@@ -34,3 +34,12 @@ extension TOC {
             audioTrackStarts: offsets.map { $0 - CDDA.leadInSectors }, leadOutLBA: sectors - CDDA.leadInSectors)
     }
 }
+
+/// Bytes from hex digits. Spaces and new lines are ignored.
+func hexBytes(_ text: String) -> [UInt8] {
+    let digits = text.filter(\.isHexDigit)
+    return stride(from: 0, to: digits.count, by: 2).map {
+        let start = digits.index(digits.startIndex, offsetBy: $0)
+        return UInt8(digits[start...digits.index(after: start)], radix: 16)!
+    }
+}

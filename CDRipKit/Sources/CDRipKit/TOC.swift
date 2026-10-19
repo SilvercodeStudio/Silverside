@@ -92,7 +92,45 @@ public struct TOC: Equatable, Sendable {
     }
 }
 
+extension TOC {
+    /// Parses a full TOC (MMC READ TOC format 0010b) with binary MSF addresses, as
+    /// `DKIOCCDREADTOC` returns it for `kCDTOCFormatTOC`.
+    public init(fullTOC bytes: [UInt8]) throws(TOCError) {
+        guard bytes.count >= 4 else { throw .malformed }
+        let end = min(bytes.count, 2 + (Int(bytes[0]) << 8 | Int(bytes[1])))
+        var tracks = [Track]()
+        var leadOut: (session: Int, lba: Int)?
+        // Each 11-byte descriptor: session, ADR and control, TNO, point, MSF, zero, PMSF.
+        for start in stride(from: 4, to: end - 10, by: 11) {
+            let session = Int(bytes[start])
+            let adr = bytes[start + 1] >> 4
+            let control = bytes[start + 1] & 0x0F
+            let point = bytes[start + 3]
+            let minute = Int(bytes[start + 8])
+            let second = Int(bytes[start + 9])
+            let frame = Int(bytes[start + 10])
+            let lba = (minute * 60 + second) * CDDA.sectorsPerSecond + frame - CDDA.leadInSectors
+            guard adr == 1 else { continue }
+            switch point {
+            case 1...99:
+                let isData = control & 0x04 != 0
+                tracks.append(
+                    Track(
+                        number: Int(point), startLBA: lba, kind: isData ? .data : .audio, session: session,
+                        hasPreEmphasis: !isData && control & 0x01 != 0, isCopyPermitted: control & 0x02 != 0))
+            case 0xA2 where session >= (leadOut?.session ?? 0):
+                leadOut = (session, lba)
+            default:
+                break
+            }
+        }
+        guard let leadOut else { throw .malformed }
+        try self.init(tracks: tracks.sorted { $0.number < $1.number }, leadOutLBA: leadOut.lba)
+    }
+}
+
 public enum TOCError: Error, Equatable {
+    case malformed
     case noTracks
     case invalidTrackNumbers
     case invalidStart(track: Int)

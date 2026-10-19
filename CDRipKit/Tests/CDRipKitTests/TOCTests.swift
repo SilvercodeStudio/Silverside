@@ -43,3 +43,45 @@ struct TOCTests {
         #expect(toc.audioLeadOutLBA == 2000)
     }
 }
+
+struct FullTOCTests {
+    /// DKIOCCDREADTOC output for Grateful Dead, "Dozin' at the Knick", disc 1 (MATSHITA BD-MLT UJ260AF).
+    static let dozinDisc1 = hexBytes(
+        """
+        00860101
+        011000A000000000010000 011000A100000000090000 011000A200000000412B00
+        0110000100000000000200 0110000200000000070032 01100003000000000C3923
+        011000040000000011303C 011000050000000018292B 01100006000000001D0A28
+        011000070000000024312B 01100008000000002A2B3A 0110000900000000360349
+        """)
+
+    @Test func parsesAudioCD() throws {
+        let toc = try TOC(fullTOC: Self.dozinDisc1)
+        #expect(toc.tracks.map(\.startLBA) == [0, 31400, 58160, 80010, 110968, 131140, 165568, 192133, 243148])
+        #expect(toc.leadOutLBA == 295575)
+        #expect(toc.tracks.allSatisfy { $0.kind == .audio && $0.session == 1 && !$0.hasPreEmphasis })
+        // Both agree with the MusicBrainz release and the AccurateRip database.
+        #expect(toc.musicBrainzDiscID == "qlxTvL1MjvcBDy5MraVOjxWJ8ec-")
+        #expect(
+            toc.accurateRipDiscID.databaseURL.absoluteString
+                == "http://www.accuraterip.com/accuraterip/6/c/5/dBAR-009-0013f5c6-00949b73-700f6509.bin")
+    }
+
+    @Test func readsControlBits() throws {
+        // Track 1 audio with pre-emphasis and copy permitted (control 3), track 2 data (control 4).
+        let bytes = hexBytes(
+            """
+            00250101
+            011000A2000000000A0000 0113000100000000000200 0114000200000000050000
+            """)
+        let toc = try TOC(fullTOC: bytes)
+        #expect(toc.tracks[0].hasPreEmphasis && toc.tracks[0].isCopyPermitted)
+        #expect(toc.tracks[1].kind == .data && !toc.tracks[1].hasPreEmphasis)
+        #expect(toc.leadOutLBA == 10 * 60 * 75 - 150)
+    }
+
+    @Test func rejectsTOCWithoutLeadOut() {
+        #expect(throws: TOCError.malformed) { try TOC(fullTOC: hexBytes("000D0101 0110000100000000000200")) }
+        #expect(throws: TOCError.malformed) { try TOC(fullTOC: [0, 2]) }
+    }
+}

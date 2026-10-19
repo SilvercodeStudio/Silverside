@@ -1,0 +1,86 @@
+import CryptoKit
+import Foundation
+
+/// The identifiers that AccurateRip uses to find a disc.
+public struct AccurateRipDiscID: Hashable, Sendable {
+    public let audioTrackCount: Int
+    public let id1: UInt32
+    public let id2: UInt32
+    public let freedbID: UInt32
+
+    public var databaseURL: URL {
+        let path = String(
+            format: "%x/%x/%x/dBAR-%03d-%08x-%08x-%08x.bin",
+            id1 & 0xF, (id1 >> 4) & 0xF, (id1 >> 8) & 0xF,
+            audioTrackCount, id1, id2, freedbID)
+        return URL(string: "http://www.accuraterip.com/accuraterip/" + path)!
+    }
+}
+
+extension TOC {
+    /// The MusicBrainz disc ID. See https://musicbrainz.org/doc/Disc_ID_Calculation.
+    /// The data track of an enhanced CD is not part of the ID.
+    public var musicBrainzDiscID: String {
+        let idTracks = isEnhanced ? tracks.dropLast() : tracks[...]
+        var offsets = [Int](repeating: 0, count: 100)
+        offsets[0] = audioLeadOutLBA + CDDA.leadInSectors
+        for track in idTracks {
+            offsets[track.number] = track.startLBA + CDDA.leadInSectors
+        }
+        var text = String(format: "%02X%02X", idTracks.first!.number, idTracks.last!.number)
+        for offset in offsets {
+            text += String(format: "%08X", offset)
+        }
+        let digest = Data(Insecure.SHA1.hash(data: Data(text.utf8)))
+        return digest.base64EncodedString()
+            .replacingOccurrences(of: "+", with: ".")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "-")
+    }
+
+    /// The freedb (CDDB) disc ID. Data tracks are included.
+    public var freedbDiscID: UInt32 {
+        func digitSum(_ value: Int) -> Int {
+            var value = value
+            var sum = 0
+            while value > 0 {
+                sum += value % 10
+                value /= 10
+            }
+            return sum
+        }
+        func seconds(_ lba: Int) -> Int { (lba + CDDA.leadInSectors) / CDDA.sectorsPerSecond }
+
+        let checksum = tracks.reduce(0) { $0 + digitSum(seconds($1.startLBA)) } % 255
+        let length = seconds(leadOutLBA) - seconds(tracks[0].startLBA)
+        return UInt32(checksum << 24 | length << 8 | tracks.count)
+    }
+
+    /// The AccurateRip disc IDs.
+    ///
+    /// Verified against the AccurateRip database for audio-only discs.
+    /// Not yet verified for discs with data tracks.
+    public var accurateRipDiscID: AccurateRipDiscID {
+        var id1: UInt32 = 0
+        var id2: UInt32 = 0
+        let audio = audioTracks
+        for (index, track) in audio.enumerated() {
+            let start = UInt32(track.startLBA)
+            id1 &+= start
+            id2 &+= max(start, 1) &* UInt32(index + 1)
+        }
+        let leadOut = UInt32(leadOutLBA)
+        id1 &+= leadOut
+        id2 &+= leadOut &* UInt32(audio.count + 1)
+        return AccurateRipDiscID(audioTrackCount: audio.count, id1: id1, id2: id2, freedbID: freedbDiscID)
+    }
+
+    /// The TOC string for CUETools DB lookups: track starts, then the lead-out, separated by colons.
+    ///
+    /// Verified against CTDB for audio-only discs. Data tracks have a "-" prefix,
+    /// which is not yet verified.
+    public var ctdbTOCString: String {
+        let starts = tracks.map { ($0.kind == .data ? "-" : "") + String($0.startLBA) }
+        return (starts + [String(leadOutLBA)]).joined(separator: ":")
+    }
+}

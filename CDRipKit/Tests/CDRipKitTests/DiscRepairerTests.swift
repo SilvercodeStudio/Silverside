@@ -126,9 +126,9 @@ struct DiscRepairerTests {
         let length = 460 * 588
         let pressing = [UInt32](repeating: 0, count: 30) + samples.dropLast(30)
         let checksum = AccurateRipAccumulator.checksum(
-            of: Array(pressing[0..<length]).span, isFirstTrack: true, isLastTrack: false)
+            of: Array(pressing[0..<length])[...], isFirstTrack: true, isLastTrack: false)
         let sector450 = Array(pressing[(450 * 588)..<(451 * 588)])
-        let frame450 = AccurateRipAccumulator.checksum(of: sector450.span, isFirstTrack: false, isLastTrack: false)
+        let frame450 = AccurateRipAccumulator.checksum(of: sector450[...], isFirstTrack: false, isLastTrack: false)
         let known = [AccurateRipRecord.Track(confidence: 2, checksum: checksum.v2, frame450Checksum: frame450.v1)]
         #expect(toc.audioTracks[0].startLBA == 0)
         #expect(

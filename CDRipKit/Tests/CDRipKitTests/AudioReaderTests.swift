@@ -13,7 +13,7 @@ struct AudioReaderTests {
     func accurateRip(_ samples: some Collection<UInt32>, track: Int, of toc: TOC) -> AccurateRipChecksum {
         let samples = Array(samples)
         return AccurateRipAccumulator.checksum(
-            of: samples.span,
+            of: samples[...],
             isFirstTrack: track == toc.tracks.first!.number,
             isLastTrack: track == toc.tracks.last!.number
         )

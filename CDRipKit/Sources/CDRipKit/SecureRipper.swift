@@ -229,7 +229,7 @@ public struct SecureRipper {
             result.status = known.isEmpty ? .consistent : .consistentButNotAccurate
             if result.firstReadWasShifted && !known.isEmpty {
                 let checksum = AccurateRipAccumulator.checksum(
-                    of: base.span, isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
+                    of: base[...], isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
                 if case .accurate(let v1, let v2) = TrackRipper.verification(of: checksum, known: known) {
                     result.status = .accurate(v1Confidence: v1, v2Confidence: v2)
                 }
@@ -299,7 +299,7 @@ public struct SecureRipper {
     ) -> ([UInt32], SecureTrackRip.Status)? {
         let size = CDDA.samplesPerSector
         let base = AccurateRipAccumulator.checksum(
-            of: samples.span, isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
+            of: samples[...], isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
         let knownChecksums = Set(known.map(\.checksum))
         func status(_ checksum: AccurateRipChecksum) -> SecureTrackRip.Status? {
             guard case .accurate(let v1, let v2) = TrackRipper.verification(of: checksum, known: known) else {
@@ -317,7 +317,7 @@ public struct SecureRipper {
                 guard ranked.count > 1 else { return nil }
                 func part(_ data: [UInt32]) -> AccurateRipChecksum {
                     AccurateRipAccumulator.contribution(
-                        of: data.span, at: index * size + 1, sampleCount: samples.count,
+                        of: data[...], at: index * size + 1, sampleCount: samples.count,
                         isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
                 }
                 let used = part(ranked[0])

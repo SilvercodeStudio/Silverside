@@ -98,7 +98,7 @@ struct Repair: AsyncParsableCommand {
             let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
             let accurate = versions[index].first { samples in
                 let checksum = AccurateRipAccumulator.checksum(
-                    of: samples.span, isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
+                    of: samples[...], isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
                 if case .accurate = TrackRipper.verification(of: checksum, known: known) { return true }
                 return false
             }
@@ -227,7 +227,7 @@ struct Repair: AsyncParsableCommand {
             let samples = result.samples(ofTrack: index)
             try WAVFile.write(samples, to: destination.appending(path: String(format: "Track %02d.wav", track.number)))
             let checksum = AccurateRipAccumulator.checksum(
-                of: samples.span, isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
+                of: samples[...], isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
             let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
             var line = String(
                 format: "  Track %2d  %6d samples repaired  ", track.number, result.changedSamples(inTrack: index))

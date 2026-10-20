@@ -255,7 +255,7 @@ struct Rip: AsyncParsableCommand {
             try WAVFile.write(samples, to: folder.appending(path: reports[index].file))
             reports[index].repairedSamples = repair.changedSamples(inTrack: index)
             let checksum = AccurateRipAccumulator.checksum(
-                of: samples.span, isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
+                of: samples[...], isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
             let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
             var line = String(
                 format: "  Track %2d  %6d samples repaired", reports[index].number, reports[index].repairedSamples)

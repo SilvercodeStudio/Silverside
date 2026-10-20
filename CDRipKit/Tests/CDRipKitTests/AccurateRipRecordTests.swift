@@ -36,7 +36,7 @@ struct AccurateRipOffsetFinderTests {
         let track = toc.sectorRange(of: toc.tracks[1])
         let positions = (track.lowerBound * CDDA.samplesPerSector)..<(track.upperBound * CDDA.samplesPerSector)
         let trueTrack = Array(samples[positions])
-        let checksum = AccurateRipAccumulator.checksum(of: trueTrack.span, isFirstTrack: false, isLastTrack: false)
+        let checksum = AccurateRipAccumulator.checksum(of: trueTrack[...], isFirstTrack: false, isLastTrack: false)
 
         // Read with no correction, from a drive with an unknown offset.
         let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: offset)
@@ -55,7 +55,7 @@ struct AccurateRipOffsetFinderTests {
         let track = toc.sectorRange(of: toc.tracks[1])
         let positions = (track.lowerBound * CDDA.samplesPerSector)..<(track.upperBound * CDDA.samplesPerSector)
         let sector450 = Array(samples[(positions.lowerBound + 450 * 588)..<(positions.lowerBound + 451 * 588)])
-        let checksum = AccurateRipAccumulator.checksum(of: sector450.span, isFirstTrack: false, isLastTrack: false)
+        let checksum = AccurateRipAccumulator.checksum(of: sector450[...], isFirstTrack: false, isLastTrack: false)
 
         let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: offset)
         let reader = AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)

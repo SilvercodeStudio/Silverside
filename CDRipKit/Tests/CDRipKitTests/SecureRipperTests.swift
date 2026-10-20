@@ -111,14 +111,14 @@ struct AccurateRipContributionTests {
     @Test func partsAddUpToTheTrackChecksum() throws {
         let (_, samples) = try makeDisc(trackSectors: [20])
         for (first, last) in [(false, false), (true, false), (false, true), (true, true)] {
-            let whole = AccurateRipAccumulator.checksum(of: samples.span, isFirstTrack: first, isLastTrack: last)
+            let whole = AccurateRipAccumulator.checksum(of: samples[...], isFirstTrack: first, isLastTrack: last)
             var sum = AccurateRipChecksum.zero
             for start in stride(from: 0, to: samples.count, by: 588) {
                 let part = Array(samples[start..<(start + 588)])
                 sum =
                     sum
                     + AccurateRipAccumulator.contribution(
-                        of: part.span, at: start + 1, sampleCount: samples.count, isFirstTrack: first, isLastTrack: last
+                        of: part[...], at: start + 1, sampleCount: samples.count, isFirstTrack: first, isLastTrack: last
                     )
             }
             #expect(sum == whole)

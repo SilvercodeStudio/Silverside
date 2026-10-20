@@ -41,7 +41,7 @@ public struct AccurateRipAccumulator: Sendable {
         lastPosition = UInt32(isLastTrack ? max(sampleCount - Self.skippedSamples, 0) : sampleCount)
     }
 
-    public mutating func add(_ samples: Span<UInt32>) {
+    public mutating func add(_ samples: ArraySlice<UInt32>) {
         precondition(Int(nextPosition) - 1 + samples.count <= sampleCount, "More samples than the track has")
         var position = nextPosition
         for index in samples.indices {
@@ -66,7 +66,7 @@ public struct AccurateRipAccumulator: Sendable {
     /// The part of a track's checksums that `samples` give, where `samples[0]` is
     /// at the 1-based `position` in a track of `sampleCount` samples.
     public static func contribution(
-        of samples: Span<UInt32>, at position: Int, sampleCount: Int, isFirstTrack: Bool, isLastTrack: Bool
+        of samples: ArraySlice<UInt32>, at position: Int, sampleCount: Int, isFirstTrack: Bool, isLastTrack: Bool
     ) -> AccurateRipChecksum {
         precondition(position >= 1 && position - 1 + samples.count <= sampleCount)
         var accumulator = AccurateRipAccumulator(
@@ -77,7 +77,7 @@ public struct AccurateRipAccumulator: Sendable {
     }
 
     public static func checksum(
-        of samples: Span<UInt32>, isFirstTrack: Bool, isLastTrack: Bool
+        of samples: ArraySlice<UInt32>, isFirstTrack: Bool, isLastTrack: Bool
     ) -> AccurateRipChecksum {
         var accumulator = AccurateRipAccumulator(
             sampleCount: samples.count, isFirstTrack: isFirstTrack, isLastTrack: isLastTrack)

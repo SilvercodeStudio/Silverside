@@ -116,9 +116,9 @@ struct TrackRipperTests {
             let start = sectors.lowerBound * CDDA.samplesPerSector
             let trackSamples = Array(samples[start..<(sectors.upperBound * CDDA.samplesPerSector)])
             let checksum = AccurateRipAccumulator.checksum(
-                of: trackSamples.span, isFirstTrack: index == 0, isLastTrack: index == toc.tracks.count - 1)
+                of: trackSamples[...], isFirstTrack: index == 0, isLastTrack: index == toc.tracks.count - 1)
             let sector450 = Array(trackSamples[(450 * 588)..<(451 * 588)])
-            let frame450 = AccurateRipAccumulator.checksum(of: sector450.span, isFirstTrack: false, isLastTrack: false)
+            let frame450 = AccurateRipAccumulator.checksum(of: sector450[...], isFirstTrack: false, isLastTrack: false)
             return AccurateRipRecord.Track(confidence: 4, checksum: checksum.v2, frame450Checksum: frame450.v1)
         }
         return (toc, samples, AccurateRipRecord(discID: toc.accurateRipDiscID, tracks: tracks))

@@ -6,11 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CDRip is a native macOS CD ripper. The goal is ripping quality equal to or better than Exact Audio Copy (EAC), with a modern UI and MusicBrainz-first metadata. It encodes to FLAC, ALAC, AAC, AIFF, and WAV. MP3 is out of scope.
 
-The work is done in layers: engine library (`CDRipKit`), then a `cdrip` CLI, then the SwiftUI app (`CDRip/`). The app doesn't link `CDRipKit` yet.
+The work is done in layers: engine library (`CDRipKit`), then a `cdrip` CLI, then the SwiftUI app (`App/`: `CDRip.xcodeproj` and its sources in `App/CDRip/`). The app doesn't link `CDRipKit` yet.
 
 Ripping is verification-first: rip fast with offset correction, verify each track against AccurateRip and CUETools DB (CTDB), and do secure re-reads only for tracks that don't match.
 
 ## Commands
+
+Open `CDRip.xcworkspace` in Xcode: it has the app project and the `CDRipKit` package, with schemes for the app, `cdrip`, and the engine tests.
 
 ```sh
 make cli ARGS='info'   # build and run the cdrip CLI (drives, info, rip, repair; -d diskN chooses a disc)
@@ -74,7 +76,7 @@ Three drives so far (MATSHITA UJ260AF +103, HL-DT-ST BU50N +6, ASUS BW-16D1HT +6
 - **Dependencies:** discuss each outside dependency with the user before you add it. Today the only one is swift-argument-parser, for the `cdrip` target only; the engine targets have none. Prefer Apple frameworks: AudioToolbox encodes FLAC and ALAC, CryptoKit does SHA-1, and URLSession, IOKit, and DiskArbitration cover the rest.
 - **Licensing:** the project will probably be open source under a permissive license such as MIT. Don't port GPL code. You may read whipper, libcdio-paranoia, XLD, and CUETools to understand an algorithm, but write our own implementation.
 - **Distribution and access:** the app uses Developer ID distribution, not the App Store. App Sandbox is off, because ripping needs raw device access.
-- **Platform versions:** Swift 6 language mode. The package's minimum is macOS 26, and the app targets macOS 27.
+- **Platform versions:** Swift 6 language mode. The package and the app both require macOS 15 Sequoia. Don't use APIs from later releases without `if #available`: for example `Span` (macOS 26), and Foundation Models (macOS 26), which must stay optional. The tests run only on the current macOS here, so read the availability of each new API.
 - **Network services:** MusicBrainz is central to the project, so protect access to it. Its limit is 1 request per second on average per IP address, with a descriptive User-Agent; it answers 503 when a client goes too fast. **Do not query MusicBrainz in ad-hoc scripts** during development: use the release data already saved in `~/Music/CDRip Archive/*/disc.json`, or saved responses in test fixtures. All requests go through `WebClient` (a rate limit per host across processes, retries on 503, a cache in `~/Library/Caches/CDRip/`). Until the MusicBrainz client exists, ask the user before any MusicBrainz request. Never put the user's email address in requests. AccurateRip and CTDB are less strict, but avoid repeating the same lookups.
 - **Hardware:** usually no drive is attached. The user has several external USB drives and a test kit of discs. Ask before you start work that needs one.
 

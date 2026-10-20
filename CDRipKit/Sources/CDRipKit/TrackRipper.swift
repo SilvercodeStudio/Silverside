@@ -89,8 +89,8 @@ public struct TrackRipper {
         let buffer = read.samples
         // The checksum of the track as if the drive's offset were `shift` samples more.
         func checksum(shiftedBy shift: Int) -> AccurateRipChecksum {
-            let window = Array(buffer[(margin + shift)..<(margin + shift + length)])
-            return AccurateRipAccumulator.checksum(of: window.span, isFirstTrack: isFirst, isLastTrack: isLast)
+            AccurateRipAccumulator.checksum(
+                of: buffer[(margin + shift)..<(margin + shift + length)], isFirstTrack: isFirst, isLastTrack: isLast)
         }
 
         let known = known(for: track)
@@ -100,7 +100,7 @@ public struct TrackRipper {
 
         let samples = Array(buffer[margin..<(margin + length)])
         let trackChecksum = AccurateRipAccumulator.checksum(
-            of: samples.span, isFirstTrack: isFirst, isLastTrack: isLast)
+            of: samples[...], isFirstTrack: isFirst, isLastTrack: isLast)
         let trackVerification = verification(of: trackChecksum)
 
         // Find other offsets that match, then check each with the whole track's checksums.

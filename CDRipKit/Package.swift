@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "CDRipKit",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "CDRipKit", targets: ["CDRipKit"]),
         .library(name: "CDRipDarwin", targets: ["CDRipDarwin"]),

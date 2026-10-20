@@ -77,7 +77,7 @@ struct HardwareTests {
         var matches = [(offset: Int, checksum: AccurateRipChecksum)]()
         for offset in Set(v1Offsets + frame450Offsets).sorted() {
             let window = Array(raw[(margin + offset)..<(margin + offset + positions.count)])
-            let checksum = AccurateRipAccumulator.checksum(of: window.span, isFirstTrack: false, isLastTrack: false)
+            let checksum = AccurateRipAccumulator.checksum(of: window[...], isFirstTrack: false, isLastTrack: false)
             let v1 = confidences(checksum.v1)
             let v2 = confidences(checksum.v2)
             print(
@@ -99,6 +99,6 @@ struct HardwareTests {
         let (offset, expected) = match
 
         let ripped = try AudioReader(drive: drive, toc: toc, readOffset: offset, canOverread: false).readTrack(track)
-        #expect(AccurateRipAccumulator.checksum(of: ripped.span, isFirstTrack: false, isLastTrack: false) == expected)
+        #expect(AccurateRipAccumulator.checksum(of: ripped[...], isFirstTrack: false, isLastTrack: false) == expected)
     }
 }

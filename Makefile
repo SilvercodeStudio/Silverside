@@ -3,11 +3,12 @@
 #   make test
 #   make run
 #
-# The app is built with xcodebuild into Xcode's DerivedData, so builds from
-# Xcode and from here share the same incremental state. The engine is a Swift
-# package in CDRipKit/ and builds with SwiftPM.
+# The app is built with xcodebuild from CDRip.xcworkspace, the workspace to open
+# in Xcode, into Xcode's DerivedData, so builds from Xcode and from here share the
+# same incremental state. The engine is a Swift package in CDRipKit/ and builds
+# with SwiftPM.
 
-PROJECT = CDRip.xcodeproj
+WORKSPACE = CDRip.xcworkspace
 SCHEME = CDRip
 PACKAGE = CDRipKit
 CONFIG ?= Debug
@@ -22,9 +23,9 @@ OFFSET ?=
 ARCH := $(shell uname -m)
 comma := ,
 DESTINATION = $(if $(filter Release,$(CONFIG)),generic/platform=macOS,platform=macOS$(comma)arch=$(ARCH))
-XCODEBUILD = xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG) -destination '$(DESTINATION)'
+XCODEBUILD = xcodebuild -workspace $(WORKSPACE) -scheme $(SCHEME) -configuration $(CONFIG) -destination '$(DESTINATION)'
 
-SWIFT_SOURCES = $(PACKAGE)/Package.swift $(PACKAGE)/Sources $(PACKAGE)/Tests CDRip
+SWIFT_SOURCES = $(PACKAGE)/Package.swift $(PACKAGE)/Sources $(PACKAGE)/Tests App/CDRip
 
 .PHONY: help build run app cli test hwtest core format lint
 

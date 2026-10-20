@@ -444,9 +444,9 @@ public struct DiscRepairer {
             matching: Set(known.map(\.frame450Checksum)), in: window, trackLength: length, margin: margin)
         guard found.count <= TrackRipper.maximumFrame450Matches else { return nil }
         for shift in found where shift != 0 {
-            let shifted = Array(window[(margin + shift)..<(margin + shift + length)])
             let checksum = AccurateRipAccumulator.checksum(
-                of: shifted.span, isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
+                of: window[(margin + shift)..<(margin + shift + length)], isFirstTrack: edges.isFirst,
+                isLastTrack: edges.isLast)
             if case .accurate = TrackRipper.verification(of: checksum, known: known) { return shift }
         }
         return nil

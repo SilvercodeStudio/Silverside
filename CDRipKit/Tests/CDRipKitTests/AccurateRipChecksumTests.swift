@@ -11,7 +11,7 @@ struct AccurateRipChecksumTests {
     }
 
     func checksum(_ samples: [UInt32], first: Bool = false, last: Bool = false) -> AccurateRipChecksum {
-        AccurateRipAccumulator.checksum(of: samples.span, isFirstTrack: first, isLastTrack: last)
+        AccurateRipAccumulator.checksum(of: samples[...], isFirstTrack: first, isLastTrack: last)
     }
 
     @Test func eachSampleIsWeightedByItsPosition() {
@@ -41,12 +41,12 @@ struct AccurateRipChecksumTests {
         var start = 0
         for size in [1, 587, 588, 5000, 1] {
             let part = samples[start..<(start + size)]
-            accumulator.add(part.span)
+            accumulator.add(part[...])
             start += size
         }
         #expect(!accumulator.isComplete)
         let rest = samples[start...]
-        accumulator.add(rest.span)
+        accumulator.add(rest[...])
         #expect(accumulator.checksum == checksum(samples, first: true, last: true))
     }
 }

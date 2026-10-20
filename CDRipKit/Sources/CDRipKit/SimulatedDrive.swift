@@ -15,8 +15,26 @@ public final class SimulatedDrive: CDDrive {
     /// Sectors that fail with a read error when asked for.
     public var unreadableSectors: Set<Int> = []
 
-    /// Physical sectors that return wrong data with no error.
+    /// Physical sectors that return wrong data with no error, the same on every read.
     public var corruptSectors: Set<Int> = []
+
+    /// Physical sectors that return wrong data and the true data in turn, starting
+    /// with wrong data, on each read that does not come from the cache. A damaged
+    /// sector of "Europe '72" did this on the MATSHITA.
+    public var unstableSectors: Set<Int> = []
+
+    /// How many sectors the drive caches. A read of sectors that are all in the
+    /// cache returns the cached data, as real drives do. Zero turns the cache off.
+    public var cacheSectors = 0
+
+    /// The number of read requests that the cache did not answer.
+    public private(set) var discReads = 0
+
+    private var cache: [Int: [UInt8]] = [:]
+    private var cacheOrder: [Int] = []
+    /// For each unstable sector: how many times it was read from the disc, and the
+    /// read request that last touched it.
+    private var unstableReads: [Int: (count: Int, request: Int)] = [:]
 
     /// The pregap (index 00) of each track in sectors, by track number. Track 1's
     /// pregap runs from LBA 0 to its start.
@@ -54,16 +72,42 @@ public final class SimulatedDrive: CDDrive {
         if let bad = sectors.first(where: unreadableSectors.contains) {
             throw DriveError.readFailed(lba: bad)
         }
+        if cacheSectors > 0, sectors.allSatisfy({ cache[$0] != nil }) {
+            return sectors.flatMap { cache[$0]! }
+        }
+        discReads += 1
+
+        // A sector that the request just before also touched is part of the same
+        // continuous read, as a drive reads ahead, so it keeps its data.
+        let firstPosition = lba * CDDA.samplesPerSector - readOffset
+        let firstSector = firstPosition.floorDivided(by: CDDA.samplesPerSector)
+        let lastSector = (firstPosition + count * CDDA.samplesPerSector - 1).floorDivided(by: CDDA.samplesPerSector)
+        var wrongThisRead = Set<Int>()
+        for sector in firstSector...lastSector where unstableSectors.contains(sector) {
+            var state = unstableReads[sector] ?? (count: 0, request: -2)
+            if state.request != discReads - 1 { state.count += 1 }
+            state.request = discReads
+            unstableReads[sector] = state
+            if state.count % 2 == 1 { wrongThisRead.insert(sector) }
+        }
 
         var bytes = [UInt8]()
         bytes.reserveCapacity(count * CDDA.bytesPerSector)
-        let firstPosition = lba * CDDA.samplesPerSector - readOffset
         for position in firstPosition..<(firstPosition + count * CDDA.samplesPerSector) {
             var sample = samples.indices.contains(position) ? samples[position] : 0
-            if corruptSectors.contains(position.floorDivided(by: CDDA.samplesPerSector)) {
+            let sector = position.floorDivided(by: CDDA.samplesPerSector)
+            if corruptSectors.contains(sector) || wrongThisRead.contains(sector) {
                 sample ^= 0x0001_0001
             }
             withUnsafeBytes(of: sample.littleEndian) { bytes.append(contentsOf: $0) }
+        }
+        if cacheSectors > 0 {
+            for (index, sector) in sectors.enumerated() {
+                if cache[sector] == nil { cacheOrder.append(sector) }
+                let start = index * CDDA.bytesPerSector
+                cache[sector] = Array(bytes[start..<(start + CDDA.bytesPerSector)])
+            }
+            while cacheOrder.count > cacheSectors { cache[cacheOrder.removeFirst()] = nil }
         }
         return bytes
     }

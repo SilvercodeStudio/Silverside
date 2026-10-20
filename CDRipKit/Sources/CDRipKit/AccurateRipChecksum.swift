@@ -1,7 +1,20 @@
 /// The AccurateRip v1 and v2 checksums of one track.
+///
+/// Both checksums are sums of one term for each sample, so the checksum of a
+/// track is the sum of the checksums of its parts. `+` and `-` wrap, as the sums do.
 public struct AccurateRipChecksum: Hashable, Sendable {
     public var v1: UInt32
     public var v2: UInt32
+
+    public static let zero = AccurateRipChecksum(v1: 0, v2: 0)
+
+    public static func + (left: Self, right: Self) -> Self {
+        Self(v1: left.v1 &+ right.v1, v2: left.v2 &+ right.v2)
+    }
+
+    public static func - (left: Self, right: Self) -> Self {
+        Self(v1: left.v1 &- right.v1, v2: left.v2 &- right.v2)
+    }
 }
 
 /// Calculates AccurateRip checksums from a track's samples, in one or more parts.
@@ -48,6 +61,19 @@ public struct AccurateRipAccumulator: Sendable {
     public var checksum: AccurateRipChecksum {
         precondition(isComplete, "Not all samples of the track were added")
         return AccurateRipChecksum(v1: v1, v2: v2)
+    }
+
+    /// The part of a track's checksums that `samples` give, where `samples[0]` is
+    /// at the 1-based `position` in a track of `sampleCount` samples.
+    public static func contribution(
+        of samples: Span<UInt32>, at position: Int, sampleCount: Int, isFirstTrack: Bool, isLastTrack: Bool
+    ) -> AccurateRipChecksum {
+        precondition(position >= 1 && position - 1 + samples.count <= sampleCount)
+        var accumulator = AccurateRipAccumulator(
+            sampleCount: sampleCount, isFirstTrack: isFirstTrack, isLastTrack: isLastTrack)
+        accumulator.nextPosition = UInt32(position)
+        accumulator.add(samples)
+        return AccurateRipChecksum(v1: accumulator.v1, v2: accumulator.v2)
     }
 
     public static func checksum(

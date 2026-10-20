@@ -39,12 +39,31 @@ public struct TrackRipper {
         self.records = records
     }
 
+    /// Whether a track is the disc's first or last audio track, where AccurateRip skips samples.
+    func edges(of track: TOC.Track) -> (isFirst: Bool, isLast: Bool) {
+        let audio = reader.toc.audioTracks
+        guard let index = audio.firstIndex(of: track) else { preconditionFailure("Not an audio track of this disc") }
+        return (index == 0, index == audio.count - 1)
+    }
+
+    /// The AccurateRip records' entries for one track.
+    func known(for track: TOC.Track) -> [AccurateRipRecord.Track] {
+        guard let index = reader.toc.audioTracks.firstIndex(of: track) else { return [] }
+        return records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
+    }
+
+    static func verification(
+        of checksum: AccurateRipChecksum, known: [AccurateRipRecord.Track]
+    ) -> AccurateRipVerification {
+        guard !known.isEmpty else { return .notChecked }
+        let v1 = known.filter { $0.checksum == checksum.v1 }.reduce(0) { $0 + $1.confidence }
+        let v2 = known.filter { $0.checksum == checksum.v2 }.reduce(0) { $0 + $1.confidence }
+        return v1 + v2 > 0 ? .accurate(v1Confidence: v1, v2Confidence: v2) : .notAccurate
+    }
+
     public func rip(_ track: TOC.Track) throws -> TrackRip {
         let toc = reader.toc
-        let audio = toc.audioTracks
-        guard let index = audio.firstIndex(of: track) else { preconditionFailure("Not an audio track of this disc") }
-        let isFirst = index == 0
-        let isLast = index == audio.count - 1
+        let (isFirst, isLast) = edges(of: track)
         let sectors = toc.sectorRange(of: track)
         let start = sectors.lowerBound * CDDA.samplesPerSector
         let length = sectors.count * CDDA.samplesPerSector
@@ -57,12 +76,9 @@ public struct TrackRipper {
             return AccurateRipAccumulator.checksum(of: window.span, isFirstTrack: isFirst, isLastTrack: isLast)
         }
 
-        let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
+        let known = known(for: track)
         func verification(of checksum: AccurateRipChecksum) -> AccurateRipVerification {
-            guard !known.isEmpty else { return .notChecked }
-            let v1 = known.filter { $0.checksum == checksum.v1 }.reduce(0) { $0 + $1.confidence }
-            let v2 = known.filter { $0.checksum == checksum.v2 }.reduce(0) { $0 + $1.confidence }
-            return v1 + v2 > 0 ? .accurate(v1Confidence: v1, v2Confidence: v2) : .notAccurate
+            Self.verification(of: checksum, known: known)
         }
 
         let samples = Array(buffer[margin..<(margin + length)])

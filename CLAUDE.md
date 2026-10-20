@@ -43,6 +43,7 @@ These rules apply in many files. Errors here give results that are a few samples
 - **Track ranges** run from one track's index 01 to the next track's index 01, so a pregap belongs to the track before it.
 - **Times** print as `MM:SS:FF` (frames of 1/75 second), as in CUE sheets, so they cannot be read as decimal seconds.
 - **Q subchannel:** frames can be damaged, so check `isValid`. `PregapFinder` reads around damaged frames, and MCN or ISRC frames (about 1 in 100). A damaged frame just before a change leaves the change unknown by one sector, so it throws for that track only.
+- **Re-reads need a cache flush.** Drives return cached data for a re-read in under 1 ms. `SecureRipper` reads far from the track first, and never inside it, because a read of a damaged sector there counts as one of its re-reads.
 - `CDDrive` is the hardware boundary. `IOKitDrive` (target `CDRipDarwin`) implements it with the `DKIOCCD*` ioctls on `/dev/rdiskN`. Swift does not import the `_IOWR` macros, so `Ioctl` computes the request codes, and a test checks them against the SDK. The node belongs to the console user, and the ioctls work while cddafs has the disc mounted. `SimulatedDrive` stands in for hardware in tests. It can simulate a read offset, overread, unreadable sectors (by requested LBA), and silent corruption (by physical sector). New drive behavior (cache, C2, subchannel, jitter) goes into both the protocol and the simulator, so you can test it without hardware.
 
 ## Verified vs. unverified
@@ -81,4 +82,5 @@ The full list is in `docs/Milestones.md`. Keep both up to date.
 
 1. Done: TOC, disc IDs, AccurateRip checksums, simulated drive, offset-corrected reader.
 2. Done: `IOKitDrive`, hardware tests, and the `cdrip` CLI with `drives` and `info` (TOC, pregaps, IDs, ISRC, MCN, AccurateRip and CTDB status).
-3. In progress: `cdrip rip` (offset-corrected WAV, AccurateRip result per track), drive profiles, and AccurateRip's drive offset list.
+3. Mostly done: `cdrip rip` (offset-corrected WAV, AccurateRip result per track), drive profiles, and AccurateRip's drive offset list.
+6. In progress, ahead of 4 and 5 because the user has many damaged discs: `SecureRipper` (cache flush, re-reads of suspect sectors, combinations tested against AccurateRip).

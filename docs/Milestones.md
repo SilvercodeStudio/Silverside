@@ -9,7 +9,7 @@ The first goal is a usable CLI: rip a whole disc to tagged FLAC or ALAC files wi
 | 3 | Rip to WAV with AccurateRip verification | In progress |
 | 4 | Encoding and tags | Not started |
 | 5 | Metadata | Not started |
-| 6 | Secure re-reads | Not started |
+| 6 | Secure re-reads | In progress |
 | 7 | CTDB verification and repair | Not started |
 | 8 | Rip log, CUE sheets, gaps and indexes | Not started |
 | 9 | Multi-disc releases and style recipes | Not started |
@@ -45,7 +45,7 @@ Done:
 - `DriveOffsetList` reads AccurateRip's `DriveOffsets.bin` (69-byte records), with vendor aliases.
 - Full-disc rips checked on hardware: Herbie Hancock, *Head Hunters* (4 of 4 tracks accurate, including the first and last), and Grateful Dead, *Reckoning* (10 of 15: the 5 others have C2 errors).
 - `DriveProfile` and `DriveProfileStore`: `~/Library/Application Support/CDRip/DriveProfiles.json`. Offset order: manual, confirmed by rips of two or more discs, then AccurateRip's list. Rips in several drives can run at once: a save locks the file, reads it again, and changes only its own profile.
-- Offsets confirmed by rips alone: +6 for the HL-DT-ST (*Head Hunters*, *Dick's Picks Vol. 2*) and for the ASUS (*Reckoning*, *Live/Dead*). Partly damaged discs count, because their good tracks still match.
+- Offsets confirmed by rips alone: +6 for the HL-DT-ST (*Head Hunters*, *Dick's Picks Vol. 2*, *Europe '72* disc 2) and for the ASUS (*Reckoning*, *Live/Dead*, *Lost in the Wonder*). Three rips in three drives ran at once with no lost profile updates. +103 for the MATSHITA (*Europe '72* disc 1, *Live at Leeds*), so all three drives are confirmed by rips, and each agrees with AccurateRip's list. Partly damaged discs count, because their good tracks still match.
 
 To do:
 
@@ -83,10 +83,44 @@ The rip log records the offset and its source. The drive profiles and past resul
 
 After milestone 5, the CLI can rip clean discs for daily use.
 
-## 6. Secure re-reads
+## 6. Secure re-reads — in progress
 
-- Re-read only the tracks that do not match AccurateRip.
-- Defeat the drive's cache, compare multiple passes, and use C2 flags as a hint only.
+Findings that shaped the design (MATSHITA, *Europe '72* disc 1, a damaged sector in track 9):
+
+- **The cache hides re-reads.** Six back-to-back reads of the sector returned the same data, five of them in 0.5 ms from the cache. After a read of 3,000 sectors elsewhere, each read took about 233 ms and came from the disc.
+- **Real re-reads of a damaged sector can alternate between two versions** (here on every read), so a majority vote cannot choose. AccurateRip can: its v1 and v2 checksums are sums of one term for each sample, so each version of a sector changes the track's checksum by a fixed amount, and combinations can be tested without reading the track again.
+- **Two reads can be wrong in the same way**, so a sector is not proved good because two reads agree.
+- **Errors that appear on one read only** are common: a second rip of tracks 5 and 6 matched AccurateRip.
+
+Done (`SecureRipper`, the default in `cdrip rip`; `--single-pass` turns it off):
+
+1. Rip the track once. If it matches AccurateRip, at the drive's offset or another, stop.
+2. Flush the cache (read up to 4,000 sectors far from the track, never inside it), and read the whole track again. Sectors that differ from the first read are suspect. A track that does not match AccurateRip gets up to 4 full reads while they show new suspect sectors.
+3. Re-read only the suspect sectors, after a cache flush each round. Keep every version of each sector, with how often it came back.
+4. After each round, use the most frequent version of each sector, and test it and the combinations of versions (up to 65,536) against AccurateRip.
+5. Without AccurateRip, a sector is resolved when one version leads all others by 3 reads.
+6. Stop after 16 rounds, or after 4 rounds that give no new version, with another full read first if one is still allowed.
+   Combinations are tested in order of how many sectors they change (one, then two, ...), with each sector's 4 most frequent versions, up to 65,536 for each round.
+7. Report: accurate, matches only other pressings (free of errors), reads agree (not in AccurateRip), reads agree but not accurate, or suspect with the unresolved sectors.
+
+`SimulatedDrive` models the findings: sectors that alternate on each read from the disc (and keep their data across one continuous read), errors that stay the same, and a cache.
+
+Results so far:
+
+- Clean discs cost nothing extra: every track that matches AccurateRip is read once (*Civilization IV*, *Two from the Vault* disc 1).
+- *The 1968 Demos* (damage on the label side near the outer edge): 10 tracks accurate, 13 free of errors (they match another pressing, at −688), and the 3 tracks at the end of the disc unresolved after 16 rounds (up to 132 suspect sectors).
+- *Europe '72* disc 1 on the MATSHITA: tracks 1, 2, 8, 9, and 10 stay unresolved. Each round gives new versions of the suspect sectors (up to 5 in track 8), and no combination that changes up to about 4 sectors matches. The drive probably conceals unreadable data by interpolation, differently on each read, so the true data never comes back. (A plain second rip did fix tracks 5 and 6, whose errors appeared on one read only.)
+- A track that does not recover takes 3–7 minutes (16 rounds, each after a cache flush).
+
+- The same tracks on the ASUS do not recover either, and it reads this disc worse (42 suspect sectors in track 8, the MATSHITA 13). But the two drives' final results for track 8 differ in 74 sectors, more than both drives' suspect sectors together. So each drive reads some sectors wrong the same way every time: re-reads in one drive cannot find them, and a comparison between drives can.
+
+To do:
+
+- Pool versions from more than one drive. A sector that two drives read differently is suspect, even if each drive always reads it the same way.
+- Test on the damaged discs, and tune the limits (rounds, combinations, cache flush size).
+- Read C2 flags with the audio, and add C2-flagged sectors to the suspects (as a hint only).
+- A per-drive cache size, from the drive's profile or a timing test.
+- Rip log lines for the suspect sectors, for CTDB repair (milestone 7).
 
 ## 7. CTDB verification and repair
 
@@ -134,4 +168,11 @@ Test discs:
 - Grateful Dead, *Reckoning*, on the MATSHITA too: the same 5 tracks fail, and the same Q frames have bad CRCs, so the faults are on the disc. Compared sample by sample, the two drives' rips differ in only 0.0004–0.03% of samples, in 4–192 sectors per track. Where they differ, the median difference is 32–44 (of 65,536 steps), and the largest about 4,000, which can be an audible click. Raw P-W subchannel from the MATSHITA was unusable on this disc: the same bytes at sectors far apart.
 - Grateful Dead, *Dick's Picks Vol. 2*: **damaged**. 2 of 6 tracks accurate on the HL-DT-ST; track 2 has C2 errors in 39 sectors. No pregaps.
 - Grateful Dead, *Live/Dead*: **damaged**. Only track 7 (35 s) accurate on the ASUS; tracks 2 and 6 have C2 errors. MCN 0075990183026. 32 silent sectors before track 1. Seven pressings in AccurateRip.
+- Grateful Dead, *Europe '72*, discs 1 and 2 (MCN 0075990266828 on both): **damaged**. Disc 1 on the MATSHITA: 3 of 10 tracks accurate in the first rip, with 557 bad Q frames in track 5 alone. A second rip of tracks 5 and 6 was accurate: the first rip differed in only 2 sectors and 1 sector, and a C2 scan (a separate read) found no errors there. So some errors happen on one read only, and re-reading fixes them. The other failed tracks have C2 errors on every scan: track 9 the most (250 sectors, 21,188 bits), then 10, 1, 2, and 8; damaged frames hide the start of track 6's pregap (it starts at 117938). Disc 2 on the HL-DT-ST: 2 of 7 accurate. Pregaps of 0.4–2.9 s, and 33 silent sectors before track 1 on both.
+- Cory Wong, *Lost in the Wonder* (indie, no label shown): all 12 tracks accurate on the ASUS. One AccurateRip record, v2 only (4 submissions).
+- The Who, *Live at Leeds* (2001 deluxe edition), both discs: all tracks accurate (20 on the HL-DT-ST, 13 on the MATSHITA), up to 200 v2 submissions. ISRCs on every track (GBAKW01… and GBAKW70…). Long pregaps on the 13-track disc: 12 s before track 10, 24 s before track 13.
+- *Civilization IV* soundtrack (2005): 18 of 18 accurate; every pregap exactly 2.00 s. Track 4 has far fewer matching submissions than the others.
+- Beatles, *The 1968 Demos* (Vigotone VIGO 100, Australia 1993; MusicBrainz lists it as a US 1994 bootleg): damage on the label side near the outer edge. 23 of 26 tracks proved free of errors (10 accurate, 13 matching another pressing at −688); tracks 21, 25, and 26 unresolved.
+- Grateful Dead, *Two from the Vault*, both discs: all tracks accurate (5 and 4).
+- Mac OS 8: a data-only disc (HFS, which current macOS cannot mount). `info` and `rip` say there are no audio tracks.
 - Still to find: an enhanced CD, a disc with hidden track one audio, a pre-emphasis disc, and a scratched disc.

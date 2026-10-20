@@ -21,10 +21,14 @@ struct Rip: AsyncParsableCommand {
     @Flag(help: "Do not look up AccurateRip or its drive offset list.")
     var offline = false
 
+    @Flag(help: "Read each track once, with no re-reads of tracks that do not match AccurateRip.")
+    var singlePass = false
+
     func run() async throws {
         let bsdName = try deviceOptions.bsdName()
         let drive = try IOKitDrive(bsdName: bsdName)
         let toc = try drive.readTOC()
+        guard !toc.audioTracks.isEmpty else { throw CommandError("This disc has no audio tracks.") }
         let selected = try Self.tracks(tracks, of: toc)
 
         // The drive's profile gives the offset, unless --offset does.
@@ -64,26 +68,31 @@ struct Rip: AsyncParsableCommand {
 
         let reader = AudioReader(drive: drive, toc: toc, readOffset: readOffset, canOverread: false)
         let ripper = TrackRipper(reader: reader, records: records)
+        let secure = SecureRipper(ripper: ripper)
         var discOffsets = Set<Int>()
         var accurateCount = 0
+        var otherPressingCount = 0
         for track in selected {
             let start = ContinuousClock.now
-            let rip = try ripper.rip(track)
-            try WAVFile.write(rip.samples, to: folder.appending(path: String(format: "Track %02d.wav", track.number)))
-            let seconds = (ContinuousClock.now - start).components.seconds
-            discOffsets.formUnion(rip.matchingOffsets)
-
+            let samples: [UInt32]
             var result: String
-            switch rip.verification {
-            case .accurate(let v1, let v2):
-                accurateCount += 1
-                result = "accurate (v1 \(v1), v2 \(v2) submissions)"
-            case .notAccurate:
-                let others = rip.matchingOffsets.map(Self.signed).joined(separator: ", ")
-                result = "NOT accurate" + (others.isEmpty ? "" : " (matches at offsets \(others))")
-            case .notChecked:
-                result = "not checked"
+            if singlePass {
+                let rip = try ripper.rip(track)
+                (samples, result) = (rip.samples, Self.describe(rip))
+                discOffsets.formUnion(rip.matchingOffsets)
+                if case .accurate = rip.verification { accurateCount += 1 }
+            } else {
+                let rip = try secure.rip(track)
+                (samples, result) = (rip.samples, Self.describe(rip))
+                discOffsets.formUnion(rip.matchingOffsets)
+                switch rip.status {
+                case .accurate: accurateCount += 1
+                case .matchesOtherPressings: otherPressingCount += 1
+                default: break
+                }
             }
+            try WAVFile.write(samples, to: folder.appending(path: String(format: "Track %02d.wav", track.number)))
+            let seconds = (ContinuousClock.now - start).components.seconds
             if track.hasPreEmphasis { result += ", pre-emphasis" }
             let length = toc.sectorRange(of: track).count
             print(String(format: "Track %2d  %@  %3d s  ", track.number, Info.duration(length), seconds) + result)
@@ -91,7 +100,11 @@ struct Rip: AsyncParsableCommand {
 
         print()
         if !records.isEmpty {
-            print("\(accurateCount) of \(selected.count) tracks are accurate.")
+            var summary = "\(accurateCount) of \(selected.count) tracks are accurate"
+            if otherPressingCount > 0 {
+                summary += ", and \(otherPressingCount) more are free of errors (they match other pressings)"
+            }
+            print(summary + ".")
             if !discOffsets.isEmpty {
                 profile.record(disc: toc.accurateRipDiscID.name, offsets: Array(discOffsets))
                 try store.save(profile)
@@ -129,6 +142,45 @@ struct Rip: AsyncParsableCommand {
             throw ValidationError("The disc has no audio track for some of \(list).")
         }
         return tracks
+    }
+
+    static func describe(_ rip: TrackRip) -> String {
+        switch rip.verification {
+        case .accurate(let v1, let v2):
+            return "accurate (v1 \(v1), v2 \(v2) submissions)"
+        case .notAccurate:
+            let others = rip.matchingOffsets.map(signed).joined(separator: ", ")
+            return "NOT accurate" + (others.isEmpty ? "" : " (matches at offsets \(others))")
+        case .notChecked:
+            return "not checked"
+        }
+    }
+
+    static func describe(_ rip: SecureTrackRip) -> String {
+        var rereads = ""
+        if rip.fullReads > 1 || rip.rounds > 0 {
+            rereads = ", after \(rip.fullReads) reads of the track"
+            if !rip.suspectSectors.isEmpty {
+                rereads += " and \(rip.rounds) re-reads of \(rip.suspectSectors.count) sectors"
+            }
+        }
+        switch rip.status {
+        case .accurate(let v1, let v2):
+            return "accurate (v1 \(v1), v2 \(v2) submissions)" + rereads
+        case .matchesOtherPressings(let offsets):
+            return
+                "free of errors, but matches only other pressings (offsets \(offsets.map(signed).joined(separator: ", ")))"
+        case .consistent:
+            return "not in AccurateRip; reads agree" + rereads
+        case .consistentButNotAccurate:
+            return "NOT accurate, but \(rip.fullReads) reads agree: this pressing may not be in AccurateRip,"
+                + " or an error reads the same each time"
+        case .suspect:
+            let most = rip.versionCounts.values.max() ?? 0
+            return
+                "NOT accurate: \(rip.unresolvedSectors.count) of \(rip.suspectSectors.count) suspect sectors unresolved"
+                + rereads + "; up to \(most) versions of a sector"
+        }
     }
 
     static func describe(_ source: DriveProfile.OffsetSource) -> String {

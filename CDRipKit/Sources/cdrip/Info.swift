@@ -45,6 +45,11 @@ struct Info: AsyncParsableCommand {
         print("MCN (barcode)        \(try SubchannelCodes.mcn(in: toc, drive: drive) ?? "-")")
         print("MusicBrainz disc ID  \(toc.musicBrainzDiscID)")
         print("freedb disc ID       \(String(format: "%08x", toc.freedbDiscID))")
+        guard !toc.audioTracks.isEmpty else {
+            print()
+            print("This is a data disc, with no audio tracks to rip.")
+            return
+        }
         print("AccurateRip          \(toc.accurateRipDiscID.databaseURL)")
         print("CTDB TOC             \(toc.ctdbTOCString)")
 

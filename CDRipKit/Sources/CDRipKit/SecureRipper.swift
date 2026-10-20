@@ -25,6 +25,9 @@ public struct SecureTrackRip: Sendable {
     public var unresolvedSectors: [Int]
     /// For each suspect sector, the number of different versions that reads gave.
     public var versionCounts: [Int: Int] = [:]
+    /// For each suspect sector, its versions, most often read first. A CTDB repair uses
+    /// them: where they disagree, the samples are suspect, and the other versions are choices.
+    public var sectorVersions: [Int: [[UInt32]]] = [:]
     /// The number of reads of the whole track, the first rip included.
     public var fullReads = 1
     /// The number of rounds of re-reads of suspect sectors.
@@ -121,7 +124,7 @@ public struct SecureRipper {
         var versions = [Int: Versions]()
         var fullReads = 1
         func readWholeTrack() throws -> Bool {
-            try flushCache(awayFrom: sectors)
+            reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
             let read = try reader.readSamples(start..<(start + sectors.count * size))
             fullReads += 1
             var foundNew = false
@@ -183,7 +186,7 @@ public struct SecureRipper {
 
             result.rounds += 1
             let versionCount = versions.values.reduce(0) { $0 + $1.order.count }
-            try flushCache(awayFrom: sectors)
+            reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
             for run in Self.runs(of: versions.keys.sorted()) {
                 let read = try reader.readSamples((start + run.lowerBound * size)..<(start + run.upperBound * size))
                 for index in run where versions[index] != nil {
@@ -194,6 +197,7 @@ public struct SecureRipper {
         }
         result.fullReads = fullReads
         result.versionCounts = versions.mapValues(\.order.count)
+        result.sectorVersions = versions.mapValues(\.ranked)
         result.suspectSectors = versions.keys.sorted()
         return result
     }
@@ -269,23 +273,6 @@ public struct SecureRipper {
         return nil
     }
 
-    /// Reads sectors far from `sectors`, so the drive's cache holds none of them.
-    /// The sectors read never overlap the track: a read of a damaged sector there
-    /// would count as one of its re-reads.
-    private func flushCache(awayFrom sectors: Range<Int>) throws {
-        let reader = ripper.reader
-        let before = 0..<sectors.lowerBound
-        let after = sectors.upperBound..<reader.toc.leadOutLBA
-        let count = min(cacheFlushSectors, max(before.count, after.count))
-        guard count > 0 else { return }
-        // Read at the far end of the larger region.
-        let start = before.count >= after.count ? 0 : after.upperBound - count
-        for lba in stride(from: start, to: start + count, by: reader.sectorsPerRead) {
-            // A sector that cannot be read still moves the drive away; its data does not matter.
-            _ = try? reader.drive.readAudioSectors(at: lba, count: min(reader.sectorsPerRead, start + count - lba))
-        }
-    }
-
     /// Groups sorted indexes into runs, joining runs with a gap of one, so the reads are fewer.
     static func runs(of indexes: [Int]) -> [Range<Int>] {
         var runs = [Range<Int>]()
@@ -297,5 +284,23 @@ public struct SecureRipper {
             }
         }
         return runs
+    }
+}
+
+extension AudioReader {
+    /// Reads `count` sectors far from `sectors`, so the drive's cache holds none of them.
+    /// The sectors read never overlap `sectors`: a read of a damaged sector there would
+    /// count as one of its re-reads.
+    public func flushCache(awayFrom sectors: Range<Int>, count: Int = 4000) {
+        let before = 0..<sectors.lowerBound
+        let after = sectors.upperBound..<toc.leadOutLBA
+        let count = min(count, max(before.count, after.count))
+        guard count > 0 else { return }
+        // Read at the far end of the larger region.
+        let start = before.count >= after.count ? 0 : after.upperBound - count
+        for lba in stride(from: start, to: start + count, by: sectorsPerRead) {
+            // A sector that cannot be read still moves the drive away; its data does not matter.
+            _ = try? drive.readAudioSectors(at: lba, count: min(sectorsPerRead, start + count - lba))
+        }
     }
 }

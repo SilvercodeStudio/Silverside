@@ -77,12 +77,15 @@ The rip log records the offset and its source. The drive profiles and past resul
 
 ## 5. Metadata
 
-The MusicBrainz client must protect the user's access to MusicBrainz:
+The MusicBrainz client must protect the user's access to MusicBrainz. Done: `WebClient` does this for every web service.
 
-- One rate limiter for the whole app: at most 1 request per second. On 503, wait (honor `Retry-After`), back off, and give up after a few tries.
-- A cache on disk (`~/Library/Caches/CDRip/`) keyed by request, shared with AccurateRip and CTDB lookups: a disc ID or a release is fetched once.
-- Tests use saved responses, so `make test` never touches the network.
-- User-Agent: the app name, its version, and a contact URL. Never an email address.
+- A rate limit for each host (MusicBrainz and the Cover Art Archive 1 per second, AccurateRip and CTDB 5 per second). The time of the last request is in `~/Library/Caches/CDRip/rate/<host>`, under a lock, so the limit holds across `cdrip` processes.
+- On 503 or 429, wait (honor `Retry-After`, else a delay that doubles from 2 s), and give up after 4 tries.
+- A cache on disk (`~/Library/Caches/CDRip/web/`) keyed by URL. Responses stay 7 days for MusicBrainz, 30 for cover art, 1 for AccurateRip and CTDB lookups, and 365 for CTDB repair data. A 404 stays 1 day.
+- Tests use a fake transport, so `make test` never touches the network.
+- User-Agent: `CDRip/0.1 ( https://preston-landers.github.io/CDRip )`. Never an email address.
+
+Still to do:
 
 - MusicBrainz lookup by disc ID, then fuzzy TOC lookup.
 - Choose among releases with the MCN (barcode) when the disc has one.
@@ -150,6 +153,8 @@ Done:
 - `CTDB`: layout, disc and track CRCs, syndromes (in parallel, with byte tables: two passes for a 55-minute disc in under half a second), the shift search, and repair with a CRC check afterwards.
 - `ReedSolomonDecoder`: Berlekamp–Massey with erasures, Chien search, Forney. e erasures and v unknown errors are corrected while e + 2v ≤ the number of syndromes.
 - `cdrip repair -i folder [-i folder ...] [-d diskN | --toc ...]`: verifies ripped WAV files against CTDB, or repairs them. With several folders (rips of the same disc), each track uses a version that matches AccurateRip if one exists; otherwise the majority value of each sample. Samples where the versions disagree are suspect: a column that cannot be decoded is decoded again with them as erasures, then with the other versions of its suspect words. With the disc in a drive, the suspect sectors of columns that still fail are re-read. Repaired tracks are checked against AccurateRip too.
+- `DiscRepairer` (CDRipKit) holds the repair steps, so `cdrip rip`, `cdrip repair`, and the app share them. Each track comes in as `TrackAudio`: its samples, and the other values that reads gave for its suspect samples. These come from several rips (the majority value per sample) or from the secure ripper's sector versions. Without repair, it only checks CRCs, at shift 0 and at each shift where column 0 matches an entry exactly. It also gives, for each track, the most submissions of an entry whose track CRC matches.
+- **Repair during `cdrip rip`.** A rip of the whole disc is checked against CTDB. If a track is not free of errors, the rip is repaired with the secure ripper's versions as suspects, and with re-reads of columns that fail. Repaired tracks are written again and checked against AccurateRip again. `--no-repair` only checks. A rip of some tracks only is not checked, because CTDB checks the whole disc. `rip` keeps the disc's audio in memory for this (about 640 MB for 60 minutes), which is acceptable.
 - All clean full rips verify: *Two from the Vault* disc 1, *Head Hunters*, *Lost in the Wonder*, *Civilization IV*, and both *Strange Remain* discs.
 
 **First full repair: *Reckoning*.** From the ASUS rip and the MATSHITA re-rip of its 5 failed tracks, `cdrip repair` corrected 8,345 samples with CTDB entry 2111910 (19 submissions) at shift 0, and all 15 tracks then matched AccurateRip, which is independent of CTDB. The largest entry (31 submissions) is stored at another pressing's alignment, and fails at every shift: trying more than one entry matters.
@@ -177,7 +182,7 @@ Results on the damaged discs so far:
 |---|---|---|
 | *Reckoning* | 10 of 15 accurate | **15 of 15** (8,345 samples corrected) |
 | *Europe '72* disc 1 | 5 of 10 | **10 of 10** (7,757 samples; one re-read on the MATSHITA) |
-| *Dick's Picks Vol. 2* | 2 of 6 | 4 of 6 (tracks 4 and 5 proved by their CTDB track CRCs; 5 columns uncorrectable) |
+| *Dick's Picks Vol. 2* | 2 of 6 | 4 of 6 (tracks 4 and 5 proved by their CTDB track CRCs; 5 columns uncorrectable). Later **6 of 6**, with repair during `cdrip rip` on the MATSHITA (below) |
 | *Europe '72* disc 2 | 2 of 7 | **7 of 7** (12,871 samples): needed reads from three drives (HL-DT-ST, ASUS, MATSHITA); with two drives, 67 columns stayed uncorrectable |
 | *The 1968 Demos* | 10 accurate, 13 free of errors | beyond CTDB: the entries that match this pressing (at shift 0) have no repair data, and the two that do are other pressings' (−324, −694) with only 8 syndromes per column |
 | *One from the Vault* disc 1 | 6 of 8 | **8 of 8** (3,203 samples) |
@@ -186,12 +191,24 @@ Results on the damaged discs so far:
 
 Every "accurate" result after a repair is from AccurateRip, which is independent of CTDB.
 
+Repair during `cdrip rip`, one rip in one drive, after light cleaning of the discs:
+
+| Disc | Drive | Result |
+|---|---|---|
+| *Reckoning* | HL-DT-ST | **15 of 15** (5 tracks repaired, 5,993 samples). Before, this needed rips from two drives. |
+| *Europe '72* disc 2 | MATSHITA | **7 of 7** (2 tracks repaired, 6,567 samples). Before, this needed reads from three drives. |
+| *Dick's Picks Vol. 2* | ASUS | 4 of 6 (tracks 3–6 repaired, 1,089 samples); 2 columns (6746, 6838) uncorrectable. Pooled with the HL-DT-ST rip and re-read in the ASUS: the same 2 columns, and the re-reads gave no new versions. |
+| *Dick's Picks Vol. 2* | MATSHITA | **6 of 6** (4 tracks repaired, 25,574 samples), from this one rip. The MATSHITA gave more versions of each damaged sector (up to 18, against 12 on the ASUS). |
+| *Hundred Year Hall* disc (4 tracks) | ASUS | **4 of 4** (2 tracks repaired, 18,422 samples) |
+| *Hundred Year Hall* disc (11 tracks) | HL-DT-ST | 6 of 11. Tracks 10 and 11 have 482 and 171 suspect sectors; 2,465 columns uncorrectable with the main entry (564 submissions), too many to re-read (512 at most). |
+
+Two things changed at once, so the cause is not known: the cleaning, and the suspects, which now come from the secure ripper's re-reads after cache flushes, not from whole extra rips.
+
 To do:
 
-- Repair during `cdrip rip`, with the secure ripper's versions and suspect sectors, so `repair` is not a separate step.
 - Keep re-read versions on disk, so that a failed run does not lose them.
 - Find tracks that match another pressing for the first track too (today it needs audio before the track).
-- Rip *Europe '72* disc 2 and *Live/Dead* in more drives, and pool the rips.
+- Rip *Live/Dead* in more drives, and pool the rips.
 
 ## 8. Rip log, CUE sheets, gaps and indexes
 
@@ -199,7 +216,7 @@ To do:
   - the disc: TOC, pregaps and index points, MCN, ISRCs, CD-Text, pre-emphasis and copy flags, disc IDs (MusicBrainz, freedb, AccurateRip, CTDB), and the MusicBrainz release
   - the drive: model, firmware, connection, offset and its source
   - the rip: for each track, the secure status, the reads and re-reads, the suspect and repaired samples, the AccurateRip and CTDB results, and the timing
-- `cdrip rip` and `cdrip repair` write a `disc.json` with the WAV files: TOC, disc IDs, drive and offset, and each track's AccurateRip and CTDB result. Then a verified rip can be encoded and tagged later, with no new rip. (Until then, `~/Music/CDRip Archive/` was filled by a script, `.build/probe/archive.py`.)
+- Done for `cdrip rip`: `RipReport`, written as `disc.json` with the WAV files: TOC, disc IDs, drive and offset, and each track's AccurateRip and CTDB result, reads, suspect and unresolved sectors, and repaired samples. Still to do: `cdrip repair` writes it too, and it gets ISRCs, MCN, pregaps, timing, and the Markdown form. Then a verified rip can be encoded and tagged later, with no new rip. (Until then, `~/Music/CDRip Archive/` was filled by a script, `.build/probe/archive.py`.)
 - Accurate CUE sheets, per-track output or image plus CUE.
 - Pregaps, index points, hidden track one audio, pre-emphasis, ISRC, and CD-Text.
 
@@ -208,6 +225,10 @@ To do:
 - A multi-disc release is one unit of work, so metadata stays consistent across discs and sessions.
 - Apple Foundation Models for verification and cleanup of metadata from conventional sources only, with a non-AI path.
 - Reusable style recipes, such as segue `>` marks and `[Venue, date]` suffixes.
+
+## Later: DVD-Audio and Blu-ray audio
+
+A possible goal after the CD work: extract the audio from a DVD-Audio disc (the user has *American Beauty*) and from a Blu-ray audio disc (a BD-R copy of *The Dark Side of the Moon*). These are different from CD: files on a UDF file system, MLP or PCM streams, and, on DVD-Audio, CPPM copy protection.
 
 ## The app (after the CLI)
 
@@ -244,6 +265,8 @@ Test discs:
 - Grateful Dead, *Reckoning* (about 1993): **damaged**, the test disc for secure re-reads. On the ASUS, tracks 8, 11, 13, 14, and 15 are not accurate, and each has C2 errors (track 8: one spot every revolution, about 16 sectors; track 15: 179 sectors). The Q frames just before tracks 9 and 14 have bad CRCs, next to C2 errors in the audio (16 sectors, one revolution, before the frame at 262379). Track 12 was accurate in the rip, but a later C2 scan found 3 bad sectors: results on damaged areas change between reads, so C2 is a hint only. 33 silent sectors before track 1.
 - Grateful Dead, *Reckoning*, on the MATSHITA too: the same 5 tracks fail, and the same Q frames have bad CRCs, so the faults are on the disc. Compared sample by sample, the two drives' rips differ in only 0.0004–0.03% of samples, in 4–192 sectors per track. Where they differ, the median difference is 32–44 (of 65,536 steps), and the largest about 4,000, which can be an audible click. Raw P-W subchannel from the MATSHITA was unusable on this disc: the same bytes at sectors far apart.
 - Grateful Dead, *Dick's Picks Vol. 2*: **damaged**. 2 of 6 tracks accurate on the HL-DT-ST; track 2 has C2 errors in 39 sectors. No pregaps.
+- Grateful Dead, *Dick's Picks Vol. 8*, discs 1–3 (11, 5, and 8 tracks): heavily played, with black paint on the label side, but clean. Every track accurate on the first read, in all three drives at once. CTDB verifies each disc at another pressing's alignment (shifts −268, −869, −860), with 299 to 318 submissions.
+- Grateful Dead, *Hundred Year Hall*, two discs (11 and 4 tracks), lightly cleaned: light to moderate damage. See the repair results in milestone 7.
 - Grateful Dead, *Live/Dead*: **damaged**. Only track 7 (35 s) accurate on the ASUS; tracks 2 and 6 have C2 errors. MCN 0075990183026. 32 silent sectors before track 1. Seven pressings in AccurateRip.
 - Grateful Dead, *Europe '72*, discs 1 and 2 (MCN 0075990266828 on both): **damaged**. Disc 1 on the MATSHITA: 3 of 10 tracks accurate in the first rip, with 557 bad Q frames in track 5 alone. A second rip of tracks 5 and 6 was accurate: the first rip differed in only 2 sectors and 1 sector, and a C2 scan (a separate read) found no errors there. So some errors happen on one read only, and re-reading fixes them. The other failed tracks have C2 errors on every scan: track 9 the most (250 sectors, 21,188 bits), then 10, 1, 2, and 8; damaged frames hide the start of track 6's pregap (it starts at 117938). Disc 2 on the HL-DT-ST: 2 of 7 accurate. Pregaps of 0.4–2.9 s, and 33 silent sectors before track 1 on both.
 - Cory Wong, *Lost in the Wonder* (indie, no label shown): all 12 tracks accurate on the ASUS. One AccurateRip record, v2 only (4 submissions).

@@ -1,0 +1,167 @@
+import Foundation
+
+/// What a rip did and found, for each track and for the disc. `cdrip rip` writes it as
+/// `disc.json` in the rip's folder, so that the rip can be checked and encoded later
+/// without the disc.
+public struct RipReport: Codable, Equatable, Sendable {
+    public struct Drive: Codable, Equatable, Sendable {
+        public var vendor: String
+        public var product: String
+        public var revision: String
+        public var readOffset: Int
+        /// Where the read offset came from, such as "AccurateRip's drive list".
+        public var offsetSource: String
+
+        public init(vendor: String, product: String, revision: String, readOffset: Int, offsetSource: String) {
+            self.vendor = vendor
+            self.product = product
+            self.revision = revision
+            self.readOffset = readOffset
+            self.offsetSource = offsetSource
+        }
+    }
+
+    public enum AccurateRipStatus: String, Codable, Sendable {
+        /// The track matches AccurateRip.
+        case accurate
+        /// The track matches AccurateRip at other offsets only: it is free of errors.
+        case otherPressings
+        /// The disc is not in AccurateRip, or the rip was offline.
+        case notInDatabase
+        /// The track does not match AccurateRip.
+        case notAccurate
+    }
+
+    public struct Track: Codable, Equatable, Sendable {
+        public var number: Int
+        public var file: String
+        public var startLBA: Int
+        public var sectors: Int
+        public var preEmphasis: Bool
+        public var accurateRip: AccurateRipStatus
+        /// The submissions for the v1 and the v2 checksum, when the track is accurate.
+        public var accurateRipConfidence: [Int]?
+        /// The drive offsets at which the first read matches AccurateRip.
+        public var matchingOffsets: [Int]
+        /// Reads of the whole track, the first included.
+        public var fullReads: Int
+        /// Rounds of re-reads of suspect sectors.
+        public var rereadRounds: Int
+        /// Sectors, counted from the track's start, that read differently on different reads.
+        public var suspectSectors: [Int]
+        /// Suspect sectors whose data reads could not decide.
+        public var unresolvedSectors: [Int]
+        /// The most submissions of a CTDB entry whose track CRC matches. 0 if none; nil if not checked.
+        public var ctdbConfidence: Int?
+        /// Samples that the CTDB repair changed.
+        public var repairedSamples: Int
+
+        public init(
+            number: Int, file: String, startLBA: Int, sectors: Int, preEmphasis: Bool,
+            accurateRip: AccurateRipStatus, accurateRipConfidence: [Int]? = nil, matchingOffsets: [Int] = [],
+            fullReads: Int = 1, rereadRounds: Int = 0, suspectSectors: [Int] = [], unresolvedSectors: [Int] = [],
+            ctdbConfidence: Int? = nil, repairedSamples: Int = 0
+        ) {
+            self.number = number
+            self.file = file
+            self.startLBA = startLBA
+            self.sectors = sectors
+            self.preEmphasis = preEmphasis
+            self.accurateRip = accurateRip
+            self.accurateRipConfidence = accurateRipConfidence
+            self.matchingOffsets = matchingOffsets
+            self.fullReads = fullReads
+            self.rereadRounds = rereadRounds
+            self.suspectSectors = suspectSectors
+            self.unresolvedSectors = unresolvedSectors
+            self.ctdbConfidence = ctdbConfidence
+            self.repairedSamples = repairedSamples
+        }
+    }
+
+    public struct CTDBResult: Codable, Equatable, Sendable {
+        public enum Status: String, Codable, Sendable {
+            /// The rip matches an entry with no changes.
+            case verified
+            /// The repaired rip matches an entry.
+            case repaired
+            /// Some tracks were repaired, and their track CRCs match an entry.
+            case partlyRepaired
+            /// No entry verifies or repairs the rip.
+            case notVerified
+            /// The disc is not in CTDB.
+            case notInDatabase
+            /// Not checked: the rip is offline, or does not have every track.
+            case notChecked
+        }
+
+        public var status: Status
+        /// The entry that verifies or repairs the rip.
+        public var entry: Int?
+        /// The entry's submissions.
+        public var confidence: Int?
+        /// The shift, in samples, between the rip and the entry.
+        public var shift: Int?
+        /// Entries that match the rip's alignment but have no repair data.
+        public var entriesWithoutRepairData = 0
+
+        public init(status: Status, entry: Int? = nil, confidence: Int? = nil, shift: Int? = nil) {
+            self.status = status
+            self.entry = entry
+            self.confidence = confidence
+            self.shift = shift
+        }
+
+        public init(_ result: DiscRepairer.Result) {
+            switch result.outcome {
+            case .verified(let entry, let shift):
+                self.init(status: .verified, entry: entry.id, confidence: entry.confidence, shift: shift)
+            case .repaired(let entry, let shift, _):
+                self.init(status: .repaired, entry: entry.id, confidence: entry.confidence, shift: shift)
+            case .partlyRepaired(let entry, let shift, _, _):
+                self.init(status: .partlyRepaired, entry: entry.id, confidence: entry.confidence, shift: shift)
+            case .notVerified:
+                self.init(status: .notVerified)
+            }
+            entriesWithoutRepairData = result.entriesWithoutRepairData
+        }
+    }
+
+    public var program = "CDRip \(CDRipVersion.string)"
+    public var date: Date
+    public var drive: Drive
+    /// True for a secure rip, with re-reads; false for a single pass.
+    public var secure: Bool
+    /// The TOC as CTDB writes it: each audio track's start LBA, then the lead-out.
+    public var toc: String
+    public var musicBrainzDiscID: String
+    public var freedbDiscID: String
+    public var accurateRipDiscID: String
+    public var tracks: [Track]
+    public var ctdb: CTDBResult
+
+    public init(date: Date = Date(), drive: Drive, secure: Bool, toc: TOC, tracks: [Track], ctdb: CTDBResult) {
+        self.date = date
+        self.drive = drive
+        self.secure = secure
+        self.toc = toc.ctdbTOCString
+        musicBrainzDiscID = toc.musicBrainzDiscID
+        freedbDiscID = String(format: "%08x", toc.freedbDiscID)
+        accurateRipDiscID = toc.accurateRipDiscID.name
+        self.tracks = tracks
+        self.ctdb = ctdb
+    }
+
+    public func write(to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(self).write(to: url, options: .atomic)
+    }
+
+    public static func read(from url: URL) throws -> RipReport {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(RipReport.self, from: Data(contentsOf: url))
+    }
+}

@@ -1,32 +1,5 @@
 import Foundation
 
-/// Settings shared by the online services.
-public enum OnlineServices {
-    /// MusicBrainz and CTDB ask clients to name themselves and give a contact.
-    public static let userAgent = "CDRip/0.1 ( https://github.com/preston-landers )"
-
-    /// Downloads a URL. Returns nil for HTTP 404, which both AccurateRip and CTDB use for an unknown disc.
-    static func data(from url: URL, session: URLSession) async throws -> Data? {
-        var request = URLRequest(url: url)
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        // The services can be slow at times: try a timed-out request twice more.
-        var attempt = 1
-        let (data, response): (Data, URLResponse)
-        while true {
-            do {
-                (data, response) = try await session.data(for: request)
-                break
-            } catch let error as URLError where error.code == .timedOut && attempt < 3 {
-                attempt += 1
-            }
-        }
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if status == 404 { return nil }
-        guard status == 200 else { throw OnlineLookupError.httpStatus(status, url) }
-        return data
-    }
-}
-
 public enum OnlineLookupError: Error, Equatable, CustomStringConvertible {
     case httpStatus(Int, URL)
 
@@ -40,9 +13,9 @@ public enum OnlineLookupError: Error, Equatable, CustomStringConvertible {
 extension AccurateRipRecord {
     /// Downloads the records for a disc. Returns none if the disc is not in AccurateRip.
     public static func download(
-        for discID: AccurateRipDiscID, session: URLSession = .shared
+        for discID: AccurateRipDiscID, client: WebClient = .shared
     ) async throws -> [AccurateRipRecord] {
-        guard let data = try await OnlineServices.data(from: discID.databaseURL, session: session) else { return [] }
+        guard let data = try await client.data(from: discID.databaseURL) else { return [] }
         return try records(from: [UInt8](data))
     }
 }
@@ -66,15 +39,15 @@ public struct CTDBEntry: Equatable, Sendable {
     public var hasParity: Bool { repairDataURL != nil }
 
     /// Downloads the entry's repair data, in the order that `CTDB.syndromes(of:layout:shift:count:)` gives.
-    public func downloadRepairData(session: URLSession = .shared) async throws -> [UInt16] {
-        guard let url = repairDataURL, let data = try await OnlineServices.data(from: url, session: session),
+    public func downloadRepairData(client: WebClient = .shared) async throws -> [UInt16] {
+        guard let url = repairDataURL, let data = try await client.data(from: url),
             let syndromes = CTDB.syndromes(fromRepairData: [UInt8](data), count: syndromeCount)
         else { throw CTDBError.malformedResponse }
         return syndromes
     }
 
     /// Looks up a disc by its TOC. Returns none if the disc is not in CTDB.
-    public static func lookup(_ toc: TOC, session: URLSession = .shared) async throws -> [CTDBEntry] {
+    public static func lookup(_ toc: TOC, client: WebClient = .shared) async throws -> [CTDBEntry] {
         var components = URLComponents(string: "http://db.cuetools.net/lookup2.php")!
         components.queryItems = [
             URLQueryItem(name: "version", value: "3"),
@@ -82,7 +55,7 @@ public struct CTDBEntry: Equatable, Sendable {
             URLQueryItem(name: "fuzzy", value: "0"),
             URLQueryItem(name: "toc", value: toc.ctdbTOCString),
         ]
-        guard let data = try await OnlineServices.data(from: components.url!, session: session) else { return [] }
+        guard let data = try await client.data(from: components.url!) else { return [] }
         return try entries(fromXML: data)
     }
 

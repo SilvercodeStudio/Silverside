@@ -53,8 +53,8 @@ public struct DriveOffsetList: Sendable {
     }
 
     /// Downloads the list.
-    public static func download(session: URLSession = .shared) async throws -> DriveOffsetList {
-        guard let data = try await OnlineServices.data(from: url, session: session) else {
+    public static func download(client: WebClient = .shared) async throws -> DriveOffsetList {
+        guard let data = try await client.data(from: url) else {
             throw OnlineLookupError.httpStatus(404, url)
         }
         return try DriveOffsetList(bytes: [UInt8](data))

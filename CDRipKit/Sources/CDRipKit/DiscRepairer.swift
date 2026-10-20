@@ -48,9 +48,11 @@ public struct TrackAudio: Sendable {
         self.init(samples: rip.samples, alternatives: alternatives)
     }
 
-    /// Adds other values for samples. A value that is the sample's own, or already known, is left out.
+    /// Adds other values for samples. A value that is the sample's own, or already known, is
+    /// left out. A sample with an empty list (suspect, with no other value) becomes suspect.
     public mutating func add(_ more: [Int: [UInt32]]) {
         for (sample, values) in more where samples.indices.contains(sample) {
+            if values.isEmpty && alternatives[sample] == nil { alternatives[sample] = [] }
             for value in values where value != samples[sample] && !(alternatives[sample] ?? []).contains(value) {
                 alternatives[sample, default: []].append(value)
             }
@@ -190,6 +192,8 @@ public struct DiscRepairer {
     public var reader: AudioReader?
     /// Rounds of re-reads for the columns that cannot be repaired.
     public var rereadRounds = 4
+    /// Sectors to read elsewhere before each re-read, so that the drive's cache holds none of them.
+    public var cacheFlushSectors = 4000
     /// Receives a line for each step, for people to read.
     public var log: (String) -> Void = { _ in }
     /// Gets an entry's repair data. Tests replace the download.
@@ -410,7 +414,7 @@ public struct DiscRepairer {
         var added = 0
         for _ in 0..<4 {
             let first = firstLBA + (sectors.first ?? 0)
-            reader.flushCache(awayFrom: first..<(first + 1))
+            reader.flushCache(awayFrom: first..<(first + 1), count: cacheFlushSectors)
             for sector in sectors {
                 let start = sector * CDDA.samplesPerSector
                 guard

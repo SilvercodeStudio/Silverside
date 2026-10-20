@@ -27,6 +27,12 @@ public struct DriveProfile: Codable, Equatable, Sendable {
     public var manualOffset: Int?
     public var listedOffset: Int?
     public var observations: [Observation] = []
+    /// The drive's cache, in sectors, as `CacheProbe` measured it.
+    public var cacheSectors: Int?
+
+    /// Sectors to read far away so that the cache holds none of a track: twice the
+    /// measured cache, for a margin, or 4,000 (more than drives were seen to cache).
+    public var cacheFlushSectors: Int { cacheSectors.map { max(2 * $0, 256) } ?? 4000 }
 
     public init(vendor: String, product: String, revision: String) {
         self.vendor = vendor

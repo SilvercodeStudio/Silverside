@@ -30,6 +30,13 @@ struct Rip: AsyncParsableCommand {
     @Flag(help: "Do not ask the drive for C2 error flags.")
     var noC2 = false
 
+    @Option(
+        help: """
+            A folder with an earlier rip of this disc, from any drive. Give it more than once. For each track that \
+            is not accurate, an accurate earlier version replaces it; otherwise all versions join the CTDB repair.
+            """)
+    var pool: [String] = []
+
     func run() async throws {
         let bsdName = try deviceOptions.bsdName()
         let drive = try IOKitDrive(bsdName: bsdName)
@@ -77,6 +84,8 @@ struct Rip: AsyncParsableCommand {
         // CTDB checks the whole disc at once.
         let checksCTDB = !entries.isEmpty && selected.count == toc.audioTracks.count
 
+        let poolFolders = pool.map { URL(filePath: $0, directoryHint: .isDirectory) }
+        try Pool.check(poolFolders, toc: toc)
         let folder = URL(filePath: output ?? "CDRip \(toc.musicBrainzDiscID)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         print("Folder: \(folder.path)")
@@ -87,15 +96,17 @@ struct Rip: AsyncParsableCommand {
         reader.unreadableRetries = 3
         var ripper = TrackRipper(reader: reader, records: records)
         ripper.readsC2 = !noC2
-        let secure = SecureRipper(ripper: ripper)
+        var secure = SecureRipper(ripper: ripper)
+        secure.cacheFlushSectors = profile.cacheFlushSectors
         var discOffsets = Set<Int>()
         var reports = [RipReport.Track]()
         // Each track's audio, with its suspect samples, for CTDB.
         var trackAudio = [TrackAudio]()
         for track in selected {
             let start = ContinuousClock.now
-            let samples: [UInt32]
+            var samples: [UInt32]
             var result: String
+            var audio: TrackAudio
             let file = String(format: "Track %02d.wav", track.number)
             var report = RipReport.Track(
                 number: track.number, file: file, startLBA: track.startLBA, sectors: toc.sectorRange(of: track).count,
@@ -114,7 +125,7 @@ struct Rip: AsyncParsableCommand {
                 case .notAccurate: report.accurateRip = rip.matchingOffsets.isEmpty ? .notAccurate : .otherPressings
                 case .notChecked: break
                 }
-                if checksCTDB { trackAudio.append(TrackAudio(samples: rip.samples)) }
+                audio = TrackAudio(samples: rip.samples)
             } else {
                 let rip = try secure.rip(track)
                 (samples, result) = (rip.samples, Self.describe(rip))
@@ -138,13 +149,40 @@ struct Rip: AsyncParsableCommand {
                 }
                 // A track free of errors needs no suspects: they could only let a repair change it.
                 let errorFree = report.accurateRip == .accurate || report.accurateRip == .otherPressings
-                let audio = errorFree ? TrackAudio(samples: rip.samples) : TrackAudio(rip)
-                if checksCTDB { trackAudio.append(audio) }
-                // Keep the other versions of suspect samples, so that a later repair can use them.
-                if !audio.alternatives.isEmpty {
-                    try audio.writeAlternatives(
-                        to: folder.appending(path: TrackAudio.alternativesFileName(track: track.number)))
+                audio = errorFree ? TrackAudio(samples: rip.samples) : TrackAudio(rip)
+            }
+            // Earlier rips (--pool): an accurate version replaces this read; otherwise every
+            // version joins the repair.
+            if !poolFolders.isEmpty && report.accurateRip != .accurate && report.accurateRip != .otherPressings {
+                let pooled = Pool.versions(of: track, toc: toc, in: poolFolders)
+                var replacement: (samples: [UInt32], v1: Int, v2: Int)?
+                for version in pooled.versions where replacement == nil {
+                    if case .accurate(let v1, let v2) = Pool.verification(
+                        of: version, track: track, toc: toc, records: records)
+                    {
+                        replacement = (version, v1, v2)
+                    }
                 }
+                if let replacement {
+                    samples = replacement.samples
+                    audio = TrackAudio(samples: replacement.samples)
+                    report.accurateRip = .accurate
+                    report.accurateRipConfidence = [replacement.v1, replacement.v2]
+                    result +=
+                        "; an earlier rip is accurate (v1 \(replacement.v1), v2 \(replacement.v2) submissions) and is used"
+                } else if !pooled.versions.isEmpty {
+                    let own = audio
+                    audio = TrackAudio(versions: [samples] + pooled.versions)
+                    audio.add(own.alternatives)
+                    for alternatives in pooled.alternatives { audio.add(alternatives) }
+                    result += "; pooled with \(pooled.versions.count) earlier versions"
+                }
+            }
+            if checksCTDB { trackAudio.append(audio) }
+            // Keep the other versions of suspect samples, so that a later repair can use them.
+            if !audio.alternatives.isEmpty {
+                try audio.writeAlternatives(
+                    to: folder.appending(path: TrackAudio.alternativesFileName(track: track.number)))
             }
             try WAVFile.write(samples, to: folder.appending(path: file))
             reports.append(report)
@@ -163,6 +201,7 @@ struct Rip: AsyncParsableCommand {
             print()
             let errorFree = reports.allSatisfy { $0.accurateRip == .accurate || $0.accurateRip == .otherPressings }
             var repairer = DiscRepairer(toc: toc, records: records, entries: entries, reader: singlePass ? nil : reader)
+            repairer.cacheFlushSectors = profile.cacheFlushSectors
             repairer.log = { print($0) }
             let repair = try await repairer.repair(trackAudio, repairing: !errorFree && !noRepair)
             trackAudio = []

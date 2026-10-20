@@ -70,17 +70,20 @@ struct Repair: AsyncParsableCommand {
         let entries = try await CTDBEntry.lookup(toc).sorted { $0.confidence > $1.confidence }
         guard !entries.isEmpty else { throw CommandError("This disc is not in CUETools DB.") }
 
-        let reader = usesDrive ? try rereader(toc: toc) : nil
+        let (reader, cacheFlushSectors) = usesDrive ? try rereader(toc: toc) : (nil, 4000)
 
         // Every version of every track, and the disc as the first versions give it, which
         // is enough to find the tracks that match AccurateRip at another pressing's offset.
+        try Pool.check(folders, toc: toc)
         var versions = [[[UInt32]]]()
+        var saved = [[[Int: [UInt32]]]]()
         for track in audioTracks {
-            let length = toc.sectorRange(of: track).count * CDDA.samplesPerSector
-            let name = String(format: "Track %02d.wav", track.number)
-            let found = folders.compactMap { try? WAVFile.read($0.appending(path: name)) }.filter { $0.count == length }
-            guard !found.isEmpty else { throw CommandError("No folder has \(name) with the TOC's length.") }
-            versions.append(found)
+            let pooled = Pool.versions(of: track, toc: toc, in: folders)
+            guard !pooled.versions.isEmpty else {
+                throw CommandError(String(format: "No folder has Track %02d.wav with the TOC's length.", track.number))
+            }
+            versions.append(pooled.versions)
+            saved.append(pooled.alternatives)
         }
         var trackStarts = [Int]()
         var firstVersions = [UInt32]()
@@ -97,9 +100,9 @@ struct Repair: AsyncParsableCommand {
             let edges = (isFirst: index == 0, isLast: index == audioTracks.count - 1)
             let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
             let accurate = versions[index].first { samples in
-                let checksum = AccurateRipAccumulator.checksum(
-                    of: samples[...], isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
-                if case .accurate = TrackRipper.verification(of: checksum, known: known) { return true }
+                if case .accurate = Pool.verification(of: samples, track: track, toc: toc, records: records) {
+                    return true
+                }
                 return false
             }
             if let accurate {
@@ -121,7 +124,7 @@ struct Repair: AsyncParsableCommand {
             var trackVersions = versions[index]
             if let reader, trackVersions.count < reads {
                 for _ in trackVersions.count..<reads {
-                    reader.flushCache(awayFrom: toc.sectorRange(of: track))
+                    reader.flushCache(awayFrom: toc.sectorRange(of: track), count: cacheFlushSectors)
                     let read = try reader.readTrack(track)
                     trackVersions.append(read)
                     // Keep the read, so that a later run can use it.
@@ -132,10 +135,7 @@ struct Repair: AsyncParsableCommand {
             }
             var audio = TrackAudio(versions: trackVersions)
             // Other values that earlier rips and repairs kept for suspect samples.
-            for folder in folders {
-                let url = folder.appending(path: TrackAudio.alternativesFileName(track: track.number))
-                if let saved = try? TrackAudio.readAlternatives(from: url) { audio.add(saved) }
-            }
+            for alternatives in saved[index] { audio.add(alternatives) }
             tracks.append(audio)
             print(
                 String(format: "Track %2d  ", track.number)
@@ -144,6 +144,7 @@ struct Repair: AsyncParsableCommand {
 
         print("CTDB: \(entries.count) entries, up to \(entries[0].confidence) submissions")
         var repairer = DiscRepairer(toc: toc, records: records, entries: entries, reader: reader)
+        repairer.cacheFlushSectors = cacheFlushSectors
         repairer.rereadRounds = rereadRounds
         repairer.log = { print($0) }
         let result = try await repairer.repair(tracks)
@@ -185,20 +186,20 @@ struct Repair: AsyncParsableCommand {
         }
     }
 
-    /// An offset-corrected reader for the disc in the drive, with the drive's offset.
-    private func rereader(toc: TOC) throws -> AudioReader {
+    /// An offset-corrected reader for the disc in the drive, with the drive's offset, and
+    /// the number of sectors that flush the drive's cache.
+    private func rereader(toc: TOC) throws -> (reader: AudioReader, cacheFlushSectors: Int) {
         let bsdName = try deviceOptions.bsdName()
         let drive = try IOKitDrive(bsdName: bsdName)
-        var readOffset = offset
-        if readOffset == nil, let device = OpticalDrive.all().first(where: { $0.discBSDName == bsdName }) {
-            readOffset = try DriveProfileStore().profile(
-                vendor: device.vendor, product: device.product, revision: device.revision
-            ).offset?.value
+        let profile = try OpticalDrive.all().first(where: { $0.discBSDName == bsdName }).map {
+            try DriveProfileStore().profile(vendor: $0.vendor, product: $0.product, revision: $0.revision)
         }
-        guard let readOffset else { throw CommandError("The drive's read offset is not known. Give it with --offset.") }
+        guard let readOffset = offset ?? profile?.offset?.value else {
+            throw CommandError("The drive's read offset is not known. Give it with --offset.")
+        }
         var reader = AudioReader(drive: drive, toc: toc, readOffset: readOffset, canOverread: false)
         reader.unreadableRetries = 3
-        return reader
+        return (reader, profile?.cacheFlushSectors ?? 4000)
     }
 
     /// The first "<folder> read N" folder, from N = 2, that has no file for `track`.
@@ -239,9 +240,4 @@ struct Repair: AsyncParsableCommand {
             print(line)
         }
     }
-}
-
-/// The TOC from a rip's disc.json, as `cdrip rip` and the archive write it.
-private struct SavedTOC: Decodable {
-    var toc: String
 }

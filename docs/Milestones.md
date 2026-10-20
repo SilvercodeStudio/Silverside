@@ -36,7 +36,7 @@ Done:
 
 Index points after index 01 are left for milestone 8: finding them needs the Q subchannel of every sector, which a rip reads anyway.
 
-## 3. Rip to WAV with AccurateRip verification — in progress
+## 3. Rip to WAV with AccurateRip verification — done
 
 Done:
 
@@ -46,10 +46,6 @@ Done:
 - Full-disc rips checked on hardware: Herbie Hancock, *Head Hunters* (4 of 4 tracks accurate, including the first and last), and Grateful Dead, *Reckoning* (10 of 15: the 5 others have C2 errors).
 - `DriveProfile` and `DriveProfileStore`: `~/Library/Application Support/CDRip/DriveProfiles.json`. Offset order: manual, confirmed by rips of two or more discs, then AccurateRip's list. Rips in several drives can run at once: a save locks the file, reads it again, and changes only its own profile.
 - Offsets confirmed by rips alone: +6 for the HL-DT-ST (*Head Hunters*, *Dick's Picks Vol. 2*, *Europe '72* disc 2) and for the ASUS (*Reckoning*, *Live/Dead*, *Lost in the Wonder*). Three rips in three drives ran at once with no lost profile updates. +103 for the MATSHITA (*Europe '72* disc 1, *Live at Leeds*), so all three drives are confirmed by rips, and each agrees with AccurateRip's list. Partly damaged discs count, because their good tracks still match.
-
-To do:
-
-Done:
 
 - Speed: the drive is the limit, not the code. A 5½-minute track rips in 26 s on the HL-DT-ST (release build) with 0.2 s of CPU time, and a 57-minute disc in about 4½ minutes (about 13×). Reading C2 flags with the audio costs no time.
 
@@ -91,7 +87,7 @@ The MusicBrainz client must protect the user's access to MusicBrainz. Done: `Web
 Still to do:
 
 - MusicBrainz lookup by disc ID, then fuzzy TOC lookup.
-- Choose among releases with the MCN (barcode) when the disc has one.
+- Choose among releases with the MCN (barcode) when the disc has one. A disc ID can belong to several releases: *Madison Square Garden 3/9/81* (3 discs) and the box set that holds it, *In and Out of the Garden* (17 discs), have the same disc IDs. Never take the first release only: rank them (MCN, then the release whose other discs the user also rips), show the choice, and remember it for the other discs of the set.
 - File and folder name templates.
 - Cover art, from either source:
   - an image file the user chooses
@@ -103,7 +99,7 @@ Still to do:
 
 After milestone 5, the CLI can rip clean discs for daily use.
 
-## 6. Secure re-reads — in progress
+## 6. Secure re-reads — done
 
 Findings that shaped the design (MATSHITA, *Europe '72* disc 1, a damaged sector in track 9):
 
@@ -134,21 +130,22 @@ Results so far:
 
 - The same tracks on the ASUS do not recover either, and it reads this disc worse (42 suspect sectors in track 8, the MATSHITA 13). But the two drives' final results for track 8 differ in 74 sectors, more than both drives' suspect sectors together. So each drive reads some sectors wrong the same way every time: re-reads in one drive cannot find them, and a comparison between drives can.
 
-To do:
+Watch for in normal use:
 
-- Check C2 reads and shifted-read detection on hardware: which drives give C2 flags, what they cost in speed, and whether a shifted read shows again (*One from the Vault* disc 2 on the ASUS).
-- Test on the damaged discs, and tune the limits (rounds, combinations, cache flush size).
-- A per-drive cache size, from the drive's profile or a timing test.
+- A shifted read on real hardware (seen once, on *One from the Vault* disc 2 on the ASUS, before the detection existed). The simulator tests the detection.
+- A disc that needs other limits (rounds, combinations). The defaults have worked on every disc so far.
 
 Done:
 
 - **Shifted reads.** On *One from the Vault* disc 2 (ASUS), one read of track 3 made 57,059 of its 59,127 sectors suspect, and the secure rip took 21 minutes; a read of track 1 differed in 14.4 million samples. Now, when a run of 32 or more sectors differs from the first read, the ripper looks for one shift (up to 10 sectors either way) that explains both the start and the end of the run. Damage changes data in place, so no shift explains it. A shifted read is left out and read again. If two later reads agree with each other and not with the first read, the first read lost its place, and a later read replaces it. `SimulatedDrive.slips` models a drive that loses its place.
 - **C2 flags.** `CDDrive.readAudioSectorsWithC2` (294 flag bytes for each sector, one bit for each byte). The first read of each track asks for them, and a drive that refuses gives a plain read (`cdrip rip --no-c2` turns them off). Sectors with C2 errors are re-read even if every read agrees, and their flagged samples are suspects for CTDB, exact to the sample. The simulator flags the bytes that it returns wrong.
 - **Unreadable sectors.** One sector that gave `EIO` stopped a whole rip (*Dick's Picks Vol. 1* disc 2 on the ASUS, track 8). Now `AudioReader.unreadableRetries` reads a failed chunk again sector by sector; a sector that still fails is silence, and the rip goes on. Such sectors are re-read like C2 sectors, a failed re-read gives no version, and their samples are erasures for CTDB.
+- **Cache size for each drive.** `CacheProbe` reads a sector, then N sectors elsewhere, then the sector again: a read from the cache takes about 0.5 ms, and one from the disc 30–240 ms. It doubles N, then bisects. `cdrip drives -d diskN --measure-cache` keeps the result in the drive's profile, and rips and repairs then flush twice that many sectors (at least 256), in place of 4,000. All three drives keep only the latest read: one sector read anywhere else, even 2,000 sectors ahead, empties the cache. So their flush is 256 sectors, which saves about 3½ s on each round of re-reads.
+- **`cdrip rip --pool <folder>`** (more than once) adds earlier rips of the disc, from any drive. For a track that is not accurate, an accurate earlier version replaces it; otherwise all versions, and their saved suspects, join the CTDB repair. A folder whose `disc.json` has another TOC is refused.
 - **Pooling across drives.** `cdrip repair` pools rips from several drives. Each rip keeps its suspect samples and their other values in `Track NN.suspects` files, so the pool has every drive's versions, not only the majority value of each file.
 - The rip report (`disc.json`) lists each track's suspect, unresolved, and C2 sectors, and its shifted reads.
 
-## 7. CTDB verification and repair — in progress
+## 7. CTDB verification and repair — done
 
 How CTDB works, from reading CUETools (for understanding only; our code is our own) and checked against real entries:
 
@@ -215,9 +212,9 @@ Two things changed at once, so the cause is not known: the cleaning, and the sus
 
 To do:
 
-- Rip *Live/Dead* in more drives, and pool the rips.
-
 Done:
+
+- *Live/Dead* in a second drive (MATSHITA): track 6 is now accurate too (2 of 7), but the disc is beyond repair. Track 4 has 4,318 suspect sectors (about 60% of it, 35 minutes of re-reads), and with the ASUS rip pooled, the repair still fails in almost every column.
 
 - Re-read versions are kept on disk (`Track NN.suspects`, by `rip` and by `repair`), so a failed run does not lose them. A later `repair` loads them.
 - **Erasure subsets.** A column can have more suspect words than its syndromes can erase (14 of 16, with 2 kept to check). When at most 16 columns fail, the decoder tries up to 200,000 random subsets of a column's suspects as erasures. With the places known, the values are the solution of a linear system, so each try is fast, and the spare syndromes and the CRC catch a wrong result. On *Hundred Year Hall* disc 1 (three rips pooled), it did not solve the last 4 columns: they have 18 to 30 suspects each, too many wrong words for a subset of 14 to hold them all.

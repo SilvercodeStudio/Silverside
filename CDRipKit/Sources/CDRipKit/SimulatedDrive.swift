@@ -48,11 +48,15 @@ public final class SimulatedDrive: CDDrive {
     public var reportsC2 = false
 
     /// How many sectors the drive caches. A read of sectors that are all in the
-    /// cache returns the cached data, as real drives do. Zero turns the cache off.
+    /// cache returns the cached data, as real drives do, and the cache removes the
+    /// sectors used least recently. Zero turns the cache off.
     public var cacheSectors = 0
 
     /// The number of read requests that the cache did not answer.
     public private(set) var discReads = 0
+
+    /// True if the cache answered the last read request.
+    public private(set) var lastReadWasCached = false
 
     private var cache: [Int: (audio: [UInt8], errorFlags: [UInt8])] = [:]
     private var cacheOrder: [Int] = []
@@ -102,8 +106,11 @@ public final class SimulatedDrive: CDDrive {
             throw DriveError.readFailed(lba: bad)
         }
         if cacheSectors > 0, sectors.allSatisfy({ cache[$0] != nil }) {
+            lastReadWasCached = true
+            touch(sectors)
             return (sectors.flatMap { cache[$0]!.audio }, sectors.flatMap { cache[$0]!.errorFlags })
         }
+        lastReadWasCached = false
         discReads += 1
 
         // A sector that the request just before also touched is part of the same
@@ -150,8 +157,8 @@ public final class SimulatedDrive: CDDrive {
             withUnsafeBytes(of: sample.littleEndian) { bytes.append(contentsOf: $0) }
         }
         if cacheSectors > 0 {
+            touch(sectors)
             for (index, sector) in sectors.enumerated() {
-                if cache[sector] == nil { cacheOrder.append(sector) }
                 let start = index * CDDA.bytesPerSector
                 let flagStart = index * CDDA.errorFlagBytesPerSector
                 cache[sector] = (
@@ -162,6 +169,12 @@ public final class SimulatedDrive: CDDrive {
             while cacheOrder.count > cacheSectors { cache[cacheOrder.removeFirst()] = nil }
         }
         return (bytes, flags)
+    }
+
+    /// Makes `sectors` the most recently used, so the cache removes them last.
+    private func touch(_ sectors: Range<Int>) {
+        cacheOrder.removeAll { sectors.contains($0) }
+        cacheOrder.append(contentsOf: sectors)
     }
 
     public func readQSubchannel(at lba: Int, count: Int) throws -> [QSubchannel] {

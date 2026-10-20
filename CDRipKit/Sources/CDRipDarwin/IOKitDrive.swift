@@ -56,10 +56,10 @@ public final class IOKitDrive: CDDrive {
 
     /// Reads the Q subchannel together with the user area, because the
     /// drives tested so far reject a read of Q alone.
-    public func readQSubchannel(at lba: Int) throws -> QSubchannel {
+    public func readQSubchannel(at lba: Int, count: Int) throws -> [QSubchannel] {
         guard lba >= 0 else { throw DriveError.sectorOutOfRange(lba: lba) }
         let sectorSize = CDDA.bytesPerSector + 16
-        var bytes = [UInt8](repeating: 0, count: sectorSize)
+        var bytes = [UInt8](repeating: 0, count: count * sectorSize)
         var request = dk_cd_read_t()
         request.offset = UInt64(lba * sectorSize)
         request.sectorArea = UInt8(kCDSectorAreaUser.rawValue | kCDSectorAreaSubChannelQ.rawValue)
@@ -73,40 +73,11 @@ public final class IOKitDrive: CDDrive {
         } catch IOKitDriveError.ioctlFailed(errno: EIO) {
             throw DriveError.readFailed(lba: lba)
         }
-        let start = CDDA.bytesPerSector
-        return QSubchannel(bytes: Array(bytes[start..<(start + QSubchannel.byteCount)]))
-    }
-
-    /// Reads the disc's Media Catalog Number (barcode). Nil if the disc has none.
-    /// Some discs store thirteen zeros, which also means none.
-    public func readMCN() throws -> String? {
-        var request = dk_cd_read_mcn_t()
-        guard try controlUnlessMissing(Ioctl.readMCN, &request) else { return nil }
-        return Self.string(fromTuple: request.mcn).flatMap { $0.allSatisfy { $0 == "0" } ? nil : $0 }
-    }
-
-    /// Reads a track's ISRC. Nil if the track has none.
-    public func readISRC(track: Int) throws -> String? {
-        var request = dk_cd_read_isrc_t()
-        request.track = UInt8(track)
-        guard try controlUnlessMissing(Ioctl.readISRC, &request) else { return nil }
-        return Self.string(fromTuple: request.isrc)
-    }
-
-    /// Runs a request that gives EIO when the disc has no such code. Returns false then.
-    private func controlUnlessMissing<Request>(_ code: UInt, _ request: inout Request) throws -> Bool {
-        do {
-            try control(code, &request)
-            return true
-        } catch IOKitDriveError.ioctlFailed(errno: EIO) {
-            return false
+        guard request.bufferLength == bytes.count else { throw DriveError.readFailed(lba: lba) }
+        return (0..<count).map { sector in
+            let start = sector * sectorSize + CDDA.bytesPerSector
+            return QSubchannel(bytes: Array(bytes[start..<(start + QSubchannel.byteCount)]))
         }
-    }
-
-    /// Converts a fixed C character array, imported as a tuple, to a String.
-    private static func string<Tuple>(fromTuple tuple: Tuple) -> String? {
-        let text = withUnsafeBytes(of: tuple) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
-        return text.isEmpty ? nil : text
     }
 
     private func control<Request>(_ code: UInt, _ request: inout Request) throws(IOKitDriveError) {
@@ -130,8 +101,6 @@ public enum IOKitDriveError: Error, Equatable, CustomStringConvertible {
 /// Request codes from IOCDMediaBSDClient.h. Swift does not import the _IOWR macro.
 enum Ioctl {
     static let read = readWrite(96, dk_cd_read_t.self)
-    static let readISRC = readWrite(97, dk_cd_read_isrc_t.self)
-    static let readMCN = readWrite(98, dk_cd_read_mcn_t.self)
     static let readTOC = readWrite(100, dk_cd_read_toc_t.self)
 
     private static func readWrite<T>(_ number: UInt, _: T.Type) -> UInt {

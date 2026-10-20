@@ -10,9 +10,19 @@ struct DeviceOptions: ParsableArguments {
         if let device { return device }
         let names = OpticalDrive.all().compactMap(\.discBSDName)
         switch names.count {
-        case 0: throw ValidationError("No drive has an audio CD.")
+        case 0: throw CommandError("No drive has an audio CD.")
         case 1: return names[0]
-        default: throw ValidationError("More than one drive has a CD (\(names.joined(separator: ", "))). Use --device.")
+        default: throw CommandError("More than one drive has a CD (\(names.joined(separator: ", "))). Use --device.")
         }
+    }
+}
+
+/// An error with a message for the user. ArgumentParser prints it without the usage text
+/// that it adds to a `ValidationError`, because the command line itself was correct.
+struct CommandError: Error, CustomStringConvertible {
+    let description: String
+
+    init(_ description: String) {
+        self.description = description
     }
 }

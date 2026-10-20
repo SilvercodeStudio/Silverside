@@ -18,7 +18,7 @@ struct Info: AsyncParsableCommand {
 
         print("Track  Start LBA  Length    Pregap    ISRC          Type")
         for track in toc.tracks {
-            let isrc = track.kind == .audio ? try drive.readISRC(track: track.number) : nil
+            let isrc = track.kind == .audio ? try SubchannelCodes.isrc(of: track, in: toc, drive: drive) : nil
             let length = toc.sectorRange(of: track).count
             var notes = [track.kind == .audio ? "audio" : "data"]
             let pregap: String
@@ -31,7 +31,9 @@ struct Info: AsyncParsableCommand {
             if track.hasPreEmphasis { notes.append("pre-emphasis") }
             if track.isCopyPermitted { notes.append("copy permitted") }
             if track.session > 1 { notes.append("session \(track.session)") }
-            if track.number == toc.tracks[0].number && track.startLBA > 0 { notes.append("audio before track 1?") }
+            if track == toc.tracks[0] && track.kind == .audio && track.startLBA > 0 {
+                notes.append(try Self.describeStart(of: track, drive: drive, toc: toc))
+            }
             print(
                 String(format: "%5d  %9d  ", track.number, track.startLBA) + Self.duration(length) + "  "
                     + pregap.padding(toLength: 8, withPad: " ", startingAt: 0) + "  "
@@ -40,7 +42,7 @@ struct Info: AsyncParsableCommand {
         }
         print(String(format: "Lead  %10d  ", toc.leadOutLBA) + Self.duration(toc.leadOutLBA))
         print()
-        print("MCN (barcode)        \(try drive.readMCN() ?? "-")")
+        print("MCN (barcode)        \(try SubchannelCodes.mcn(in: toc, drive: drive) ?? "-")")
         print("MusicBrainz disc ID  \(toc.musicBrainzDiscID)")
         print("freedb disc ID       \(String(format: "%08x", toc.freedbDiscID))")
         print("AccurateRip          \(toc.accurateRipDiscID.databaseURL)")
@@ -63,6 +65,18 @@ struct Info: AsyncParsableCommand {
             let parity = entries.contains(where: \.hasParity) ? ", with repair data" : ""
             print("CTDB                 \(entries.count) entries, up to \(most) submissions\(parity)")
         }
+    }
+
+    /// Says whether the sectors before track 1 are silent or hold audio, such as a hidden track.
+    static func describeStart(of track: TOC.Track, drive: IOKitDrive, toc: TOC) throws -> String {
+        let samples = try AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)
+            .readSamples(0..<(track.startLBA * CDDA.samplesPerSector))
+        // With no offset correction, the end can hold the start of track 1. Up to
+        // 5 sectors covers the read offset of almost every drive.
+        let checked = samples.dropLast(5 * CDDA.samplesPerSector)
+        let sectors = "\(track.startLBA) sectors before track 1"
+        if checked.isEmpty { return sectors }
+        return checked.allSatisfy { $0 == 0 } ? "\(sectors) are silent" : "\(sectors) hold audio (hidden track?)"
     }
 
     /// Formats a sector count as MM:SS:FF (minutes, seconds, and frames of 1/75 second), as CUE sheets do.

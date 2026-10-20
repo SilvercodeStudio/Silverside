@@ -5,8 +5,15 @@ public protocol CDDrive {
     /// Reads raw audio sectors, 2352 bytes each. The data is not offset-corrected.
     func readAudioSectors(at lba: Int, count: Int) throws -> [UInt8]
 
-    /// Reads the Q subchannel of one sector. The frame can be damaged; check `isValid`.
-    func readQSubchannel(at lba: Int) throws -> QSubchannel
+    /// Reads the Q subchannel of `count` sectors. Frames can be damaged; check `isValid`.
+    func readQSubchannel(at lba: Int, count: Int) throws -> [QSubchannel]
+}
+
+extension CDDrive {
+    /// Reads the Q subchannel of one sector.
+    public func readQSubchannel(at lba: Int) throws -> QSubchannel {
+        try readQSubchannel(at: lba, count: 1)[0]
+    }
 }
 
 public enum DriveError: Error, Equatable, CustomStringConvertible {

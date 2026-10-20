@@ -54,13 +54,14 @@ The test values in `DiscIDTests` are real data from MusicBrainz, AccurateRip, an
 
 ## Hardware findings
 
-Two drives so far; details for each are in `docs/Milestones.md`. MATSHITA BD-MLT UJ260AF on USB (no hub), probed with `DKIOCCD*` ioctls:
+Three drives so far (MATSHITA UJ260AF +103, HL-DT-ST BU50N +6, ASUS BW-16D1HT +6); details for each are in `docs/Milestones.md`. MATSHITA BD-MLT UJ260AF on USB (no hub), probed with `DKIOCCD*` ioctls:
 
 - The read offset is +103. It agrees with AccurateRip's drive offset list, and it is the only offset that matches on all three test discs. One disc cannot prove a drive's offset: other pressings match too, and they can have more submissions (*The Endless River*: +773 has v1 66 and v2 200, +103 has 27 and 200). AccurateRip confidences stop at 200. Find a drive's offset from the offsets that several discs share, or from the AccurateRip drive offset list.
 - These work: full TOC, audio reads, C2 error flags, and Q subchannel together with the user area (Q alone gives `EINVAL`).
 - No overread: reads at or past the lead-out give `EIO`. The HL-DT-ST BU50N (offset +6) gives the same result, so the limit may be in the macOS CD driver, not the drives. Exclusive SCSITask access would show which.
 - The HL-DT-ST BU50N at +6 and the MATSHITA at +103 give identical checksums for the same track.
-- `DKIOCCDREADISRC` works through the bridge (*The Endless River*: GBN9X1400051, as in MusicBrainz). `DKIOCCDREADMCN` and `DKIOCCDREADISRC` give `EIO` when the disc has no code, so treat `EIO` as "no code". ISRC frames are also in about 1 of 100 Q-subchannel sectors (ADR 3); in the 6-bit ISRC characters, `0`–`9` are 0x00–0x09 and `A`–`Z` are 0x11–0x2A.
+- Read MCN and ISRC from the Q subchannel (`SubchannelCodes`), not with `DKIOCCDREADISRC` and `DKIOCCDREADMCN`. On the HL-DT-ST, the ISRC ioctl returned the previous track's code for several tracks of *The Story of the Ghost*, and the code no longer uses either ioctl. MCN and ISRC frames are about 1 in 100 Q frames; in the 6-bit ISRC characters, `0`–`9` are 0x00–0x09 and `A`–`Z` are 0x11–0x2A.
+- A valid MCN or ISRC frame can sit at a track change (*The Story of the Ghost*, LBA 17441). `PregapFinder` counts such frames as part of the previous track.
 - AccurateRip records can be v2 only (Vulfpeck *Clarity of Cal* has one v2 submission). The v1 offset search finds nothing there; the sector 450 checksum, which is v1-style for both versions, finds the offset.
 
 ## Constraints

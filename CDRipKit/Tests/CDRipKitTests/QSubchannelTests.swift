@@ -13,6 +13,21 @@ struct QSubchannelTests {
         #expect(frame.position == QSubchannel.Position(track: 1, index: 1, lba: 1000))
     }
 
+    /// Read from Phish, "The Story of the Ghost": LBA 17441 and 89520.
+    @Test func parsesRealMCNAndISRCFrames() {
+        let mcn = QSubchannel(bytes: hexBytes("020075596229722000411d32"))
+        #expect(mcn.mcn == "0075596229722" && mcn.position == nil && mcn.isrc == nil)
+        let isrc = QSubchannel(bytes: hexBytes("0396355504980019304587a6"))
+        #expect(isrc.isrc == "USEE19800193" && isrc.position == nil && isrc.mcn == nil)
+    }
+
+    @Test func makesCodeFramesThatParse() {
+        #expect(QSubchannel.mcn("0075596229722").mcn == "0075596229722")
+        #expect(QSubchannel.isrc("GBN9X1400051").isrc == "GBN9X1400051")
+        // The real ISRC frame stores a frame number in its last data byte; ours stores zero.
+        #expect(QSubchannel.isrc("USEE19800193").bytes[0..<9] == hexBytes("0396355504980019304587a6")[0..<9])
+    }
+
     @Test func rejectsADamagedFrame() {
         var bytes = Self.realFrame
         bytes[1] = 0x83
@@ -59,6 +74,13 @@ struct PregapFinderTests {
         #expect(try PregapFinder.pregap(of: toc.tracks[2], in: toc, drive: drive) == 37)
     }
 
+    /// Sector 441 holds an MCN frame, right before track 2 starts at 442 with no pregap.
+    @Test func treatsACodeFrameAtTheChangeAsThePreviousTrack() throws {
+        let drive = try drive(pregaps: [:], trackSectors: [442, 300])
+        drive.mcn = "0075596229722"
+        #expect(try PregapFinder.pregaps(of: drive.toc, drive: drive) == [1: 0, 2: 0])
+    }
+
     @Test func leavesOutDataTracks() throws {
         let toc = try TOC(
             tracks: [.init(number: 1, startLBA: 0), .init(number: 2, startLBA: 400, kind: .data)], leadOutLBA: 900)
@@ -91,5 +113,24 @@ struct CTDBEntryTests {
         #expect(throws: CTDBError.malformedResponse) {
             try CTDBEntry.entries(fromXML: Data(#"<ctdb><entry confidence="x"/></ctdb>"#.utf8))
         }
+    }
+}
+
+struct SubchannelCodesTests {
+    @Test func readsCodesFromFrames() throws {
+        let (toc, samples) = try makeDisc(trackSectors: [600, 700, 400])
+        let drive = SimulatedDrive(toc: toc, samples: samples)
+        drive.mcn = "0075596229722"
+        drive.isrcs = [1: "USEE19800189", 2: "USEE19800190"]
+        #expect(try SubchannelCodes.mcn(in: toc, drive: drive) == "0075596229722")
+        let isrcs = try toc.tracks.map { try SubchannelCodes.isrc(of: $0, in: toc, drive: drive) }
+        #expect(isrcs == ["USEE19800189", "USEE19800190", nil])
+    }
+
+    @Test func treatsAnMCNOfZerosAsNone() throws {
+        let (toc, samples) = try makeDisc(trackSectors: [600])
+        let drive = SimulatedDrive(toc: toc, samples: samples)
+        drive.mcn = "0000000000000"
+        #expect(try SubchannelCodes.mcn(in: toc, drive: drive) == nil)
     }
 }

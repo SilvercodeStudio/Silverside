@@ -31,7 +31,10 @@ public enum PregapFinder {
         var low = range.lowerBound
         var high = range.upperBound
         while low < high {
-            let (sector, position) = try readPosition(near: low + (high - low) / 2, in: low..<high, drive: drive)
+            // Sectors with only MCN or ISRC frames left between two known positions
+            // belong to the previous track: no position frame says the new track starts there.
+            guard let (sector, position) = try readPosition(near: low + (high - low) / 2, in: low..<high, drive: drive)
+            else { return high }
             if position.track == track {
                 high = sector
             } else {
@@ -43,19 +46,23 @@ public enum PregapFinder {
 
     /// Reads a position frame at `lba`. If that frame is damaged, or is an MCN or
     /// ISRC frame, reads the nearest sector in `range` that has a position frame.
+    /// Returns nil if the sectors near `lba` in `range` have only valid MCN or ISRC frames.
     private static func readPosition(
         near lba: Int, in range: Range<Int>, drive: any CDDrive
-    ) throws -> (sector: Int, position: QSubchannel.Position) {
+    ) throws -> (sector: Int, position: QSubchannel.Position)? {
+        var sawDamage = false
         for distance in 0..<16 {
             for sector in Set([lba - distance, lba + distance]).sorted() where range.contains(sector) {
                 // Read a damaged frame again once. A valid MCN or ISRC frame does not change.
-                for _ in 0..<2 {
+                for attempt in 0..<2 {
                     let frame = try drive.readQSubchannel(at: sector)
                     if let position = frame.position { return (sector, position) }
                     if frame.isValid { break }
+                    if attempt == 1 { sawDamage = true }
                 }
             }
         }
+        guard sawDamage else { return nil }
         throw PregapError.unreadableSubchannel(lba: lba)
     }
 }

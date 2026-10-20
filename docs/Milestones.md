@@ -31,7 +31,7 @@ Done:
 - Offset detection: `AccurateRipOffsetFinder`, with the full-track v1 checksum and the sector 450 checksum (for v2-only records).
 - Parser for AccurateRip database files.
 - `cdrip` CLI skeleton with swift-argument-parser (`make cli ARGS='...'`).
-- `cdrip info`: TOC, pregaps (binary search of the Q subchannel, with damaged frames skipped), disc IDs, ISRCs, MCN, and AccurateRip and CTDB status (`--offline` skips the lookups). Uses the only drive with a CD unless `-d diskN` is given.
+- `cdrip info`: TOC, pregaps (binary search of the Q subchannel, with damaged frames skipped), silence check before track 1, disc IDs, ISRCs and MCN (from Q-subchannel frames), and AccurateRip and CTDB status (`--offline` skips the lookups). Uses the only drive with a CD unless `-d diskN` is given.
 - `cdrip drives`: drives from the IOKit registry (vendor, product, firmware, connection) and their CDs.
 
 Index points after index 01 are left for milestone 8: finding them needs the Q subchannel of every sector, which a rip reads anyway.
@@ -97,7 +97,7 @@ After milestone 5, the CLI can rip clean discs for daily use.
 | Drive | Connection | Read offset | Notes |
 |---|---|---|---|
 | MATSHITA BD-MLT UJ260AF | USB, no hub | +103 | The only offset that matches on all 3 test discs; agrees with the AccurateRip list (648 submissions). No overread. C2, Q subchannel, CD-Text, and ISRC work. |
-| ASUS BW-16D1HT | OWC enclosure | — | Not tested yet |
+| ASUS BW-16D1HT, firmware 3.10, possibly LG inside and modified for LibreDrive | USB | +6 | Agrees with the AccurateRip list (3,015 submissions); matches on *Dozin' at the Knick* disc 1. About 24.7×, the fastest so far. |
 | HL-DT-ST BD-RE BU50N (LG), firmware CC03, possibly modified for LibreDrive (MakeMKV) | USB, no hub | +6 | Agrees with the AccurateRip list (51 submissions); matches on *Clarity of Cal*, with the same checksums as the MATSHITA at +103. No overread. C2 and Q subchannel (with user area) work. Raw P-W subchannel gives `EIO`. Reports 20×. |
 
 Drives report vendor names that differ from the names in AccurateRip's offset list. Drive profiles need a table of vendor aliases:
@@ -109,10 +109,12 @@ Drives report vendor names that differ from the names in AccurateRip's offset li
 
 Test discs:
 
-- Grateful Dead, *Dozin' at the Knick*, disc 1: in AccurateRip and CTDB, no CD-Text, HDCD logo on the disc. AccurateRip matches four other pressings besides the one at the drive offset.
+- Grateful Dead, *Dozin' at the Knick*, disc 1, two copies with the same TOC: a used copy, and the original from 1996. In AccurateRip and CTDB, no CD-Text, HDCD logo on the disc. AccurateRip has five pressings. The original's audio is 195 samples later than the used copy's: it matches the second-largest group of submissions, and the used copy matches the largest.
 - Vulfpeck, *Clarity of Cal* (2025, indie): CD-Text with vinyl side numbers in the track titles ("A1 Big Dipper"). One AccurateRip submission, v2 only. No MCN or ISRC in the Q subchannel. The barcode 3760420424738 is in MusicBrainz, but it was not found in about 1,200 sectors of Q subchannel.
 - Beatles, *Past Masters Vol. 2* (1988 pressing): no ISRC, MCN, or pre-emphasis. In AccurateRip, but this pressing (at the drive's offset) has few submissions; two other pressings have many more.
 - Miles Davis, *Kind of Blue* (1997 edition, 6 tracks): ISRCs (USSM159…), an MCN of all zeros (no barcode), pregaps of 1.7–4 seconds. AccurateRip 57 records; CTDB up to 5,905 submissions.
+- Phish, *The Story of the Ghost* (1998 original): 32 silent sectors before track 1, an MCN (0075596229722), ISRCs on every track, and an MCN frame at the change from track 1 to track 2. The HL-DT-ST's ISRC command gave wrong codes for several tracks; the Q-subchannel frames are correct.
 - Grateful Dead, *Summer Magic 1985* (20 discs): MusicBrainz disc IDs known. Not in AccurateRip when last checked.
 - Pink Floyd, *The Endless River* (2014, major label): ISRCs on the disc (GBN9X1400051…), the same as in MusicBrainz. No MCN. CD-Text. Many pressings in AccurateRip, and one (+773) has more submissions than the drive's offset.
-- Still to find: a disc with an MCN, an enhanced CD, a disc with hidden track one audio, a pre-emphasis disc, and a scratched disc.
+- To try: a Windows 98 CD (data track only).
+- Still to find: an enhanced CD, a disc with hidden track one audio, a pre-emphasis disc, and a scratched disc.

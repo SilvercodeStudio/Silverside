@@ -23,14 +23,38 @@ public struct QSubchannel: Equatable, Sendable {
         func bcd(_ value: Int) -> UInt8 { UInt8((value / 10) << 4 | value % 10) }
         let msf = lba + CDDA.leadInSectors
         let seconds = msf / CDDA.sectorsPerSecond
-        var bytes: [UInt8] = [
+        return withCRC([
             0x01, track == leadOutTrack ? 0xAA : bcd(track), bcd(index), 0, 0, 0, 0,
             bcd(seconds / 60), bcd(seconds % 60), bcd(msf % CDDA.sectorsPerSecond),
-        ]
-        let crc = crc(bytes[...])
-        bytes += [UInt8(crc >> 8), UInt8(crc & 0xFF)]
-        return QSubchannel(bytes: bytes)
+        ])
     }
+
+    /// Makes a valid ADR 2 frame. `mcn` must be 13 digits.
+    public static func mcn(_ mcn: String) -> QSubchannel {
+        let digits = mcn.compactMap(\.wholeNumberValue).map(UInt8.init) + [0]
+        precondition(digits.count == 14)
+        let packed = stride(from: 0, to: 14, by: 2).map { digits[$0] << 4 | digits[$0 + 1] }
+        return withCRC([0x02] + packed + [0, 0])
+    }
+
+    /// Makes a valid ADR 3 frame. `isrc` must be 5 letters or digits and then 7 digits.
+    public static func isrc(_ isrc: String) -> QSubchannel {
+        let characters = Array(isrc)
+        precondition(characters.count == 12)
+        let code = characters[0..<5].reduce(UInt32(0)) { $0 << 6 | UInt32(isrcCodes.firstIndex(of: $1)!) } << 2
+        let digits = characters[5...].compactMap(\.wholeNumberValue).map(UInt8.init) + [0]
+        let packed = stride(from: 0, to: 8, by: 2).map { digits[$0] << 4 | digits[$0 + 1] }
+        let codeBytes = (0..<4).map { UInt8(truncatingIfNeeded: code >> (24 - 8 * $0)) }
+        return withCRC([0x03] + codeBytes + packed + [0])
+    }
+
+    private static func withCRC(_ bytes: [UInt8]) -> QSubchannel {
+        let crc = crc(bytes[...])
+        return QSubchannel(bytes: bytes + [UInt8(crc >> 8), UInt8(crc & 0xFF)])
+    }
+
+    /// The 6-bit character codes of an ISRC's first five characters. "?" marks unused codes.
+    private static let isrcCodes = Array("0123456789???????ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
     public var control: UInt8 { bytes[0] >> 4 }
     public var adr: UInt8 { bytes[0] & 0x0F }
@@ -51,6 +75,27 @@ public struct QSubchannel: Equatable, Sendable {
         else { return nil }
         let lba = (minute * 60 + second) * CDDA.sectorsPerSecond + frame - CDDA.leadInSectors
         return Position(track: track, index: index, lba: lba)
+    }
+
+    /// The Media Catalog Number (13 digits) in a valid ADR 2 frame.
+    public var mcn: String? {
+        guard isValid, adr == 2 else { return nil }
+        let digits = bytes[1...7].flatMap { [$0 >> 4, $0 & 0x0F] }.prefix(13)
+        guard digits.allSatisfy({ $0 <= 9 }) else { return nil }
+        return String(digits.map { Character(String($0)) })
+    }
+
+    /// The ISRC in a valid ADR 3 frame: 5 characters from 6-bit codes, then 7 BCD digits.
+    public var isrc: String? {
+        guard isValid, adr == 3 else { return nil }
+        let code = bytes[1...4].reduce(UInt32(0)) { $0 << 8 | UInt32($1) }
+        let characters = (0..<5).map { Int(code >> (26 - 6 * $0) & 0x3F) }
+        guard characters.allSatisfy({ Self.isrcCodes.indices.contains($0) && Self.isrcCodes[$0] != "?" }) else {
+            return nil
+        }
+        let digits = bytes[5...8].flatMap { [$0 >> 4, $0 & 0x0F] }.prefix(7)
+        guard digits.allSatisfy({ $0 <= 9 }) else { return nil }
+        return String(characters.map { Self.isrcCodes[$0] }) + String(digits.map { Character(String($0)) })
     }
 
     /// CRC-16/CCITT with the bits inverted, as the Q subchannel stores it.

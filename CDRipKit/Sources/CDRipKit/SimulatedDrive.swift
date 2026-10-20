@@ -25,6 +25,12 @@ public final class SimulatedDrive: CDDrive {
     /// Sectors whose Q subchannel has a bad CRC.
     public var corruptQSectors: Set<Int> = []
 
+    /// The disc's MCN. If set, sectors whose LBA ends in 41 have an MCN frame in place of a position.
+    public var mcn: String?
+
+    /// ISRCs by track number. Sectors whose LBA ends in 83 have their track's ISRC frame, if it has one.
+    public var isrcs: [Int: String] = [:]
+
     public init(toc: TOC, samples: [UInt32], readOffset: Int = 0, canOverread: Bool = false) {
         precondition(samples.count == toc.leadOutLBA * CDDA.samplesPerSector, "Image length does not match the TOC")
         self.toc = toc
@@ -58,10 +64,24 @@ public final class SimulatedDrive: CDDrive {
         return bytes
     }
 
-    public func readQSubchannel(at lba: Int) throws -> QSubchannel {
-        guard (0..<toc.leadOutLBA).contains(lba) else { throw DriveError.sectorOutOfRange(lba: lba) }
+    public func readQSubchannel(at lba: Int, count: Int) throws -> [QSubchannel] {
+        let sectors = lba..<(lba + count)
+        guard sectors.clamped(to: 0..<toc.leadOutLBA) == sectors else {
+            throw DriveError.sectorOutOfRange(lba: sectors.first { !(0..<toc.leadOutLBA).contains($0) }!)
+        }
+        return sectors.map(frame(at:))
+    }
+
+    private func frame(at lba: Int) -> QSubchannel {
         let track = toc.tracks.last { $0.startLBA - (pregaps[$0.number] ?? 0) <= lba } ?? toc.tracks[0]
-        let frame = QSubchannel.position(track: track.number, index: lba < track.startLBA ? 0 : 1, lba: lba)
+        let frame: QSubchannel
+        if let mcn, lba % 100 == 41 {
+            frame = .mcn(mcn)
+        } else if let isrc = isrcs[track.number], lba % 100 == 83 {
+            frame = .isrc(isrc)
+        } else {
+            frame = .position(track: track.number, index: lba < track.startLBA ? 0 : 1, lba: lba)
+        }
         guard corruptQSectors.contains(lba) else { return frame }
         var bytes = frame.bytes
         bytes[1] ^= 0x80

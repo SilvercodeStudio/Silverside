@@ -247,17 +247,21 @@ public enum CTDB {
         var changes = [Change]()
         var columnsWithErrors = 0
         var uncorrectable = [Int]()
+        func record(_ corrections: [ReedSolomonDecoder.Correction], column: Int) {
+            for correction in corrections {
+                let row = layout.rows - 1 - correction.degree
+                let sample = first + row * CTDBLayout.strideSamples + column / 2
+                changes.append(Change(sample: sample, mask: UInt32(correction.error) << (16 * (column % 2))))
+            }
+        }
+        func difference(_ column: Int) -> [UInt16] {
+            (0..<count).map { ours[column * count + $0] ^ reference[column * count + $0] }
+        }
         for column in 0..<CTDBLayout.stride {
-            let difference = (0..<count).map { ours[column * count + $0] ^ reference[column * count + $0] }
+            let difference = difference(column)
             guard difference.contains(where: { $0 != 0 }) else { continue }
             columnsWithErrors += 1
-            let suspectDegrees = erasures[column]
-            guard
-                let corrections = decode(
-                    difference, length: layout.rows, suspects: suspectDegrees, count: count)
-                    ?? decodeWithAlternatives(
-                        difference, column: column, suspects: suspectDegrees, audio: audio, first: first,
-                        layout: layout, count: count, alternatives: alternatives)
+            guard let corrections = decode(difference, length: layout.rows, suspects: erasures[column], count: count)
             else {
                 uncorrectable.append(column)
                 if columnsWithErrors >= 200 && 2 * uncorrectable.count > columnsWithErrors {
@@ -266,10 +270,19 @@ public enum CTDB {
                 }
                 continue
             }
-            for correction in corrections {
-                let row = layout.rows - 1 - correction.degree
-                let sample = first + row * CTDBLayout.strideSamples + column / 2
-                changes.append(Change(sample: sample, mask: UInt32(correction.error) << (16 * (column % 2))))
+            record(corrections, column: column)
+        }
+        // Trying other versions costs many decodes for each column, so it is only worth it
+        // when few columns are left, as on a disc that is nearly repaired.
+        if !uncorrectable.isEmpty && uncorrectable.count <= maximumColumnsForAlternatives {
+            uncorrectable = uncorrectable.filter { column in
+                guard
+                    let corrections = decodeWithAlternatives(
+                        difference(column), column: column, suspects: erasures[column], audio: audio, first: first,
+                        layout: layout, count: count, alternatives: alternatives)
+                else { return true }
+                record(corrections, column: column)
+                return false
             }
         }
         if !uncorrectable.isEmpty {
@@ -308,6 +321,9 @@ public enum CTDB {
         return ReedSolomonDecoder.corrections(
             syndromes: difference, length: length, erasures: suspects, maximumErrors: suspects.count + budget / 2)
     }
+
+    /// Try other versions of suspect words only when at most this many columns fail without them.
+    static let maximumColumnsForAlternatives = 256
 
     /// The most combinations of other versions of a column's suspect words to try.
     static let maximumAlternativeCombinations = 4096

@@ -146,6 +146,7 @@ public struct SecureRipper {
         while try !readWholeTrack() && !known.isEmpty && fullReads < maximumFullReads {}
         if versions.isEmpty {
             result.status = first.verification == .notChecked ? .consistent : .consistentButNotAccurate
+            result.fullReads = fullReads
             return result
         }
 

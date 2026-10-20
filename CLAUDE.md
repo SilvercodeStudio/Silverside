@@ -74,7 +74,7 @@ Three drives so far (MATSHITA UJ260AF +103, HL-DT-ST BU50N +6, ASUS BW-16D1HT +6
 - **Licensing:** the project will probably be open source under a permissive license such as MIT. Don't port GPL code. You may read whipper, libcdio-paranoia, XLD, and CUETools to understand an algorithm, but write our own implementation.
 - **Distribution and access:** the app uses Developer ID distribution, not the App Store. App Sandbox is off, because ripping needs raw device access.
 - **Platform versions:** Swift 6 language mode. The package's minimum is macOS 26, and the app targets macOS 27.
-- **Network services:** MusicBrainz allows 1 request per second and needs a descriptive User-Agent. Don't put the user's email address in requests.
+- **Network services:** MusicBrainz is central to the project, so protect access to it. Its limit is 1 request per second on average per IP address, with a descriptive User-Agent; it answers 503 when a client goes too fast. **Do not query MusicBrainz in ad-hoc scripts** during development: use the release data already saved in `~/Music/CDRip Archive/*/disc.json`, or saved responses in test fixtures. Until the app's own client exists (milestone 5: one rate limiter, backoff on 503, a cache on disk), ask the user before any MusicBrainz request. Never put the user's email address in requests. AccurateRip and CTDB are less strict, but avoid repeating the same lookups.
 - **Hardware:** usually no drive is attached. The user has several external USB drives and a test kit of discs. Ask before you start work that needs one.
 
 ## Roadmap

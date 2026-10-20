@@ -25,6 +25,12 @@ struct Repair: AsyncParsableCommand {
     )
     var output: String?
 
+    @Option(
+        help:
+            "With the disc in a drive, read each track that does not match AccurateRip until it has this many versions."
+    )
+    var reads = 3
+
     @Option(help: "Rounds of re-reads for columns that cannot be repaired, when the disc is in a drive.")
     var rereadRounds = 4
 
@@ -37,9 +43,6 @@ struct Repair: AsyncParsableCommand {
     /// Re-read the suspect samples of at most this many columns that cannot be repaired.
     static let maximumColumnsToReread = 512
 
-    /// With the disc in a drive, read a track that does not match AccurateRip until it has this many versions.
-    static let versionsToRead = 3
-
     /// Search for shifts with many errors in column 0 only for this many entries, the
     /// largest first. That search is slow, and small entries rarely help.
     static let entriesWithFullSearch = 3
@@ -50,7 +53,13 @@ struct Repair: AsyncParsableCommand {
         let audioTracks = toc.audioTracks
         guard !audioTracks.isEmpty else { throw CommandError("This disc has no audio tracks.") }
         guard let firstInput = input.first else { throw ValidationError("Give at least one --input folder.") }
-        let folders = input.map { URL(filePath: $0, directoryHint: .isDirectory) }
+        // Earlier re-reads are kept next to the first folder, as "<folder> read 2" and so on.
+        let firstFolder = URL(filePath: firstInput, directoryHint: .isDirectory).standardizedFileURL
+        let parent = firstFolder.deletingLastPathComponent()
+        let readFolders = ((try? FileManager.default.contentsOfDirectory(atPath: parent.path)) ?? [])
+            .filter { $0.hasPrefix(firstFolder.lastPathComponent + " read ") }.sorted()
+            .map { parent.appending(path: $0, directoryHint: .isDirectory) }
+        let folders = input.map { URL(filePath: $0, directoryHint: .isDirectory) } + readFolders
         // Look everything up first, so that a network problem shows before long re-reads.
         let records = try await AccurateRipRecord.download(for: toc.accurateRipDiscID)
         let entries = try await CTDBEntry.lookup(toc).sorted { $0.confidence > $1.confidence }
@@ -109,10 +118,15 @@ struct Repair: AsyncParsableCommand {
             // With the disc in a drive, read a track that has few versions again, so that
             // the reads can disagree where the disc is damaged.
             var trackVersions = versions[index]
-            if let reader, trackVersions.count < Self.versionsToRead {
-                for _ in trackVersions.count..<Self.versionsToRead {
+            if let reader, trackVersions.count < reads {
+                for _ in trackVersions.count..<reads {
                     flushCache(reader: reader, awayFrom: toc.sectorRange(of: track), toc: toc)
-                    trackVersions.append(try reader.readTrack(track))
+                    let read = try reader.readTrack(track)
+                    trackVersions.append(read)
+                    // Keep the read, so that a later run can use it.
+                    let folder = Self.nextReadFolder(after: firstFolder, track: track)
+                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                    try WAVFile.write(read, to: folder.appending(path: String(format: "Track %02d.wav", track.number)))
                 }
             }
             // Where the versions disagree, use the value that most of them have (the earlier
@@ -164,15 +178,20 @@ struct Repair: AsyncParsableCommand {
         // an entry may be stored at one of them. A shift where any of the entry's track CRCs
         // matches is right, even if column 0 has too many errors to find it.
         let hints = Self.accurateRipShifts(of: audio, toc: toc, trackStarts: trackStarts, records: records)
+        // The track CRCs at each hint shift, once: they are the same for every entry.
+        let hintCRCs = hints.filter(layout.shifts.contains).map {
+            (shift: $0, crcs: CTDB.trackCRCs(of: audio, toc: toc, layout: layout, shift: $0))
+        }
+        var best: (tracks: [Int], changed: [Int], audio: [UInt32])?
+        // Entries that match the rip's alignment but have no repair data: often single
+        // submissions, each with its own errors.
+        var withoutRepairData = Set<Int>()
         entries: for (rank, entry) in entries.enumerated()
         where entry.syndromeCount > 0 && entry.column0Syndromes.count == entry.syndromeCount {
             var matches = [CTDB.ShiftMatch]()
             if entry.trackCRCs.count == audioTracks.count {
-                for shift in hints where layout.shifts.contains(shift) {
-                    let trackCRCs = CTDB.trackCRCs(of: audio, toc: toc, layout: layout, shift: shift)
-                    if zip(trackCRCs, entry.trackCRCs).contains(where: { $0 == $1 }) {
-                        matches.append(CTDB.ShiftMatch(shift: shift, errors: 0))
-                    }
+                for (shift, trackCRCs) in hintCRCs where zip(trackCRCs, entry.trackCRCs).contains(where: { $0 == $1 }) {
+                    matches.append(CTDB.ShiftMatch(shift: shift, errors: 0))
                 }
             }
             for match in CTDB.shifts(
@@ -187,7 +206,10 @@ struct Repair: AsyncParsableCommand {
                     print("Verified: the rip matches \(name), with no errors.")
                     return
                 }
-                guard entry.hasParity else { continue }
+                guard entry.hasParity else {
+                    if match.errors == 0 { withoutRepairData.insert(entry.id) }
+                    continue
+                }
                 print("Repairing with \(name)...")
                 let reference = try await entry.downloadRepairData()
                 var quietRounds = 0
@@ -231,16 +253,26 @@ struct Repair: AsyncParsableCommand {
                         print("  The repair did not give the entry's CRC (\(columnsWithErrors) columns with errors).")
                         unproved = changes
                     }
-                    // Some corrections are missing or wrong. Keep those in tracks that a CRC then proves right.
-                    if try keepProvedTracks(
+                    // Some corrections are missing or wrong. Keep the best set of tracks that a CRC
+                    // then proves right, and try the next entry: it may repair more.
+                    let proved = provedTracks(
                         unproved, of: audio, entry: entry, shift: match.shift, toc: toc, layout: layout,
-                        trackStarts: trackStarts, folder: folder, records: records)
-                    {
-                        return
-                    }
-                    break entries
+                        trackStarts: trackStarts)
+                    if proved.tracks.count > (best?.tracks.count ?? 0) { best = proved }
+                    continue entries
                 }
             }
+        }
+        if !withoutRepairData.isEmpty {
+            print("\(withoutRepairData.count) more entries match the rip's alignment, but have no repair data.")
+        }
+        if let best {
+            print("No entry repairs the whole disc. Keeping the corrections in tracks \(best.tracks),")
+            print("whose CTDB track CRCs then match.")
+            try report(
+                changed: best.changed, repaired: best.audio, toc: toc, trackStarts: trackStarts, folder: folder,
+                records: records)
+            return
         }
         print("Could not verify or repair the rip with any entry.")
     }
@@ -292,35 +324,30 @@ struct Repair: AsyncParsableCommand {
     }
 
     /// Applies `changes`, and keeps them only in the tracks whose CTDB track CRC then
-    /// matches the entry's. Writes the result if any track was repaired. Returns true then.
-    private func keepProvedTracks(
+    /// matches the entry's. Returns those tracks' numbers, the samples kept, and the audio.
+    private func provedTracks(
         _ changes: [CTDB.Change], of audio: [UInt32], entry: CTDBEntry, shift: Int, toc: TOC, layout: CTDBLayout,
-        trackStarts: [Int], folder: URL, records: [AccurateRipRecord]
-    ) throws -> Bool {
-        guard !changes.isEmpty, entry.trackCRCs.count == toc.audioTracks.count else { return false }
+        trackStarts: [Int]
+    ) -> (tracks: [Int], changed: [Int], audio: [UInt32]) {
+        guard !changes.isEmpty, entry.trackCRCs.count == toc.audioTracks.count else { return ([], [], audio) }
         var partial = audio
         for change in changes { partial[change.sample] ^= change.mask }
         let trackCRCs = CTDB.trackCRCs(of: partial, toc: toc, layout: layout, shift: shift)
-        var kept = [Int]()
+        var kept = Set<Int>()
         var proved = [Int]()
         for (index, trackCRC) in trackCRCs.enumerated() {
             let start = trackStarts[index]
             let end = index + 1 < trackStarts.count ? trackStarts[index + 1] : partial.count
             let inTrack = changes.filter { (start..<end).contains($0.sample) }
-            if trackCRC == entry.trackCRCs[index] {
-                kept += inTrack.map(\.sample)
-                if !inTrack.isEmpty { proved.append(toc.audioTracks[index].number) }
+            if trackCRC == entry.trackCRCs[index] && !inTrack.isEmpty {
+                kept.formUnion(inTrack.map(\.sample))
+                proved.append(toc.audioTracks[index].number)
             } else {
                 // Undo this track's corrections: they are not proved.
                 for change in inTrack { partial[change.sample] ^= change.mask }
             }
         }
-        guard !kept.isEmpty else { return false }
-        print("  Keeping the corrections in tracks \(proved), whose CTDB track CRCs then match.")
-        try report(
-            changed: Array(Set(kept)).sorted(), repaired: partial, toc: toc, trackStarts: trackStarts, folder: folder,
-            records: records)
-        return true
+        return (proved, kept.sorted(), partial)
     }
 
     /// An offset-corrected reader for the disc in the drive, with the drive's offset.
@@ -335,6 +362,17 @@ struct Repair: AsyncParsableCommand {
         }
         guard let readOffset else { throw CommandError("The drive's read offset is not known. Give it with --offset.") }
         return AudioReader(drive: drive, toc: toc, readOffset: readOffset, canOverread: false)
+    }
+
+    /// The first "<folder> read N" folder, from N = 2, that has no file for `track`.
+    static func nextReadFolder(after folder: URL, track: TOC.Track) -> URL {
+        let name = String(format: "Track %02d.wav", track.number)
+        for number in 2... {
+            let candidate = folder.deletingLastPathComponent().appending(
+                path: "\(folder.lastPathComponent) read \(number)", directoryHint: .isDirectory)
+            if !FileManager.default.fileExists(atPath: candidate.appending(path: name).path) { return candidate }
+        }
+        fatalError("Unreachable")
     }
 
     /// Reads 4,000 sectors away from `sectors`: more than a drive's cache holds.

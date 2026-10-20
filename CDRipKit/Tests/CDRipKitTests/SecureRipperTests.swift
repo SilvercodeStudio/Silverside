@@ -72,6 +72,8 @@ struct SecureRipperTests {
         let rip = try secure.rip(toc.tracks[1])
         #expect(rip.status == .consistentButNotAccurate)
         #expect(rip.rounds == 0)
+        // A track that does not match AccurateRip gets every full read while none shows new suspects.
+        #expect(rip.fullReads == secure.maximumFullReads)
     }
 
     @Test func comparesTwoReadsWithoutAccurateRip() throws {

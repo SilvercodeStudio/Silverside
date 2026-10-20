@@ -71,15 +71,29 @@ The rip log records the offset and its source. The drive profiles and past resul
 
 - FLAC and ALAC through AudioToolbox. AIFF and WAV.
 - After encoding, decode the file and compare it with the ripped PCM.
-- Our own writers for FLAC metadata blocks (Vorbis comments, PICTURE) and MP4 `ilst` atoms.
+- Our own writers for FLAC metadata blocks (Vorbis comments, PICTURE) and MP4 `ilst` atoms (including `covr` for cover art).
+- Encode from saved, verified WAV rips too (`~/Music/CDRip Archive/`), so a disc that was hard to rip never needs ripping again. Each archived disc has a `disc.json` with its TOC, disc IDs, MusicBrainz release, and AccurateRip results.
 - Optional external encoder hook (stdin to a command-line tool), for other formats.
 
 ## 5. Metadata
 
+The MusicBrainz client must protect the user's access to MusicBrainz:
+
+- One rate limiter for the whole app: at most 1 request per second. On 503, wait (honor `Retry-After`), back off, and give up after a few tries.
+- A cache on disk (`~/Library/Caches/CDRip/`) keyed by request, shared with AccurateRip and CTDB lookups: a disc ID or a release is fetched once.
+- Tests use saved responses, so `make test` never touches the network.
+- User-Agent: the app name, its version, and a contact URL. Never an email address.
+
 - MusicBrainz lookup by disc ID, then fuzzy TOC lookup.
 - Choose among releases with the MCN (barcode) when the disc has one.
 - File and folder name templates.
-- Cover art from the Cover Art Archive.
+- Cover art, from either source:
+  - an image file the user chooses
+  - an online lookup: the Cover Art Archive, through the MusicBrainz release (front cover first; back and booklet if wanted)
+- Cover art output:
+  - embedded in each file: a FLAC PICTURE block (type 3, front cover), or the MP4 `covr` atom for ALAC and AAC
+  - `cover.jpg` in the album folder
+  - one size limit for embedded art (for example, 1000 px on the long side), so files stay small; the folder copy keeps full size
 
 After milestone 5, the CLI can rip clean discs for daily use.
 
@@ -116,6 +130,7 @@ Results so far:
 
 To do:
 
+- Detect reads that are shifted in time (jitter, or the drive losing its place on a scratch). On *One from the Vault* disc 2 (ASUS), one read of track 3 made 57,059 of its 59,127 sectors suspect, and the secure rip took 21 minutes; a read of track 1 differed in 14.4 million samples. Before comparing reads, find the shift between them (as the AccurateRip offset search does), and re-align or discard a shifted read.
 - Pool versions from more than one drive. A sector that two drives read differently is suspect, even if each drive always reads it the same way.
 - Test on the damaged discs, and tune the limits (rounds, combinations, cache flush size).
 - Read C2 flags with the audio, and add C2-flagged sectors to the suspects (as a hint only).
@@ -152,6 +167,8 @@ Findings on *Europe '72* disc 1 (5 damaged tracks, 5 rips pooled):
 - Whole sectors as erasures are far too coarse: each column gets about 62, and only 16 fit. Erasures that are right also use up capacity, so decode without them first.
 - With many erasures, a wrong combination can decode "successfully": with e erasures and no other errors, e syndromes explain any difference. After re-reads, every column decoded once, but the disc CRC then did not match. So erasure decoding now keeps 2 syndromes spare (2v + e ≤ npar − 2).
 - When a repair cannot finish (some columns cannot be corrected, or the disc CRC fails), the corrections are still kept in each track whose CTDB track CRC then matches: those tracks are proved.
+- Not every CTDB entry has repair data (no `hasparity`), and small entries often have 8 syndromes per column, not 16. Different entries can be different pressings, or the same pressing with a submitter's errors, so try every entry, not just the largest.
+- Re-reads made by `repair` are kept as "<first folder> read 2", "read 3", and so on, and later runs load them.
 - On a very damaged disc, column 0 itself can have too many errors to find the shift (*Live/Dead*). The offsets where tracks match AccurateRip are hints: a shift where any of an entry's track CRCs matches is right.
 
 Results on the damaged discs so far:
@@ -161,9 +178,11 @@ Results on the damaged discs so far:
 | *Reckoning* | 10 of 15 accurate | **15 of 15** (8,345 samples corrected) |
 | *Europe '72* disc 1 | 5 of 10 | **10 of 10** (7,757 samples; one re-read on the MATSHITA) |
 | *Dick's Picks Vol. 2* | 2 of 6 | 4 of 6 (tracks 4 and 5 proved by their CTDB track CRCs; 5 columns uncorrectable) |
-| *Europe '72* disc 2 | 2 of 7 | not yet: 110 columns uncorrectable, one rip only |
-| *The 1968 Demos* | 10 accurate, 13 free of errors | not yet: all columns decode, but the CRC fails; its CTDB entries have at most 3 submissions |
-| *Live/Dead* | 1 of 7 | not yet: most columns uncorrectable, one rip only |
+| *Europe '72* disc 2 | 2 of 7 | **7 of 7** (12,871 samples): needed reads from three drives (HL-DT-ST, ASUS, MATSHITA); with two drives, 67 columns stayed uncorrectable |
+| *The 1968 Demos* | 10 accurate, 13 free of errors | beyond CTDB: the entries that match this pressing (at shift 0) have no repair data, and the two that do are other pressings' (−324, −694) with only 8 syndromes per column |
+| *One from the Vault* disc 1 | 6 of 8 | **8 of 8** (3,203 samples) |
+| *One from the Vault* disc 2 (a long scratch) | 4 of 8 | **8 of 8** (18,391 samples) |
+| *Live/Dead* | 1 of 7 | beyond CTDB: three reads from two drives disagree in about 108,000 samples of track 4 (damage to the reflective layer), and most columns are uncorrectable |
 
 Every "accurate" result after a repair is from AccurateRip, which is independent of CTDB.
 
@@ -176,7 +195,11 @@ To do:
 
 ## 8. Rip log, CUE sheets, gaps and indexes
 
-- A detailed rip log in our own format.
+- A rip report in the destination folder, from both the CLI and the app, in more than one format: JSON (for tools, and for encoding and tagging later) and Markdown (to read). It records:
+  - the disc: TOC, pregaps and index points, MCN, ISRCs, CD-Text, pre-emphasis and copy flags, disc IDs (MusicBrainz, freedb, AccurateRip, CTDB), and the MusicBrainz release
+  - the drive: model, firmware, connection, offset and its source
+  - the rip: for each track, the secure status, the reads and re-reads, the suspect and repaired samples, the AccurateRip and CTDB results, and the timing
+- `cdrip rip` and `cdrip repair` write a `disc.json` with the WAV files: TOC, disc IDs, drive and offset, and each track's AccurateRip and CTDB result. Then a verified rip can be encoded and tagged later, with no new rip. (Until then, `~/Music/CDRip Archive/` was filled by a script, `.build/probe/archive.py`.)
 - Accurate CUE sheets, per-track output or image plus CUE.
 - Pregaps, index points, hidden track one audio, pre-emphasis, ISRC, and CD-Text.
 
@@ -185,6 +208,12 @@ To do:
 - A multi-disc release is one unit of work, so metadata stays consistent across discs and sessions.
 - Apple Foundation Models for verification and cleanup of metadata from conventional sources only, with a non-AI path.
 - Reusable style recipes, such as segue `>` marks and `[Venue, date]` suffixes.
+
+## The app (after the CLI)
+
+- A simple ripping view by default: insert a disc, check the metadata, rip.
+- All the technical detail is there to open on demand: everything the rip report has, for the disc (TOC, ISRCs, MCN, CD-Text, pregaps, flags) and for the rip.
+- A live graph as each track rips: error levels by position, suspect sectors, and which were recovered or not. The engine sends progress events (sectors read, suspect, resolved, unresolved) as it works, so the graph, the progress display, and the rip report all come from the same events.
 
 ## Hardware for testing
 

@@ -18,6 +18,13 @@ public final class SimulatedDrive: CDDrive {
     /// Physical sectors that return wrong data with no error.
     public var corruptSectors: Set<Int> = []
 
+    /// The pregap (index 00) of each track in sectors, by track number. Track 1's
+    /// pregap runs from LBA 0 to its start.
+    public var pregaps: [Int: Int] = [:]
+
+    /// Sectors whose Q subchannel has a bad CRC.
+    public var corruptQSectors: Set<Int> = []
+
     public init(toc: TOC, samples: [UInt32], readOffset: Int = 0, canOverread: Bool = false) {
         precondition(samples.count == toc.leadOutLBA * CDDA.samplesPerSector, "Image length does not match the TOC")
         self.toc = toc
@@ -49,5 +56,15 @@ public final class SimulatedDrive: CDDrive {
             withUnsafeBytes(of: sample.littleEndian) { bytes.append(contentsOf: $0) }
         }
         return bytes
+    }
+
+    public func readQSubchannel(at lba: Int) throws -> QSubchannel {
+        guard (0..<toc.leadOutLBA).contains(lba) else { throw DriveError.sectorOutOfRange(lba: lba) }
+        let track = toc.tracks.last { $0.startLBA - (pregaps[$0.number] ?? 0) <= lba } ?? toc.tracks[0]
+        let frame = QSubchannel.position(track: track.number, index: lba < track.startLBA ? 0 : 1, lba: lba)
+        guard corruptQSectors.contains(lba) else { return frame }
+        var bytes = frame.bytes
+        bytes[1] ^= 0x80
+        return QSubchannel(bytes: bytes)
     }
 }

@@ -1,7 +1,7 @@
 import ArgumentParser
 
 @main
-struct CDRipCommand: ParsableCommand {
+struct CDRipCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "cdrip",
         abstract: "Rip audio CDs with AccurateRip verification.",

@@ -41,6 +41,8 @@ These rules apply in many files. Errors here give results that are a few samples
 - **Read offset sign:** a drive with offset +N (as AccurateRip lists it) returns data N samples *earlier* than the sector asked for. `AudioReader` corrects this. Without overread, it fills samples past the disc edges with silence. AccurateRip ignores those samples, because it skips the first 2939 samples of the first track and the last 2940 of the last track.
 - **Enhanced CDs** (a data track in a later session): the audio session ends `CDDA.sessionGapSectors` (11400) before the data track. MusicBrainz leaves out the data track. AccurateRip uses the real lead-out and counts audio tracks only.
 - **Track ranges** run from one track's index 01 to the next track's index 01, so a pregap belongs to the track before it.
+- **Times** print as `MM:SS:FF` (frames of 1/75 second), as in CUE sheets, so they cannot be read as decimal seconds.
+- **Q subchannel:** frames can be damaged, so check `isValid`. `PregapFinder` reads around damaged frames, and MCN or ISRC frames (about 1 in 100). A damaged frame just before a change leaves the change unknown by one sector, so it throws for that track only.
 - `CDDrive` is the hardware boundary. `IOKitDrive` (target `CDRipDarwin`) implements it with the `DKIOCCD*` ioctls on `/dev/rdiskN`. Swift does not import the `_IOWR` macros, so `Ioctl` computes the request codes, and a test checks them against the SDK. The node belongs to the console user, and the ioctls work while cddafs has the disc mounted. `SimulatedDrive` stands in for hardware in tests. It can simulate a read offset, overread, unreadable sectors (by requested LBA), and silent corruption (by physical sector). New drive behavior (cache, C2, subchannel, jitter) goes into both the protocol and the simulator, so you can test it without hardware.
 
 ## Verified vs. unverified
@@ -76,5 +78,5 @@ The full list is in `docs/Milestones.md`. Keep both up to date.
 
 
 1. Done: TOC, disc IDs, AccurateRip checksums, simulated drive, offset-corrected reader.
-2. In progress. Done: `IOKitDrive`, hardware tests, and the `cdrip` CLI with `drives` and `info` (TOC, IDs, ISRC, MCN). Still to do: AccurateRip status and Q-subchannel pregaps in `info`.
+2. Done: `IOKitDrive`, hardware tests, and the `cdrip` CLI with `drives` and `info` (TOC, pregaps, IDs, ISRC, MCN, AccurateRip and CTDB status).
 3. `cdrip rip --track N`: an offset-corrected rip, an AccurateRip lookup, and WAV output.

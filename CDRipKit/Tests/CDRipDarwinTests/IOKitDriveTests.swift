@@ -41,14 +41,10 @@ struct HardwareTests {
         let toc = try drive.readTOC()
         let audio = toc.audioTracks
         try #require(audio.count >= 3, "The disc needs a track that is not first or last")
-        let url = toc.accurateRipDiscID.databaseURL
-        let (data, response) = try await URLSession.shared.data(from: url)
-        let status = (response as? HTTPURLResponse)?.statusCode
-        if status == 404 {
-            try Test.cancel("This disc is not in AccurateRip: \(url)")
+        let records = try await AccurateRipRecord.download(for: toc.accurateRipDiscID)
+        if records.isEmpty {
+            try Test.cancel("This disc is not in AccurateRip: \(toc.accurateRipDiscID.databaseURL)")
         }
-        try #require(status == 200, "AccurateRip returned HTTP \(status.map(String.init) ?? "?") for \(url)")
-        let records = try AccurateRipRecord.records(from: [UInt8](data))
 
         // The sector 450 search needs at least 451 sectors (6 seconds).
         let middle = audio.dropFirst().dropLast().filter { toc.sectorRange(of: $0).count >= 451 }

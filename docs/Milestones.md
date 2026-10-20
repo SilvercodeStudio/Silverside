@@ -28,22 +28,22 @@ Done:
 
 - `IOKitDrive`: full TOC and audio reads through the `DKIOCCD*` ioctls on `/dev/rdiskN`.
 - Hardware tests (`make hwtest`) that find the drive's offset from AccurateRip and check a ripped track.
-- Offset detection: `AccurateRipOffsetFinder`.
+- Offset detection: `AccurateRipOffsetFinder`, with the full-track v1 checksum and the sector 450 checksum (for v2-only records).
 - Parser for AccurateRip database files.
 - `cdrip` CLI skeleton with swift-argument-parser (`make cli ARGS='...'`).
-- `cdrip info -d diskN`: TOC and disc IDs.
+- `cdrip info`: TOC, disc IDs, ISRCs, and MCN. Uses the only drive with a CD unless `-d diskN` is given.
+- `cdrip drives`: drives from the IOKit registry (vendor, product, firmware, connection) and their CDs.
 
 To do:
 
-- `cdrip drives`: find drives and discs through IOKit or DiskArbitration, and show vendor, product, and firmware.
-- `cdrip info`: add AccurateRip status, plus MCN, ISRC, and pregaps from Q subchannel. Find the disc without `-d` when only one is inserted.
+- `cdrip info`: add AccurateRip status (number of records), and pregaps and index points from Q subchannel.
 
 ## 3. Rip to WAV with AccurateRip verification
 
 - `cdrip rip`: rip every track (or chosen tracks) to WAV with offset correction.
 - Report an AccurateRip result for each track: v1 or v2, and confidence.
 - The first and last tracks on drives without overread: AccurateRip skips the samples that are lost.
-- Drive profiles: where to store the offset and other capabilities for each drive and enclosure.
+- Drive profiles: where to store the offset and other capabilities for each drive and enclosure. Key them on firmware revision too, because modified firmware (such as LibreDrive) can change behavior. Find the offset from the AccurateRip drive offset list (with vendor aliases), or from the offsets that several discs share. One disc is not enough.
 
 ## 4. Encoding and tags
 
@@ -86,14 +86,21 @@ After milestone 5, the CLI can rip clean discs for daily use.
 
 | Drive | Connection | Read offset | Notes |
 |---|---|---|---|
-| MATSHITA BD-MLT UJ260AF | USB, no hub | +103 | Agrees with the AccurateRip list (648 submissions). No overread. C2 and Q subchannel work. |
+| MATSHITA BD-MLT UJ260AF | USB, no hub | +103 | The only offset that matches on all 3 test discs; agrees with the AccurateRip list (648 submissions). No overread. C2, Q subchannel, CD-Text, and ISRC work. |
 | ASUS BW-16D1HT | OWC enclosure | — | Not tested yet |
-| LG (model to be confirmed) | — | — | Not tested yet |
+| HL-DT-ST BD-RE BU50N (LG), firmware CC03, possibly modified for LibreDrive (MakeMKV) | USB, no hub | +6 | Agrees with the AccurateRip list (51 submissions); matches on *Clarity of Cal*, with the same checksums as the MATSHITA at +103. No overread. C2 and Q subchannel (with user area) work. Raw P-W subchannel gives `EIO`. Reports 20×. |
 
-Drives report vendor names that differ from the names in AccurateRip's offset list. For example, "MATSHITA" (Matsushita) is listed as "Panasonic". Drive profiles need a table of vendor aliases.
+Drives report vendor names that differ from the names in AccurateRip's offset list. Drive profiles need a table of vendor aliases:
+
+| Drive reports | AccurateRip lists |
+|---|---|
+| MATSHITA (Matsushita) | Panasonic, hp |
+| HL-DT-ST (Hitachi-LG Data Storage) | LG Electronics, hp HLDS, hp |
 
 Test discs:
 
 - Grateful Dead, *Dozin' at the Knick*, disc 1: in AccurateRip and CTDB, no CD-Text, HDCD logo on the disc. AccurateRip matches four other pressings besides the one at the drive offset.
+- Vulfpeck, *Clarity of Cal* (2025, indie): CD-Text with vinyl side numbers in the track titles ("A1 Big Dipper"). One AccurateRip submission, v2 only. No MCN or ISRC in the Q subchannel. The barcode 3760420424738 is in MusicBrainz, but it was not found in about 1,200 sectors of Q subchannel.
 - Grateful Dead, *Summer Magic 1985* (20 discs): MusicBrainz disc IDs known. Not in AccurateRip when last checked.
-- Still to find: a disc from an unrelated release, an enhanced CD, a disc with hidden track one audio, a pre-emphasis disc, and a scratched disc.
+- Pink Floyd, *The Endless River* (2014, major label): ISRCs on the disc (GBN9X1400051…), the same as in MusicBrainz. No MCN. CD-Text. Many pressings in AccurateRip, and one (+773) has more submissions than the drive's offset.
+- Still to find: a disc with an MCN, an enhanced CD, a disc with hidden track one audio, a pre-emphasis disc, and a scratched disc.

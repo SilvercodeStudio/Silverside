@@ -49,6 +49,24 @@ struct AccurateRipOffsetFinderTests {
         #expect(found == [offset])
     }
 
+    @Test(arguments: [-1500, 0, 103, 1500])
+    func findsTheDriveOffsetFromSector450(offset: Int) throws {
+        let (toc, samples) = try makeDisc(trackSectors: [20, 460, 20])
+        let track = toc.sectorRange(of: toc.tracks[1])
+        let positions = (track.lowerBound * CDDA.samplesPerSector)..<(track.upperBound * CDDA.samplesPerSector)
+        let sector450 = Array(samples[(positions.lowerBound + 450 * 588)..<(positions.lowerBound + 451 * 588)])
+        let checksum = AccurateRipAccumulator.checksum(of: sector450.span, isFirstTrack: false, isLastTrack: false)
+
+        let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: offset)
+        let reader = AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)
+        let margin = 2000
+        let read = try reader.readSamples((positions.lowerBound - margin)..<(positions.upperBound + margin))
+
+        let found = AccurateRipOffsetFinder.frame450Offsets(
+            matching: [checksum.v1], in: read, trackLength: positions.count, margin: margin)
+        #expect(found == [offset])
+    }
+
     @Test func findsNothingForAnUnknownChecksum() throws {
         let (_, samples) = try makeDisc(trackSectors: [10])
         #expect(AccurateRipOffsetFinder.offsets(matching: [1], in: samples, trackLength: 588 * 8, margin: 588).isEmpty)

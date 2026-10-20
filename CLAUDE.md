@@ -13,9 +13,9 @@ Ripping is verification-first: rip fast with offset correction, verify each trac
 ## Commands
 
 ```sh
-make cli ARGS='info -d disk14'   # build and run the cdrip CLI
+make cli ARGS='info'   # build and run the cdrip CLI (drives, info; -d diskN chooses a disc)
 make test        # swift test --package-path CDRipKit
-make hwtest      # hardware tests; needs a drive and a disc in AccurateRip (DEVICE=diskN to choose)
+make hwtest OFFSET=103   # hardware tests; needs a disc in AccurateRip (DEVICE=diskN to choose; OFFSET checks the drive's offset)
 make core        # swift build --package-path CDRipKit
 make build       # xcodebuild the app (CONFIG=Release for a universal build)
 make run         # build and start the app; ARGS='...' passes launch arguments
@@ -52,12 +52,14 @@ The test values in `DiscIDTests` are real data from MusicBrainz, AccurateRip, an
 
 ## Hardware findings
 
-MATSHITA BD-MLT UJ260AF on USB (no hub), probed with `DKIOCCD*` ioctls:
+Two drives so far; details for each are in `docs/Milestones.md`. MATSHITA BD-MLT UJ260AF on USB (no hub), probed with `DKIOCCD*` ioctls:
 
-- The read offset is probably +103: on *Dozin' at the Knick* disc 1, it has the most AccurateRip submissions. Other pressings also match (+298, +752, and +1442 on v1 and v2; +883 on v1 only), so one disc cannot prove the offset. Confirm it with a second disc.
+- The read offset is +103. It agrees with AccurateRip's drive offset list, and it is the only offset that matches on all three test discs. One disc cannot prove a drive's offset: other pressings match too, and they can have more submissions (*The Endless River*: +773 has v1 66 and v2 200, +103 has 27 and 200). AccurateRip confidences stop at 200. Find a drive's offset from the offsets that several discs share, or from the AccurateRip drive offset list.
 - These work: full TOC, audio reads, C2 error flags, and Q subchannel together with the user area (Q alone gives `EINVAL`).
-- No overread: reads at or past the lead-out give `EIO`.
-- `DKIOCCDREADMCN` and `DKIOCCDREADISRC` gave `EIO` on a disc with no CD-Text. It is not known whether the disc has no codes or the bridge blocks the command. The Q subchannel also carries MCN and ISRC, so it is a fallback.
+- No overread: reads at or past the lead-out give `EIO`. The HL-DT-ST BU50N (offset +6) gives the same result, so the limit may be in the macOS CD driver, not the drives. Exclusive SCSITask access would show which.
+- The HL-DT-ST BU50N at +6 and the MATSHITA at +103 give identical checksums for the same track.
+- `DKIOCCDREADISRC` works through the bridge (*The Endless River*: GBN9X1400051, as in MusicBrainz). `DKIOCCDREADMCN` and `DKIOCCDREADISRC` give `EIO` when the disc has no code, so treat `EIO` as "no code". ISRC frames are also in about 1 of 100 Q-subchannel sectors (ADR 3); in the 6-bit ISRC characters, `0`–`9` are 0x00–0x09 and `A`–`Z` are 0x11–0x2A.
+- AccurateRip records can be v2 only (Vulfpeck *Clarity of Cal* has one v2 submission). The v1 offset search finds nothing there; the sector 450 checksum, which is v1-style for both versions, finds the offset.
 
 ## Constraints
 
@@ -74,5 +76,5 @@ The full list is in `docs/Milestones.md`. Keep both up to date.
 
 
 1. Done: TOC, disc IDs, AccurateRip checksums, simulated drive, offset-corrected reader.
-2. In progress. Done: `IOKitDrive`, hardware tests, and the `cdrip` CLI skeleton with `info`. Still to do: `drives` (drive discovery), and Q-subchannel data in `info`.
+2. In progress. Done: `IOKitDrive`, hardware tests, and the `cdrip` CLI with `drives` and `info` (TOC, IDs, ISRC, MCN). Still to do: AccurateRip status and Q-subchannel pregaps in `info`.
 3. `cdrip rip --track N`: an offset-corrected rip, an AccurateRip lookup, and WAV output.

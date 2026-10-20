@@ -9,11 +9,16 @@ struct IoctlTests {
     @Test func requestCodesMatchTheSDK() {
         #expect(Ioctl.read == 0xC020_6460)
         #expect(Ioctl.readTOC == 0xC018_6464)
+        #expect(Ioctl.readISRC == 0xC010_6461)
+        #expect(Ioctl.readMCN == 0xC010_6462)
     }
 }
 
 /// The BSD name of the disc for hardware tests, such as disk14 (from `drutil status`).
 private let device = ProcessInfo.processInfo.environment["CDRIP_TEST_DEVICE"]
+
+/// The drive's known read offset, if set. Then the test requires a match at this offset.
+private let expectedOffset = ProcessInfo.processInfo.environment["CDRIP_TEST_OFFSET"].flatMap { Int($0) }
 
 /// Tests with a real drive and disc. The disc must be in AccurateRip.
 @Suite(
@@ -45,10 +50,14 @@ struct HardwareTests {
         try #require(status == 200, "AccurateRip returned HTTP \(status.map(String.init) ?? "?") for \(url)")
         let records = try AccurateRipRecord.records(from: [UInt8](data))
 
-        let middle = audio.dropFirst().dropLast()
-        let track = try #require(middle.min { toc.sectorRange(of: $0).count < toc.sectorRange(of: $1).count })
+        // The sector 450 search needs at least 451 sectors (6 seconds).
+        let middle = audio.dropFirst().dropLast().filter { toc.sectorRange(of: $0).count >= 451 }
+        let track = try #require(
+            middle.min { toc.sectorRange(of: $0).count < toc.sectorRange(of: $1).count },
+            "The disc needs a middle track of at least 6 seconds")
         let index = try #require(audio.firstIndex(of: track))
         let known = Set(records.map { $0.tracks[index].checksum })
+        let knownFrame450 = Set(records.map { $0.tracks[index].frame450Checksum })
         let sectors = toc.sectorRange(of: track)
         let positions = (sectors.lowerBound * CDDA.samplesPerSector)..<(sectors.upperBound * CDDA.samplesPerSector)
 
@@ -58,18 +67,21 @@ struct HardwareTests {
             .readSamples((positions.lowerBound - margin)..<(positions.upperBound + margin))
         print("Read track \(track.number) (\(sectors.count) sectors) in \(ContinuousClock.now - start)")
 
-        let offsets = AccurateRipOffsetFinder.offsets(
+        let v1Offsets = AccurateRipOffsetFinder.offsets(
             matching: known, in: raw, trackLength: positions.count, margin: margin)
-        print("Offsets that match AccurateRip v1: \(offsets)")
+        let frame450Offsets = AccurateRipOffsetFinder.frame450Offsets(
+            matching: knownFrame450, in: raw, trackLength: positions.count, margin: margin)
+        print("Offsets that match AccurateRip: v1 \(v1Offsets), sector 450 \(frame450Offsets)")
 
-        // Each pressing of a disc matches at its own offset, and some have only v1
-        // submissions. One disc cannot show which pressing it is, so the most likely
-        // drive offset is the one where v1 and v2 both match with the most submissions.
+        // Each pressing of a disc matches at its own offset, and a record can be
+        // v1 or v2. A 32-bit match at a wrong offset is very unlikely, so any match
+        // counts. One disc cannot show the drive's offset: another pressing can have
+        // more submissions, and AccurateRip confidences stop at 200.
         func confidences(_ value: UInt32) -> [Int] {
             records.compactMap { $0.tracks[index].checksum == value ? $0.tracks[index].confidence : nil }
         }
-        var found: (offset: Int, checksum: AccurateRipChecksum, confidence: Int)?
-        for offset in offsets {
+        var matches = [(offset: Int, checksum: AccurateRipChecksum)]()
+        for offset in Set(v1Offsets + frame450Offsets).sorted() {
             let window = Array(raw[(margin + offset)..<(margin + offset + positions.count)])
             let checksum = AccurateRipAccumulator.checksum(of: window.span, isFirstTrack: false, isLastTrack: false)
             let v1 = confidences(checksum.v1)
@@ -78,13 +90,19 @@ struct HardwareTests {
                 String(
                     format: "  offset %+d: v1 %08X confidence %@, v2 %08X confidence %@",
                     offset, checksum.v1, v1.description, checksum.v2, v2.description))
-            let confidence = v1.reduce(0, +) + v2.reduce(0, +)
-            if !v1.isEmpty && !v2.isEmpty && confidence > found?.confidence ?? 0 {
-                found = (offset, checksum, confidence)
+            if !v1.isEmpty || !v2.isEmpty {
+                matches.append((offset, checksum))
             }
         }
-        let (offset, expected, _) = try #require(found, "No offset matches both v1 and v2")
-        print("Most likely read offset of this drive: \(offset > 0 ? "+" : "")\(offset)")
+        let match: (offset: Int, checksum: AccurateRipChecksum)
+        if let expectedOffset {
+            match = try #require(
+                matches.first { $0.offset == expectedOffset }, "No match at the expected offset \(expectedOffset)")
+        } else {
+            match = try #require(matches.first, "No offset matches AccurateRip")
+            print("Set CDRIP_TEST_OFFSET to the drive's offset to check it. Ripping at \(match.offset).")
+        }
+        let (offset, expected) = match
 
         let ripped = try AudioReader(drive: drive, toc: toc, readOffset: offset, canOverread: false).readTrack(track)
         #expect(AccurateRipAccumulator.checksum(of: ripped.span, isFirstTrack: false, isLastTrack: false) == expected)

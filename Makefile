@@ -14,6 +14,8 @@ CONFIG ?= Debug
 ARGS ?=
 # The disc for hardware tests; the first disc that drutil reports, unless set.
 DEVICE ?= $(shell drutil status 2>/dev/null | sed -n 's|.*Name: /dev/||p' | head -1)
+# The drive's known read offset for hardware tests. If empty, the tests only list matching offsets.
+OFFSET ?=
 
 # Debug builds only this Mac's architecture. A Release build goes to a generic
 # Mac, so it holds every architecture in ARCHS (Apple silicon and Intel).
@@ -32,7 +34,7 @@ help:
 	@echo "make app            print the path of the built app"
 	@echo "make cli            build and run the cdrip CLI; ARGS='info -d disk14' passes arguments"
 	@echo "make test           run the engine tests (swift test)"
-	@echo "make hwtest         run the tests that need a drive and an AccurateRip disc (DEVICE=diskN to choose)"
+	@echo "make hwtest         run the tests that need a drive and an AccurateRip disc (DEVICE=diskN, OFFSET=n to check the drive's offset)"
 	@echo "make core           build the engine package only (swift build)"
 	@echo "make format         reformat the Swift sources with swift-format (settings in .swift-format)"
 	@echo "make lint           report formatting problems without changing files"
@@ -58,7 +60,7 @@ test:
 
 hwtest:
 	@[ -n "$(DEVICE)" ] || { echo "No disc found. Insert one, or set DEVICE=diskN."; exit 1; }
-	CDRIP_TEST_DEVICE=$(DEVICE) swift test --package-path $(PACKAGE) --filter HardwareTests
+	CDRIP_TEST_DEVICE=$(DEVICE) CDRIP_TEST_OFFSET=$(OFFSET) swift test --package-path $(PACKAGE) --filter HardwareTests
 
 core:
 	swift build --package-path $(PACKAGE)

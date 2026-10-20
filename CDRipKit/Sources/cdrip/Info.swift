@@ -6,14 +6,15 @@ import Foundation
 struct Info: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Show a disc's table of contents and disc IDs.")
 
-    @Option(name: .shortAndLong, help: "The disc's BSD name, such as disk14 (see `drutil status`).")
-    var device: String
+    @OptionGroup var deviceOptions: DeviceOptions
 
     func run() throws {
-        let toc = try IOKitDrive(bsdName: device).readTOC()
+        let drive = try IOKitDrive(bsdName: deviceOptions.bsdName())
+        let toc = try drive.readTOC()
 
-        print("Track  Start LBA  Length     Type")
+        print("Track  Start LBA  Length    ISRC          Type")
         for track in toc.tracks {
+            let isrc = track.kind == .audio ? try drive.readISRC(track: track.number) : nil
             let length = toc.sectorRange(of: track).count
             var notes = [track.kind == .audio ? "audio" : "data"]
             if track.hasPreEmphasis { notes.append("pre-emphasis") }
@@ -21,10 +22,12 @@ struct Info: ParsableCommand {
             if track.session > 1 { notes.append("session \(track.session)") }
             print(
                 String(format: "%5d  %9d  ", track.number, track.startLBA) + Self.duration(length) + "  "
+                    + (isrc ?? "-").padding(toLength: 12, withPad: " ", startingAt: 0) + "  "
                     + notes.joined(separator: ", "))
         }
         print(String(format: "Lead  %10d  ", toc.leadOutLBA) + Self.duration(toc.leadOutLBA))
         print()
+        print("MCN (barcode)        \(try drive.readMCN() ?? "-")")
         print("MusicBrainz disc ID  \(toc.musicBrainzDiscID)")
         print("freedb disc ID       \(String(format: "%08x", toc.freedbDiscID))")
         print("AccurateRip          \(toc.accurateRipDiscID.databaseURL)")

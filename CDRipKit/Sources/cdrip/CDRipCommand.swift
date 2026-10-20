@@ -5,6 +5,6 @@ struct CDRipCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "cdrip",
         abstract: "Rip audio CDs with AccurateRip verification.",
-        subcommands: [Info.self]
+        subcommands: [Drives.self, Info.self]
     )
 }

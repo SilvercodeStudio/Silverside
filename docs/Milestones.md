@@ -10,7 +10,7 @@ The first goal is a usable CLI: rip a whole disc to tagged FLAC or ALAC files wi
 | 4 | Encoding and tags | Not started |
 | 5 | Metadata | Not started |
 | 6 | Secure re-reads | In progress |
-| 7 | CTDB verification and repair | Not started |
+| 7 | CTDB verification and repair | In progress |
 | 8 | Rip log, CUE sheets, gaps and indexes | Not started |
 | 9 | Multi-disc releases and style recipes | Not started |
 
@@ -122,9 +122,57 @@ To do:
 - A per-drive cache size, from the drive's profile or a timing test.
 - Rip log lines for the suspect sectors, for CTDB repair (milestone 7).
 
-## 7. CTDB verification and repair
+## 7. CTDB verification and repair — in progress
 
-- Verify against CUETools DB. Use parity repair as a last resort.
+How CTDB works, from reading CUETools (for understanding only; our code is our own) and checked against real entries:
+
+- The disc's audio, from the first audio track to the lead-out, is 16-bit words. Rows are 11,760 words (10 sectors). The first row, and the last row plus the remainder, are left out.
+- The disc CRC is CRC-32 of the rest. On *Two from the Vault* disc 1, our rip matches the main entry (360 submissions) at a shift of +1195 samples: CTDB stores this disc at the alignment of another pressing.
+- Each column is a Reed–Solomon codeword over GF(2¹⁶) (polynomial 0x1100B). The repair data is 8 or 16 syndromes for each of the 11,760 columns (up to 376 KB). Our column-0 syndromes equal the lookup's `syndrome` attribute.
+
+Done:
+
+- `CTDB`: layout, disc and track CRCs, syndromes (in parallel, with byte tables: two passes for a 55-minute disc in under half a second), the shift search, and repair with a CRC check afterwards.
+- `ReedSolomonDecoder`: Berlekamp–Massey with erasures, Chien search, Forney. e erasures and v unknown errors are corrected while e + 2v ≤ the number of syndromes.
+- `cdrip repair -i folder [-i folder ...] [-d diskN | --toc ...]`: verifies ripped WAV files against CTDB, or repairs them. With several folders (rips of the same disc), each track uses a version that matches AccurateRip if one exists; otherwise the majority value of each sample. Samples where the versions disagree are suspect: a column that cannot be decoded is decoded again with them as erasures, then with the other versions of its suspect words. With the disc in a drive, the suspect sectors of columns that still fail are re-read. Repaired tracks are checked against AccurateRip too.
+- All clean full rips verify: *Two from the Vault* disc 1, *Head Hunters*, *Lost in the Wonder*, *Civilization IV*, and both *Strange Remain* discs.
+
+**First full repair: *Reckoning*.** From the ASUS rip and the MATSHITA re-rip of its 5 failed tracks, `cdrip repair` corrected 8,345 samples with CTDB entry 2111910 (19 submissions) at shift 0, and all 15 tracks then matched AccurateRip, which is independent of CTDB. The largest entry (31 submissions) is stored at another pressing's alignment, and fails at every shift: trying more than one entry matters.
+
+Findings on *Europe '72* disc 1 (5 damaged tracks, 5 rips pooled):
+
+| Method | Columns with errors | Columns that cannot be corrected |
+|---|---|---|
+| First rip only | 9,034 | 90 |
+| Pooled, whole disagreeing sectors as erasures | 9,375 | 231 |
+| Pooled, disagreeing samples as erasures | 9,375 | 361 |
+| Pooled, majority value, erasures only when needed | 6,672 | 5 |
+| ... and other reads' versions of suspect words | 6,672 | 1 |
+
+- Whole sectors as erasures are far too coarse: each column gets about 62, and only 16 fit. Erasures that are right also use up capacity, so decode without them first.
+- With many erasures, a wrong combination can decode "successfully": with e erasures and no other errors, e syndromes explain any difference. After re-reads, every column decoded once, but the disc CRC then did not match. So erasure decoding now keeps 2 syndromes spare (2v + e ≤ npar − 2).
+- When a repair cannot finish (some columns cannot be corrected, or the disc CRC fails), the corrections are still kept in each track whose CTDB track CRC then matches: those tracks are proved.
+- On a very damaged disc, column 0 itself can have too many errors to find the shift (*Live/Dead*). The offsets where tracks match AccurateRip are hints: a shift where any of an entry's track CRCs matches is right.
+
+Results on the damaged discs so far:
+
+| Disc | Before | After `cdrip repair` |
+|---|---|---|
+| *Reckoning* | 10 of 15 accurate | **15 of 15** (8,345 samples corrected) |
+| *Europe '72* disc 1 | 5 of 10 | **10 of 10** (7,757 samples; one re-read on the MATSHITA) |
+| *Dick's Picks Vol. 2* | 2 of 6 | 4 of 6 (tracks 4 and 5 proved by their CTDB track CRCs; 5 columns uncorrectable) |
+| *Europe '72* disc 2 | 2 of 7 | not yet: 110 columns uncorrectable, one rip only |
+| *The 1968 Demos* | 10 accurate, 13 free of errors | not yet: all columns decode, but the CRC fails; its CTDB entries have at most 3 submissions |
+| *Live/Dead* | 1 of 7 | not yet: most columns uncorrectable, one rip only |
+
+Every "accurate" result after a repair is from AccurateRip, which is independent of CTDB.
+
+To do:
+
+- Repair during `cdrip rip`, with the secure ripper's versions and suspect sectors, so `repair` is not a separate step.
+- Keep re-read versions on disk, so that a failed run does not lose them.
+- Find tracks that match another pressing for the first track too (today it needs audio before the track).
+- Rip *Europe '72* disc 2 and *Live/Dead* in more drives, and pool the rips.
 
 ## 8. Rip log, CUE sheets, gaps and indexes
 

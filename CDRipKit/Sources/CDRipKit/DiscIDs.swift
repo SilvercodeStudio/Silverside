@@ -81,6 +81,21 @@ extension TOC {
     ///
     /// Verified against CTDB for audio-only discs. Data tracks have a "-" prefix,
     /// which is not yet verified.
+    /// Makes a TOC from a CTDB TOC string, the reverse of `ctdbTOCString`. A data
+    /// track after the audio is put in a second session, as on an enhanced CD.
+    public init(ctdbTOCString string: String) throws(TOCError) {
+        let parts = string.split(separator: ":").map(String.init)
+        guard parts.count >= 2, let leadOut = Int(parts.last!) else { throw .malformed }
+        var tracks = [Track]()
+        for (index, part) in parts.dropLast().enumerated() {
+            let isData = part.hasPrefix("-")
+            guard let start = Int(isData ? String(part.dropFirst()) : part) else { throw .malformed }
+            let session = isData && index == parts.count - 2 && index > 0 ? 2 : 1
+            tracks.append(Track(number: index + 1, startLBA: start, kind: isData ? .data : .audio, session: session))
+        }
+        try self.init(tracks: tracks, leadOutLBA: leadOut)
+    }
+
     public var ctdbTOCString: String {
         let starts = tracks.map { ($0.kind == .data ? "-" : "") + String($0.startLBA) }
         return (starts + [String(leadOutLBA)]).joined(separator: ":")

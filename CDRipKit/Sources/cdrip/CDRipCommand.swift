@@ -6,7 +6,7 @@ struct CDRipCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "cdrip",
         abstract: "Rip audio CDs with AccurateRip verification.",
-        subcommands: [Drives.self, Info.self, Rip.self]
+        subcommands: [Drives.self, Info.self, Rip.self, Repair.self]
     )
 
     /// Prints each line at once, also when the output goes to a file or a pipe,

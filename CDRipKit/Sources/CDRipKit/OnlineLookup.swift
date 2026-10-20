@@ -9,7 +9,17 @@ public enum OnlineServices {
     static func data(from url: URL, session: URLSession) async throws -> Data? {
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await session.data(for: request)
+        // The services can be slow at times: try a timed-out request twice more.
+        var attempt = 1
+        let (data, response): (Data, URLResponse)
+        while true {
+            do {
+                (data, response) = try await session.data(for: request)
+                break
+            } catch let error as URLError where error.code == .timedOut && attempt < 3 {
+                attempt += 1
+            }
+        }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 404 { return nil }
         guard status == 200 else { throw OnlineLookupError.httpStatus(status, url) }
@@ -45,8 +55,23 @@ public struct CTDBEntry: Equatable, Sendable {
     /// The CRC32 of the whole disc.
     public var crc32: UInt32
     public var trackCRCs: [UInt32]
-    /// True if CTDB has parity data, which can repair a damaged rip.
-    public var hasParity: Bool
+    /// Where CTDB keeps the entry's repair data, if it has any.
+    public var repairDataURL: URL?
+    /// The number of syndromes for each column in the repair data (8 or 16).
+    public var syndromeCount: Int
+    /// The syndromes of column 0, from the lookup, for finding the shift between a rip and the entry.
+    public var column0Syndromes: [UInt16]
+
+    /// True if CTDB has repair data, which can correct a damaged rip.
+    public var hasParity: Bool { repairDataURL != nil }
+
+    /// Downloads the entry's repair data, in the order that `CTDB.syndromes(of:layout:shift:count:)` gives.
+    public func downloadRepairData(session: URLSession = .shared) async throws -> [UInt16] {
+        guard let url = repairDataURL, let data = try await OnlineServices.data(from: url, session: session),
+            let syndromes = CTDB.syndromes(fromRepairData: [UInt8](data), count: syndromeCount)
+        else { throw CTDBError.malformedResponse }
+        return syndromes
+    }
 
     /// Looks up a disc by its TOC. Returns none if the disc is not in CTDB.
     public static func lookup(_ toc: TOC, session: URLSession = .shared) async throws -> [CTDBEntry] {
@@ -87,10 +112,16 @@ public struct CTDBEntry: Equatable, Sendable {
                 return
             }
             let trackCRCs = (attributes["trackcrcs"] ?? "").split(separator: " ").compactMap { UInt32($0, radix: 16) }
+            let syndromeCount = attributes["npar"].flatMap { Int($0) } ?? 0
+            let syndromeBytes = attributes["syndrome"].flatMap { Data(base64Encoded: $0) }.map { [UInt8]($0) } ?? []
+            let column0 = stride(from: 0, to: syndromeBytes.count - 1, by: 2).map {
+                UInt16(syndromeBytes[$0]) | UInt16(syndromeBytes[$0 + 1]) << 8
+            }
             entries.append(
                 CTDBEntry(
                     id: id, confidence: confidence, crc32: crc32, trackCRCs: trackCRCs,
-                    hasParity: attributes["hasparity"] != nil))
+                    repairDataURL: attributes["hasparity"].flatMap { URL(string: $0) },
+                    syndromeCount: syndromeCount, column0Syndromes: column0))
         }
     }
 }

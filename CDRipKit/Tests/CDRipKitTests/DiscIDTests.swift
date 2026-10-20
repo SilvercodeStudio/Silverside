@@ -103,6 +103,13 @@ struct DiscIDTests {
         #expect(toc.freedbDiscID == 0x9610_0E0A)
     }
 
+    @Test func readsACTDBTOCString() throws {
+        let toc = try TOC(ctdbTOCString: "32:17442:36557:224777")
+        #expect(toc.tracks.map(\.startLBA) == [32, 17442, 36557] && toc.leadOutLBA == 224777)
+        #expect(toc.ctdbTOCString == "32:17442:36557:224777")
+        #expect(throws: TOCError.malformed) { try TOC(ctdbTOCString: "12:x:300") }
+    }
+
     /// CTDB returned records for this TOC string (Summer Magic disc 1).
     @Test func ctdbTOCString() throws {
         let disc = Self.summerMagic[0]

@@ -162,6 +162,14 @@ struct TrackRipperTests {
 }
 
 struct WAVFileTests {
+    @Test func readsWhatItWrites() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "CDRipTests-\(UUID()).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let samples: [UInt32] = [0x0002_0001, 0xFFFF_8000, 0]
+        try WAVFile.write(samples, to: url)
+        #expect(try WAVFile.read(url) == samples)
+    }
+
     @Test func writesAPCMHeader() {
         let data = [UInt8](WAVFile.data(for: [0x0002_0001]))
         #expect(data.count == 48)

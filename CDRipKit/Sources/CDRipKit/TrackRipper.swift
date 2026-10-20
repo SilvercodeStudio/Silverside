@@ -52,7 +52,8 @@ public struct TrackRipper {
         return records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
     }
 
-    static func verification(
+    /// How a track's checksum compares with the AccurateRip records' entries for the track.
+    public static func verification(
         of checksum: AccurateRipChecksum, known: [AccurateRipRecord.Track]
     ) -> AccurateRipVerification {
         guard !known.isEmpty else { return .notChecked }

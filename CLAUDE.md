@@ -13,7 +13,8 @@ Ripping is verification-first: rip fast with offset correction, verify each trac
 ## Commands
 
 ```sh
-make cli ARGS='info'   # build and run the cdrip CLI (drives, info, rip; -d diskN chooses a disc)
+make cli ARGS='info'   # build and run the cdrip CLI (drives, info, rip, repair; -d diskN chooses a disc)
+swift build --package-path CDRipKit -c release --product cdrip   # CTDB repair needs the release build to be fast
 make test        # swift test --package-path CDRipKit
 make hwtest OFFSET=103   # hardware tests; needs a disc in AccurateRip (DEVICE=diskN to choose; OFFSET checks the drive's offset)
 make core        # swift build --package-path CDRipKit
@@ -44,6 +45,7 @@ These rules apply in many files. Errors here give results that are a few samples
 - **Times** print as `MM:SS:FF` (frames of 1/75 second), as in CUE sheets, so they cannot be read as decimal seconds.
 - **Q subchannel:** frames can be damaged, so check `isValid`. `PregapFinder` reads around damaged frames, and MCN or ISRC frames (about 1 in 100). A damaged frame just before a change leaves the change unknown by one sector, so it throws for that track only.
 - **Re-reads need a cache flush.** Drives return cached data for a re-read in under 1 ms. `SecureRipper` reads far from the track first, and never inside it, because a read of a damaged sector there counts as one of its re-reads.
+- **CTDB** (`CTDB.swift`, verified against real entries): the audio from the first audio track to the lead-out is 16-bit words (left, right, ...). Rows are 11,760 words (5,880 samples, 10 sectors; the XML `stride` counts samples). The first row, and the last row plus the remainder, are left out of the CRC and the repair data. The disc CRC is plain CRC-32 (zlib) of that middle part; track CRCs leave out the same parts in the first and last tracks. Each column is a Reed–Solomon codeword over GF(2¹⁶), polynomial 0x1100B, α = 2: S_i = Σ word × α^(i × degree), with the first row at the highest degree. The `hasparity` file holds syndromes (not parity), syndrome by syndrome, one value per column; the lookup's `syndrome` attribute is column 0's. **Entries can be stored at another pressing's alignment** (*Two from the Vault* disc 1: shift +1195), so find the shift from column 0's syndromes; `CTDB.column0Syndromes` gets every shift from two passes. Reed–Solomon can miscorrect past its limit, so always check the CRC after a repair.
 - `CDDrive` is the hardware boundary. `IOKitDrive` (target `CDRipDarwin`) implements it with the `DKIOCCD*` ioctls on `/dev/rdiskN`. Swift does not import the `_IOWR` macros, so `Ioctl` computes the request codes, and a test checks them against the SDK. The node belongs to the console user, and the ioctls work while cddafs has the disc mounted. `SimulatedDrive` stands in for hardware in tests. It can simulate a read offset, overread, unreadable sectors (by requested LBA), and silent corruption (by physical sector). New drive behavior (cache, C2, subchannel, jitter) goes into both the protocol and the simulator, so you can test it without hardware.
 
 ## Verified vs. unverified
@@ -83,4 +85,5 @@ The full list is in `docs/Milestones.md`. Keep both up to date.
 1. Done: TOC, disc IDs, AccurateRip checksums, simulated drive, offset-corrected reader.
 2. Done: `IOKitDrive`, hardware tests, and the `cdrip` CLI with `drives` and `info` (TOC, pregaps, IDs, ISRC, MCN, AccurateRip and CTDB status).
 3. Mostly done: `cdrip rip` (offset-corrected WAV, AccurateRip result per track), drive profiles, and AccurateRip's drive offset list.
-6. In progress, ahead of 4 and 5 because the user has many damaged discs: `SecureRipper` (cache flush, re-reads of suspect sectors, combinations tested against AccurateRip).
+6. Mostly done, ahead of 4 and 5 because the user has many damaged discs: `SecureRipper` (cache flush, re-reads of suspect sectors, combinations tested against AccurateRip).
+7. In progress: CTDB verification and repair (`CTDB`, `ReedSolomonDecoder`, `cdrip repair`), from ripped WAV files, pooling several rips, with re-reads when the disc is in a drive.

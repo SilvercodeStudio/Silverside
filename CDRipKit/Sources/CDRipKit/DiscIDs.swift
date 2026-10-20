@@ -8,12 +8,14 @@ public struct AccurateRipDiscID: Hashable, Sendable {
     public let id2: UInt32
     public let freedbID: UInt32
 
+    /// The name of the disc's database file, such as "dBAR-009-0013f5c6-00949b73-700f6509".
+    public var name: String {
+        String(format: "dBAR-%03d-%08x-%08x-%08x", audioTrackCount, id1, id2, freedbID)
+    }
+
     public var databaseURL: URL {
-        let path = String(
-            format: "%x/%x/%x/dBAR-%03d-%08x-%08x-%08x.bin",
-            id1 & 0xF, (id1 >> 4) & 0xF, (id1 >> 8) & 0xF,
-            audioTrackCount, id1, id2, freedbID)
-        return URL(string: "http://www.accuraterip.com/accuraterip/" + path)!
+        let folders = String(format: "%x/%x/%x/", id1 & 0xF, (id1 >> 4) & 0xF, (id1 >> 8) & 0xF)
+        return URL(string: "http://www.accuraterip.com/accuraterip/" + folders + name + ".bin")!
     }
 }
 

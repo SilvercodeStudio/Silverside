@@ -33,7 +33,9 @@ public enum PregapFinder {
         while low < high {
             // Sectors with only MCN or ISRC frames left between two known positions
             // belong to the previous track: no position frame says the new track starts there.
-            guard let (sector, position) = try readPosition(near: low + (high - low) / 2, in: low..<high, drive: drive)
+            guard
+                let (sector, position) = try readPosition(
+                    near: low + (high - low) / 2, in: low..<high, tracks: (track - 1)...track, drive: drive)
             else { return high }
             if position.track == track {
                 high = sector
@@ -48,9 +50,9 @@ public enum PregapFinder {
     /// ISRC frame, reads the nearest sector in `range` that has a position frame.
     /// Returns nil if the sectors near `lba` in `range` have only valid MCN or ISRC frames.
     private static func readPosition(
-        near lba: Int, in range: Range<Int>, drive: any CDDrive
+        near lba: Int, in range: Range<Int>, tracks: ClosedRange<Int>, drive: any CDDrive
     ) throws -> (sector: Int, position: QSubchannel.Position)? {
-        var sawDamage = false
+        var damaged = [(sector: Int, frame: QSubchannel)]()
         for distance in 0..<16 {
             for sector in Set([lba - distance, lba + distance]).sorted() where range.contains(sector) {
                 // Read a damaged frame again once. A valid MCN or ISRC frame does not change.
@@ -58,11 +60,19 @@ public enum PregapFinder {
                     let frame = try drive.readQSubchannel(at: sector)
                     if let position = frame.position { return (sector, position) }
                     if frame.isValid { break }
-                    if attempt == 1 { sawDamage = true }
+                    if attempt == 1 { damaged.append((sector, frame)) }
                 }
             }
         }
-        guard sawDamage else { return nil }
+        guard !damaged.isEmpty else { return nil }
+        // Some discs have a bad CRC in the frame just before each track change, with
+        // correct contents. Use such a frame only if its absolute time is the sector
+        // read and it names one of the two tracks.
+        for (sector, frame) in damaged {
+            if let position = frame.unverifiedPosition, position.lba == sector, tracks.contains(position.track) {
+                return (sector, position)
+            }
+        }
         throw PregapError.unreadableSubchannel(lba: lba)
     }
 }

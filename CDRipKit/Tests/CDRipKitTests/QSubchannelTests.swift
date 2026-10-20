@@ -74,6 +74,13 @@ struct PregapFinderTests {
         #expect(try PregapFinder.pregap(of: toc.tracks[2], in: toc, drive: drive) == 37)
     }
 
+    /// Grateful Dead, "Reckoning", has a bad CRC in the last frame before tracks 9 and 14.
+    @Test func usesAFrameWithABadCRCWhenItsTimeAgrees() throws {
+        let drive = try drive(pregaps: [2: 150, 3: 0])
+        drive.badCRCQSectors = [249, 899]
+        #expect(try PregapFinder.pregaps(of: drive.toc, drive: drive) == [1: 0, 2: 150, 3: 0, 4: 0])
+    }
+
     /// Sector 441 holds an MCN frame, right before track 2 starts at 442 with no pregap.
     @Test func treatsACodeFrameAtTheChangeAsThePreviousTrack() throws {
         let drive = try drive(pregaps: [:], trackSectors: [442, 300])

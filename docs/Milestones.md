@@ -6,7 +6,7 @@ The first goal is a usable CLI: rip a whole disc to tagged FLAC or ALAC files wi
 |---|---|---|
 | 1 | Engine basics | Done |
 | 2 | Hardware access and CLI skeleton | Done |
-| 3 | Rip to WAV with AccurateRip verification | Engine mostly done |
+| 3 | Rip to WAV with AccurateRip verification | In progress |
 | 4 | Encoding and tags | Not started |
 | 5 | Metadata | Not started |
 | 6 | Secure re-reads | Not started |
@@ -36,12 +36,24 @@ Done:
 
 Index points after index 01 are left for milestone 8: finding them needs the Q subchannel of every sector, which a rip reads anyway.
 
-## 3. Rip to WAV with AccurateRip verification
+## 3. Rip to WAV with AccurateRip verification — in progress
 
-- `cdrip rip`: rip every track (or chosen tracks) to WAV with offset correction.
-- Report an AccurateRip result for each track: v1 or v2, and confidence.
-- The first and last tracks on drives without overread: AccurateRip skips the samples that are lost.
-- Drive profiles: where to store the offset and other capabilities for each drive and enclosure. Key them on firmware revision too, because modified firmware (such as LibreDrive) can change behavior. Find the offset from the AccurateRip drive offset list (with vendor aliases), or from the offsets that several discs share. One disc is not enough.
+Done:
+
+- `cdrip rip [--tracks 1,3-5] [-o folder] [--offset n] [--offline]`: offset-corrected WAV files, and an AccurateRip result for each track (v1 and v2 submissions, or the other offsets that match).
+- `TrackRipper` reads 5 sectors more on each side of a track, so it can find the other offsets that match without a second read. Each candidate is checked with the full-track checksum.
+- `DriveOffsetList` reads AccurateRip's `DriveOffsets.bin` (69-byte records), with vendor aliases.
+- Full-disc rips checked on hardware: Herbie Hancock, *Head Hunters* (4 of 4 tracks accurate, including the first and last), and Grateful Dead, *Reckoning* (10 of 15: the 5 others have C2 errors).
+- `DriveProfile` and `DriveProfileStore`: `~/Library/Application Support/CDRip/DriveProfiles.json`. Offset order: manual, confirmed by rips of two or more discs, then AccurateRip's list. Rips in several drives can run at once: a save locks the file, reads it again, and changes only its own profile.
+- Offsets confirmed by rips alone: +6 for the HL-DT-ST (*Head Hunters*, *Dick's Picks Vol. 2*) and for the ASUS (*Reckoning*, *Live/Dead*). Partly damaged discs count, because their good tracks still match.
+
+To do:
+
+- A way to set a drive's offset by hand (for example `cdrip drives --set-offset`), saved in its profile.
+- Keep a copy of `DriveOffsets.bin`. Today it is downloaded once for each new drive.
+- Offline rips: keep what is needed to check them against AccurateRip later.
+- Speed: a 6½-minute track took 36 s on the HL-DT-ST (debug build). Profile the reads and the checksums.
+- Memory: a track is held in memory as it is ripped (about 10 MB a minute). Long single-track discs need streaming.
 
 ### Offset handling
 
@@ -117,4 +129,9 @@ Test discs:
 - Grateful Dead, *Summer Magic 1985* (20 discs): MusicBrainz disc IDs known. Not in AccurateRip when last checked.
 - Pink Floyd, *The Endless River* (2014, major label): ISRCs on the disc (GBN9X1400051…), the same as in MusicBrainz. No MCN. CD-Text. Many pressings in AccurateRip, and one (+773) has more submissions than the drive's offset.
 - To try: a Windows 98 CD (data track only).
+- Herbie Hancock, *Head Hunters* (about 1999): long pregaps (1.9–2.3 s). All 4 tracks accurate on the HL-DT-ST at +6; the disc also matches at −1070 and −943.
+- Grateful Dead, *Reckoning* (about 1993): **damaged**, the test disc for secure re-reads. On the ASUS, tracks 8, 11, 13, 14, and 15 are not accurate, and each has C2 errors (track 8: one spot every revolution, about 16 sectors; track 15: 179 sectors). The Q frames just before tracks 9 and 14 have bad CRCs, next to C2 errors in the audio (16 sectors, one revolution, before the frame at 262379). Track 12 was accurate in the rip, but a later C2 scan found 3 bad sectors: results on damaged areas change between reads, so C2 is a hint only. 33 silent sectors before track 1.
+- Grateful Dead, *Reckoning*, on the MATSHITA too: the same 5 tracks fail, and the same Q frames have bad CRCs, so the faults are on the disc. Compared sample by sample, the two drives' rips differ in only 0.0004–0.03% of samples, in 4–192 sectors per track. Where they differ, the median difference is 32–44 (of 65,536 steps), and the largest about 4,000, which can be an audible click. Raw P-W subchannel from the MATSHITA was unusable on this disc: the same bytes at sectors far apart.
+- Grateful Dead, *Dick's Picks Vol. 2*: **damaged**. 2 of 6 tracks accurate on the HL-DT-ST; track 2 has C2 errors in 39 sectors. No pregaps.
+- Grateful Dead, *Live/Dead*: **damaged**. Only track 7 (35 s) accurate on the ASUS; tracks 2 and 6 have C2 errors. MCN 0075990183026. 32 silent sectors before track 1. Seven pressings in AccurateRip.
 - Still to find: an enhanced CD, a disc with hidden track one audio, a pre-emphasis disc, and a scratched disc.

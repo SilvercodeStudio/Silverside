@@ -65,7 +65,13 @@ public struct QSubchannel: Equatable, Sendable {
 
     /// The position in a valid ADR 1 frame. Nil for other frames (such as MCN and ISRC) and damaged frames.
     public var position: Position? {
-        guard isValid, adr == 1 else { return nil }
+        isValid ? unverifiedPosition : nil
+    }
+
+    /// The position in an ADR 1 frame, without the CRC check. Use it only with
+    /// another check, such as an absolute time that agrees with the sector read.
+    public var unverifiedPosition: Position? {
+        guard adr == 1 else { return nil }
         func bcd(_ byte: UInt8) -> Int? {
             byte >> 4 <= 9 && byte & 0x0F <= 9 ? Int(byte >> 4) * 10 + Int(byte & 0x0F) : nil
         }

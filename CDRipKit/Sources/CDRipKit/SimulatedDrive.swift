@@ -22,8 +22,12 @@ public final class SimulatedDrive: CDDrive {
     /// pregap runs from LBA 0 to its start.
     public var pregaps: [Int: Int] = [:]
 
-    /// Sectors whose Q subchannel has a bad CRC.
+    /// Sectors whose Q subchannel has a damaged track number and a bad CRC.
     public var corruptQSectors: Set<Int> = []
+
+    /// Sectors whose Q subchannel has correct contents but a bad CRC, as some discs
+    /// have just before each track change.
+    public var badCRCQSectors: Set<Int> = []
 
     /// The disc's MCN. If set, sectors whose LBA ends in 41 have an MCN frame in place of a position.
     public var mcn: String?
@@ -82,9 +86,14 @@ public final class SimulatedDrive: CDDrive {
         } else {
             frame = .position(track: track.number, index: lba < track.startLBA ? 0 : 1, lba: lba)
         }
-        guard corruptQSectors.contains(lba) else { return frame }
         var bytes = frame.bytes
-        bytes[1] ^= 0x80
+        if corruptQSectors.contains(lba) {
+            bytes[1] ^= 0x80
+        } else if badCRCQSectors.contains(lba) {
+            bytes[11] ^= 0x01
+        } else {
+            return frame
+        }
         return QSubchannel(bytes: bytes)
     }
 }

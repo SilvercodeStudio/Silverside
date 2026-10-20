@@ -13,7 +13,7 @@ Ripping is verification-first: rip fast with offset correction, verify each trac
 ## Commands
 
 ```sh
-make cli ARGS='info'   # build and run the cdrip CLI (drives, info; -d diskN chooses a disc)
+make cli ARGS='info'   # build and run the cdrip CLI (drives, info, rip; -d diskN chooses a disc)
 make test        # swift test --package-path CDRipKit
 make hwtest OFFSET=103   # hardware tests; needs a disc in AccurateRip (DEVICE=diskN to choose; OFFSET checks the drive's offset)
 make core        # swift build --package-path CDRipKit
@@ -62,6 +62,7 @@ Three drives so far (MATSHITA UJ260AF +103, HL-DT-ST BU50N +6, ASUS BW-16D1HT +6
 - The HL-DT-ST BU50N at +6 and the MATSHITA at +103 give identical checksums for the same track.
 - Read MCN and ISRC from the Q subchannel (`SubchannelCodes`), not with `DKIOCCDREADISRC` and `DKIOCCDREADMCN`. On the HL-DT-ST, the ISRC ioctl returned the previous track's code for several tracks of *The Story of the Ghost*, and the code no longer uses either ioctl. MCN and ISRC frames are about 1 in 100 Q frames; in the 6-bit ISRC characters, `0`–`9` are 0x00–0x09 and `A`–`Z` are 0x11–0x2A.
 - A valid MCN or ISRC frame can sit at a track change (*The Story of the Ghost*, LBA 17441). `PregapFinder` counts such frames as part of the previous track.
+- C2 flags are a hint only. On damaged discs, the result for a sector can change between reads: *Reckoning* track 12 was accurate in a rip, but a later C2 scan found 3 bad sectors. Raw P-W subchannel can be unreliable too (MATSHITA, *Reckoning*).
 - AccurateRip records can be v2 only (Vulfpeck *Clarity of Cal* has one v2 submission). The v1 offset search finds nothing there; the sector 450 checksum, which is v1-style for both versions, finds the offset.
 
 ## Constraints
@@ -80,4 +81,4 @@ The full list is in `docs/Milestones.md`. Keep both up to date.
 
 1. Done: TOC, disc IDs, AccurateRip checksums, simulated drive, offset-corrected reader.
 2. Done: `IOKitDrive`, hardware tests, and the `cdrip` CLI with `drives` and `info` (TOC, pregaps, IDs, ISRC, MCN, AccurateRip and CTDB status).
-3. `cdrip rip --track N`: an offset-corrected rip, an AccurateRip lookup, and WAV output.
+3. In progress: `cdrip rip` (offset-corrected WAV, AccurateRip result per track), drive profiles, and AccurateRip's drive offset list.

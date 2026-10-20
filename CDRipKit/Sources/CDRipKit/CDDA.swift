@@ -8,6 +8,8 @@ public enum CDDA {
     public static let bytesPerSector = 2352
     public static let bytesPerSample = 4
     public static let samplesPerSector = 588
+    /// C2 error flags for one sector: one bit for each byte.
+    public static let errorFlagBytesPerSector = bytesPerSector / 8
     public static let sectorsPerSecond = 75
 
     /// The 2-second lead-in before LBA 0. MusicBrainz and freedb offsets include it.

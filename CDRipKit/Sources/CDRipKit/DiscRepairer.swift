@@ -1,3 +1,5 @@
+import Foundation
+
 /// One track's audio for a CTDB repair: the samples to start from, and the other
 /// values that reads gave where they disagree.
 public struct TrackAudio: Sendable {
@@ -29,6 +31,8 @@ public struct TrackAudio: Sendable {
     }
 
     /// From a secure rip: its samples, with the other versions of its suspect sectors.
+    /// Samples with C2 errors, or from sectors that could not be read, are suspect too, with
+    /// no other value if no read gave one.
     public init(_ rip: SecureTrackRip) {
         var alternatives = [Int: [UInt32]]()
         for (sector, versions) in rip.sectorVersions {
@@ -38,7 +42,60 @@ public struct TrackAudio: Sendable {
                 if !others.isEmpty { alternatives[sample] = others }
             }
         }
+        for sample in (rip.c2Samples ?? []) + rip.unreadableSamples where alternatives[sample] == nil {
+            alternatives[sample] = []
+        }
         self.init(samples: rip.samples, alternatives: alternatives)
+    }
+
+    /// Adds other values for samples. A value that is the sample's own, or already known, is left out.
+    public mutating func add(_ more: [Int: [UInt32]]) {
+        for (sample, values) in more where samples.indices.contains(sample) {
+            for value in values where value != samples[sample] && !(alternatives[sample] ?? []).contains(value) {
+                alternatives[sample, default: []].append(value)
+            }
+        }
+    }
+
+    /// The name of the file that keeps a track's alternatives, next to its WAV file.
+    public static func alternativesFileName(track: Int) -> String {
+        String(format: "Track %02d.suspects", track)
+    }
+
+    static let fileMagic: [UInt8] = Array("CDRS".utf8)
+
+    /// Writes the alternatives, so that a later repair can use them: "CDRS", then for each
+    /// suspect sample its index, the number of values, and the values, as little-endian UInt32.
+    public func writeAlternatives(to url: URL) throws {
+        var words = [UInt32]()
+        for (sample, values) in alternatives.sorted(by: { $0.key < $1.key }) {
+            words += [UInt32(sample), UInt32(values.count)] + values
+        }
+        var data = Data(Self.fileMagic)
+        for word in words { withUnsafeBytes(of: word.littleEndian) { data.append(contentsOf: $0) } }
+        try data.write(to: url, options: .atomic)
+    }
+
+    /// Reads alternatives that `writeAlternatives(to:)` wrote.
+    public static func readAlternatives(from url: URL) throws -> [Int: [UInt32]] {
+        let bytes = [UInt8](try Data(contentsOf: url))
+        guard bytes.starts(with: fileMagic), (bytes.count - fileMagic.count) % 4 == 0 else {
+            throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: url.path])
+        }
+        let words = stride(from: fileMagic.count, to: bytes.count, by: 4).map { start in
+            (0..<4).reduce(UInt32(0)) { $0 | UInt32(bytes[start + $1]) << (8 * $1) }
+        }
+        var alternatives = [Int: [UInt32]]()
+        var index = 0
+        while index + 2 <= words.count {
+            let count = Int(words[index + 1])
+            guard index + 2 + count <= words.count else {
+                throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: url.path])
+            }
+            alternatives[Int(words[index])] = Array(words[(index + 2)..<(index + 2 + count)])
+            index += 2 + count
+        }
+        return alternatives
     }
 
     /// The values other than `chosen`, once each, in the order they come.
@@ -91,6 +148,18 @@ public struct DiscRepairer {
         public var trackConfidences: [Int]
         /// The number of entries that match the rip's alignment, but have no repair data.
         public var entriesWithoutRepairData = 0
+        /// Other values for suspect samples, by index in `audio`, with the ones that re-reads added.
+        public var alternatives: [Int: [UInt32]] = [:]
+
+        /// One audio track's alternatives, by sample index in the track.
+        public func alternatives(ofTrack index: Int) -> [Int: [UInt32]] {
+            let range = trackRange(index)
+            var result = [Int: [UInt32]]()
+            for (sample, values) in alternatives where range.contains(sample) {
+                result[sample - range.lowerBound] = values
+            }
+            return result
+        }
 
         /// The samples of one audio track, by its index among the audio tracks.
         public func samples(ofTrack index: Int) -> [UInt32] {
@@ -167,6 +236,7 @@ public struct DiscRepairer {
         func finish(_ outcome: Outcome, audio: [UInt32]? = nil) -> Result {
             result.outcome = outcome
             result.entriesWithoutRepairData = withoutRepairData.count
+            result.alternatives = alternatives
             if let audio { result.audio = audio }
             result.trackConfidences = trackConfidences(of: result.audio, layout: layout, outcome: outcome)
             return result
@@ -228,9 +298,17 @@ public struct DiscRepairer {
                             .repaired(entry: entry, shift: match.shift, changedSamples: changed), audio: repaired)
                     case .uncorrectable(let columns, let columnsWithErrors, let checked, let changes):
                         let part = checked < CTDBLayout.stride ? " (stopped after \(checked) columns)" : ""
+                        // For a few columns, how many suspect words each has, and how many of them have other values.
+                        let details = columns.map { column in
+                            let samples = CTDB.suspectSamples(
+                                inColumn: column, suspects: suspects, layout: layout, shift: match.shift)
+                            let withOthers = samples.filter { !(alternatives[$0] ?? []).isEmpty }.count
+                            return "\(column) (\(samples.count) suspects, \(withOthers) with other values)"
+                        }
                         log(
                             "  Cannot repair: \(columns.count) of \(columnsWithErrors) columns with errors have too many"
-                                + part + (columns.count <= 8 ? ": columns \(columns)" : "") + ".")
+                                + part + (columns.count <= 8 ? ": columns \(details.joined(separator: ", "))" : "")
+                                + ".")
                         // Most columns repaired: this is the entry's shift, so re-read, and try no other shift.
                         guard checked == CTDBLayout.stride, columns.count <= Self.maximumColumnsToReread else {
                             break rounds
@@ -336,10 +414,11 @@ public struct DiscRepairer {
             for sector in sectors {
                 let start = sector * CDDA.samplesPerSector
                 guard
-                    let read = try? reader.readSamples(
-                        (firstSample + start)..<(firstSample + start + CDDA.samplesPerSector))
+                    let read = try? reader.read(
+                        (firstSample + start)..<(firstSample + start + CDDA.samplesPerSector), withC2: false),
+                    read.unreadable.isEmpty
                 else { continue }
-                for (offset, value) in read.enumerated() where wanted.contains(start + offset) {
+                for (offset, value) in read.samples.enumerated() where wanted.contains(start + offset) {
                     let sample = start + offset
                     if value != audio[sample] && !(alternatives[sample] ?? []).contains(value) {
                         alternatives[sample, default: []].append(value)
@@ -359,10 +438,8 @@ public struct DiscRepairer {
         known: [AccurateRipRecord.Track]
     ) -> Int? {
         let margin = TrackRipper.margin
-        guard !known.isEmpty, length >= 451 * CDDA.samplesPerSector, start >= margin,
-            start + length + margin <= audio.count
-        else { return nil }
-        let window = Array(audio[(start - margin)..<(start + length + margin)])
+        guard !known.isEmpty, length >= 451 * CDDA.samplesPerSector else { return nil }
+        let window = Self.window(of: audio, start: start, length: length, margin: margin)
         let found = AccurateRipOffsetFinder.frame450Offsets(
             matching: Set(known.map(\.frame450Checksum)), in: window, trackLength: length, margin: margin)
         guard found.count <= TrackRipper.maximumFrame450Matches else { return nil }
@@ -384,18 +461,25 @@ public struct DiscRepairer {
         let margin = TrackRipper.margin
         for (index, track) in toc.audioTracks.enumerated() {
             let length = toc.sectorRange(of: track).count * CDDA.samplesPerSector
-            let start = trackStarts[index]
-            guard length >= 451 * CDDA.samplesPerSector, start >= margin, start + length + margin <= audio.count else {
-                continue
-            }
+            guard length >= 451 * CDDA.samplesPerSector else { continue }
             let known = Set(
                 records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index].frame450Checksum : nil })
-            let window = Array(audio[(start - margin)..<(start + length + margin)])
+            let window = Self.window(of: audio, start: trackStarts[index], length: length, margin: margin)
             let found = AccurateRipOffsetFinder.frame450Offsets(
                 matching: known, in: window, trackLength: length, margin: margin)
             if found.count <= TrackRipper.maximumFrame450Matches { shifts.formUnion(found) }
         }
         return shifts.sorted { abs($0) < abs($1) }
+    }
+
+    /// A track's samples with `margin` samples on each side. Past the ends of `audio` they
+    /// are silence, as a drive with no overread gives. AccurateRip skips that many samples
+    /// at the disc's edges, so the first and last tracks can still be checked at other offsets.
+    static func window(of audio: [UInt32], start: Int, length: Int, margin: Int) -> [UInt32] {
+        let range = (start - margin)..<(start + length + margin)
+        let inside = range.clamped(to: 0..<audio.count)
+        return [UInt32](repeating: 0, count: inside.lowerBound - range.lowerBound) + audio[inside]
+            + [UInt32](repeating: 0, count: range.upperBound - inside.upperBound)
     }
 
     /// Groups sorted indexes into ranges of consecutive indexes.

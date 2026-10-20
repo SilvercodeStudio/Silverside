@@ -206,6 +206,39 @@ struct CTDBTests {
         #expect(damaged == original)
     }
 
+    /// Ten wrong words among 20 suspects in one column, with 16 syndromes: too many for
+    /// errors at unknown places (8), and too many suspects to erase them all (14, with 2
+    /// spare). A subset of 14 suspects that holds the 10 wrong words decodes.
+    @Test func repairsAColumnWithTooManySuspectsBySubsets() {
+        let layout = CTDBLayout(sampleCount: 30 * CTDBLayout.strideSamples + 500)
+        var generator = SplitMix64(state: 5)
+        let original = (0..<layout.sampleCount).map { _ in UInt32.random(in: .min ... .max, using: &generator) }
+        let reference = CTDB.syndromes(of: original, layout: layout, shift: 0, count: 16)
+        let crc = CTDB.discCRC(of: original, layout: layout)
+        let samples = (0..<20).map { layout.prefixSamples + $0 * CTDBLayout.strideSamples + 77 }
+        var damaged = original
+        for sample in samples.prefix(10) { damaged[sample] ^= 0x0000_0101 }
+        let result = CTDB.repair(
+            &damaged, layout: layout, shift: 0, reference: reference, count: 16, crc: crc,
+            suspects: samples.map { $0..<($0 + 1) })
+        #expect(result == .repaired(changedSamples: Array(samples.prefix(10))))
+        #expect(damaged == original)
+    }
+
+    @Test func solvesErasureValues() {
+        let degrees = [3, 40, 41]
+        let errors: [UInt16] = [0x1234, 0, 0xBEEF]
+        let syndromes = (0..<6).map { i in
+            zip(degrees, errors).reduce(UInt16(0)) {
+                $0 ^ GaloisField16.multiply($1.1, GaloisField16.alphaPower(i * $1.0))
+            }
+        }
+        #expect(CTDB.erasureValues(syndromes, degrees: degrees) == errors)
+        var wrong = syndromes
+        wrong[5] ^= 1
+        #expect(CTDB.erasureValues(wrong, degrees: degrees) == nil)
+    }
+
     @Test(arguments: [0, 1195, -700, 5879])
     func findsTheShiftOfAnEntry(shift: Int) {
         let (layout, audio) = disc()

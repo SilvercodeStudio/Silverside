@@ -276,10 +276,14 @@ public enum CTDB {
         // when few columns are left, as on a disc that is nearly repaired.
         if !uncorrectable.isEmpty && uncorrectable.count <= maximumColumnsForAlternatives {
             uncorrectable = uncorrectable.filter { column in
+                let fewColumns = uncorrectable.count <= maximumColumnsForErasureSubsets
                 guard
                     let corrections = decodeWithAlternatives(
                         difference(column), column: column, suspects: erasures[column], audio: audio, first: first,
                         layout: layout, count: count, alternatives: alternatives)
+                        ?? (fewColumns
+                            ? decodeWithErasureSubsets(difference(column), suspects: erasures[column], count: count)
+                            : nil)
                 else { return true }
                 record(corrections, column: column)
                 return false
@@ -327,6 +331,62 @@ public enum CTDB {
 
     /// The most combinations of other versions of a column's suspect words to try.
     static let maximumAlternativeCombinations = 4096
+
+    /// Try subsets of suspect words as erasures only when at most this many columns fail.
+    static let maximumColumnsForErasureSubsets = 16
+
+    /// The most subsets of one column's suspect words to try as erasures.
+    static let maximumErasureSubsets = 200_000
+
+    /// For a column with more suspect words than its syndromes can erase (with
+    /// `spareSyndromes` kept to check the result): tries random subsets of them as
+    /// erasures, with no other errors. If every wrong word is in a subset, the subset
+    /// decodes, and the spare syndromes show that it does. With the places known, the
+    /// error values are the solution of a linear system, so each try is fast. The subsets
+    /// come from a fixed seed, so a repair gives the same result each time.
+    static func decodeWithErasureSubsets(
+        _ difference: [UInt16], suspects: [Int], count: Int
+    ) -> [ReedSolomonDecoder.Correction]? {
+        let size = count - spareSyndromes
+        guard size > 0, suspects.count > size else { return nil }
+        var generator = SubsetGenerator(state: UInt64(suspects.count) &* 0x9E37_79B9_7F4A_7C15)
+        var pool = suspects
+        for _ in 0..<maximumErasureSubsets {
+            // The first `size` places after a partial shuffle are a random subset.
+            for index in 0..<size { pool.swapAt(index, Int.random(in: index..<pool.count, using: &generator)) }
+            let degrees = Array(pool[0..<size])
+            if let values = erasureValues(difference, degrees: degrees) {
+                return zip(degrees, values).filter { $0.1 != 0 }.map { .init(degree: $0.0, error: $0.1) }
+            }
+        }
+        return nil
+    }
+
+    /// The error values at `degrees` that give the syndromes: S_i = Σ_j E_j α^(i d_j). The
+    /// first `degrees.count` syndromes give the values (a Vandermonde system); the others
+    /// must agree, or the result is nil.
+    static func erasureValues(_ syndromes: [UInt16], degrees: [Int]) -> [UInt16]? {
+        typealias GF = GaloisField16
+        let size = degrees.count
+        var matrix = (0..<size).map { row in degrees.map { GF.alphaPower(row * $0) } + [syndromes[row]] }
+        for column in 0..<size {
+            guard let pivot = (column..<size).first(where: { matrix[$0][column] != 0 }) else { return nil }
+            matrix.swapAt(column, pivot)
+            let inverse = GF.divide(1, matrix[column][column])
+            for k in column...size { matrix[column][k] = GF.multiply(matrix[column][k], inverse) }
+            for row in 0..<size where row != column && matrix[row][column] != 0 {
+                let factor = matrix[row][column]
+                for k in column...size { matrix[row][k] ^= GF.multiply(factor, matrix[column][k]) }
+            }
+        }
+        let values = matrix.map { $0[size] }
+        for row in size..<syndromes.count {
+            var sum: UInt16 = 0
+            for (degree, value) in zip(degrees, values) { sum ^= GF.multiply(value, GF.alphaPower(row * degree)) }
+            if sum != syndromes[row] { return nil }
+        }
+        return values
+    }
 
     /// For a column that cannot be decoded, tries the other versions of its suspect words
     /// that reads gave, fewest changed words first, and decodes again. Changing a word at
@@ -416,5 +476,18 @@ public enum CTDB {
             }
         }
         return samples
+    }
+}
+
+/// SplitMix64, for the erasure subsets: fast, and the same on every run.
+private struct SubsetGenerator: RandomNumberGenerator {
+    var state: UInt64
+
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
     }
 }

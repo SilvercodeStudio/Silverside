@@ -27,6 +27,9 @@ struct Rip: AsyncParsableCommand {
     @Flag(help: "Check the rip against CUETools DB, but do not repair it.")
     var noRepair = false
 
+    @Flag(help: "Do not ask the drive for C2 error flags.")
+    var noC2 = false
+
     func run() async throws {
         let bsdName = try deviceOptions.bsdName()
         let drive = try IOKitDrive(bsdName: bsdName)
@@ -79,8 +82,11 @@ struct Rip: AsyncParsableCommand {
         print("Folder: \(folder.path)")
         print()
 
-        let reader = AudioReader(drive: drive, toc: toc, readOffset: readOffset, canOverread: false)
-        let ripper = TrackRipper(reader: reader, records: records)
+        var reader = AudioReader(drive: drive, toc: toc, readOffset: readOffset, canOverread: false)
+        // A sector that cannot be read is silence and suspect, so one bad sector does not stop the rip.
+        reader.unreadableRetries = 3
+        var ripper = TrackRipper(reader: reader, records: records)
+        ripper.readsC2 = !noC2
         let secure = SecureRipper(ripper: ripper)
         var discOffsets = Set<Int>()
         var reports = [RipReport.Track]()
@@ -99,6 +105,8 @@ struct Rip: AsyncParsableCommand {
                 (samples, result) = (rip.samples, Self.describe(rip))
                 discOffsets.formUnion(rip.matchingOffsets)
                 report.matchingOffsets = rip.matchingOffsets
+                report.c2Sectors = rip.c2Samples.map { Array(Set($0.map { $0 / CDDA.samplesPerSector })).sorted() }
+                report.unreadableSectors = Array(Set(rip.unreadableSamples.map { $0 / CDDA.samplesPerSector })).sorted()
                 switch rip.verification {
                 case .accurate(let v1, let v2):
                     report.accurateRip = .accurate
@@ -116,6 +124,9 @@ struct Rip: AsyncParsableCommand {
                 report.rereadRounds = rip.rounds
                 report.suspectSectors = rip.suspectSectors
                 report.unresolvedSectors = rip.unresolvedSectors
+                report.c2Sectors = rip.c2Sectors
+                report.shiftedReads = rip.shiftedReads
+                report.unreadableSectors = rip.unreadableSectors
                 switch rip.status {
                 case .accurate(let v1, let v2):
                     report.accurateRip = .accurate
@@ -125,15 +136,23 @@ struct Rip: AsyncParsableCommand {
                 case .consistentButNotAccurate, .suspect:
                     report.accurateRip = records.isEmpty ? .notInDatabase : .notAccurate
                 }
-                if checksCTDB {
-                    // A track free of errors needs no suspects: they could only let a repair change it.
-                    let errorFree = report.accurateRip == .accurate || report.accurateRip == .otherPressings
-                    trackAudio.append(errorFree ? TrackAudio(samples: rip.samples) : TrackAudio(rip))
+                // A track free of errors needs no suspects: they could only let a repair change it.
+                let errorFree = report.accurateRip == .accurate || report.accurateRip == .otherPressings
+                let audio = errorFree ? TrackAudio(samples: rip.samples) : TrackAudio(rip)
+                if checksCTDB { trackAudio.append(audio) }
+                // Keep the other versions of suspect samples, so that a later repair can use them.
+                if !audio.alternatives.isEmpty {
+                    try audio.writeAlternatives(
+                        to: folder.appending(path: TrackAudio.alternativesFileName(track: track.number)))
                 }
             }
             try WAVFile.write(samples, to: folder.appending(path: file))
             reports.append(report)
             let seconds = (ContinuousClock.now - start).components.seconds
+            if let c2 = report.c2Sectors, !c2.isEmpty { result += ", C2 errors in \(c2.count) sectors" }
+            if let unreadable = report.unreadableSectors, !unreadable.isEmpty {
+                result += ", \(unreadable.count) sectors could not be read"
+            }
             if track.hasPreEmphasis { result += ", pre-emphasis" }
             let length = toc.sectorRange(of: track).count
             print(String(format: "Track %2d  %@  %3d s  ", track.number, Info.duration(length), seconds) + result)
@@ -150,6 +169,20 @@ struct Rip: AsyncParsableCommand {
             ctdb = RipReport.CTDBResult(repair)
             for index in reports.indices { reports[index].ctdbConfidence = repair.trackConfidences[index] }
             try applyRepair(repair, to: &reports, records: records, folder: folder)
+            // Keep the alternatives, with the ones that re-reads added, for tracks that are not yet right.
+            for (index, report) in reports.enumerated() {
+                let url = folder.appending(path: TrackAudio.alternativesFileName(track: report.number))
+                var audio = TrackAudio(samples: repair.samples(ofTrack: index))
+                audio.add(repair.alternatives(ofTrack: index))
+                if report.accurateRip == .accurate || report.accurateRip == .otherPressings
+                    || audio.alternatives.isEmpty
+                    || ctdb.status == .repaired
+                {
+                    try? FileManager.default.removeItem(at: url)
+                } else {
+                    try audio.writeAlternatives(to: url)
+                }
+            }
         } else if !entries.isEmpty {
             print()
             print("CTDB: not checked, because it checks the whole disc, and some tracks were not ripped.")
@@ -280,23 +313,34 @@ struct Rip: AsyncParsableCommand {
                 rereads += " and \(rip.rounds) re-reads of \(rip.suspectSectors.count) sectors"
             }
         }
+        var shifted = ""
+        if !rip.shiftedReads.isEmpty {
+            let shifts = rip.shiftedReads.map { signed($0) }.joined(separator: ", ")
+            shifted =
+                rip.firstReadWasShifted
+                ? "; the first read lost its place (\(shifts) samples) and was replaced"
+                : "; \(rip.shiftedReads.count) reads lost their place (\(shifts) samples) and were left out"
+        }
+        let text: String
         switch rip.status {
         case .accurate(let v1, let v2):
-            return "accurate (v1 \(v1), v2 \(v2) submissions)" + rereads
+            text = "accurate (v1 \(v1), v2 \(v2) submissions)" + rereads
         case .matchesOtherPressings(let offsets):
-            return
+            text =
                 "free of errors, but matches only other pressings (offsets \(offsets.map(signed).joined(separator: ", ")))"
         case .consistent:
-            return "not in AccurateRip; reads agree" + rereads
+            text = "not in AccurateRip; reads agree" + rereads
         case .consistentButNotAccurate:
-            return "NOT accurate, but \(rip.fullReads) reads agree: this pressing may not be in AccurateRip,"
+            text =
+                "NOT accurate, but \(rip.fullReads) reads agree: this pressing may not be in AccurateRip,"
                 + " or an error reads the same each time"
         case .suspect:
             let most = rip.versionCounts.values.max() ?? 0
-            return
+            text =
                 "NOT accurate: \(rip.unresolvedSectors.count) of \(rip.suspectSectors.count) suspect sectors unresolved"
                 + rereads + "; up to \(most) versions of a sector"
         }
+        return text + shifted
     }
 
     static func describe(_ source: DriveProfile.OffsetSource) -> String {

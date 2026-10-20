@@ -98,6 +98,16 @@ struct WebClientTests {
         await #expect(throws: OnlineLookupError.httpStatus(500, Self.url)) { try await client.data(from: Self.url) }
     }
 
+    @Test func usesAnOldCopyWhenTheRequestFails() async throws {
+        let failures = Array(repeating: FakeTransport.Answer.timeout, count: WebClient.maximumAttempts)
+        let transport = FakeTransport([.status(200, body: "old")] + failures)
+        let (client, directory) = client(transport, lifetime: .zero)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        #expect(try await client.data(from: Self.url) == Data("old".utf8))
+        #expect(try await client.data(from: Self.url) == Data("old".utf8))
+        #expect(await client.requestsSent == 1 + WebClient.maximumAttempts)
+    }
+
     /// Two clients that share a folder stand for two processes: the limit holds for both.
     @Test func waitsBetweenRequestsToAHost() async throws {
         let transport = FakeTransport([.status(200), .status(200), .status(200)])
@@ -122,7 +132,7 @@ struct WebClientTests {
         #expect(agent == "CDRip/\(CDRipVersion.string) ( https://preston-landers.github.io/CDRip )")
     }
 
-    @Test func limitsMusicBrainzToOneRequestASecond() {
-        #expect(WebClient.defaultPolicies["musicbrainz.org"]?.interval == .seconds(1))
+    @Test func waitsTwoSecondsBetweenMusicBrainzRequests() {
+        #expect(WebClient.defaultPolicies["musicbrainz.org"]?.interval == .seconds(2))
     }
 }

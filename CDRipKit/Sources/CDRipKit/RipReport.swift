@@ -51,6 +51,12 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var suspectSectors: [Int]
         /// Suspect sectors whose data reads could not decide.
         public var unresolvedSectors: [Int]
+        /// Sectors, counted from the track's start, with C2 errors in the first read. Nil if C2 was not read.
+        public var c2Sectors: [Int]?
+        /// The shifts, in samples, of reads that lost their place and were left out.
+        public var shiftedReads: [Int]?
+        /// Sectors, counted from the track's start, that the first read could not read.
+        public var unreadableSectors: [Int]?
         /// The most submissions of a CTDB entry whose track CRC matches. 0 if none; nil if not checked.
         public var ctdbConfidence: Int?
         /// Samples that the CTDB repair changed.

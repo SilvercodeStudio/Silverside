@@ -18,6 +18,11 @@ public struct TrackRip: Sendable {
     /// The drive offsets at which this track matches AccurateRip. There can be
     /// more than one, because pressings of a disc are shifted against each other.
     public var matchingOffsets: [Int]
+    /// The samples, by index in the track, that the drive flagged with C2 errors. Nil
+    /// if the rip did not read C2 flags.
+    public var c2Samples: [Int]?
+    /// The samples, by index in the track, from sectors that could not be read. They are silence.
+    public var unreadableSamples: [Int] = []
 }
 
 /// Rips tracks with offset correction and checks them against AccurateRip.
@@ -25,6 +30,9 @@ public struct TrackRipper {
     public let reader: AudioReader
     /// The disc's AccurateRip records. Empty if the disc is not in the database or the rip is offline.
     public let records: [AccurateRipRecord]
+    /// If true, the first read of each track asks for C2 error flags. A drive that
+    /// refuses gives a plain read.
+    public var readsC2 = false
 
     /// Samples read before and after each track, so other offsets can be checked.
     /// AccurateRip skips this many samples at the disc's edges.
@@ -70,7 +78,15 @@ public struct TrackRipper {
         let length = sectors.count * CDDA.samplesPerSector
         let margin = Self.margin
 
-        let buffer = try reader.readSamples((start - margin)..<(start + length + margin))
+        let positions = (start - margin)..<(start + length + margin)
+        var read: AudioReader.Read
+        var flagged: [Int]?
+        if readsC2, let withC2 = try? reader.read(positions, withC2: true) {
+            (read, flagged) = (withC2, withC2.flagged)
+        } else {
+            read = try reader.read(positions, withC2: false)
+        }
+        let buffer = read.samples
         // The checksum of the track as if the drive's offset were `shift` samples more.
         func checksum(shiftedBy shift: Int) -> AccurateRipChecksum {
             let window = Array(buffer[(margin + shift)..<(margin + shift + length)])
@@ -109,6 +125,8 @@ public struct TrackRipper {
 
         return TrackRip(
             track: track, samples: samples, checksum: trackChecksum, verification: trackVerification,
-            matchingOffsets: matchingOffsets)
+            matchingOffsets: matchingOffsets,
+            c2Samples: flagged?.map { $0 - margin }.filter { (0..<length).contains($0) },
+            unreadableSamples: read.unreadable.map { $0 - margin }.filter { (0..<length).contains($0) })
     }
 }

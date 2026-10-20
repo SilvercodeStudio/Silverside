@@ -119,10 +119,43 @@ struct DiscRepairerTests {
         #expect(result.audio.dropLast(SecureRipperTests.driveOffset) == samples.dropLast(SecureRipperTests.driveOffset))
     }
 
+    /// The first track matches another pressing, 30 samples later. Its audio before the
+    /// disc's start is silence, which AccurateRip skips.
+    @Test func findsAnotherPressingForTheFirstTrack() throws {
+        let (toc, samples, _) = try TrackRipperTests().disc()
+        let length = 460 * 588
+        let pressing = [UInt32](repeating: 0, count: 30) + samples.dropLast(30)
+        let checksum = AccurateRipAccumulator.checksum(
+            of: Array(pressing[0..<length]).span, isFirstTrack: true, isLastTrack: false)
+        let sector450 = Array(pressing[(450 * 588)..<(451 * 588)])
+        let frame450 = AccurateRipAccumulator.checksum(of: sector450.span, isFirstTrack: false, isLastTrack: false)
+        let known = [AccurateRipRecord.Track(confidence: 2, checksum: checksum.v2, frame450Checksum: frame450.v1)]
+        #expect(toc.audioTracks[0].startLBA == 0)
+        #expect(
+            DiscRepairer.otherPressingShift(
+                of: samples, start: 0, length: length, edges: (true, false), known: known) == -30)
+    }
+
     @Test func choosesTheMostFrequentValue() {
         let audio = TrackAudio(versions: [[1, 2, 3, 4], [1, 5, 3, 6], [1, 5, 7, 8]])
         #expect(audio.samples == [1, 5, 3, 4])
         #expect(audio.alternatives == [1: [2], 2: [7], 3: [6, 8]])
+    }
+
+    @Test func keepsAlternativesInAFile() throws {
+        let audio = TrackAudio(samples: [1, 2, 3], alternatives: [0: [7], 2: [0xFFFF_FFFF, 9]])
+        let url = FileManager.default.temporaryDirectory.appending(path: "suspects-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try audio.writeAlternatives(to: url)
+        #expect(try TrackAudio.readAlternatives(from: url) == audio.alternatives)
+        try Data([1, 2, 3, 4]).write(to: url)
+        #expect(throws: CocoaError.self) { try TrackAudio.readAlternatives(from: url) }
+    }
+
+    @Test func addsOnlyNewValues() {
+        var audio = TrackAudio(samples: [1, 2, 3], alternatives: [0: [7]])
+        audio.add([0: [7, 8, 1], 1: [2], 2: [4], 5: [6]])
+        #expect(audio.alternatives == [0: [7, 8], 2: [4]])
     }
 
     @Test func groupsConsecutiveSamples() {

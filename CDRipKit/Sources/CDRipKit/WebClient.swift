@@ -21,6 +21,8 @@ public struct URLSessionTransport: HTTPTransport {
 /// - A 503, a 429, or a timeout is tried again later: after `Retry-After` if the
 ///   server gives it, or with a delay that doubles each time.
 /// - Responses, and 404s, are kept in a cache on disk, for a time that depends on the host.
+///   When a request fails, a copy from the cache is used even if it is old, so that
+///   lookups work offline.
 public actor WebClient {
     public static let userAgent = "CDRip/\(CDRipVersion.string) ( https://preston-landers.github.io/CDRip )"
 
@@ -39,9 +41,11 @@ public actor WebClient {
 
     static let day = Duration.seconds(86_400)
 
-    /// MusicBrainz allows 1 request per second on average. The others have no published limit.
+    /// MusicBrainz allows 1 request per second on average, but answered 503 to requests
+    /// 1.5 s apart (perhaps at a busy time of day), so CDRip waits 2 s. The others have
+    /// no published limit.
     public static let defaultPolicies: [String: HostPolicy] = [
-        "musicbrainz.org": HostPolicy(interval: .seconds(1), lifetime: day * 7),
+        "musicbrainz.org": HostPolicy(interval: .seconds(2), lifetime: day * 7),
         "coverartarchive.org": HostPolicy(interval: .seconds(1), lifetime: day * 30),
         "www.accuraterip.com": HostPolicy(interval: .milliseconds(200), lifetime: day),
         "db.cuetools.net": HostPolicy(interval: .milliseconds(200), lifetime: day),
@@ -77,23 +81,32 @@ public actor WebClient {
     }
 
     /// The response body for `url`, or nil if the server answers 404.
-    /// `useCache: false` sends a new request, and keeps its answer in the cache.
+    /// `useCache: false` sends a new request, and keeps its answer in the cache. If the
+    /// request fails, the answer in the cache is used, however old it is.
     public func data(from url: URL, useCache: Bool = true) async throws -> Data? {
         let key = Insecure.SHA1.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
         let body = directory.appending(path: "web/\(key).data")
         let meta = directory.appending(path: "web/\(key).json")
         let policy = policies[url.host() ?? ""] ?? Self.fallbackPolicy
 
-        if useCache, let cached = try? JSONDecoder().decode(CacheEntry.self, from: Data(contentsOf: meta)) {
-            let age = Duration.seconds(Date().timeIntervalSince(cached.fetched))
-            let lifetime = cached.status == 404 ? Self.notFoundLifetime : policy.lifetime
-            if age < lifetime {
-                if cached.status == 404 { return nil }
-                if let data = try? Data(contentsOf: body) { return data }
-            }
+        let cached = (try? JSONDecoder().decode(CacheEntry.self, from: Data(contentsOf: meta))).flatMap {
+            entry -> (entry: CacheEntry, data: Data?)? in
+            if entry.status == 404 { return (entry, nil) }
+            return (try? Data(contentsOf: body)).map { (entry, $0) }
+        }
+        if useCache, let cached {
+            let age = Duration.seconds(Date().timeIntervalSince(cached.entry.fetched))
+            if age < (cached.entry.status == 404 ? Self.notFoundLifetime : policy.lifetime) { return cached.data }
         }
 
-        let (data, status) = try await fetch(url, policy: policy)
+        let data: Data
+        let status: Int
+        do {
+            (data, status) = try await fetch(url, policy: policy)
+        } catch {
+            if let cached { return cached.data }
+            throw error
+        }
         try FileManager.default.createDirectory(at: body.deletingLastPathComponent(), withIntermediateDirectories: true)
         if status == 200 { try data.write(to: body, options: .atomic) }
         try JSONEncoder().encode(CacheEntry(url: url.absoluteString, status: status, fetched: Date()))

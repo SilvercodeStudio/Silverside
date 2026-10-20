@@ -23,6 +23,30 @@ public final class SimulatedDrive: CDDrive {
     /// sector of "Europe '72" did this on the MATSHITA.
     public var unstableSectors: Set<Int> = []
 
+    /// A place where the drive loses its place, as on a scratch: on the `onPass`th read
+    /// from the disc that passes physical sector `sector`, the data from that sector on
+    /// comes from `shift` samples further on, until a request that does not continue the read.
+    public struct Slip: Sendable {
+        public var sector: Int
+        public var shift: Int
+        public var onPass: Int
+
+        public init(sector: Int, shift: Int, onPass: Int) {
+            self.sector = sector
+            self.shift = shift
+            self.onPass = onPass
+        }
+    }
+
+    public var slips: [Slip] = []
+    private var slipPasses: [Int: (count: Int, request: Int)] = [:]
+    /// The shift of a slip in this read, and the sample position where it starts.
+    private var activeSlip: (shift: Int, from: Int)?
+    private var lastRequestEnd: Int?
+
+    /// If true, C2 reads flag the bytes of corrupt and unstable sectors that read wrong.
+    public var reportsC2 = false
+
     /// How many sectors the drive caches. A read of sectors that are all in the
     /// cache returns the cached data, as real drives do. Zero turns the cache off.
     public var cacheSectors = 0
@@ -30,7 +54,7 @@ public final class SimulatedDrive: CDDrive {
     /// The number of read requests that the cache did not answer.
     public private(set) var discReads = 0
 
-    private var cache: [Int: [UInt8]] = [:]
+    private var cache: [Int: (audio: [UInt8], errorFlags: [UInt8])] = [:]
     private var cacheOrder: [Int] = []
     /// For each unstable sector: how many times it was read from the disc, and the
     /// read request that last touched it.
@@ -64,6 +88,11 @@ public final class SimulatedDrive: CDDrive {
     public func readTOC() throws -> TOC { toc }
 
     public func readAudioSectors(at lba: Int, count: Int) throws -> [UInt8] {
+        try readAudioSectorsWithC2(at: lba, count: count).audio
+    }
+
+    /// Flags the bytes that it returns wrong, if `reportsC2` is true.
+    public func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8]) {
         let sectors = lba..<(lba + count)
         if !canOverread {
             if lba < 0 { throw DriveError.sectorOutOfRange(lba: lba) }
@@ -73,7 +102,7 @@ public final class SimulatedDrive: CDDrive {
             throw DriveError.readFailed(lba: bad)
         }
         if cacheSectors > 0, sectors.allSatisfy({ cache[$0] != nil }) {
-            return sectors.flatMap { cache[$0]! }
+            return (sectors.flatMap { cache[$0]!.audio }, sectors.flatMap { cache[$0]!.errorFlags })
         }
         discReads += 1
 
@@ -91,13 +120,32 @@ public final class SimulatedDrive: CDDrive {
             if state.count % 2 == 1 { wrongThisRead.insert(sector) }
         }
 
+        if lastRequestEnd != lba { activeSlip = nil }
+        lastRequestEnd = lba + count
+        for (index, slip) in slips.enumerated() where (firstSector...lastSector).contains(slip.sector) {
+            var state = slipPasses[index] ?? (count: 0, request: -2)
+            if state.request != discReads - 1 { state.count += 1 }
+            state.request = discReads
+            slipPasses[index] = state
+            if state.count == slip.onPass && activeSlip == nil {
+                activeSlip = (slip.shift, slip.sector * CDDA.samplesPerSector)
+            }
+        }
+
         var bytes = [UInt8]()
         bytes.reserveCapacity(count * CDDA.bytesPerSector)
+        var flags = [UInt8](repeating: 0, count: count * CDDA.errorFlagBytesPerSector)
         for position in firstPosition..<(firstPosition + count * CDDA.samplesPerSector) {
-            var sample = samples.indices.contains(position) ? samples[position] : 0
+            let source = activeSlip.map { position >= $0.from ? position + $0.shift : position } ?? position
+            var sample = samples.indices.contains(source) ? samples[source] : 0
             let sector = position.floorDivided(by: CDDA.samplesPerSector)
             if corruptSectors.contains(sector) || wrongThisRead.contains(sector) {
                 sample ^= 0x0001_0001
+                if reportsC2 {
+                    // The low bytes of the left and right values are wrong.
+                    let byte = (position - firstPosition) * CDDA.bytesPerSample
+                    flags[byte / 8] |= 0x80 >> (byte % 8) | 0x80 >> ((byte + 2) % 8)
+                }
             }
             withUnsafeBytes(of: sample.littleEndian) { bytes.append(contentsOf: $0) }
         }
@@ -105,11 +153,15 @@ public final class SimulatedDrive: CDDrive {
             for (index, sector) in sectors.enumerated() {
                 if cache[sector] == nil { cacheOrder.append(sector) }
                 let start = index * CDDA.bytesPerSector
-                cache[sector] = Array(bytes[start..<(start + CDDA.bytesPerSector)])
+                let flagStart = index * CDDA.errorFlagBytesPerSector
+                cache[sector] = (
+                    Array(bytes[start..<(start + CDDA.bytesPerSector)]),
+                    Array(flags[flagStart..<(flagStart + CDDA.errorFlagBytesPerSector)])
+                )
             }
             while cacheOrder.count > cacheSectors { cache[cacheOrder.removeFirst()] = nil }
         }
-        return bytes
+        return (bytes, flags)
     }
 
     public func readQSubchannel(at lba: Int, count: Int) throws -> [QSubchannel] {

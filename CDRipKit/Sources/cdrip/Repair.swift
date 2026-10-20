@@ -9,7 +9,11 @@ struct Repair: AsyncParsableCommand {
 
     @OptionGroup var deviceOptions: DeviceOptions
 
-    @Option(help: "The disc's CTDB TOC, such as 0:31400:58160:295575, in place of reading the disc.")
+    @Option(
+        help: """
+            The disc's CTDB TOC, such as 0:31400:58160:295575. Default: from disc.json in the first input folder, \
+            else from the disc in the drive.
+            """)
     var toc: String?
 
     @Option(
@@ -38,13 +42,24 @@ struct Repair: AsyncParsableCommand {
     var offset: Int?
 
     func run() async throws {
-        let toc =
-            try self.toc.map { try TOC(ctdbTOCString: $0) } ?? IOKitDrive(bsdName: deviceOptions.bsdName()).readTOC()
+        guard let firstInput = input.first else { throw ValidationError("Give at least one --input folder.") }
+        let firstFolder = URL(filePath: firstInput, directoryHint: .isDirectory).standardizedFileURL
+        // The TOC: from --toc, from the rip's disc.json, or from the disc. With the disc
+        // in a drive (by --device, or with no other TOC), re-reads are possible.
+        let savedTOC =
+            (try? JSONDecoder().decode(SavedTOC.self, from: Data(contentsOf: firstFolder.appending(path: "disc.json"))))?
+            .toc
+        let usesDrive = deviceOptions.device != nil || (self.toc == nil && savedTOC == nil)
+        let driveTOC = usesDrive ? try IOKitDrive(bsdName: deviceOptions.bsdName()).readTOC() : nil
+        guard let toc = try (self.toc ?? savedTOC).map({ try TOC(ctdbTOCString: $0) }) ?? driveTOC else {
+            throw CommandError("The disc's TOC is not known.")
+        }
+        if let driveTOC, driveTOC.ctdbTOCString != toc.ctdbTOCString {
+            throw CommandError("The disc in the drive is not the disc of the rip (TOC \(driveTOC.ctdbTOCString)).")
+        }
         let audioTracks = toc.audioTracks
         guard !audioTracks.isEmpty else { throw CommandError("This disc has no audio tracks.") }
-        guard let firstInput = input.first else { throw ValidationError("Give at least one --input folder.") }
         // Earlier re-reads are kept next to the first folder, as "<folder> read 2" and so on.
-        let firstFolder = URL(filePath: firstInput, directoryHint: .isDirectory).standardizedFileURL
         let parent = firstFolder.deletingLastPathComponent()
         let readFolders = ((try? FileManager.default.contentsOfDirectory(atPath: parent.path)) ?? [])
             .filter { $0.hasPrefix(firstFolder.lastPathComponent + " read ") }.sorted()
@@ -55,8 +70,7 @@ struct Repair: AsyncParsableCommand {
         let entries = try await CTDBEntry.lookup(toc).sorted { $0.confidence > $1.confidence }
         guard !entries.isEmpty else { throw CommandError("This disc is not in CUETools DB.") }
 
-        // Re-reads need the disc: not with --toc.
-        let reader = self.toc == nil ? try rereader(toc: toc) : nil
+        let reader = usesDrive ? try rereader(toc: toc) : nil
 
         // Every version of every track, and the disc as the first versions give it, which
         // is enough to find the tracks that match AccurateRip at another pressing's offset.
@@ -116,7 +130,12 @@ struct Repair: AsyncParsableCommand {
                     try WAVFile.write(read, to: folder.appending(path: String(format: "Track %02d.wav", track.number)))
                 }
             }
-            let audio = TrackAudio(versions: trackVersions)
+            var audio = TrackAudio(versions: trackVersions)
+            // Other values that earlier rips and repairs kept for suspect samples.
+            for folder in folders {
+                let url = folder.appending(path: TrackAudio.alternativesFileName(track: track.number))
+                if let saved = try? TrackAudio.readAlternatives(from: url) { audio.add(saved) }
+            }
             tracks.append(audio)
             print(
                 String(format: "Track %2d  ", track.number)
@@ -128,6 +147,22 @@ struct Repair: AsyncParsableCommand {
         repairer.rereadRounds = rereadRounds
         repairer.log = { print($0) }
         let result = try await repairer.repair(tracks)
+        // Keep the alternatives, with the ones that re-reads added, so that a later run can use them.
+        let proved: Set<Int>? =
+            switch result.outcome {
+            case .notVerified: []
+            case .partlyRepaired(_, _, let numbers, _): Set(numbers)
+            case .verified, .repaired: nil
+            }
+        if let proved {
+            for (index, track) in audioTracks.enumerated()
+            where !tracks[index].alternatives.isEmpty && !proved.contains(track.number) {
+                var audio = TrackAudio(samples: result.samples(ofTrack: index))
+                audio.add(result.alternatives(ofTrack: index))
+                try audio.writeAlternatives(
+                    to: firstFolder.appending(path: TrackAudio.alternativesFileName(track: track.number)))
+            }
+        }
         let folder = URL(filePath: firstInput, directoryHint: .isDirectory)
         let withoutRepairData =
             result.entriesWithoutRepairData == 0
@@ -161,7 +196,9 @@ struct Repair: AsyncParsableCommand {
             ).offset?.value
         }
         guard let readOffset else { throw CommandError("The drive's read offset is not known. Give it with --offset.") }
-        return AudioReader(drive: drive, toc: toc, readOffset: readOffset, canOverread: false)
+        var reader = AudioReader(drive: drive, toc: toc, readOffset: readOffset, canOverread: false)
+        reader.unreadableRetries = 3
+        return reader
     }
 
     /// The first "<folder> read N" folder, from N = 2, that has no file for `track`.
@@ -202,4 +239,9 @@ struct Repair: AsyncParsableCommand {
             print(line)
         }
     }
+}
+
+/// The TOC from a rip's disc.json, as `cdrip rip` and the archive write it.
+private struct SavedTOC: Decodable {
+    var toc: String
 }

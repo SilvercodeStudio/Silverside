@@ -49,11 +49,14 @@ Done:
 
 To do:
 
-- A way to set a drive's offset by hand (for example `cdrip drives --set-offset`), saved in its profile.
-- Keep a copy of `DriveOffsets.bin`. Today it is downloaded once for each new drive.
-- Offline rips: keep what is needed to check them against AccurateRip later.
-- Speed: a 6½-minute track took 36 s on the HL-DT-ST (debug build). Profile the reads and the checksums.
-- Memory: a track is held in memory as it is ripped (about 10 MB a minute). Long single-track discs need streaming.
+Done:
+
+- Speed: the drive is the limit, not the code. A 5½-minute track rips in 26 s on the HL-DT-ST (release build) with 0.2 s of CPU time, and a 57-minute disc in about 4½ minutes (about 13×). Reading C2 flags with the audio costs no time.
+
+- `cdrip drives --set-offset N -d diskN` sets a drive's offset by hand, saved in its profile; `--clear-offset` removes it. `cdrip drives` shows each drive's offset and its source.
+- `DriveOffsets.bin` is kept in the `WebClient` cache, and a profile keeps the offset once it is found. When a request fails, the cache gives its copy, however old.
+- Offline rips: `cdrip rip --offline` writes `disc.json` with the WAV files. Later, `cdrip repair -i <folder>` reads the TOC from it, and checks the rip against AccurateRip and CTDB with no disc.
+- Memory: a rip holds the whole disc for CTDB (about 640 MB for 60 minutes). That is acceptable, so long single-track discs need no streaming.
 
 ### Offset handling
 
@@ -79,7 +82,7 @@ The rip log records the offset and its source. The drive profiles and past resul
 
 The MusicBrainz client must protect the user's access to MusicBrainz. Done: `WebClient` does this for every web service.
 
-- A rate limit for each host (MusicBrainz and the Cover Art Archive 1 per second, AccurateRip and CTDB 5 per second). The time of the last request is in `~/Library/Caches/CDRip/rate/<host>`, under a lock, so the limit holds across `cdrip` processes.
+- A rate limit for each host (MusicBrainz 1 request every 2 seconds, the Cover Art Archive 1 per second, AccurateRip and CTDB 5 per second). MusicBrainz's limit is 1 per second, but it answered 503 to requests 1.5 s apart, perhaps at a busy time of day. The time of the last request is in `~/Library/Caches/CDRip/rate/<host>`, under a lock, so the limit holds across `cdrip` processes.
 - On 503 or 429, wait (honor `Retry-After`, else a delay that doubles from 2 s), and give up after 4 tries.
 - A cache on disk (`~/Library/Caches/CDRip/web/`) keyed by URL. Responses stay 7 days for MusicBrainz, 30 for cover art, 1 for AccurateRip and CTDB lookups, and 365 for CTDB repair data. A 404 stays 1 day.
 - Tests use a fake transport, so `make test` never touches the network.
@@ -133,12 +136,17 @@ Results so far:
 
 To do:
 
-- Detect reads that are shifted in time (jitter, or the drive losing its place on a scratch). On *One from the Vault* disc 2 (ASUS), one read of track 3 made 57,059 of its 59,127 sectors suspect, and the secure rip took 21 minutes; a read of track 1 differed in 14.4 million samples. Before comparing reads, find the shift between them (as the AccurateRip offset search does), and re-align or discard a shifted read.
-- Pool versions from more than one drive. A sector that two drives read differently is suspect, even if each drive always reads it the same way.
+- Check C2 reads and shifted-read detection on hardware: which drives give C2 flags, what they cost in speed, and whether a shifted read shows again (*One from the Vault* disc 2 on the ASUS).
 - Test on the damaged discs, and tune the limits (rounds, combinations, cache flush size).
-- Read C2 flags with the audio, and add C2-flagged sectors to the suspects (as a hint only).
 - A per-drive cache size, from the drive's profile or a timing test.
-- Rip log lines for the suspect sectors, for CTDB repair (milestone 7).
+
+Done:
+
+- **Shifted reads.** On *One from the Vault* disc 2 (ASUS), one read of track 3 made 57,059 of its 59,127 sectors suspect, and the secure rip took 21 minutes; a read of track 1 differed in 14.4 million samples. Now, when a run of 32 or more sectors differs from the first read, the ripper looks for one shift (up to 10 sectors either way) that explains both the start and the end of the run. Damage changes data in place, so no shift explains it. A shifted read is left out and read again. If two later reads agree with each other and not with the first read, the first read lost its place, and a later read replaces it. `SimulatedDrive.slips` models a drive that loses its place.
+- **C2 flags.** `CDDrive.readAudioSectorsWithC2` (294 flag bytes for each sector, one bit for each byte). The first read of each track asks for them, and a drive that refuses gives a plain read (`cdrip rip --no-c2` turns them off). Sectors with C2 errors are re-read even if every read agrees, and their flagged samples are suspects for CTDB, exact to the sample. The simulator flags the bytes that it returns wrong.
+- **Unreadable sectors.** One sector that gave `EIO` stopped a whole rip (*Dick's Picks Vol. 1* disc 2 on the ASUS, track 8). Now `AudioReader.unreadableRetries` reads a failed chunk again sector by sector; a sector that still fails is silence, and the rip goes on. Such sectors are re-read like C2 sectors, a failed re-read gives no version, and their samples are erasures for CTDB.
+- **Pooling across drives.** `cdrip repair` pools rips from several drives. Each rip keeps its suspect samples and their other values in `Track NN.suspects` files, so the pool has every drive's versions, not only the majority value of each file.
+- The rip report (`disc.json`) lists each track's suspect, unresolved, and C2 sectors, and its shifted reads.
 
 ## 7. CTDB verification and repair — in progress
 
@@ -200,15 +208,21 @@ Repair during `cdrip rip`, one rip in one drive, after light cleaning of the dis
 | *Dick's Picks Vol. 2* | ASUS | 4 of 6 (tracks 3–6 repaired, 1,089 samples); 2 columns (6746, 6838) uncorrectable. Pooled with the HL-DT-ST rip and re-read in the ASUS: the same 2 columns, and the re-reads gave no new versions. |
 | *Dick's Picks Vol. 2* | MATSHITA | **6 of 6** (4 tracks repaired, 25,574 samples), from this one rip. The MATSHITA gave more versions of each damaged sector (up to 18, against 12 on the ASUS). |
 | *Hundred Year Hall* disc (4 tracks) | ASUS | **4 of 4** (2 tracks repaired, 18,422 samples) |
-| *Hundred Year Hall* disc (11 tracks) | HL-DT-ST | 6 of 11. Tracks 10 and 11 have 482 and 171 suspect sectors; 2,465 columns uncorrectable with the main entry (564 submissions), too many to re-read (512 at most). |
+| *Hundred Year Hall* disc 1 (11 tracks) | HL-DT-ST | 6 of 11. Tracks 10 and 11 have 482 and 171 suspect sectors; 2,465 columns uncorrectable with the main entry (564 submissions), too many to re-read (512 at most). |
+| *Hundred Year Hall* disc 1 | MATSHITA | 6 of 11 alone (367 columns uncorrectable; 290 in a second rip with C2). Pooled with the HL-DT-ST rip: 18 columns. Three rips pooled: **9 of 11** (track 2 repaired and proved), 4 columns uncorrectable. |
 
 Two things changed at once, so the cause is not known: the cleaning, and the suspects, which now come from the secure ripper's re-reads after cache flushes, not from whole extra rips.
 
 To do:
 
-- Keep re-read versions on disk, so that a failed run does not lose them.
-- Find tracks that match another pressing for the first track too (today it needs audio before the track).
 - Rip *Live/Dead* in more drives, and pool the rips.
+
+Done:
+
+- Re-read versions are kept on disk (`Track NN.suspects`, by `rip` and by `repair`), so a failed run does not lose them. A later `repair` loads them.
+- **Erasure subsets.** A column can have more suspect words than its syndromes can erase (14 of 16, with 2 kept to check). When at most 16 columns fail, the decoder tries up to 200,000 random subsets of a column's suspects as erasures. With the places known, the values are the solution of a linear system, so each try is fast, and the spare syndromes and the CRC catch a wrong result. On *Hundred Year Hall* disc 1 (three rips pooled), it did not solve the last 4 columns: they have 18 to 30 suspects each, too many wrong words for a subset of 14 to hold them all.
+- The log names each failing column, when 8 or fewer fail, with its number of suspect words.
+- Tracks that match another pressing are found for the first and last tracks too: the audio past the disc's edges is silence, which AccurateRip skips.
 
 ## 8. Rip log, CUE sheets, gaps and indexes
 

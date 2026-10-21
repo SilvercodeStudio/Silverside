@@ -6,6 +6,7 @@ struct ResultsView: View {
     @Environment(AppModel.self) private var model
     var folder: URL
     var report: RipReport
+    @State private var reportShown = true
 
     private var toc: TOC? { try? TOC(ctdbTOCString: report.toc) }
 
@@ -22,28 +23,27 @@ struct ResultsView: View {
                 Divider()
                 table
             }
-            .frame(minWidth: 620)
+            .frame(minWidth: 640)
+            .layoutPriority(1)
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text("Rip Report").font(.headline)
                     Spacer()
-                    Button("Copy") {
+                    Button("Copy as Markdown") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(report.markdown, forType: .string)
                     }
                 }
                 .padding(12)
                 Divider()
-                ScrollView {
-                    Text(report.markdown)
-                        .font(Theme.monoSmall)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
-                }
+                HelpWebView(
+                    html: MarkdownHTML.page(MarkdownHTML.render(Self.withoutTrackTable(report.markdown)), compact: true)
+                )
             }
-            .frame(minWidth: 320, idealWidth: 420)
+            .frame(minWidth: 300, idealWidth: 380, maxWidth: 560)
             .background(Color.secondary.opacity(0.04))
+            .opacity(reportShown ? 1 : 0)
+            .frame(width: reportShown ? nil : 0)
         }
         .navigationTitle(report.release.map { "\($0.title)" } ?? folder.lastPathComponent)
         .navigationSubtitle(
@@ -57,8 +57,23 @@ struct ResultsView: View {
                 } label: {
                     Label("Show in Finder", systemImage: "folder")
                 }
+                Toggle(isOn: $reportShown) {
+                    Label("Rip Report", systemImage: "sidebar.trailing")
+                }
+                .help("Show or hide the rip report")
             }
         }
+    }
+
+    /// The report without its Tracks section: the table beside it shows the same, with room.
+    static func withoutTrackTable(_ markdown: String) -> String {
+        var kept = [String]()
+        var skipping = false
+        for line in markdown.components(separatedBy: "\n") {
+            if line.hasPrefix("## ") { skipping = line == "## Tracks" }
+            if !skipping { kept.append(line) }
+        }
+        return kept.joined(separator: "\n")
     }
 
     private var header: some View {
@@ -72,9 +87,7 @@ struct ResultsView: View {
                     "Ripped \(report.date.formatted(date: .abbreviated, time: .shortened)) on \(report.drive.vendor) \(report.drive.product), read offset \(report.drive.readOffset.signedDescription), \(report.secure ? "secure" : "one read per track")."
                 )
                 .foregroundStyle(.secondary)
-                HStack(spacing: 6) {
-                    ForEach(ResultChips.chips(for: report), id: \.text) { $0 }
-                }
+                ChipRow(chips: ResultChips.chips(for: report))
             }
         }
     }
@@ -85,7 +98,10 @@ struct ResultsView: View {
             TableColumn("Title") { track in Text(titles[track.number] ?? track.file) }.width(min: 160, ideal: 260)
             TableColumn("Time") { track in Text(Format.duration(sectors: track.sectors)).foregroundStyle(.secondary) }
                 .width(52)
-            TableColumn("Status") { track in FinishedStatus(track: track) }.width(min: 200, ideal: 300)
+            TableColumn("Status") { track in FinishedStatus(track: track, ctdb: report.ctdb) }.width(
+                min: 110, ideal: 130)
+            TableColumn("Re-reads") { track in RereadsCell(track: track, ctdb: report.ctdb) }.width(min: 80, ideal: 100)
+            TableColumn("Repaired") { track in RepairedCell(track: track) }.width(min: 90, ideal: 110)
             TableColumn("AccurateRip") { track in AccurateRipCell(state: .finished(track)) }.width(min: 100, ideal: 140)
             TableColumn("CTDB") { track in
                 if let confidence = track.ctdbConfidence, confidence > 0 {

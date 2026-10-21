@@ -35,6 +35,13 @@ struct MainWindow: View {
                 if let id = UserDefaults.standard.string(forKey: "openWindow"), !id.isEmpty {
                     if id == "settings" { openSettings() } else { openWindow(id: id) }
                 }
+                // `-selectRecent 1` shows the newest earlier rip, for screenshots of the results.
+                if UserDefaults.standard.bool(forKey: "selectRecent") {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(1))
+                        if let rip = model.recentRips.first { model.selection = .rip(rip.folder) }
+                    }
+                }
             #endif
         }
     }
@@ -86,19 +93,27 @@ struct SidebarView: View {
                         tone: rip.isVerified ? .good : .warning
                     )
                     .tag(SidebarItem.rip(rip.folder))
+                    .help(rip.details)
                 }
             }
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 360)
         .safeAreaInset(edge: .bottom) {
-            HStack(spacing: 6) {
-                Image(systemName: "folder")
-                Text(model.settings.rips).lineLimit(1).truncationMode(.middle)
+            Button {
+                model.revealFolder(model.settings.ripsURL)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder")
+                    Text(model.settings.rips).lineLimit(1).truncationMode(.middle)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(.plain)
+            .help("Open the rips folder in the Finder")
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }

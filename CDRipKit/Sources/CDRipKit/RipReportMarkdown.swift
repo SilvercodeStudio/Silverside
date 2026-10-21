@@ -75,11 +75,24 @@ extension RipReport {
         if !problems.isEmpty {
             lines.append("## Problems")
             lines.append("")
+            let repaired = ctdb.status == .repaired || ctdb.status == .partlyRepaired
             for track in problems {
                 if !track.unresolvedSectors.isEmpty {
-                    lines.append(
-                        "- Track \(track.number): sectors \(Self.list(track.unresolvedSectors)) read differently each time."
-                    )
+                    let runs = Self.runs(track.unresolvedSectors)
+                    var line =
+                        "- Track \(track.number): \(track.unresolvedSectors.count) sectors read differently each time"
+                        + (runs.count > 1
+                            ? ", in \(runs.count) runs (\(runs.first!) to \(runs.last!))" : " (\(runs[0]))")
+                    if let unreadable = track.unreadableSectors, !unreadable.isEmpty {
+                        line += "; \(unreadable.count) could not be read at all"
+                    }
+                    line += repaired && track.repairedSamples > 0 ? ". CTDB's repair fixed them." : "."
+                    lines.append(line)
+                    lines.append("  <details><summary>Every sector</summary>")
+                    lines.append("")
+                    lines.append("  \(Self.list(track.unresolvedSectors))")
+                    lines.append("")
+                    lines.append("  </details>")
                 }
                 if let shifts = track.shiftedReads, !shifts.isEmpty {
                     lines.append(
@@ -141,6 +154,13 @@ extension RipReport {
     }
 
     /// Sector numbers, with runs as "40-52".
+    /// The sectors as runs: "9336", "13597-13598".
+    static func runs(_ sectors: [Int]) -> [String] {
+        DiscRepairer.ranges(of: sectors.sorted()).map {
+            $0.count == 1 ? String($0.lowerBound) : "\($0.lowerBound)-\($0.upperBound - 1)"
+        }
+    }
+
     static func list(_ sectors: [Int]) -> String {
         DiscRepairer.ranges(of: sectors.sorted()).map {
             $0.count == 1 ? String($0.lowerBound) : "\($0.lowerBound)-\($0.upperBound - 1)"

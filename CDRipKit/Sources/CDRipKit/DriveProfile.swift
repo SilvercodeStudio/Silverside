@@ -19,6 +19,8 @@ public struct DriveProfile: Codable, Equatable, Sendable {
         public var disc: String
         public var offsets: [Int]
         public var date: Date
+        /// The disc's name, for people: "Grateful Dead - Reckoning". Nil in older observations.
+        public var title: String?
     }
 
     public var vendor: String
@@ -79,9 +81,9 @@ public struct DriveProfile: Codable, Equatable, Sendable {
     }
 
     /// Records the offsets that matched on a disc. A new rip of the same disc replaces the old one.
-    public mutating func record(disc: String, offsets: [Int], date: Date = Date()) {
+    public mutating func record(disc: String, offsets: [Int], date: Date = Date(), title: String? = nil) {
         observations.removeAll { $0.disc == disc }
-        observations.append(Observation(disc: disc, offsets: offsets.sorted(), date: date))
+        observations.append(Observation(disc: disc, offsets: offsets.sorted(), date: date, title: title))
     }
 }
 

@@ -49,6 +49,8 @@ struct Chip: View {
             Text(text)
         }
         .font(.callout)
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(foreground)
         .padding(.horizontal, 9)
         .padding(.vertical, 3)

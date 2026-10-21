@@ -146,6 +146,14 @@ nonisolated enum MarkdownHTML {
                 table.append(line)
                 continue
             }
+            // A details block in the rip report passes through as HTML.
+            if line.hasPrefix("<details") || line.hasPrefix("</details") {
+                endParagraph()
+                endList()
+                endTable()
+                html.append(line)
+                continue
+            }
             endTable()
             if line.isEmpty {
                 endParagraph()
@@ -241,13 +249,16 @@ nonisolated enum MarkdownHTML {
     }
 
     /// A page in the system font, light or dark with the system.
-    static func page(_ body: String) -> String {
+    static func page(_ body: String, compact: Bool = false) -> String {
         """
         <!doctype html><html><head><meta charset="utf-8">
         <style>
         :root { color-scheme: light dark; }
-        body { font: 14px/1.5 -apple-system, system-ui, sans-serif; color: CanvasText; background: transparent;
-               margin: 0; padding: 22px 32px 40px; max-width: 760px; }
+        body { font: \(compact ? "12.5px/1.45" : "14px/1.5") -apple-system, system-ui, sans-serif; color: CanvasText;
+               background: transparent; margin: 0; padding: \(compact ? "12px 16px 24px" : "22px 32px 40px");
+               max-width: 760px; }
+        details { margin: 2px 0 8px; } summary { cursor: pointer; color: color-mix(in srgb, CanvasText 60%, transparent); }
+        \(compact ? "table { display: block; overflow-x: auto; width: max-content; max-width: 100%; } th, td { white-space: nowrap; }" : "")
         h1 { font-size: 24px; font-weight: 700; margin: 0 0 14px; letter-spacing: -0.01em; }
         h2 { font-size: 17px; font-weight: 600; margin: 26px 0 8px; }
         h3 { font-size: 15px; font-weight: 600; margin: 18px 0 6px; }

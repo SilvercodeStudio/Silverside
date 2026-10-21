@@ -376,7 +376,9 @@ public struct DiscRip {
         }
 
         if !records.isEmpty && !discOffsets.isEmpty {
-            profile.record(disc: toc.accurateRipDiscID.name, offsets: Array(discOffsets))
+            profile.record(
+                disc: toc.accurateRipDiscID.name, offsets: Array(discOffsets),
+                title: named.map { "\($0.artist) - \($0.title)" })
             try profiles.save(profile)
         }
 

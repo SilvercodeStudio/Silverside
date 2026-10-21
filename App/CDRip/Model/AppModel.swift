@@ -173,4 +173,8 @@ final class AppModel {
     func revealInFinder(_ url: URL) {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
+
+    func revealFolder(_ url: URL) {
+        NSWorkspace.shared.open(url)
+    }
 }

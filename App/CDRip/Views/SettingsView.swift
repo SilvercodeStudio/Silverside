@@ -18,6 +18,8 @@ struct SettingsView: View {
             NamingSettings().tabItem { Label("Naming", systemImage: "textformat") }.tag(Tab.naming)
         }
         .frame(width: 640, height: 520)
+        // No field takes focus by itself: a blinking cursor in the library path invites a slip.
+        .onAppear { DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) } }
     }
 }
 
@@ -82,7 +84,7 @@ struct FolderField: View {
     var body: some View {
         LabeledContent(label) {
             HStack {
-                TextField("", text: $path).labelsHidden()
+                TextField("", text: $path).labelsHidden().textFieldStyle(.roundedBorder)
                 Button("Choose...") {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = true
@@ -171,8 +173,11 @@ struct DriveSettings: View {
                 }
                 LabeledContent("Set by hand") {
                     HStack {
-                        TextField("", text: $manualOffset).labelsHidden().frame(width: 80).multilineTextAlignment(
-                            .trailing)
+                        TextField("samples", text: $manualOffset)
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 90)
+                            .multilineTextAlignment(.trailing)
                         Button("Set") { save(profile) { $0.manualOffset = Int(manualOffset) } }
                             .disabled(Int(manualOffset) == nil)
                         Button("Clear") {
@@ -193,11 +198,18 @@ struct DriveSettings: View {
                 }
                 ForEach(Array(profile.observations.suffix(8).enumerated()), id: \.offset) { _, observation in
                     LabeledContent {
-                        Text(observation.offsets.map(\.signedDescription).joined(separator: ", "))
+                        offsetsText(observation.offsets, winner: profile.offset?.value)
                     } label: {
-                        Text(observation.disc).lineLimit(1).truncationMode(.middle)
+                        Text(title(of: observation)).lineLimit(1).truncationMode(.middle)
+                            .help(
+                                observation.disc + " · "
+                                    + observation.date.formatted(date: .abbreviated, time: .omitted))
                     }
                 }
+                Text(
+                    "Each disc that AccurateRip knows matches at the drive's offset, and often at other pressings' offsets too. The offset that every disc shares is the drive's."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
             Section("Cache") {
                 LabeledContent("Measured cache") {
@@ -208,6 +220,24 @@ struct DriveSettings: View {
             if let message { Text(message).foregroundStyle(Theme.bad) }
         }
         .formStyle(.grouped)
+    }
+
+    /// The disc's name: from the observation, else from a rip of the disc in the rips folder, else its ID.
+    private func title(of observation: DriveProfile.Observation) -> String {
+        if let title = observation.title { return title }
+        if let rip = model.recentRips.first(where: { $0.report.accurateRipDiscID == observation.disc }) {
+            return rip.artist.isEmpty ? rip.title : "\(rip.artist) - \(rip.title)"
+        }
+        return observation.disc
+    }
+
+    /// The offsets a disc matched, with the drive's own in bold.
+    private func offsetsText(_ offsets: [Int], winner: Int?) -> Text {
+        offsets.enumerated().reduce(Text("")) { text, item in
+            let value = Text(item.element.signedDescription)
+            let shown = item.element == winner ? value.bold().foregroundColor(Theme.good) : value
+            return text + (item.offset == 0 ? shown : Text(", ") + shown)
+        }
     }
 
     private func save(_ profile: DriveProfile, change: (inout DriveProfile) -> Void) {
@@ -248,31 +278,63 @@ struct RippingSettings: View {
 
 struct EncodingSettings: View {
     @Environment(AppModel.self) private var model
+    private let lame = MP3Encoder.lame()
 
     var body: some View {
         @Bindable var model = model
         Form {
             Section("AAC") {
                 Picker("Mode", selection: $model.settings.aac.mode) {
-                    ForEach(AACOptions.Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(AACOptions.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }
                 }
-                Stepper(
-                    "Bit rate: \(model.settings.aac.bitRate) kbit/s", value: $model.settings.aac.bitRate, in: 64...320,
-                    step: 16)
-                Stepper(
-                    "VBR quality: \(model.settings.aac.vbrQuality)", value: $model.settings.aac.vbrQuality, in: 0...127)
+                if model.settings.aac.mode == .vbr {
+                    Picker("Quality", selection: $model.settings.aac.vbrQuality) {
+                        ForEach(Self.aacQualities, id: \.value) { Text($0.name).tag($0.value) }
+                        if !Self.aacQualities.contains(where: { $0.value == model.settings.aac.vbrQuality }) {
+                            Text("Custom (\(model.settings.aac.vbrQuality))").tag(model.settings.aac.vbrQuality)
+                        }
+                    }
+                    Text("A true VBR takes its size from the quality alone; the bit rate is not used.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Picker("Bit rate", selection: $model.settings.aac.bitRate) {
+                        ForEach(Self.bitRates, id: \.self) { Text("\($0) kbit/s").tag($0) }
+                        if !Self.bitRates.contains(model.settings.aac.bitRate) {
+                            Text("\(model.settings.aac.bitRate) kbit/s").tag(model.settings.aac.bitRate)
+                        }
+                    }
+                    Text(
+                        model.settings.aac.mode == .vbrConstrained
+                            ? "Apple's choice for iTunes Plus: the bit rate varies around this target. 256 is the usual."
+                            : "The bit rate everywhere, or on average over the track."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Section("MP3") {
-                Picker("Mode", selection: $model.settings.mp3.mode) {
-                    ForEach(MP3Options.Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                LabeledContent("lame") {
+                    if let lame {
+                        Text("Found at \(lame.path)").foregroundStyle(Theme.good)
+                    } else {
+                        Text("Not found. Install it with `brew install lame`.").foregroundStyle(Theme.warning)
+                    }
                 }
-                Stepper(
-                    "VBR quality: \(model.settings.mp3.vbrQuality) (0 is best)", value: $model.settings.mp3.vbrQuality,
-                    in: 0...9)
-                Stepper(
-                    "Bit rate: \(model.settings.mp3.bitRate) kbit/s", value: $model.settings.mp3.bitRate, in: 64...320,
-                    step: 16)
-                Text("MP3 needs the lame program on the Mac. CDRip runs it as a separate program.")
+                Picker("Mode", selection: $model.settings.mp3.mode) {
+                    ForEach(MP3Options.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }
+                }
+                if model.settings.mp3.mode == .vbr {
+                    Picker("Quality", selection: $model.settings.mp3.vbrQuality) {
+                        ForEach(0...9, id: \.self) { Text(Self.mp3Quality($0)).tag($0) }
+                    }
+                } else {
+                    Picker("Bit rate", selection: $model.settings.mp3.bitRate) {
+                        ForEach(Self.bitRates, id: \.self) { Text("\($0) kbit/s").tag($0) }
+                        if !Self.bitRates.contains(model.settings.mp3.bitRate) {
+                            Text("\(model.settings.mp3.bitRate) kbit/s").tag(model.settings.mp3.bitRate)
+                        }
+                    }
+                }
+                Text("CDRip runs lame as a separate program, which keeps its LGPL code out of the app.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Lossless") {
@@ -283,6 +345,41 @@ struct EncodingSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    static func name(of mode: AACOptions.Mode) -> String {
+        switch mode {
+        case .cbr: "Constant bit rate (CBR)"
+        case .abr: "Average bit rate (ABR)"
+        case .vbrConstrained: "Constrained VBR"
+        case .vbr: "Variable bit rate (VBR)"
+        }
+    }
+
+    static func name(of mode: MP3Options.Mode) -> String {
+        switch mode {
+        case .vbr: "Variable bit rate (VBR)"
+        case .cbr: "Constant bit rate (CBR)"
+        case .abr: "Average bit rate (ABR)"
+        }
+    }
+
+    static let bitRates = [128, 160, 192, 224, 256, 320]
+
+    /// Apple's VBR quality runs from 0 to 127; these are the steps worth naming.
+    static let aacQualities: [(name: String, value: Int)] = [
+        ("Low (32)", 32), ("Medium (64)", 64), ("High (96)", 96), ("Highest (127)", 127),
+    ]
+
+    static func mp3Quality(_ value: Int) -> String {
+        switch value {
+        case 0: "0 · best, about 245 kbit/s"
+        case 2: "2 · about 190 kbit/s"
+        case 4: "4 · about 165 kbit/s"
+        case 6: "6 · about 130 kbit/s"
+        case 9: "9 · smallest, about 65 kbit/s"
+        default: String(value)
+        }
     }
 }
 
@@ -300,6 +397,12 @@ struct NamingSettings: View {
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Example") {
+                let example = NamingExample(model: model)
+                LabeledContent("Library file") { Text(example.libraryPath).textSelection(.enabled) }
+                LabeledContent("Rip folder") { Text(example.ripFolder).textSelection(.enabled) }
+                Text(example.source).font(.caption).foregroundStyle(.secondary)
+            }
             Section("Rips") {
                 TextField("Rip folder", text: $model.settings.ripFolderTemplate)
             }
@@ -312,4 +415,57 @@ struct NamingSettings: View {
         }
         .formStyle(.grouped)
     }
+}
+
+/// The names the templates give, for the disc in the selected drive, or for a sample disc.
+struct NamingExample {
+    var libraryPath: String
+    var ripFolder: String
+    var source: String
+
+    init(model: AppModel) {
+        let settings = model.settings
+        let disc = model.selectedDrive?.disc ?? model.drives.lazy.compactMap(\.disc).first
+        let release: MusicBrainzRelease
+        let medium: MusicBrainzRelease.Medium
+        let track: MusicBrainzRelease.Track
+        if let disc, let shown = disc.shownRelease, let found = disc.shownMedium, found.tracks.count > 2 {
+            release = shown
+            medium = found
+            track = found.tracks[2]
+            source = "From the disc in \(model.selectedDrive?.name ?? "the drive")."
+        } else {
+            release = Self.sample
+            medium = release.media[0]
+            track = medium.tracks[2]
+            source = "A sample disc; insert one to see its names."
+        }
+        let metadata = TrackMetadata(
+            release: release, medium: medium, track: track, liveShowStyle: settings.liveShowStyle,
+            plainPunctuation: settings.plainPunctuation)
+        let values = metadata.nameValues
+        libraryPath =
+            NameTemplate(settings.folderTemplate).name(values) + "/" + NameTemplate(settings.trackTemplate).name(values)
+            + "." + settings.format.fileExtension
+        ripFolder = NameTemplate(settings.ripFolderTemplate).name(NameTemplate.values(release: release, medium: medium))
+    }
+
+    /// *Clarity of Cal*, with a guest on track 3.
+    static let sample: MusicBrainzRelease = {
+        let vulfpeck = MusicBrainzRelease.Credit(name: "Vulfpeck", artistID: "sample")
+        var release = MusicBrainzRelease.manual(
+            toc: try! TOC(audioTrackStarts: [0, 14_000, 32_000], leadOutLBA: 52_000))
+        release.title = "Clarity of Cal"
+        release.artistCredit = [vulfpeck]
+        release.date = "2025-03-04"
+        for (index, title) in ["Big Dipper", "Matter of Time", "Can You Tell"].enumerated() {
+            release.media[0].tracks[index].title = title
+            release.media[0].tracks[index].artistCredit = [vulfpeck]
+        }
+        release.media[0].tracks[2].artistCredit = [
+            MusicBrainzRelease.Credit(name: "Vulfpeck", joinPhrase: " & ", artistID: "sample"),
+            .init(name: "Joey Dosik"),
+        ]
+        return release
+    }()
 }

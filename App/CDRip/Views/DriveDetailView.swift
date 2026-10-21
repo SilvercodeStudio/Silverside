@@ -58,7 +58,7 @@ struct DriveDetailView: View {
             Button {
                 slot.lookUpAgain()
             } label: {
-                Label("Look Up Metadata", systemImage: "magnifyingglass").padding(.horizontal, 4)
+                Label("Look Up Metadata", systemImage: "arrow.triangle.2.circlepath").padding(.horizontal, 4)
             }
             .help("Ask MusicBrainz about this disc again")
             .disabled(slot.disc == nil || isRipping)
@@ -148,8 +148,9 @@ struct AlbumHeader: View {
                         label: "Album", text: field(\.album, original: disc.baseRelease?.title),
                         shown: disc.title(from: source), editable: editable)
                     EditableField(
-                        label: editable ? "Date" : disc.yearIsFirstRelease ? "First Release" : "Year",
-                        text: field(\.date, original: disc.baseRelease?.date), shown: disc.year ?? "—",
+                        label: disc.yearIsFirstRelease ? "First Release" : "Date",
+                        text: field(\.date, original: disc.baseRelease?.date),
+                        shown: disc.shownRelease?.date ?? disc.release?.releaseGroup?.firstReleaseDate ?? "—",
                         prompt: disc.yearIsFirstRelease ? disc.release?.releaseGroup?.firstReleaseDate : nil,
                         editable: editable
                     )
@@ -163,25 +164,15 @@ struct AlbumHeader: View {
                     EditableField(
                         label: "Album Artist", text: field(\.albumArtist, original: disc.baseRelease?.artist),
                         shown: disc.artist(from: source).isEmpty ? "—" : disc.artist(from: source), editable: editable)
-                    Field(
-                        label: "Tracks",
-                        value: "\(disc.toc.audioTracks.count) · \(Format.duration(sectors: disc.totalSectors))"
-                    )
-                    .frame(width: 120)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Tracks").font(.caption).foregroundStyle(.secondary)
+                        Text("\(disc.toc.audioTracks.count) · \(Format.duration(sectors: disc.totalSectors))")
+                            .font(.title3)
+                            .padding(.vertical, 4)
+                    }
+                    .frame(width: 120, alignment: .leading)
                 }
                 HStack(spacing: 8) {
-                    if disc.hasCDText, disc.release != nil {
-                        Picker("Names", selection: $source) {
-                            Text("MusicBrainz").tag(DiscInfo.Source.musicBrainz)
-                            Text("CD-Text").tag(DiscInfo.Source.cdText)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
-                        .help(
-                            "Show the names from MusicBrainz, or the CD-Text on the disc. The rip's tags come from MusicBrainz."
-                        )
-                    }
                     lookupChip
                     if !disc.edits.isEmpty {
                         Chip(text: "Edited", tone: .warning, systemImage: "pencil")
@@ -193,6 +184,21 @@ struct AlbumHeader: View {
                     if let discLabel = disc.discLabel { Chip(text: discLabel) }
                     if let mcn = disc.mcn { Chip(text: "MCN \(mcn)") }
                     Spacer()
+                    if disc.hasCDText, disc.release != nil {
+                        HStack(spacing: 6) {
+                            Text("Names from").font(.callout).foregroundStyle(.secondary)
+                            Picker("Names from", selection: $source) {
+                                Text("MusicBrainz").tag(DiscInfo.Source.musicBrainz)
+                                Text("CD-Text").tag(DiscInfo.Source.cdText)
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                        .help(
+                            "Show the names from MusicBrainz, or the CD-Text on the disc. The rip's tags come from MusicBrainz."
+                        )
+                    }
                     if !disc.edits.isEmpty, editable {
                         Button("Undo Edits") { slot.disc?.edits = MetadataEdits() }
                     }
@@ -306,9 +312,9 @@ struct StatusBar: View {
                     Text(slot.fastMode ? "Fast" : "Secure")
                     if let offset = slot.rip?.readOffset { Text("Offset \(offset.signedDescription)") }
                     Text(model.settings.encodeAfterRip ? model.settings.format.rawValue.uppercased() : "WAV")
-                    Button("Show Log") { model.logShown = true }
-                        .buttonStyle(.link)
-                        .disabled(slot.rip == nil)
+                    if slot.rip != nil {
+                        Button("Show Log") { model.logShown = true }.buttonStyle(.link)
+                    }
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -362,9 +368,7 @@ struct ResultBanner: View {
                 .foregroundStyle(report.isVerified ? Theme.good : Theme.warning)
             VStack(alignment: .leading, spacing: 4) {
                 Text(RipRun.headline(for: report)).font(.headline)
-                HStack(spacing: 6) {
-                    ForEach(ResultChips.chips(for: report), id: \.text) { $0 }
-                }
+                ChipRow(chips: ResultChips.chips(for: report))
             }
             Spacer()
             if let folder {
@@ -375,6 +379,20 @@ struct ResultBanner: View {
         .padding(12)
         .background(
             (report.isVerified ? Theme.good : Theme.warning).opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+/// A row of chips that scrolls sideways when there are many, so it never widens the window.
+struct ChipRow: View {
+    var chips: [Chip]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(chips, id: \.text) { $0 }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -400,11 +418,18 @@ enum ResultChips {
         case .notChecked: break
         }
         let suspects = report.tracks.reduce(0) { $0 + $1.suspectSectors.count }
-        if suspects > 0 { chips.append(Chip(text: "\(suspects) sectors re-read", tone: .warning)) }
-        let repaired = report.tracks.reduce(0) { $0 + $1.repairedSamples }
-        if repaired > 0 { chips.append(Chip(text: "\(repaired) samples repaired", tone: .warning)) }
         let unresolved = report.tracks.reduce(0) { $0 + $1.unresolvedSectors.count }
-        if unresolved > 0 { chips.append(Chip(text: "\(unresolved) sectors unresolved", tone: .bad)) }
+        let repaired = report.tracks.reduce(0) { $0 + $1.repairedSamples }
+        if suspects > 0 {
+            var text = Format.count(suspects, "sector") + " re-read"
+            if unresolved > 0 {
+                text += report.isVerified ? ", \(unresolved) fixed by CTDB" : ", \(unresolved) never agreed"
+            }
+            chips.append(Chip(text: text, tone: unresolved > 0 && !report.isVerified ? .bad : .warning))
+        } else if unresolved > 0 {
+            chips.append(Chip(text: "\(unresolved) sectors unresolved", tone: report.isVerified ? .warning : .bad))
+        }
+        if repaired > 0 { chips.append(Chip(text: "\(repaired.formatted()) samples repaired", tone: .warning)) }
         return chips
     }
 }

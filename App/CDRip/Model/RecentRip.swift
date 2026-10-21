@@ -20,11 +20,19 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         }.count
     }
 
+    /// The artist, when the rip was made (two rips of a disc look alike otherwise), and what
+    /// is not verified. The drive is in `details`, for a tooltip: its names wrap badly.
     var subtitle: String {
-        let tracks = report.tracks.count
-        if isVerified { return artist }
-        let unverified = tracks - verifiedCount
-        return artist.isEmpty ? "\(unverified) unverified" : "\(artist) · \(unverified) unverified"
+        var parts = [String]()
+        if !artist.isEmpty { parts.append(artist) }
+        parts.append(report.date.formatted(date: .abbreviated, time: .omitted))
+        let unverified = report.tracks.count - verifiedCount
+        if unverified > 0 { parts.append("\(unverified) unverified") }
+        return parts.joined(separator: " · ")
+    }
+
+    var details: String {
+        "Ripped \(report.date.formatted(date: .abbreviated, time: .shortened)) on \(report.drive.vendor) \(report.drive.product), read offset \(report.drive.readOffset.signedDescription)."
     }
 
     /// The rips in a folder, the newest first.

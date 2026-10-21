@@ -6,7 +6,8 @@ public struct RippedDisc: Sendable {
     public struct Track: Sendable {
         public var number: Int
         public var file: URL
-        /// True if AccurateRip or CTDB proves the track, or the archive marks the disc complete.
+        /// True if AccurateRip or CTDB proves the track, or the archive marks the disc complete
+        /// (the rule of `RipReport.isVerified`).
         public var isVerified: Bool
         public var isrc: String?
     }
@@ -129,6 +130,18 @@ public struct DiscEncoder {
 
     public init(format: AudioFormat) {
         self.format = format
+    }
+
+    /// An encoder as the settings describe it: the format (unless `format` is given), the
+    /// name templates, the styles, and the AAC and MP3 options.
+    public init(settings: Settings, format: AudioFormat? = nil) {
+        self.init(format: format ?? settings.format)
+        folderTemplate = NameTemplate(settings.folderTemplate)
+        trackTemplate = NameTemplate(settings.trackTemplate)
+        liveShowStyle = settings.liveShowStyle
+        plainPunctuation = settings.plainPunctuation
+        aac = settings.aac
+        mp3 = settings.mp3
     }
 
     /// Encodes the disc's tracks into `library`, and returns the files written.

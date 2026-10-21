@@ -39,9 +39,12 @@ struct Metadata: AsyncParsableCommand {
         let toc: TOC
         var mcn: String?
         if let folder {
-            let data = try Data(contentsOf: folder.appending(path: "disc.json"))
-            toc = try TOC(ctdbTOCString: JSONDecoder().decode(SavedTOC.self, from: data).toc)
-            mcn = (try? JSONDecoder().decode(SavedMCN.self, from: data))?.mcn
+            guard let saved = RipPool.savedTOC(in: folder) else {
+                throw CommandError("\(folder.appending(path: "disc.json").path) has no TOC.")
+            }
+            toc = try TOC(ctdbTOCString: saved)
+            let data = try? Data(contentsOf: folder.appending(path: "disc.json"))
+            mcn = data.flatMap { try? JSONDecoder().decode(SavedMCN.self, from: $0) }?.mcn
         } else {
             let drive = try IOKitDrive(bsdName: deviceOptions.bsdName())
             toc = try drive.readTOC()
@@ -49,7 +52,7 @@ struct Metadata: AsyncParsableCommand {
         }
         print("MusicBrainz disc ID: \(toc.musicBrainzDiscID)" + (mcn.map { ", MCN \($0)" } ?? ""))
 
-        let choice = try await ReleaseChoice.find(toc: toc, mcn: mcn, releaseID: release)
+        let choice = try await ReleaseLookup.find(toc: toc, mcn: mcn, releaseID: release)
         guard let chosen = choice.chosen else {
             print("MusicBrainz has no release with this disc.")
             return
@@ -61,23 +64,24 @@ struct Metadata: AsyncParsableCommand {
         }
         for (index, candidate) in choice.ranked.enumerated() {
             let mark = candidate.id == chosen.id ? "*" : " "
-            print("\(mark) \(index + 1). " + ReleaseChoice.describe(candidate, toc: toc))
+            print("\(mark) \(index + 1). " + candidate.summary(for: toc))
         }
         if !choice.ranked.contains(where: { $0.id == chosen.id }) {
-            print("* " + ReleaseChoice.describe(chosen, toc: toc) + " (from --release)")
+            print("* " + chosen.summary(for: toc) + " (from --release)")
         }
         print()
         ReleaseChoice.printTracks(of: chosen, toc: toc)
 
         guard let folder else { return }
-        try ReleaseChoice.save(chosen, inDiscJSONOf: folder)
+        try chosen.save(inDiscJSONOf: folder)
         print()
         print("Saved the release in \(folder.appending(path: "disc.json").path).")
         if let cover {
             let image = CoverImage(data: try Data(contentsOf: URL(filePath: cover)))
             print("Cover: \(try image.write(to: folder).path)")
         } else {
-            try await ReleaseChoice.saveArtwork(artwork ?? Settings.load().artwork, of: chosen, in: folder)
+            ReleaseChoice.printArtwork(
+                try await CoverArtClient().saveArtwork(artwork ?? Settings.load().artwork, of: chosen, in: folder))
         }
     }
 }
@@ -87,38 +91,13 @@ private struct SavedMCN: Decodable {
     var mcn: String?
 }
 
-/// Finding, showing, and keeping the release for a disc, for `metadata` and `rip`.
+/// Asking for a release, and showing one, on the terminal, for `metadata` and `rip`.
 enum ReleaseChoice {
-    /// The releases for a disc, the most likely first, and the one to use: the release with
-    /// `releaseID` if given (it is then remembered for the other discs of the release), else the first.
-    static func find(
-        toc: TOC, mcn: String?, releaseID: String?, ask: Bool = false, client: MusicBrainzClient = MusicBrainzClient()
-    ) async throws -> (ranked: [MusicBrainzRelease], chosen: MusicBrainzRelease?, isExact: Bool) {
-        let lookup = try await client.lookup(toc)
-        let discID = toc.musicBrainzDiscID
-        let store = ReleaseChoiceStore()
-        let ranked = ReleaseRanking.ranked(
-            lookup.releases, discID: discID, mcn: mcn, chosen: store.choices(forDiscID: discID))
-        guard let releaseID else {
-            var chosen = ranked.first
-            if ask, ReleaseRanking.isAmbiguous(ranked, mcn: mcn, chosen: store.choices(forDiscID: discID)) {
-                chosen = askForRelease(ranked, toc: toc)
-                if let chosen { try store.remember(chosen) }
-            }
-            return (ranked, chosen, lookup.isExact)
-        }
-        var chosen = ranked.first { $0.id == releaseID }
-        if chosen == nil { chosen = try await client.release(id: releaseID) }
-        guard let chosen else { throw CommandError("MusicBrainz has no release \(releaseID).") }
-        try store.remember(chosen)
-        return (ranked, chosen, lookup.isExact)
-    }
-
     /// Asks the user to pick a release, on the terminal. The first is the default.
     static func askForRelease(_ ranked: [MusicBrainzRelease], toc: TOC) -> MusicBrainzRelease? {
         print("Several MusicBrainz releases have this disc:")
         for (index, release) in ranked.enumerated() {
-            print("  \(index + 1). " + describe(release, toc: toc))
+            print("  \(index + 1). " + release.summary(for: toc))
         }
         while true {
             print("Which release? [1] ", terminator: "")
@@ -128,27 +107,6 @@ enum ReleaseChoice {
             if let number = Int(line), ranked.indices.contains(number - 1) { return ranked[number - 1] }
             print("Give a number from 1 to \(ranked.count).")
         }
-    }
-
-    /// One line for a release: "Grateful Dead - Cornell 5/8/77 (2017-05-05, US; disc 2 of 3; ...)".
-    static func describe(_ release: MusicBrainzRelease, toc: TOC) -> String {
-        var details = [[release.date, release.country].compactMap { $0 }.joined(separator: ", ")]
-        if let medium = release.medium(for: toc) {
-            let how = release.medium(withDiscID: toc.musicBrainzDiscID) == nil ? " (by track lengths)" : ""
-            details.append(
-                (release.media.count > 1 ? "disc \(medium.position) of \(release.media.count)" : "1 disc") + how)
-        } else {
-            details.append("\(release.media.count) discs; which one is this disc is not clear")
-        }
-        if let barcode = release.barcode, !barcode.isEmpty { details.append("barcode \(barcode)") }
-        let labels = release.labels.compactMap { label in
-            [label.name, label.catalogNumber].compactMap { $0 }.joined(separator: " ")
-        }.filter { !$0.isEmpty }
-        if !labels.isEmpty { details.append(labels.joined(separator: ", ")) }
-        if let status = release.status, status != "Official" { details.append(status.lowercased()) }
-        if let disambiguation = release.disambiguation { details.append(disambiguation) }
-        return "\(release.artist) - \(release.title) (\(details.filter { !$0.isEmpty }.joined(separator: "; ")))"
-            + "  \(release.id)"
     }
 
     static func printTracks(of release: MusicBrainzRelease, toc: TOC) {
@@ -168,29 +126,17 @@ enum ReleaseChoice {
         }
     }
 
-    /// Sets "release" in a folder's disc.json, and keeps every other key.
-    static func save(_ release: MusicBrainzRelease, inDiscJSONOf folder: URL) throws {
-        let url = folder.appending(path: "disc.json")
-        var object = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]) ?? [:]
-        object["release"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(release))
-        let data = try JSONSerialization.data(
-            withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try data.write(to: url, options: .atomic)
-    }
-
-    /// Saves the Cover Art Archive's artwork for the release in `folder`: the front cover as
-    /// cover.jpg, and with `.all`, the other images in Artwork/.
-    static func saveArtwork(_ artwork: ArtworkChoice, of release: MusicBrainzRelease, in folder: URL) async throws {
-        guard artwork != .none else { return }
-        guard release.hasFrontCover || (release.artworkCount ?? 0) > 0 else {
+    static func printArtwork(_ result: ArtworkResult) {
+        switch result {
+        case .notWanted:
+            break
+        case .noneInArchive:
             print("Cover: the Cover Art Archive has none for this release.")
-            return
-        }
-        let files = try await CoverArtClient().save(releaseID: release.id, in: folder, all: artwork == .all)
-        if files.isEmpty { print("Cover: not found in the Cover Art Archive.") }
-        for file in files {
-            let size = ((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) / 1024
-            print("Cover: \(file.path) (\(size) KB)")
+        case .saved(let files):
+            for file in files {
+                let size = ((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) / 1024
+                print("Cover: \(file.path) (\(size) KB)")
+            }
         }
     }
 }

@@ -127,6 +127,7 @@ cdrip encode -i "<rip folder>"       # encode a rip later
 | `metadata` | Shows the MusicBrainz releases for a disc, and keeps the chosen one in a rip's `disc.json`. |
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
 | `config` | Shows and changes the settings. |
+| `eject` | Ejects the disc from a drive (`-d diskN`), or from every drive (`--all`). |
 
 ### What a rip makes
 
@@ -187,6 +188,7 @@ cdrip config unset aac.mode                     # back to the default
 | `readC2` | `true` | ask the drive for C2 error flags |
 | `encodeAfterRip` | `false` | `rip` encodes when it finishes |
 | `keepRipAfterEncoding` | `false` | keep the WAV files after `rip --encode` |
+| `ejectAfterRip` | `false` | `rip` ejects the disc when every track is verified |
 | `aac.mode`, `aac.bitRate`, `aac.vbrQuality` | `vbr-constrained`, `256`, `127` | Apple's AAC encoder |
 | `mp3.mode`, `mp3.vbrQuality`, `mp3.bitRate`, `mp3.extraArguments` | `vbr`, `0`, `320`, `[]` | LAME |
 

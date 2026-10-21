@@ -72,7 +72,7 @@ Done:
 
 - `AudioEncoder`: FLAC, ALAC, AAC (256 kbit/s by default), and AIFF through AudioToolbox (`ExtAudioFile`), and decoding of any of them. FLAC, ALAC, and AIFF give back every sample. Apple's FLAC files have a correct audio MD5 (`flac -t` passes). WAV uses `WAVFile`.
 - MP3 through `lame` (`MP3Encoder`, `-V 0`, about 245 kbit/s): CDRip pipes the PCM to it, and writes the ID3v2.4 tag itself (`ID3Tags`). Running LAME as a separate program keeps its LGPL code out of CDRip. Apple's frameworks have no MP3 encoder (`afconvert` fails with `'fmt?'`).
-- `FLACTags`: our own metadata blocks. Apple writes STREAMINFO and a small VORBIS_COMMENT; CDRip keeps STREAMINFO and any other blocks, writes its VORBIS_COMMENT (vendor "CDRip 0.1") and a PICTURE block (type 3, front cover), adds 8 KB of padding, and copies the audio frames unchanged.
+- `FLACTags`: our own metadata blocks. Apple writes STREAMINFO and a small VORBIS_COMMENT; CDRip keeps STREAMINFO and any other blocks, writes its VORBIS_COMMENT (vendor "CDRip <version>", now 0.2) and a PICTURE block (type 3, front cover), adds 8 KB of padding, and copies the audio frames unchanged.
 - `MP4Tags`: `moov/udta/meta/ilst` with iTunes atoms (`©nam`, `©ART`, `aART`, `©alb`, `©day`, `trkn`, `disk`, `covr`, `©too`), and freeform `----` atoms named as MusicBrainz Picard names them (ISRC, BARCODE, the MusicBrainz IDs, and so on). Apple puts `moov` before `mdat`, so new tags move the audio: the writer drops the `free` atom and moves every `stco`/`co64` chunk offset by the same amount. The encoder's own items (such as `iTunSMPB`, for gapless AAC) are kept.
 - `ID3Tags`: text frames, `TXXX` and `UFID` for the MusicBrainz IDs as Picard writes them, and `APIC` for the cover; any ID3 tags that `lame` wrote are replaced.
 - `EmbeddedCover`: the embedded cover is at most 1000 px on its long side (ImageIO), as in the user's library; a cover within the size is kept byte for byte. The album folder keeps the full-size `cover.jpg`.
@@ -95,7 +95,7 @@ The MusicBrainz client must protect the user's access to MusicBrainz. Done: `Web
 - On 503 or 429, wait (honor `Retry-After`, else a delay that doubles from 2 s), and give up after 4 tries.
 - A cache on disk (`~/Library/Caches/CDRip/web/`) keyed by URL. Responses stay 7 days for MusicBrainz, 30 for cover art, 1 for AccurateRip and CTDB lookups, and 365 for CTDB repair data. A 404 stays 1 day.
 - Tests use a fake transport, so `make test` never touches the network.
-- User-Agent: `CDRip/0.1 ( https://preston-landers.github.io/CDRip )`. Never an email address.
+- User-Agent: `CDRip/<version> ( https://preston-landers.github.io/CDRip )`. Never an email address.
 
 Done:
 
@@ -273,11 +273,38 @@ Still to do:
 
 - A drive report (`cdrip drives -d diskN --report`, later the app's bug-report tool): `DriveReport` holds the drive's registry (device and protocol characteristics, such as "CD Features", "Retry Count" 20, and "Read Time Out Duration" 30000 ms, and the USB bridge's names and IDs, with no serial numbers), the Mac and macOS, CDRip's profile of the drive, the disc's TOC and disc ID (no audio), and 7 quick checks with the disc in it: the TOC, a read of 2,600 sectors (speed), C2 flags, the Q subchannel, a read past the lead-out, CD-Text, and the cache size. About 10 seconds. From it, a drive that the developer does not have can be modeled in `SimulatedDrive`. Checked on the MATSHITA: its enclosure's bridge is an Initio chip (USB 0x13FD:0x0840).
 - `cdrip cdtext -d diskN`: every field of the disc's CD-Text (titles, performers, songwriters, composers, arrangers, messages, disc ID, genre, UPC and ISRCs, the blocks' languages and character set), with `--packs` for the raw packs and `--json`.
+- `cdrip eject -d diskN` (or `--all`): unmounts and ejects the disc through DiskArbitration, as the Finder does. Version 0.2.
 
 Still to do:
 
 - A check in the drive report of how the drive fails on an unreadable sector (it needs a damaged disc).
 - Developer ID signing and notarization, with the user's new developer ID.
+
+The rip and repair workflows are in the engine (`DiscRip`, `RipRepair`), and the CLI only prints their events, so the app can use the same code.
+
+## Loose ends
+
+Built and tested with the simulator, but not yet on hardware:
+
+- The workflows in the engine (`DiscRip`, `RipRepair`): one short rip and one repair on a drive, to check that the output did not change.
+- The prompt for a release when the ranking cannot pick one (a disc in several releases with no MCN, barcode, or earlier choice to settle it).
+- Shifted-read detection (`SecureRipper`), made after *One from the Vault* disc 2 on the ASUS.
+- Hidden track one audio: a disc with a real hidden track.
+- Enhanced CDs (a data track in a later session): the AccurateRip and CTDB rules are marked as not verified in the code.
+
+Discs that are not yet fully verified:
+
+- *Hundred Year Hall* disc 1: 9 of 11 tracks; 4 CTDB columns have too many suspects.
+- *Live/Dead*: 2 of 7 tracks.
+
+Deferred:
+
+- Discs that MusicBrainz does not know: names from CD-Text, or typed in (see the README's TODO).
+- CD-Text in other blocks and character sets (MS-JIS).
+- De-emphasis as an option.
+- The drive report's check of an unreadable sector (it needs a damaged disc).
+- Developer ID signing and notarization.
+- A test of `RipRepair` without the network: it downloads AccurateRip and CTDB data itself. `DiscRepairerTests` covers the repair.
 
 ## 9. Multi-disc releases and style recipes
 
@@ -294,6 +321,7 @@ A possible goal after the CD work: extract the audio from a DVD-Audio disc (the 
 - A simple ripping view by default: insert a disc, check the metadata, rip.
 - All the technical detail is there to open on demand: everything the rip report has, for the disc (TOC, ISRCs, MCN, CD-Text, pregaps, flags) and for the rip.
 - A live graph as each track rips: error levels by position, suspect sectors, and which were recovered or not. The engine sends progress events (sectors read, suspect, resolved, unresolved) as it works, so the graph, the progress display, and the rip report all come from the same events.
+- Advice when tracks are not verified after the rip and the CTDB repair: the next step that is most likely to help. With the rip's suspects kept, a second rip in the same drive pools with the first (`--pool`); a rip in another drive helps more, because each drive reads damage differently (*Dick's Picks Vol. 2*, *Hundred Year Hall*); cleaning the disc helps when the errors are in many places. A disc that is not in AccurateRip or CTDB cannot be verified, only shown to read the same each time.
 
 ## Hardware for testing
 

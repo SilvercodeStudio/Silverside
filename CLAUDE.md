@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-CDRip is a native macOS CD ripper. The goal is ripping quality equal to or better than Exact Audio Copy (EAC), with a modern UI and MusicBrainz-first metadata. It encodes to FLAC, ALAC, AAC, AIFF, and WAV. MP3 is out of scope.
+CDRip is a native macOS CD ripper. The goal is ripping quality equal to or better than Exact Audio Copy (EAC), with a modern UI and MusicBrainz-first metadata. It encodes to FLAC, ALAC, AAC, AIFF, and WAV, and to MP3 through an external `lame`.
 
-The work is done in layers: engine library (`CDRipKit`), then a `cdrip` CLI, then the SwiftUI app (`App/`: `CDRip.xcodeproj` and its sources in `App/CDRip/`). The app doesn't link `CDRipKit` yet.
+The work is done in layers: engine library (`CDRipKit`), then a `cdrip` CLI, then the SwiftUI app (`App/`: `CDRip.xcodeproj` and its sources in `App/CDRip/`). The CLI is finished for daily use; the app is next (see **App** below).
 
 Ripping is verification-first: rip fast with offset correction, verify each track against AccurateRip and CUETools DB (CTDB), and do secure re-reads only for tracks that don't match.
 
@@ -15,7 +15,7 @@ Ripping is verification-first: rip fast with offset correction, verify each trac
 Open `CDRip.xcworkspace` in Xcode: it has the app project and the `CDRipKit` package, with schemes for the app, `cdrip`, and the engine tests.
 
 ```sh
-make cli ARGS='info'   # build and run the cdrip CLI (drives, info, rip, repair, metadata, encode, config; -d diskN)
+make cli ARGS='info'   # build and run the cdrip CLI (drives, info, cdtext, rip, repair, metadata, encode, config, eject; -d diskN)
 make install PREFIX=~/.local   # universal release build of cdrip, and shell completions
 swift build --package-path CDRipKit -c release --product cdrip   # CTDB repair needs the release build to be fast
 make test        # swift test --package-path CDRipKit
@@ -35,6 +35,27 @@ swift test --package-path CDRipKit --filter 'DiscIDTests/ctdbTOCString'
 ```
 
 Run `make format`, `make lint`, and `make test` before you report work as done.
+
+## Architecture
+
+The engine does the work, and the CLI only parses options and prints. Put new behavior in `CDRipKit`, so that the app gets it too. Engine files (`CDRipKit/Sources/CDRipKit/`), by layer:
+
+- **Disc and drive:** `CDDA` (constants), `TOC`, `DiscIDs` (MusicBrainz, AccurateRip, freedb, CTDB), `Drive` (`CDDrive`), `SimulatedDrive`, `QSubchannel`, `SubchannelCodes` (MCN, ISRC), `PregapFinder`, `CDText`, `CacheProbe`, `DriveProfile` (`DriveProfileStore`), `DriveOffsetList`, `DriveReport`. The Darwin target (`CDRipDarwin`) has `IOKitDrive` and `OpticalDrive` (the drive list from the I/O Registry).
+- **Reading:** `AudioReader` (offset correction, cache flush), `TrackRipper` (one pass, AccurateRip check), `SecureRipper` (re-reads, C2, shifted reads), `HiddenTrack`, `RipEvent` (progress).
+- **Verification and repair:** `AccurateRipChecksum`, `AccurateRipOffsetFinder`, `AccurateRipRecord` and `OnlineLookup` (AccurateRip and CTDB downloads), `CTDB`, `GaloisField16` (with `ReedSolomonDecoder`), `DiscRepairer` (with `TrackAudio`, the suspects).
+- **Metadata:** `WebClient` (rate limits, cache, retries), `MusicBrainz`, `ReleaseChoice` (`ReleaseRanking`, `ReleaseChoiceStore`), `ReleaseLookup`, `CoverArt`, `NameTemplate`, `TrackMetadata`.
+- **Output:** `WAVFile`, `AudioEncoder`, `EncoderOptions`, `MP3` (lame and ID3), `FLACTags`, `MP4Tags`, `ChunkTags` (AIFF and WAV), `EmbeddedCover`, `CueSheet`, `RipReport` and `RipReportMarkdown`, `Encoding` (`RippedDisc`, `DiscEncoder`).
+- **Workflows:** `DiscRip` (a whole rip, as `cdrip rip` does it), `RipRepair` (`cdrip repair`), `RipPool` (earlier rips, and `RipFolder` claims), `RipSummaries` (text for people), `Settings`.
+
+## App
+
+The app is in `App/` and does not link `CDRipKit` yet. To start, add the local package to the app target with the `CDRipKit` and `CDRipDarwin` products. Use these engine APIs, and add to the engine, not the app, when something is missing:
+
+- **Rip:** `DiscRip` with `DiscRipOptions(settings:)`. Its `events` closure sends each step as a `DiscRipEvent`; `.reading(RipEvent)` gives sector-by-sector progress for a live graph. `chooseRelease` asks the user when the MusicBrainz ranking cannot pick a release. `DiscRip` and its closures are not `Sendable`, and its reads block, so run it in one task away from the main actor, and send the events to the main actor.
+- **Repair:** `RipRepair` with `RipRepairEvent`.
+- **Drives:** `OpticalDrive.all()` lists drives and their discs; `DriveProfileStore` holds offsets and cache sizes; `DriveReport` makes the drive report.
+- **Metadata and output:** `ReleaseLookup.find`, `CoverArtClient.saveArtwork`, `DiscEncoder(settings:)`, and `RippedDisc`.
+- **Settings:** `Settings.load()` and `save()` (`~/Library/Application Support/CDRip/settings.json`), shared with `cdrip config`. The app and the CLI must agree on every shared file, and both keep keys that they do not know (see **Files that several versions share** below).
 
 ## Engine conventions (CDRipKit)
 
@@ -96,4 +117,4 @@ The full list is in `docs/Milestones.md`. Keep both up to date.
 4. Mostly done: encoding (`AudioEncoder`, `FLACTags`, `MP4Tags`, `ID3Tags`, `DiscEncoder`, `cdrip encode`, `cdrip rip --encode`), checked by decoding each file again.
 8. Mostly done: the Markdown rip report, CUE sheets, pregaps, CD-Text (`cdrip cdtext`), hidden track one audio, AIFF and WAV tags; and the drive report (`cdrip drives --report`).
 
-The CLI is finished for daily use. Next: the app.
+The CLI is finished for daily use. Next: the app. The loose ends (built but not tested on hardware, and deferred work) are in `docs/Milestones.md`.

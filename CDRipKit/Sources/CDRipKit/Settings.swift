@@ -40,6 +40,8 @@ public struct Settings: Codable, Equatable, Sendable {
     /// Keep the rip's WAV files after `cdrip rip --encode`. If false, a rip whose tracks are
     /// all verified and encoded is deleted; its report goes into the album folder.
     public var keepRipAfterEncoding = false
+    /// Eject the disc after `cdrip rip`, if every track is verified.
+    public var ejectAfterRip = false
     public var aac = AACOptions()
     public var mp3 = MP3Options()
 
@@ -80,6 +82,12 @@ public struct Settings: Codable, Equatable, Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return encoder
     }
+
+    /// The library folder, with "~" made into the home folder.
+    public var libraryURL: URL { Self.expand(library) }
+
+    /// The folder for rips: the `rips` setting, or the current folder if it is empty.
+    public var ripsURL: URL { rips.isEmpty ? URL.currentDirectory() : Self.expand(rips) }
 
     /// A path with "~" made into the home folder.
     public static func expand(_ path: String) -> URL {
@@ -160,6 +168,7 @@ public struct Settings: Codable, Equatable, Sendable {
         readC2 = try value(.readC2, defaults.readC2)
         encodeAfterRip = try value(.encodeAfterRip, defaults.encodeAfterRip)
         keepRipAfterEncoding = try value(.keepRipAfterEncoding, defaults.keepRipAfterEncoding)
+        ejectAfterRip = try value(.ejectAfterRip, defaults.ejectAfterRip)
         aac = try value(.aac, defaults.aac)
         mp3 = try value(.mp3, defaults.mp3)
     }

@@ -14,15 +14,18 @@ final class ProgressLine {
     private var lastDraw = ContinuousClock.now - .seconds(1)
     private var isOnScreen = false
     private var trackStart = ContinuousClock.now
-    /// The read now under way, and when it started, for the time left.
-    private var pass: (number: Int, start: ContinuousClock.Instant)?
+    /// The read now under way, and its progress over the last few seconds, for the time left.
+    /// A drive speeds up during a read, so the speed since the start would give too long a time.
+    private var pass: (number: Int, points: [(time: ContinuousClock.Instant, read: Int)])?
 
     func show(_ event: RipEvent) {
         guard isShown else { return }
         let text: String
         switch event {
         case .reading(_, let number, let read, let sectors, let c2, let unreadable):
-            if pass?.number != number { pass = (number, .now) }
+            if pass?.number != number { pass = (number, []) }
+            pass?.points.append((.now, read))
+            pass?.points.removeAll { ContinuousClock.now - $0.time > .seconds(5) }
             // At most 10 updates a second, but always the last one.
             guard read == sectors || ContinuousClock.now - lastDraw >= .milliseconds(100) else { return }
             let fraction = sectors == 0 ? 0 : Double(read) / Double(sectors)
@@ -35,10 +38,12 @@ final class ProgressLine {
             if c2 > 0 { parts.append(color("C2: \(c2) sectors", code: 33)) }
             if unreadable > 0 { parts.append(color("cannot read: \(unreadable) sectors", code: 31)) }
             var times = Self.minutes(ContinuousClock.now - trackStart)
-            // The time left in this read, from its speed so far.
-            if let pass, read > 0, read < sectors {
-                let spent = ContinuousClock.now - pass.start
-                times += ", " + Self.minutes(spent * (Double(sectors - read) / Double(read))) + " left"
+            // The time left in this read, from its speed over the last few seconds.
+            if let first = pass?.points.first, read > first.read, read < sectors,
+                ContinuousClock.now - first.time >= .seconds(1)
+            {
+                let spent = ContinuousClock.now - first.time
+                times += ", " + Self.minutes(spent * (Double(sectors - read) / Double(read - first.read))) + " left"
             }
             parts.append(times)
             text = parts.joined(separator: "  ·  ")

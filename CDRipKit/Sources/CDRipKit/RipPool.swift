@@ -1,12 +1,11 @@
-import CDRipKit
 import Foundation
 
-/// Earlier rips of a disc, for `rip --pool` and `repair`: their WAV files, and the
+/// Earlier rips of a disc, for pooling (`rip --pool` and `repair`): their WAV files, and the
 /// other values of suspect samples that they kept.
-enum Pool {
+public enum RipPool {
     /// The versions of a track in `folders` ("Track NN.wav" with the track's length),
     /// and the alternatives that each folder kept for it ("Track NN.suspects").
-    static func versions(
+    public static func versions(
         of track: TOC.Track, toc: TOC, in folders: [URL]
     ) -> (versions: [[UInt32]], alternatives: [[Int: [UInt32]]]) {
         let length = toc.sectorRange(of: track).count * CDDA.samplesPerSector
@@ -20,7 +19,7 @@ enum Pool {
     }
 
     /// How a version of an audio track compares with AccurateRip.
-    static func verification(
+    public static func verification(
         of samples: [UInt32], track: TOC.Track, toc: TOC, records: [AccurateRipRecord]
     ) -> AccurateRipVerification {
         let audioTracks = toc.audioTracks
@@ -32,52 +31,58 @@ enum Pool {
     }
 
     /// Checks that each folder with a disc.json holds a rip of the disc with `toc`.
-    static func check(_ folders: [URL], toc: TOC) throws {
+    public static func check(_ folders: [URL], toc: TOC) throws {
         for folder in folders {
-            guard let data = try? Data(contentsOf: folder.appending(path: "disc.json")),
-                let saved = try? JSONDecoder().decode(SavedTOC.self, from: data)
-            else { continue }
-            guard saved.toc == toc.ctdbTOCString else {
-                throw CommandError("\(folder.path) holds a rip of another disc (TOC \(saved.toc)).")
-            }
+            guard let saved = savedTOC(in: folder) else { continue }
+            guard saved == toc.ctdbTOCString else { throw RipFolderError.otherDisc(folder, toc: saved) }
+        }
+    }
+
+    /// The CTDB TOC in a folder's disc.json (a rip's report or an archive manifest).
+    public static func savedTOC(in folder: URL) -> String? {
+        struct Saved: Decodable { var toc: String }
+        return (try? Data(contentsOf: folder.appending(path: "disc.json"))).flatMap {
+            try? JSONDecoder().decode(Saved.self, from: $0).toc
         }
     }
 }
 
-/// The TOC from a rip's disc.json, as `cdrip rip` and the archive write it.
-struct SavedTOC: Decodable {
-    var toc: String
+public enum RipFolderError: Error, Equatable, CustomStringConvertible {
+    /// The folder holds a rip of another disc.
+    case otherDisc(URL, toc: String)
+    /// Both the folder and its other name hold rips of other discs.
+    case taken(URL, URL)
+
+    public var description: String {
+        switch self {
+        case .otherDisc(let folder, let toc): "\(folder.path) holds a rip of another disc (TOC \(toc))."
+        case .taken(let first, let second): "Both \(first.path) and \(second.path) hold another disc's rip."
+        }
+    }
 }
 
 /// A rip's folder, claimed for one disc, so that two rips never write into the same folder.
 /// The claim is a file that holds the disc's TOC, created atomically, and removed at the end.
-enum RipFolder {
+public enum RipFolder {
     static let claimFile = ".cdrip-rip"
 
     /// Claims `folder` for the disc. If another disc's rip has it, or it holds another disc's
     /// disc.json, claims "<folder> [<disc ID>]" instead. Returns the folder claimed.
-    static func claim(_ folder: URL, toc: TOC) throws -> URL {
+    public static func claim(_ folder: URL, toc: TOC) throws -> URL {
         if try claimIfFree(folder, toc: toc) { return folder }
         let other = folder.deletingLastPathComponent().appending(
             path: "\(folder.lastPathComponent) [\(toc.musicBrainzDiscID)]", directoryHint: .isDirectory)
-        print("\(folder.lastPathComponent) holds another disc's rip, so this rip goes in \(other.lastPathComponent).")
-        guard try claimIfFree(other, toc: toc) else {
-            throw CommandError("Both \(folder.path) and \(other.path) hold another disc's rip.")
-        }
+        guard try claimIfFree(other, toc: toc) else { throw RipFolderError.taken(folder, other) }
         return other
     }
 
-    static func release(_ folder: URL) {
+    public static func release(_ folder: URL) {
         try? FileManager.default.removeItem(at: folder.appending(path: claimFile))
     }
 
     private static func claimIfFree(_ folder: URL, toc: TOC) throws -> Bool {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        if let data = try? Data(contentsOf: folder.appending(path: "disc.json")),
-            let saved = try? JSONDecoder().decode(SavedTOC.self, from: data), saved.toc != toc.ctdbTOCString
-        {
-            return false
-        }
+        if let saved = RipPool.savedTOC(in: folder), saved != toc.ctdbTOCString { return false }
         let path = folder.appending(path: claimFile).path
         let file = open(path, O_WRONLY | O_CREAT | O_EXCL, 0o644)
         if file >= 0 {

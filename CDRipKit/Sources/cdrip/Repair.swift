@@ -56,9 +56,7 @@ struct Repair: AsyncParsableCommand {
         let firstFolder = URL(filePath: firstInput, directoryHint: .isDirectory).standardizedFileURL
         // The TOC: from --toc, from the rip's disc.json, or from the disc. With the disc
         // in a drive (by --device, or with no other TOC), re-reads are possible.
-        let savedTOC =
-            (try? JSONDecoder().decode(SavedTOC.self, from: Data(contentsOf: firstFolder.appending(path: "disc.json"))))?
-            .toc
+        let savedTOC = RipPool.savedTOC(in: firstFolder)
         let usesDrive = deviceOptions.device != nil || (self.toc == nil && savedTOC == nil)
         let driveTOC = usesDrive ? try IOKitDrive(bsdName: deviceOptions.bsdName()).readTOC() : nil
         guard let toc = try (self.toc ?? savedTOC).map({ try TOC(ctdbTOCString: $0) }) ?? driveTOC else {
@@ -67,133 +65,14 @@ struct Repair: AsyncParsableCommand {
         if let driveTOC, driveTOC.ctdbTOCString != toc.ctdbTOCString {
             throw CommandError("The disc in the drive is not the disc of the rip (TOC \(driveTOC.ctdbTOCString)).")
         }
-        let audioTracks = toc.audioTracks
-        guard !audioTracks.isEmpty else { throw CommandError("This disc has no audio tracks.") }
-        // Earlier re-reads are kept next to the first folder, as "<folder> read 2" and so on.
-        let parent = firstFolder.deletingLastPathComponent()
-        let readFolders = ((try? FileManager.default.contentsOfDirectory(atPath: parent.path)) ?? [])
-            .filter { $0.hasPrefix(firstFolder.lastPathComponent + " read ") }.sorted()
-            .map { parent.appending(path: $0, directoryHint: .isDirectory) }
-        let folders = input.map { URL(filePath: $0, directoryHint: .isDirectory) } + readFolders
-        // Look everything up first, so that a network problem shows before long re-reads.
-        let records = try await AccurateRipRecord.download(for: toc.accurateRipDiscID)
-        let entries = try await CTDBEntry.lookup(toc).sorted { $0.confidence > $1.confidence }
-        guard !entries.isEmpty else { throw CommandError("This disc is not in CUETools DB.") }
 
-        let (reader, cacheFlushSectors) = usesDrive ? try rereader(toc: toc) : (nil, 4000)
-
-        // Every version of every track, and the disc as the first versions give it, which
-        // is enough to find the tracks that match AccurateRip at another pressing's offset.
-        try Pool.check(folders, toc: toc)
-        var versions = [[[UInt32]]]()
-        var saved = [[[Int: [UInt32]]]]()
-        for track in audioTracks {
-            let pooled = Pool.versions(of: track, toc: toc, in: folders)
-            guard !pooled.versions.isEmpty else {
-                throw CommandError(String(format: "No folder has Track %02d.wav with the TOC's length.", track.number))
-            }
-            versions.append(pooled.versions)
-            saved.append(pooled.alternatives)
-        }
-        var trackStarts = [Int]()
-        var firstVersions = [UInt32]()
-        for trackVersions in versions {
-            trackStarts.append(firstVersions.count)
-            firstVersions += trackVersions[0]
-        }
-
-        // For each track, use a version that matches AccurateRip, at any offset, if there is
-        // one. Otherwise the samples where the versions disagree are suspect.
-        var tracks = [TrackAudio]()
-        for (index, track) in audioTracks.enumerated() {
-            let length = versions[index][0].count
-            let edges = (isFirst: index == 0, isLast: index == audioTracks.count - 1)
-            let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
-            let accurate = versions[index].first { samples in
-                if case .accurate = Pool.verification(of: samples, track: track, toc: toc, records: records) {
-                    return true
-                }
-                return false
-            }
-            if let accurate {
-                tracks.append(TrackAudio(samples: accurate))
-                print(String(format: "Track %2d  accurate in AccurateRip", track.number))
-                continue
-            }
-            if let shift = DiscRepairer.otherPressingShift(
-                of: firstVersions, start: trackStarts[index], length: length, edges: edges, known: known)
-            {
-                tracks.append(TrackAudio(samples: versions[index][0]))
-                print(
-                    String(format: "Track %2d  free of errors: matches another pressing at ", track.number)
-                        + Rip.signed(shift))
-                continue
-            }
-            // With the disc in a drive, read a track that has few versions again, so that
-            // the reads can disagree where the disc is damaged.
-            var trackVersions = versions[index]
-            if let reader, trackVersions.count < reads {
-                for _ in trackVersions.count..<reads {
-                    reader.flushCache(awayFrom: toc.sectorRange(of: track), count: cacheFlushSectors)
-                    let read = try reader.readTrack(track)
-                    trackVersions.append(read)
-                    // Keep the read, so that a later run can use it.
-                    let folder = Self.nextReadFolder(after: firstFolder, track: track)
-                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                    try WAVFile.write(read, to: folder.appending(path: String(format: "Track %02d.wav", track.number)))
-                }
-            }
-            var audio = TrackAudio(versions: trackVersions)
-            // Other values that earlier rips and repairs kept for suspect samples.
-            for alternatives in saved[index] { audio.add(alternatives) }
-            tracks.append(audio)
-            print(
-                String(format: "Track %2d  ", track.number)
-                    + "\(trackVersions.count) versions, \(audio.alternatives.count) samples where they disagree")
-        }
-
-        print("CTDB: \(entries.count) entries, up to \(entries[0].confidence) submissions")
-        var repairer = DiscRepairer(toc: toc, records: records, entries: entries, reader: reader)
-        repairer.cacheFlushSectors = cacheFlushSectors
-        repairer.rereadRounds = rereadRounds
-        repairer.log = { print($0) }
-        let result = try await repairer.repair(tracks)
-        // Keep the alternatives, with the ones that re-reads added, so that a later run can use them.
-        let proved: Set<Int>? =
-            switch result.outcome {
-            case .notVerified: []
-            case .partlyRepaired(_, _, let numbers, _): Set(numbers)
-            case .verified, .repaired: nil
-            }
-        if let proved {
-            for (index, track) in audioTracks.enumerated()
-            where !tracks[index].alternatives.isEmpty && !proved.contains(track.number) {
-                var audio = TrackAudio(samples: result.samples(ofTrack: index))
-                audio.add(result.alternatives(ofTrack: index))
-                try audio.writeAlternatives(
-                    to: firstFolder.appending(path: TrackAudio.alternativesFileName(track: track.number)))
-            }
-        }
-        let folder = URL(filePath: firstInput, directoryHint: .isDirectory)
-        let withoutRepairData =
-            result.entriesWithoutRepairData == 0
-            ? "" : "\(result.entriesWithoutRepairData) more entries match the rip's alignment, but have no repair data."
-        switch result.outcome {
-        case .verified(let entry, let shift):
-            print(
-                "Verified: the rip matches entry \(entry.id) (\(entry.confidence) submissions)"
-                    + (shift == 0 ? "" : " at shift \(Rip.signed(shift))") + ", with no errors.")
-        case .repaired:
-            try report(result, toc: toc, folder: folder, records: records)
-        case .partlyRepaired(_, _, let tracks, _):
-            if !withoutRepairData.isEmpty { print(withoutRepairData) }
-            print("No entry repairs the whole disc. Keeping the corrections in tracks \(tracks),")
-            print("whose CTDB track CRCs then match.")
-            try report(result, toc: toc, folder: folder, records: records)
-        case .notVerified:
-            if !withoutRepairData.isEmpty { print(withoutRepairData) }
-            print("Could not verify or repair the rip with any entry.")
-        }
+        var repair = RipRepair(toc: toc, folders: input.map { URL(filePath: $0, directoryHint: .isDirectory) })
+        if let output { repair.output = URL(filePath: output, directoryHint: .isDirectory) }
+        if usesDrive { (repair.reader, repair.cacheFlushSectors) = try rereader(toc: toc) }
+        repair.reads = reads
+        repair.rereadRounds = rereadRounds
+        repair.events = Self.print
+        _ = try await repair.run()
     }
 
     /// An offset-corrected reader for the disc in the drive, with the drive's offset, and
@@ -212,42 +91,52 @@ struct Repair: AsyncParsableCommand {
         return (reader, profile?.cacheFlushSectors ?? 4000)
     }
 
-    /// The first "<folder> read N" folder, from N = 2, that has no file for `track`.
-    static func nextReadFolder(after folder: URL, track: TOC.Track) -> URL {
-        let name = String(format: "Track %02d.wav", track.number)
-        for number in 2... {
-            let candidate = folder.deletingLastPathComponent().appending(
-                path: "\(folder.lastPathComponent) read \(number)", directoryHint: .isDirectory)
-            if !FileManager.default.fileExists(atPath: candidate.appending(path: name).path) { return candidate }
-        }
-        fatalError("Unreachable")
-    }
-
-    /// Writes the repaired tracks, and checks them against AccurateRip, which does not depend on CTDB.
-    private func report(
-        _ result: DiscRepairer.Result, toc: TOC, folder: URL, records: [AccurateRipRecord]
-    ) throws {
-        let audioTracks = toc.audioTracks
-        let destination = URL(
-            filePath: output ?? folder.standardizedFileURL.path + " repaired", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-
-        let total = audioTracks.indices.reduce(0) { $0 + result.changedSamples(inTrack: $1) }
-        print("  Repaired \(total) samples. Files: \(destination.path)")
-        for (index, track) in audioTracks.enumerated() {
-            let samples = result.samples(ofTrack: index)
-            try WAVFile.write(samples, to: destination.appending(path: String(format: "Track %02d.wav", track.number)))
-            let checksum = AccurateRipAccumulator.checksum(
-                of: samples[...], isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
-            let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
-            var line = String(
-                format: "  Track %2d  %6d samples repaired  ", track.number, result.changedSamples(inTrack: index))
-            switch TrackRipper.verification(of: checksum, known: known) {
+    private static func print(_ event: RipRepairEvent) {
+        switch event {
+        case .trackAccurate(let number):
+            Swift.print(String(format: "Track %2d  accurate in AccurateRip", number))
+        case .trackMatchesOtherPressing(let number, let shift):
+            Swift.print(
+                String(format: "Track %2d  free of errors: matches another pressing at ", number)
+                    + shift.signedDescription)
+        case .trackPooled(let number, let versions, let suspectSamples):
+            Swift.print(
+                String(format: "Track %2d  ", number)
+                    + "\(versions) versions, \(suspectSamples) samples where they disagree")
+        case .ctdbEntries(let count, let mostSubmissions):
+            Swift.print("CTDB: \(count) entries, up to \(mostSubmissions) submissions")
+        case .repairLog(let line):
+            Swift.print(line)
+        case .finished(let result):
+            let withoutRepairData =
+                result.entriesWithoutRepairData == 0
+                ? ""
+                : "\(result.entriesWithoutRepairData) more entries match the rip's alignment, but have no repair data."
+            switch result.outcome {
+            case .verified(let entry, let shift):
+                Swift.print(
+                    "Verified: the rip matches entry \(entry.id) (\(entry.confidence) submissions)"
+                        + (shift == 0 ? "" : " at shift \(shift.signedDescription)") + ", with no errors.")
+            case .repaired:
+                break
+            case .partlyRepaired(_, _, let tracks, _):
+                if !withoutRepairData.isEmpty { Swift.print(withoutRepairData) }
+                Swift.print("No entry repairs the whole disc. Keeping the corrections in tracks \(tracks),")
+                Swift.print("whose CTDB track CRCs then match.")
+            case .notVerified:
+                if !withoutRepairData.isEmpty { Swift.print(withoutRepairData) }
+                Swift.print("Could not verify or repair the rip with any entry.")
+            }
+        case .writing(let folder, let repairedSamples):
+            Swift.print("  Repaired \(repairedSamples) samples. Files: \(folder.path)")
+        case .trackWritten(let number, let repairedSamples, let accurateRip):
+            var line = String(format: "  Track %2d  %6d samples repaired  ", number, repairedSamples)
+            switch accurateRip {
             case .accurate(let v1, let v2): line += "AccurateRip: accurate (v1 \(v1), v2 \(v2))"
             case .notAccurate: line += "AccurateRip: not accurate"
             case .notChecked: line += "AccurateRip: not in the database"
             }
-            print(line)
+            Swift.print(line)
         }
     }
 }

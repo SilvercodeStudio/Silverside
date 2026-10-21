@@ -48,21 +48,19 @@ struct EncodingOptions: ParsableArguments {
 
     /// The encoder, and the library, from these options over the settings.
     func encoder(_ settings: Settings) -> (encoder: DiscEncoder, library: URL) {
-        var encoder = DiscEncoder(format: format ?? settings.format)
-        encoder.folderTemplate = NameTemplate(folderTemplate ?? settings.folderTemplate)
-        encoder.trackTemplate = NameTemplate(trackTemplate ?? settings.trackTemplate)
-        encoder.liveShowStyle = liveShowStyle ?? settings.liveShowStyle
-        encoder.plainPunctuation = plainPunctuation ?? settings.plainPunctuation
-        encoder.aac = settings.aac
+        var encoder = DiscEncoder(settings: settings, format: format)
+        if let folderTemplate { encoder.folderTemplate = NameTemplate(folderTemplate) }
+        if let trackTemplate { encoder.trackTemplate = NameTemplate(trackTemplate) }
+        if let liveShowStyle { encoder.liveShowStyle = liveShowStyle }
+        if let plainPunctuation { encoder.plainPunctuation = plainPunctuation }
         if let aacMode { encoder.aac.mode = aacMode }
         if let aacBitrate { encoder.aac.bitRate = aacBitrate }
         if let aacQuality { encoder.aac.vbrQuality = aacQuality }
-        encoder.mp3 = settings.mp3
         if let mp3Mode { encoder.mp3.mode = mp3Mode }
         if let mp3Bitrate { encoder.mp3.bitRate = mp3Bitrate }
         if let mp3Quality { encoder.mp3.vbrQuality = mp3Quality }
         if !lameOption.isEmpty { encoder.mp3.extraArguments = lameOption }
-        return (encoder, Settings.expand(library ?? settings.library))
+        return (encoder, library.map(Settings.expand) ?? settings.libraryURL)
     }
 }
 

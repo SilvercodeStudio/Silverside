@@ -172,5 +172,5 @@ public actor WebClient {
 
 /// The version that CDRip reports, as in its User-Agent.
 public enum CDRipVersion {
-    public static let string = "0.1"
+    public static let string = "0.2"
 }

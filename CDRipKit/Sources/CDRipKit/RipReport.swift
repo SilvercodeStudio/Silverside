@@ -202,3 +202,16 @@ public struct RipReport: Codable, Equatable, Sendable {
         return try decoder.decode(RipReport.self, from: Data(contentsOf: url))
     }
 }
+
+extension RipReport {
+    /// True if AccurateRip or CTDB proves every track, and the reads of a hidden track agree.
+    /// `RippedDisc` uses the same rule for each track.
+    public var isVerified: Bool {
+        let wholeDisc = ctdb.status == .verified || ctdb.status == .repaired
+        let tracksVerified = tracks.allSatisfy {
+            wholeDisc || $0.accurateRip == .accurate || $0.accurateRip == .otherPressings
+                || ($0.ctdbConfidence ?? 0) > 0
+        }
+        return tracksVerified && hiddenTrack?.readsAgree != false
+    }
+}

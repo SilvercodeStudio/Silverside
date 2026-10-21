@@ -114,7 +114,7 @@ struct Drives: ParsableCommand {
             }
             let profile = store.profile(vendor: drive.vendor, product: drive.product, revision: drive.revision)
             if let (offset, source) = profile.offset {
-                print("  Read offset: \(Rip.signed(offset)) (\(Rip.describe(source)))")
+                print("  Read offset: \(offset.signedDescription) (\(source.description))")
             } else {
                 print("  Read offset: not known (cdrip rip looks it up in AccurateRip's drive list)")
             }

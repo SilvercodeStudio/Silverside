@@ -61,6 +61,8 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var ctdbConfidence: Int?
         /// Samples that the CTDB repair changed.
         public var repairedSamples: Int
+        /// The track's ISRC, from the Q subchannel.
+        public var isrc: String?
 
         public init(
             number: Int, file: String, startLBA: Int, sectors: Int, preEmphasis: Bool,
@@ -145,6 +147,10 @@ public struct RipReport: Codable, Equatable, Sendable {
     public var accurateRipDiscID: String
     public var tracks: [Track]
     public var ctdb: CTDBResult
+    /// The disc's MCN (barcode), from the Q subchannel.
+    public var mcn: String?
+    /// The MusicBrainz release that the rip used for its names, with every disc's tracks.
+    public var release: MusicBrainzRelease?
 
     public init(date: Date = Date(), drive: Drive, secure: Bool, toc: TOC, tracks: [Track], ctdb: CTDBResult) {
         self.date = date

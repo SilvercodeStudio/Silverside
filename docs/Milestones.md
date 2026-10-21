@@ -84,18 +84,22 @@ The MusicBrainz client must protect the user's access to MusicBrainz. Done: `Web
 - Tests use a fake transport, so `make test` never touches the network.
 - User-Agent: `CDRip/0.1 ( https://preston-landers.github.io/CDRip )`. Never an email address.
 
+Done:
+
+- `MusicBrainzClient`: one request per disc, `discid/<id>?toc=...`. MusicBrainz returns the releases with the disc ID, or, if it does not know the ID, the releases whose TOC is nearly the same (a fuzzy match). The answer has an `id` only for an exact match. Each release has its artist credit, date, country, status, barcode, labels and catalog numbers, release group, every medium with its disc IDs and tracks (title, length, credit, recording ID), and whether the Cover Art Archive has a front cover. `MusicBrainzRelease` is Codable in CDRip's own form, so `disc.json` keeps it.
+- `ReleaseRanking`: one disc ID can belong to several releases (*Madison Square Garden 3/9/81* and the 17-disc box set *In and Out of the Garden*; *Cornell 5/8/77* and the 11-disc *May 1977: Get Shown the Light*). The order: a release the user chose for any disc of the set, a barcode that matches the MCN (a 12-digit UPC is the EAN with a leading zero), an exact match, an official release, fewer media, then MusicBrainz's order.
+- `ReleaseChoiceStore` (`~/Library/Application Support/CDRip/ReleaseChoices.json`): a release chosen with `--release` is kept for every disc ID of its media, so the other discs of the set get it too.
+- `CoverArtClient`: the front cover from the Cover Art Archive, saved as `cover.jpg` or `cover.png` (from the image's first bytes). `cdrip metadata --cover <file>` uses the user's image instead.
+- `NameTemplate`: fields in braces, parts in brackets that are kept only when all their fields have values, `/` for subfolders. The default folder name is the archive's: `{artist} - {album}[ (Disc {disc})]`. Values are made safe for file names (`/` and `:` become `-`, no control characters, no leading dots, at most 240 bytes).
+- `cdrip metadata [-d diskN | -i folder] [--release ID] [--cover file]`: shows the ranked releases and the tracks. With `-i`, it writes the release into the folder's `disc.json` (keeping every other key) and saves the cover.
+- `cdrip rip` looks up the disc (unless `--offline`), names the folder from the release, keeps the release, the MCN, and each track's ISRC in `disc.json`, and saves the front cover. A failed lookup does not stop the rip.
+- Tests use saved answers (`Tests/CDRipKitTests/Resources/MusicBrainz`), so `make test` never touches the network.
+
 Still to do:
 
-- MusicBrainz lookup by disc ID, then fuzzy TOC lookup.
-- Choose among releases with the MCN (barcode) when the disc has one. A disc ID can belong to several releases: *Madison Square Garden 3/9/81* (3 discs) and the box set that holds it, *In and Out of the Garden* (17 discs), have the same disc IDs. Never take the first release only: rank them (MCN, then the release whose other discs the user also rips), show the choice, and remember it for the other discs of the set.
-- File and folder name templates.
-- Cover art, from either source:
-  - an image file the user chooses
-  - an online lookup: the Cover Art Archive, through the MusicBrainz release (front cover first; back and booklet if wanted)
-- Cover art output:
-  - embedded in each file: a FLAC PICTURE block (type 3, front cover), or the MP4 `covr` atom for ALAC and AAC
-  - `cover.jpg` in the album folder
-  - one size limit for embedded art (for example, 1000 px on the long side), so files stay small; the folder copy keeps full size
+- Embedded cover art (milestone 4): a FLAC PICTURE block (type 3, front cover), or the MP4 `covr` atom for ALAC and AAC, with one size limit (for example, 1000 px on the long side) so files stay small; the folder copy keeps full size.
+- Back covers and booklets from the Cover Art Archive, if wanted.
+- Add the full release to the archive's older `disc.json` files (`cdrip metadata -i <folder>` for each), so they can be encoded and tagged.
 
 After milestone 5, the CLI can rip clean discs for daily use.
 

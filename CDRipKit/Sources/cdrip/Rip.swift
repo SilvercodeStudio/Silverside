@@ -15,8 +15,17 @@ struct Rip: AsyncParsableCommand {
     @Option(help: "The tracks to rip, such as 1,3-5. Default: all audio tracks.")
     var tracks: String?
 
-    @Option(name: .shortAndLong, help: "The folder for the WAV files. Default: \"CDRip <MusicBrainz disc ID>\".")
+    @Option(
+        name: .shortAndLong,
+        help: """
+            The folder for the WAV files. Default: named from the MusicBrainz release, such as \
+            "Grateful Dead - Cornell 5-8-77 (Disc 1)", or "CDRip <disc ID>" if there is none.
+            """)
     var output: String?
+
+    @Option(
+        help: "The MusicBrainz ID of the release to use. CDRip keeps the choice for the other discs of the release.")
+    var release: String?
 
     @Flag(help: "Do not look up AccurateRip or its drive offset list.")
     var offline = false
@@ -86,7 +95,32 @@ struct Rip: AsyncParsableCommand {
 
         let poolFolders = pool.map { URL(filePath: $0, directoryHint: .isDirectory) }
         try Pool.check(poolFolders, toc: toc)
-        let folder = URL(filePath: output ?? "CDRip \(toc.musicBrainzDiscID)", directoryHint: .isDirectory)
+        // MusicBrainz names the folder. A failed lookup does not stop the rip.
+        let mcn = try? SubchannelCodes.mcn(in: toc, drive: drive)
+        var chosen: MusicBrainzRelease?
+        if !offline {
+            do {
+                let choice = try await ReleaseChoice.find(toc: toc, mcn: mcn, releaseID: release)
+                chosen = choice.chosen
+                if let chosen {
+                    let others = choice.ranked.count - (choice.ranked.contains { $0.id == chosen.id } ? 1 : 0)
+                    print(
+                        "MusicBrainz: " + ReleaseChoice.describe(chosen, discID: toc.musicBrainzDiscID)
+                            + (choice.isExact ? "" : " (a fuzzy match of the TOC)")
+                            + (others > 0 ? "; \(others) other releases (see cdrip metadata)" : ""))
+                } else {
+                    print("MusicBrainz: no release has this disc")
+                }
+            } catch {
+                print("MusicBrainz: the lookup failed (\(error))")
+            }
+        }
+        let defaultName =
+            chosen.map {
+                NameTemplate.folder.name(
+                    NameTemplate.values(release: $0, medium: $0.medium(withDiscID: toc.musicBrainzDiscID)))
+            } ?? "CDRip \(toc.musicBrainzDiscID)"
+        let folder = URL(filePath: output ?? defaultName, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         print("Folder: \(folder.path)")
         print()
@@ -111,6 +145,7 @@ struct Rip: AsyncParsableCommand {
             var report = RipReport.Track(
                 number: track.number, file: file, startLBA: track.startLBA, sectors: toc.sectorRange(of: track).count,
                 preEmphasis: track.hasPreEmphasis, accurateRip: .notInDatabase)
+            report.isrc = try? SubchannelCodes.isrc(of: track, in: toc, drive: drive)
             if singlePass {
                 let rip = try ripper.rip(track)
                 (samples, result) = (rip.samples, Self.describe(rip))
@@ -258,8 +293,17 @@ struct Rip: AsyncParsableCommand {
         let driveReport = RipReport.Drive(
             vendor: device.vendor, product: device.product, revision: device.revision, readOffset: readOffset,
             offsetSource: source)
-        let report = RipReport(drive: driveReport, secure: !singlePass, toc: toc, tracks: reports, ctdb: ctdb)
+        var report = RipReport(drive: driveReport, secure: !singlePass, toc: toc, tracks: reports, ctdb: ctdb)
+        report.mcn = mcn
+        report.release = chosen
         try report.write(to: folder.appending(path: "disc.json"))
+        if let chosen {
+            do {
+                try await ReleaseChoice.saveFrontCover(of: chosen, in: folder)
+            } catch {
+                print("Cover: the download failed (\(error))")
+            }
+        }
     }
 
     /// Prints the CTDB result. Writes the tracks that the repair changed, and checks them

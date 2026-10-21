@@ -1,0 +1,13 @@
+{"release-count": 1, "release-offset": 0, "releases": [
+  {"id": "00000000-0000-0000-0000-000000000001", "title": "Example Live", "status": "Official", "date": "1990",
+   "country": "US", "barcode": "", "disambiguation": "",
+   "artist-credit": [{"name": "Band A", "joinphrase": " & ", "artist": {"id": "a1", "name": "Band A", "sort-name": "A, Band"}},
+                     {"name": "Singer B", "joinphrase": "", "artist": {"id": "b1", "name": "Singer B", "sort-name": "B, Singer"}}],
+   "label-info": [], "cover-art-archive": {"artwork": false, "front": false, "count": 0},
+   "media": [{"position": 1, "format": "CD", "title": "", "discs": [],
+              "tracks": [{"id": "t1", "position": 1, "number": "1", "title": "Opening", "length": null,
+                          "recording": {"id": "r1", "title": "Opening"}},
+                         {"id": "t2", "position": 2, "number": "2", "title": "Guest Song", "length": 300000,
+                          "artist-credit": [{"name": "Guest", "joinphrase": "", "artist": {"id": "g1", "name": "Guest", "sort-name": "Guest"}}],
+                          "recording": {"id": "r2", "title": "Guest Song"}}]}]}
+]}

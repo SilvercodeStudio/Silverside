@@ -49,13 +49,23 @@ The engine does the work, and the CLI only parses options and prints. Put new be
 
 ## App
 
-The app is in `App/` and does not link `CDRipKit` yet. To start, add the local package to the app target with the `CDRipKit` and `CDRipDarwin` products. Use these engine APIs, and add to the engine, not the app, when something is missing:
+The app is in `App/` (`CDRip.xcodeproj`, sources in `App/CDRip/`) and links the local package's `CDRipKit` and `CDRipDarwin` products. It is a first version (2026-10-21): the main window rips a disc end to end through `DiscRip`, and Settings edits the shared settings file and the drive profiles. The design (a Claude Design artifact; its PDF and icon assets are in `docs/asset_import/`) is an inspiration, not a spec. What is built, and what is not yet, is in `docs/Milestones.md` under **The app**.
 
-- **Rip:** `DiscRip` with `DiscRipOptions(settings:)`. Its `events` closure (`@Sendable`) sends each step as a `DiscRipEvent`, from the reading thread; `.reading(RipEvent)` gives chunk-by-chunk progress with sector positions for a live graph. `chooseRelease` asks the user when the MusicBrainz ranking cannot pick a release. `run()` is async and runs the reads and the encoding on a thread of their own (`blocking(_:)`), so await it from any task and send the events to the main actor. To stop, cancel the task or call `rip.stop.stop()`: `run()` throws `CancellationError` after the chunk under way, and the folder keeps the tracks written so far. The app runs under App Transport Security, and AccurateRip and CTDB are plain HTTP, so its Info.plist needs exception domains for `www.accuraterip.com`, `db.cuetools.net`, and `p.cuetools.net`.
-- **Repair:** `RipRepair` with `RipRepairEvent`.
-- **Drives:** `OpticalDrive.all()` lists drives and their discs; `DriveProfileStore` holds offsets and cache sizes; `DriveReport` makes the drive report.
-- **Metadata and output:** `ReleaseLookup.find`, `CoverArtClient.saveArtwork`, `DiscEncoder(settings:)`, and `RippedDisc`.
-- **Settings:** `Settings.load()` and `save()` (`~/Library/Application Support/CDRip/settings.json`), shared with `cdrip config`. The app and the CLI must agree on every shared file, and both keep keys that they do not know (see **Files that several versions share** below).
+Layout of `App/CDRip/`:
+
+- `CDRipApp.swift`: the scenes (main window, Settings) and `AppCommands.swift` (the Disc menu).
+- `Model/`: `AppModel` (settings, drives, earlier rips, the DiskArbitration watcher), `DriveSlot` (one drive: its disc and its rip), `DiscInfo` (TOC, MCN, CD-Text, the MusicBrainz release and cover), `RipRun` (one rip: the engine's events turned into track states, progress, and a log), `RecentRip` (earlier rips from `disc.json`), and the debug-only `DemoDisc` and `DebugScreenshot`.
+- `Views/`: `MainWindow` (split view, sidebar, empty states), `DriveDetailView` (toolbar, album header, status bar, result banner), `TrackTable`, `ResultsView` (an earlier rip, with its Markdown report), `Sheets` (release picker, rip log), `SettingsView` (General, Drives, Ripping, Encoding, Naming), `Theme` (the sheen gradient, chips, progress bar, error strip, cover).
+
+Rules for the app:
+
+- Put behavior in the engine. The app only turns engine types into views; when the app needs something the engine lacks (a public init, `Identifiable`), add it to `CDRipKit`.
+- The target uses `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`: every type is main-actor unless marked `nonisolated`. Engine work runs in `Task.detached`; the engine's `@Sendable` event closures hop back with `DispatchQueue.main.async` + `MainActor.assumeIsolated`, which keeps the events in order. Build the drive (`IOKitDrive`, `SimulatedDrive`) inside the detached task: `any CDDrive` is not `Sendable`.
+- A disc is read (TOC, MCN, CD-Text) when it appears, then looked up in MusicBrainz once (the web cache keeps the answer, so the rip's own lookup sends no second request). The rip gets the chosen release by ID.
+- Info.plist has the App Transport Security exceptions for AccurateRip and CTDB (plain HTTP). It sits in the synchronized folder with a membership exception, so it is not copied as a resource.
+- The app icon is `Assets.xcassets/AppIcon.appiconset` (the design's "icon set v2": B2 at 128 px and up, C2 below). `AppIconLarge` and `AppIconOverhead` are the 1024 px images for use in views. An Icon Composer `.icon` for macOS 26+ is still to do.
+- Debug launch arguments take a value (`UserDefaults` reads `-key value` pairs, so a bare `-flag` swallows the next argument): `-demo 1` adds a simulated drive with a short disc (release from the engine's *Cornell 5/8/77* fixture, offline); `-demoOnly 1` leaves the real drives alone; `-demoRip 1` starts the demo's rip; `-screenshotPath /path.png -screenshotDelay 6` renders the windows to PNG and quits. `make run ARGS='-demo 1 -demoOnly 1'` runs it. The sidebar does not render in the offscreen capture (its material draws only on screen), but the content does.
+- Running the app with a disc in a real drive reads that disc's TOC and MCN at once. Ask before a test that needs a drive.
 
 ## Engine conventions (CDRipKit)
 

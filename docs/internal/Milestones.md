@@ -13,6 +13,7 @@ The first goal is a usable CLI: rip a whole disc to tagged FLAC or ALAC files wi
 | 7 | CTDB verification and repair | Done |
 | 8 | Rip log, CUE sheets, gaps and indexes | Mostly done |
 | 9 | Multi-disc releases and style recipes | Not started |
+| 10 | The app | In progress |
 
 ## 1. Engine basics — done
 
@@ -338,6 +339,28 @@ What the engine gives the app, after the 0.2 review: `DiscRip.run()` and `RipRep
 - All the technical detail is there to open on demand: everything the rip report has, for the disc (TOC, ISRCs, MCN, CD-Text, pregaps, flags) and for the rip.
 - A live graph as each track rips: error levels by position, suspect sectors, and which were recovered or not. The engine sends progress events (sectors read, suspect, resolved, unresolved) as it works, so the graph, the progress display, and the rip report all come from the same events.
 - Advice when tracks are not verified after the rip and the CTDB repair: the next step that is most likely to help. With the rip's suspects kept, a second rip in the same drive pools with the first (`--pool`); a rip in another drive helps more, because each drive reads damage differently (*Dick's Picks Vol. 2*, *Hundred Year Hall*); cleaning the disc helps when the errors are in many places. A disc that is not in AccurateRip or CTDB cannot be verified, only shown to read the same each time.
+
+### Built on 2026-10-21 (first version)
+
+The app links `CDRipKit` and `CDRipDarwin`, and follows the design in `docs/asset_import/CDRip — Mac GUI.pdf` (main window, results, Settings › Drives, the icon set v2) as an inspiration.
+
+- Main window: drives in the sidebar (DiskArbitration tells the app when a disc comes or goes; the app also lists the drives again when it becomes active) and the earlier rips in the rips folder. A disc is read when it appears (TOC, MCN, CD-Text), looked up in MusicBrainz, and shown with its cover: album header with chips (Disc ID match, fuzzy match, several releases, not found), a release picker for the other releases, the track table with checkboxes, and a status bar.
+- Rip: the toolbar's Rip Disc/Rip Selected, Secure or Fast (one read), Stop (cancels the task; the tracks done so far stay), Eject, Look Up Metadata. `RipRun` turns `DiscRipEvent` and `RipEvent` into each track's state (reading pass with a sheen progress bar, re-read rounds, finished with its AccurateRip and CTDB result), a whole-rip progress bar with speed and time left, an error strip of the current track's flagged, unreadable, and suspect sectors, and a log sheet with the same lines as `cdrip rip`. After the rip, a banner with the headline and chips (AccurateRip n/n, CTDB verified or repaired, sectors re-read, samples repaired, unresolved), Show in Finder, and the log. Encoding, ejecting, and the rips folder follow the settings.
+- Results: an earlier rip shows its headline, chips, track table, and the Markdown report.
+- Settings: General (folders, format, encode after rip, keep rip, eject, artwork), Drives (profiles with the offset in use and its source, a manual offset, the rips that confirmed it, the cache), Ripping (C2), Encoding (AAC and MP3 options), Naming (templates and style). Every change saves to the shared `settings.json`.
+- The app icon from the design's icon set v2 (B2 at 128 px and up, C2 below), and the 1024 px images in the asset catalog.
+- For work without hardware: `-demo 1` (a simulated drive with a 2:47 disc, offline, with a release from the test fixtures and a few damaged sectors) and `-screenshotPath`. The whole rip flow was checked this way, and the disc reading and MusicBrainz lookup with *Reckoning* in the HL-DT-ST GUC0N. No rip on hardware from the app yet.
+
+Not yet, roughly in order:
+
+- A rip of a real disc from the app, and the stop, eject, and encode paths on hardware.
+- The live graph of a track (error levels by position) beyond the error strip; the Dock tile's progress.
+- Editing metadata, and discs that MusicBrainz does not know (names from CD-Text or typed in), which the engine does not support yet.
+- Repair from the app (`RipRepair`, pooling rips from several drives), and the advice after an unverified rip.
+- A queue of several drives at once; a rip's folder claim is already per disc.
+- Settings › Drives: run the drive test and measure the cache from the app (`DriveReport`, `CacheProbe`); vendor aliases for AccurateRip's list.
+- An Icon Composer `.icon` for macOS 26 and later, the About window, Help, Developer ID signing and notarization.
+- The sidebar's recent rips cover only the rips folder, not the reports in the library's album folders.
 
 ## Hardware for testing
 

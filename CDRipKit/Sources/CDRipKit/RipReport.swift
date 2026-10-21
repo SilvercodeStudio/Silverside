@@ -219,3 +219,8 @@ extension RipReport {
         return tracksVerified && hiddenTrack?.readsAgree != false
     }
 }
+
+extension RipReport.Track: Identifiable {
+    /// The track number: a report has each track once.
+    public var id: Int { number }
+}

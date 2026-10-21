@@ -18,6 +18,19 @@ public struct OpticalDrive: Equatable, Sendable {
     /// Serial numbers are left out.
     public var registry: [String: String] = [:]
 
+    public init(
+        vendor: String, product: String, revision: String, interconnect: String, location: String,
+        discBSDName: String? = nil, registry: [String: String] = [:]
+    ) {
+        self.vendor = vendor
+        self.product = product
+        self.revision = revision
+        self.interconnect = interconnect
+        self.location = location
+        self.discBSDName = discBSDName
+        self.registry = registry
+    }
+
     /// All CD, DVD, and Blu-ray drives, in registry order.
     public static func all() -> [OpticalDrive] {
         var iterator: io_iterator_t = 0

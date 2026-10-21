@@ -1,3 +1,5 @@
+import Foundation
+
 /// A drive that reads from a disc image in memory, for tests without hardware.
 public final class SimulatedDrive: CDDrive {
     public let toc: TOC
@@ -25,6 +27,10 @@ public final class SimulatedDrive: CDDrive {
 
     /// Physical sectors that return wrong data with no error, the same on every read.
     public var corruptSectors: Set<Int> = []
+
+    /// The drive's speed over 1× (75 sectors per second). Nil reads at once; a speed makes
+    /// each read take the time a drive would, for the app's progress display.
+    public var readSpeed: Double?
 
     /// Physical sectors that return wrong data and the true data in turn, starting
     /// with wrong data, on each read that does not come from the cache. A damaged
@@ -111,6 +117,9 @@ public final class SimulatedDrive: CDDrive {
     /// Flags the bytes that it returns wrong, if `reportsC2` is true.
     public func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8]) {
         let sectors = lba..<(lba + count)
+        if let readSpeed, readSpeed > 0 {
+            Thread.sleep(forTimeInterval: Double(count) / (readSpeed * Double(CDDA.sectorsPerSecond)))
+        }
         if !canOverread {
             if lba < 0 { throw DriveError.sectorOutOfRange(lba: lba) }
             if sectors.upperBound > toc.leadOutLBA { throw DriveError.sectorOutOfRange(lba: toc.leadOutLBA) }

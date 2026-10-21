@@ -6,13 +6,31 @@
 	objectVersion = 90;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		000000000000000000000201 /* CDRipKit in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000211 /* CDRipKit */; };
+		000000000000000000000202 /* CDRipDarwin in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000212 /* CDRipDarwin */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* CDRip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CDRip.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		000000000000000000000011 /* Exceptions for "CDRip" folder in "CDRip" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 000000000000000100000000 /* CDRip */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		000000000000000000000010 /* CDRip */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				000000000000000000000011 /* Exceptions for "CDRip" folder in "CDRip" target */,
+			);
 			path = CDRip;
 			sourceTree = "<group>";
 		};
@@ -22,6 +40,8 @@
 		000000000000000130000000 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				000000000000000000000201 /* CDRipKit in Frameworks */,
+				000000000000000000000202 /* CDRipDarwin in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -60,7 +80,11 @@
 				000000000000000000000010 /* CDRip */,
 			);
 			name = CDRip;
-			productName = MyApp;
+			packageProductDependencies = (
+				000000000000000000000211 /* CDRipKit */,
+				000000000000000000000212 /* CDRipDarwin */,
+			);
+			productName = CDRip;
 			productReference = 000000000000000000000120 /* CDRip.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -88,6 +112,9 @@
 			);
 			mainGroup = 000000000000000000000001;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				000000000000000000000210 /* XCLocalSwiftPackageReference "../CDRipKit" */,
+			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
 			projectDirPath = "";
@@ -250,13 +277,16 @@
 		000000000000000111000000 /* Debug configuration for PBXNativeTarget "CDRip" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_FILE = CDRip/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -289,13 +319,16 @@
 		000000000000000112000000 /* Release configuration for PBXNativeTarget "CDRip" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_FILE = CDRip/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -345,6 +378,24 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		000000000000000000000210 /* XCLocalSwiftPackageReference "../CDRipKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../CDRipKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		000000000000000000000211 /* CDRipKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CDRipKit;
+		};
+		000000000000000000000212 /* CDRipDarwin */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CDRipDarwin;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 000000000000000000000000 /* Project object */;
 }

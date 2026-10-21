@@ -5,6 +5,7 @@ import SwiftUI
 /// The main window: drives and earlier rips in the sidebar, and the selected disc or rip.
 struct MainWindow: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         @Bindable var model = model
@@ -29,6 +30,8 @@ struct MainWindow: View {
         .onAppear {
             #if DEBUG
                 DebugScreenshot.scheduleIfRequested()
+                // `-openWindow help` opens a window at launch, for screenshots.
+                if let id = UserDefaults.standard.string(forKey: "openWindow"), !id.isEmpty { openWindow(id: id) }
             #endif
         }
     }

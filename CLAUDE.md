@@ -16,7 +16,8 @@ Open `CDRip.xcworkspace` in Xcode: it has the app project and the `CDRipKit` pac
 
 ```sh
 make cli ARGS='info'   # build and run the cdrip CLI (drives, info, cdtext, rip, repair, metadata, encode, config, eject; -d diskN)
-make install PREFIX=~/.local   # universal release build of cdrip, and shell completions
+make install PREFIX=~/.local   # universal release build of cdrip, and shell completions (make install-cli-local does the same)
+make install-app               # universal release build of the app, copied to ~/Applications (APP_DIR=... for another folder)
 swift build --package-path CDRipKit -c release --product cdrip   # CTDB repair needs the release build to be fast
 make test        # swift test --package-path CDRipKit
 make hwtest OFFSET=103   # hardware tests; needs a disc in AccurateRip (DEVICE=diskN to choose; OFFSET checks the drive's offset)
@@ -55,7 +56,8 @@ Layout of `App/CDRip/`:
 
 - `CDRipApp.swift`: the scenes (main window, Settings) and `AppCommands.swift` (the Disc menu).
 - `Model/`: `AppModel` (settings, drives, earlier rips, the DiskArbitration watcher), `DriveSlot` (one drive: its disc and its rip), `DiscInfo` (TOC, MCN, CD-Text, the MusicBrainz release and cover), `RipRun` (one rip: the engine's events turned into track states, progress, and a log), `RecentRip` (earlier rips from `disc.json`), and the debug-only `DemoDisc` and `DebugScreenshot`.
-- `Views/`: `MainWindow` (split view, sidebar, empty states), `DriveDetailView` (toolbar, album header, status bar, result banner), `TrackTable`, `ResultsView` (an earlier rip, with its Markdown report), `Sheets` (release picker, rip log), `SettingsView` (General, Drives, Ripping, Encoding, Naming), `Theme` (the sheen gradient, chips, progress bar, error strip, cover).
+- `Views/`: `MainWindow` (split view, sidebar, empty states), `DriveDetailView` (toolbar, album header, status bar, result banner), `TrackTable`, `ResultsView` (an earlier rip, with its Markdown report), `Sheets` (release picker, rip log), `SettingsView` (General, Drives, Ripping, Encoding, Naming), `HelpWindow` (the Help window, a small Markdown-to-HTML converter, a WebKit view), `Theme` (the sheen gradient, chips, progress bar, error strip, cover).
+- `Help/`: the help pages as Markdown (`NN Title.md`; the number orders them, the first heading names them). The synchronized folder bundles them as resources.
 
 Rules for the app:
 
@@ -66,6 +68,7 @@ Rules for the app:
 - The app icon is `Assets.xcassets/AppIcon.appiconset` (the design's "icon set v2": B2 at 128 px and up, C2 below). `AppIconLarge` and `AppIconOverhead` are the 1024 px images for use in views. An Icon Composer `.icon` for macOS 26+ is still to do.
 - Debug launch arguments take a value (`UserDefaults` reads `-key value` pairs, so a bare `-flag` swallows the next argument): `-demo 1` adds a simulated drive with a short disc (release from the engine's *Cornell 5/8/77* fixture, offline); `-demoOnly 1` leaves the real drives alone; `-demoRip 1` starts the demo's rip; `-screenshotPath /path.png -screenshotDelay 6` renders the windows to PNG and quits. `make run ARGS='-demo 1 -demoOnly 1'` runs it. The sidebar does not render in the offscreen capture (its material draws only on screen), but the content does.
 - Running the app with a disc in a real drive reads that disc's TOC and MCN at once. Ask before a test that needs a drive.
+- `-openWindow help` opens the Help window at launch. WebKit draws out of process, so a screenshot shows the Help window's title but not its page; check the converter's HTML instead.
 
 ## Engine conventions (CDRipKit)
 

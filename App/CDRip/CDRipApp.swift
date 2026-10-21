@@ -16,5 +16,10 @@ import SwiftUI
             SettingsView()
                 .environment(model)
         }
+
+        Window("CDRip Help", id: "help") {
+            HelpView()
+        }
+        .defaultSize(width: 900, height: 620)
     }
 }

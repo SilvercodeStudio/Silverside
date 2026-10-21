@@ -22,6 +22,12 @@ struct DiscInfo {
         var cdText: CDText?
     }
 
+    /// Where the names on show come from.
+    enum Source: Hashable {
+        case musicBrainz
+        case cdText
+    }
+
     enum LookupState: Equatable {
         case notLookedUp
         case lookingUp
@@ -52,17 +58,35 @@ struct DiscInfo {
         self.cdText = cdText
     }
 
+    /// True if the disc has CD-Text with at least one name.
+    var hasCDText: Bool {
+        guard let cdText else { return false }
+        return !cdText.titles.isEmpty || !cdText.performers.isEmpty
+    }
+
     /// The album's title: from MusicBrainz, else CD-Text, else the disc ID.
-    var title: String {
-        release?.title ?? cdText?.titles[0] ?? "Audio CD"
+    var title: String { title(from: .musicBrainz) }
+
+    var artist: String { artist(from: .musicBrainz) }
+
+    func title(from source: Source) -> String {
+        if source == .cdText, let title = cdText?.titles[0] { return title }
+        return release?.title ?? cdText?.titles[0] ?? "Audio CD"
     }
 
-    var artist: String {
-        release?.artist ?? cdText?.performers[0] ?? ""
+    func artist(from source: Source) -> String {
+        if source == .cdText, let performer = cdText?.performers[0] { return performer }
+        return release?.artist ?? cdText?.performers[0] ?? ""
     }
 
+    /// The release's year, or the year of the release group's first release when this
+    /// edition has no date in MusicBrainz (`yearIsFirstRelease`).
     var year: String? {
-        release?.date.map { String($0.prefix(4)) }
+        (release?.date ?? release?.releaseGroup?.firstReleaseDate).map { String($0.prefix(4)) }
+    }
+
+    var yearIsFirstRelease: Bool {
+        release?.date == nil && release?.releaseGroup?.firstReleaseDate != nil
     }
 
     var discLabel: String? {
@@ -82,11 +106,18 @@ struct DiscInfo {
     var totalSectors: Int { toc.audioTracks.reduce(0) { $0 + toc.sectorRange(of: $1).count } }
 
     /// The tracks, named from the release or CD-Text.
-    var tracks: [Track] {
+    var tracks: [Track] { tracks(from: .musicBrainz) }
+
+    func tracks(from source: Source) -> [Track] {
         toc.audioTracks.enumerated().map { index, track in
             var row = Track(
                 number: track.number, title: "Track \(track.number)", sectors: toc.sectorRange(of: track).count)
-            if let medium, index < medium.tracks.count {
+            if source == .cdText, let title = cdText?.titles[track.number] {
+                row.title = title
+                if let performer = cdText?.performers[track.number], performer != cdText?.performers[0] {
+                    row.artist = performer
+                }
+            } else if let medium, index < medium.tracks.count {
                 let named = medium.tracks[index]
                 row.title = named.title
                 if let release, named.artist != release.artist { row.artist = named.artist }

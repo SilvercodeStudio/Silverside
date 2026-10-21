@@ -7,7 +7,7 @@ struct TrackTable: View {
     @State private var tableSelection: Set<Int> = []
 
     var body: some View {
-        Table(slot.disc?.tracks ?? [], selection: $tableSelection) {
+        Table(slot.disc?.tracks(from: slot.namesSource) ?? [], selection: $tableSelection) {
             TableColumn("") { track in
                 Toggle("", isOn: binding(for: track.number))
                     .labelsHidden()

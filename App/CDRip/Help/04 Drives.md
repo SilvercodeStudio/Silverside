@@ -1,0 +1,19 @@
+# Drives
+
+Any drive that macOS sees as a CD drive works: USB, Thunderbolt, or a SATA drive in an enclosure. CDRip lists them in the sidebar with the disc in each.
+
+## Settings › Drives
+
+Each drive CDRip has seen has a profile:
+
+- **Read offset.** The offset in use and where it came from: set by hand, confirmed by rips, or from AccurateRip's list of drives. A drive with no offset gets it from the list at its first online rip. An offset set by hand overrides the others; use it only when you know the drive's offset, for example from another ripper.
+- **Rips.** The discs that checked the drive against AccurateRip, and the offsets they matched. Two or more discs that agree confirm the offset.
+- **Cache.** Drives keep the last read in memory and return it again for a re-read, which would hide errors. Before a re-read, CDRip reads elsewhere on the disc to empty the cache. The command line can measure the cache (`cdrip drives --measure-cache`); an unmeasured drive gets a large, safe flush.
+
+## Ejecting
+
+Eject in the toolbar unmounts and ejects the disc, as the Finder does. With "Eject the disc if every track is verified" on in Settings, a disc leaves the drive by itself after a good rip, and a disc with errors stays for another try.
+
+## Several drives
+
+Each drive rips on its own, so several discs can rip at once. Each rip claims its folder, so two rips of the same disc never write to one folder.

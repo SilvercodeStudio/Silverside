@@ -3,9 +3,14 @@ import SwiftUI
 
 struct AppCommands: Commands {
     let model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {}
+        CommandGroup(replacing: .help) {
+            Button("CDRip Help") { openWindow(id: "help") }
+                .keyboardShortcut("?", modifiers: .command)
+        }
         CommandMenu("Disc") {
             Button("Rip") { if let slot = model.selectedDrive { model.startRip(slot) } }
                 .keyboardShortcut("r", modifiers: .command)

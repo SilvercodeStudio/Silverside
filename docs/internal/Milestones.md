@@ -349,6 +349,7 @@ The app links `CDRipKit` and `CDRipDarwin`, and follows the design in `docs/asse
 - Results: an earlier rip shows its headline, chips, track table, and the Markdown report.
 - Settings: General (folders, format, encode after rip, keep rip, eject, artwork), Drives (profiles with the offset in use and its source, a manual offset, the rips that confirmed it, the cache), Ripping (C2), Encoding (AAC and MP3 options), Naming (templates and style). Every change saves to the shared `settings.json`.
 - The app icon from the design's icon set v2 (B2 at 128 px and up, C2 below), and the 1024 px images in the asset catalog.
+- The header switches between the MusicBrainz names and the disc's CD-Text when the disc has both; the tags still come from MusicBrainz. A help window (Help menu, Cmd-?) with six Markdown pages: welcome, ripping, verification, drives, settings, troubleshooting. `make install-app` copies a universal release build to `~/Applications`; `make install-cli-local` installs `cdrip` under `~/.local`.
 - For work without hardware: `-demo 1` (a simulated drive with a 2:47 disc, offline, with a release from the test fixtures and a few damaged sectors) and `-screenshotPath`. The whole rip flow was checked this way, and the disc reading and MusicBrainz lookup with *Reckoning* in the HL-DT-ST GUC0N. No rip on hardware from the app yet.
 
 Not yet, roughly in order:
@@ -359,7 +360,8 @@ Not yet, roughly in order:
 - Repair from the app (`RipRepair`, pooling rips from several drives), and the advice after an unverified rip.
 - A queue of several drives at once; a rip's folder claim is already per disc.
 - Settings › Drives: run the drive test and measure the cache from the app (`DriveReport`, `CacheProbe`); vendor aliases for AccurateRip's list.
-- An Icon Composer `.icon` for macOS 26 and later, the About window, Help, Developer ID signing and notarization.
+- An Icon Composer `.icon` for macOS 26 and later, the About window, Developer ID signing and notarization.
+- Checked with a real disc so far: reading and the MusicBrainz lookup (*Reckoning*, *Clarity of Cal*), and the disc-inserted-after-launch path, which failed at first because the drive slot kept the device name from launch.
 - The sidebar's recent rips cover only the rips folder, not the reports in the library's album folders.
 
 ## Hardware for testing

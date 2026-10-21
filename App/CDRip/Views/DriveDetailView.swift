@@ -50,7 +50,7 @@ struct DriveDetailView: View {
             Button {
                 model.eject(slot)
             } label: {
-                Label("Eject", systemImage: "eject")
+                Label("Eject", systemImage: "eject").padding(.horizontal, 4)
             }
             .help("Eject the disc")
             .disabled(slot.device.discBSDName == nil || isRipping)
@@ -58,19 +58,24 @@ struct DriveDetailView: View {
             Button {
                 slot.lookUpAgain()
             } label: {
-                Label("Look Up Metadata", systemImage: "magnifyingglass")
+                Label("Look Up Metadata", systemImage: "magnifyingglass").padding(.horizontal, 4)
             }
             .help("Ask MusicBrainz about this disc again")
             .disabled(slot.disc == nil || isRipping)
-
+        }
+        ToolbarItem(placement: .primaryAction) {
             Picker("Mode", selection: $slot.fastMode) {
                 Text("Secure").tag(false)
                 Text("Fast (one read)").tag(true)
             }
-            .help("Secure re-reads tracks that do not match AccurateRip. Fast reads each track once.")
+            .help(
+                "Secure re-reads tracks that do not match AccurateRip. Fast reads each track once. Normally, secure is recommended."
+            )
             .disabled(isRipping)
-
-            if isRipping {
+            .padding(.leading, 10)
+        }
+        if isRipping {
+            ToolbarItem(placement: .primaryAction) {
                 Button {
                     model.stopRip(slot)
                 } label: {
@@ -78,11 +83,13 @@ struct DriveDetailView: View {
                 }
                 .help("Stop after the read under way. The tracks ripped so far stay.")
             }
-
+        }
+        ToolbarItem(placement: .primaryAction) {
             Button {
                 model.startRip(slot)
             } label: {
                 Label(ripTitle, systemImage: "arrow.down.circle.fill").labelStyle(.titleAndIcon)
+                    .padding(.trailing, 6)
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut("r", modifiers: .command)
@@ -105,7 +112,7 @@ struct DiscView: View {
     var body: some View {
         VStack(spacing: 0) {
             if let disc = slot.disc {
-                AlbumHeader(disc: disc, releasePickerShown: $releasePickerShown)
+                AlbumHeader(disc: disc, releasePickerShown: $releasePickerShown, source: $slot.namesSource)
                     .padding(16)
             }
             if let rip = slot.rip, !rip.isRunning, let report = rip.report {
@@ -127,17 +134,25 @@ struct AlbumHeader: View {
     @Environment(AppModel.self) private var model
     var disc: DiscInfo
     @Binding var releasePickerShown: Bool
+    @Binding var source: DiscInfo.Source
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             CoverView(data: disc.cover)
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 16) {
-                    Field(label: "Album", value: disc.title)
-                    Field(label: "Year", value: disc.year ?? "—").frame(width: 120)
+                    Field(label: "Album", value: disc.title(from: source))
+                    Field(label: disc.yearIsFirstRelease ? "First Release" : "Year", value: disc.year ?? "—")
+                        .frame(width: 120)
+                        .help(
+                            disc.yearIsFirstRelease
+                                ? "This edition has no date in MusicBrainz. The year is the release group's first release."
+                                : "")
                 }
                 HStack(alignment: .top, spacing: 16) {
-                    Field(label: "Album Artist", value: disc.artist.isEmpty ? "—" : disc.artist)
+                    Field(
+                        label: "Album Artist",
+                        value: disc.artist(from: source).isEmpty ? "—" : disc.artist(from: source))
                     Field(
                         label: "Tracks",
                         value: "\(disc.toc.audioTracks.count) · \(Format.duration(sectors: disc.totalSectors))"
@@ -145,6 +160,20 @@ struct AlbumHeader: View {
                     .frame(width: 120)
                 }
                 HStack(spacing: 8) {
+                    if disc.hasCDText, disc.release != nil {
+                        Picker("Names", selection: $source) {
+                            Text("MusicBrainz").tag(DiscInfo.Source.musicBrainz)
+                            Text("CD-Text").tag(DiscInfo.Source.cdText)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                        .help(
+                            "Show the names from MusicBrainz, or the CD-Text on the disc. The rip's tags come from MusicBrainz."
+                        )
+                    } else if disc.hasCDText {
+                        Chip(text: "CD-Text on the disc", systemImage: "text.quote")
+                    }
                     lookupChip
                     if let label = disc.labelText { Chip(text: label) }
                     if let discLabel = disc.discLabel { Chip(text: discLabel) }

@@ -22,9 +22,11 @@ final class DriveSlot: Identifiable {
     var selectedTracks: Set<Int> = []
     /// Read each track once, with no re-reads.
     var fastMode = false
+    /// Which names the header and the table show.
+    var namesSource = DiscInfo.Source.musicBrainz
     var rip: RipRun?
-    /// Makes the engine's drive for a rip, on the rip's thread.
-    let makeDrive: @Sendable () throws -> any CDDrive
+    /// A drive of the slot's own, such as the demo's simulated drive.
+    private let customDrive: (@Sendable () throws -> any CDDrive)?
     let isDemo: Bool
     /// The disc the `disc` was read from, so a swapped disc is read again.
     @ObservationIgnored private var discBSDName: String?
@@ -34,8 +36,7 @@ final class DriveSlot: Identifiable {
         self.id = id
         self.device = device
         isDemo = false
-        let name = device.discBSDName ?? ""
-        makeDrive = { try IOKitDrive(bsdName: name) }
+        customDrive = nil
     }
 
     /// A slot with a drive of its own, such as the demo's simulated drive.
@@ -43,7 +44,7 @@ final class DriveSlot: Identifiable {
         self.id = id
         self.device = device
         self.disc = disc
-        self.makeDrive = makeDrive
+        customDrive = makeDrive
         isDemo = true
         discState = .ready
         selectedTracks = Set(disc.toc.audioTracks.map(\.number))
@@ -51,6 +52,13 @@ final class DriveSlot: Identifiable {
 
     static func baseID(of device: OpticalDrive) -> String {
         "\(device.vendor) \(device.product) \(device.revision) \(device.interconnect) \(device.location)"
+    }
+
+    /// Makes the engine's drive for the disc in the drive now, on the caller's thread.
+    var makeDrive: @Sendable () throws -> any CDDrive {
+        if let customDrive { return customDrive }
+        let name = device.discBSDName ?? ""
+        return { try IOKitDrive(bsdName: name) }
     }
 
     var name: String { "\(device.vendor) \(device.product)".trimmingCharacters(in: .whitespaces) }

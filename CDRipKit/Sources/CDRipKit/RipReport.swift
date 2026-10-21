@@ -63,6 +63,9 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var repairedSamples: Int
         /// The track's ISRC, from the Q subchannel.
         public var isrc: String?
+        /// The track's pregap (index 00 to index 01) in sectors, from the Q subchannel. For track 1,
+        /// the part of the disc before it. The pregap of a later track is at the end of the track before it.
+        public var pregapSectors: Int?
 
         public init(
             number: Int, file: String, startLBA: Int, sectors: Int, preEmphasis: Bool,
@@ -149,6 +152,28 @@ public struct RipReport: Codable, Equatable, Sendable {
     public var ctdb: CTDBResult
     /// The disc's MCN (barcode), from the Q subchannel.
     public var mcn: String?
+    /// The disc's CD-Text, if it has any.
+    public var cdText: CDText?
+    /// Audio before track 1 (hidden track one audio), if the disc has it.
+    public var hiddenTrack: HiddenTrack?
+
+    public struct HiddenTrack: Codable, Equatable, Sendable {
+        public var file: String
+        public var sectors: Int
+        /// The largest sample value, as a 16-bit magnitude.
+        public var peak: Int
+        /// True if two reads agreed. AccurateRip and CTDB do not cover this audio.
+        public var readsAgree: Bool
+        public var reads: Int
+
+        public init(file: String, sectors: Int, peak: Int, readsAgree: Bool, reads: Int) {
+            self.file = file
+            self.sectors = sectors
+            self.peak = peak
+            self.readsAgree = readsAgree
+            self.reads = reads
+        }
+    }
     /// The MusicBrainz release that the rip used for its names, with every disc's tracks.
     public var release: MusicBrainzRelease?
 

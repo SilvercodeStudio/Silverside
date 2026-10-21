@@ -61,6 +61,36 @@ struct NameTemplateTests {
                 == "03 Scarlet Begonias - Fire on the Mountain")
     }
 
+    /// A compilation names each track's artist; an album by one artist does not.
+    @Test func namesTheArtistOfEachTrackOnACompilation() {
+        var release = makeRelease(discs: 1)
+        release.artistCredit = [.init(name: "Various Artists")]
+        release.media[0].tracks[0].artistCredit = [
+            .init(name: "Mark Cromer", joinPhrase: " & "), .init(name: "Jeff Briggs"),
+        ]
+        let values = NameTemplate.values(release: release, medium: release.media[0], track: release.media[0].tracks[0])
+        #expect(
+            NameTemplate.libraryTrack.name(values)
+                == "03 Mark Cromer & Jeff Briggs - Scarlet Begonias - Fire on the Mountain")
+        let single = makeRelease(discs: 1)
+        #expect(
+            NameTemplate.libraryTrack.name(
+                NameTemplate.values(release: single, medium: single.media[0], track: single.media[0].tracks[0]))
+                == "03 Scarlet Begonias - Fire on the Mountain")
+    }
+
+    /// A guest on a band's own album (*Clarity of Cal*): the band is in the credit, so the name has no artist.
+    @Test func leavesOutTheArtistOfAGuestTrack() {
+        var guest = makeRelease(discs: 1)
+        guest.artistCredit = [.init(name: "Vulfpeck", artistID: "v")]
+        guest.media[0].tracks[0].artistCredit = [
+            .init(name: "Vulfpeck", joinPhrase: " & ", artistID: "v"), .init(name: "Joey Dosik", artistID: "j"),
+        ]
+        let values = NameTemplate.values(release: guest, medium: guest.media[0], track: guest.media[0].tracks[0])
+        #expect(NameTemplate.libraryTrack.name(values) == "03 Scarlet Begonias - Fire on the Mountain")
+        #expect(values["trackArtist"] == "Vulfpeck & Joey Dosik")
+    }
+
     @Test func makesValuesSafe() {
         #expect(NameTemplate.safeComponent("  ..Hidden: a/b\tc. ") == "Hidden- a-b c")
         #expect(NameTemplate.safeComponent(String(repeating: "é", count: 200)).utf8.count <= 240)

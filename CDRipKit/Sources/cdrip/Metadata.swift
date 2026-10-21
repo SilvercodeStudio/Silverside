@@ -157,7 +157,10 @@ enum ReleaseChoice {
             return
         }
         let title = medium.title.map { ": \($0)" } ?? ""
-        print("Disc \(medium.position) of \(release.media.count)\(title)")
+        let seconds = toc.audioTracks.reduce(0) { $0 + toc.sectorRange(of: $1).count } / CDDA.sectorsPerSecond
+        print(
+            "Disc \(medium.position) of \(release.media.count)\(title), "
+                + String(format: "%d:%02d", seconds / 60, seconds % 60))
         for track in medium.tracks {
             let length = track.length.map { String(format: "%2d:%02d", $0 / 60_000, $0 / 1000 % 60) } ?? "     "
             let artist = track.artist == release.artist ? "" : "\(track.artist) - "

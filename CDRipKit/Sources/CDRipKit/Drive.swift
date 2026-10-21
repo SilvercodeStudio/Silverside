@@ -13,6 +13,9 @@ public protocol CDDrive {
     /// could not correct the data. The flags are a hint only: on damaged discs they
     /// change from read to read.
     func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8])
+
+    /// Reads the disc's CD-Text, as the drive gives it (see `CDText`). Nil if the disc has none.
+    func readCDText() throws -> [UInt8]?
 }
 
 extension CDDrive {

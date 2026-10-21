@@ -8,7 +8,9 @@ import Foundation
 /// subfolder. Values are made safe for file names first, so a `/` in a title does not.
 ///
 /// Fields: `artist` (also `albumArtist`), `album`, `date`, `year`, `disc`, `discs`,
-/// `discTitle`, `track` (two digits), `title`, `trackArtist`. `{disc:2}` pads a number
+/// `discTitle`, `track` (two digits), `title`, `trackArtist`, and `otherArtist`: the track's
+/// artist only when the album's artist is not among the track's credits, as on a compilation
+/// (a guest on a band's own album does not count). `{disc:2}` pads a number
 /// with zeros to two digits.
 public struct NameTemplate: Equatable, Sendable {
     public var pattern: String
@@ -26,8 +28,9 @@ public struct NameTemplate: Equatable, Sendable {
     /// The user's library: an artist folder with one folder for each album, with every disc in it.
     public static let libraryFolder = NameTemplate("{albumArtist}/{album}")
 
-    /// Tracks in the user's library: "18-03 Walkin' Blues" (disc 18, track 3), or "03 Deal" for one disc.
-    public static let libraryTrack = NameTemplate("[{disc:2}-]{track} {title}")
+    /// Tracks in the user's library: "18-03 Walkin' Blues" (disc 18, track 3), or "03 Deal" for one
+    /// disc. On a compilation, the track's artist comes first: "02 Mark Cromer - Asoka".
+    public static let libraryTrack = NameTemplate("[{disc:2}-]{track} [{otherArtist} - ]{title}")
 
     /// The fields for one track, or for a disc when `track` is nil.
     public static func values(
@@ -49,8 +52,18 @@ public struct NameTemplate: Equatable, Sendable {
             values["track"] = String(format: "%02d", track.position)
             values["title"] = track.title
             values["trackArtist"] = track.artist
+            if !Self.credits(track.artistCredit, include: release.artistCredit) { values["otherArtist"] = track.artist }
         }
         return values
+    }
+
+    /// True if every artist of `album` is among `track`'s credits: by MusicBrainz artist ID, or by name.
+    static func credits(
+        _ track: [MusicBrainzRelease.Credit], include album: [MusicBrainzRelease.Credit]
+    ) -> Bool {
+        album.allSatisfy { artist in
+            track.contains { $0.artistID.map { $0 == artist.artistID } ?? ($0.name == artist.name) }
+        }
     }
 
     /// The name for the values, with each part made safe for the file system.

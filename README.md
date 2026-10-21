@@ -41,8 +41,12 @@ to be installed. All other supported formats are handled natively.
 - **Encoding** to FLAC, Apple Lossless (ALAC), AAC, AIFF, WAV, or MP3, with
   tags and the cover embedded. Each file is checked after encoding: a
   lossless file must decode to exactly the ripped audio.
-- **A rip report** (`disc.json`) with every track's result, the TOC, the disc
-  IDs, the ISRCs and MCN, the drive and its offset, and the release.
+- **A rip report**, as Markdown to read and as JSON (`disc.json`), with every
+  track's result, the TOC, pregaps, the disc IDs, the ISRCs, MCN, and CD-Text,
+  the drive and its offset, and the release; and a **CUE sheet**, from which
+  the disc can be burned again exactly.
+- **Hidden track one audio** (a song before track 1) is ripped and encoded as
+  track 0.
 
 ### Ripping marginal CDs
 
@@ -115,8 +119,9 @@ cdrip encode -i "<rip folder>"       # encode a rip later
 
 | Command | What it does |
 |---|---|
-| `drives` | Lists the drives, their discs, read offsets, and caches. Sets a drive's offset by hand (`--set-offset`), or measures its cache (`--measure-cache`). |
-| `info` | Shows a disc's TOC, pregaps, ISRCs, MCN, disc IDs, and whether AccurateRip and CTDB have it. |
+| `drives` | Lists the drives, their discs, read offsets, and caches. Sets a drive's offset by hand (`--set-offset`), measures its cache (`--measure-cache`), or writes a drive report for a bug report (`--report`). |
+| `info` | Shows a disc's TOC, pregaps, ISRCs, MCN, CD-Text, disc IDs, and whether AccurateRip and CTDB have it. |
+| `cdtext` | Shows every field of a disc's CD-Text, or its raw packs (`--packs`). |
 | `rip` | Rips a disc to WAV files: verifies, re-reads, repairs, looks up the release, saves the cover, and can encode. |
 | `repair` | Repairs rips again with CTDB: pools rips from several drives, and re-reads with the disc in a drive. |
 | `metadata` | Shows the MusicBrainz releases for a disc, and keeps the chosen one in a rip's `disc.json`. |
@@ -134,10 +139,13 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
 - `cover.jpg`, and `Artwork/` with `--artwork all`
 - `Track NN.suspects`, for tracks that are not verified: the other values that
   reads gave for their suspect samples, for a later `cdrip repair`
+- `Rip Report.md`, and `Track 00.wav` if the disc has hidden track one audio
 
 `cdrip encode` (or `rip --encode`) puts the files in the library as
 `Artist/Album/18-03 Title.flac` (disc 18, track 3), with every disc of a
-release in one album folder, and a full-size `cover.jpg`. For live shows whose
+release in one album folder, a full-size `cover.jpg`, and a CUE sheet for each
+disc. On a compilation, each track's artist comes first:
+`02 Mark Cromer & Jeff Briggs - Asoka`. For live shows whose
 MusicBrainz disc titles have a date and venue, titles end with
 `[Venue, M-D-YY]`. It encodes only tracks that AccurateRip or CTDB verified,
 unless you give `--allow-unverified`. The rip's report goes into the album
@@ -171,7 +179,7 @@ cdrip config unset aac.mode                     # back to the default
 | `rips` | `~/Music/CDRip Rips` | where rips go |
 | `format` | `flac` | `flac`, `alac`, `aac`, `aiff`, `wav`, or `mp3` |
 | `folderTemplate` | `{albumArtist}/{album}` | the album folder, in the library |
-| `trackTemplate` | `[{disc:2}-]{track} {title}` | each file's name |
+| `trackTemplate` | `[{disc:2}-]{track} [{otherArtist} - ]{title}` | each file's name |
 | `ripFolderTemplate` | `{artist} - {album}[ (Disc {disc})]` | each rip's folder |
 | `liveShowStyle` | `true` | `[Venue, M-D-YY]` for live shows |
 | `plainPunctuation` | `false` | ASCII quotes and dashes in names and tags |
@@ -183,7 +191,8 @@ cdrip config unset aac.mode                     # back to the default
 | `mp3.mode`, `mp3.vbrQuality`, `mp3.bitRate`, `mp3.extraArguments` | `vbr`, `0`, `320`, `[]` | LAME |
 
 In templates, fields are in braces: `artist`, `albumArtist`, `album`, `date`,
-`year`, `disc`, `discs`, `discTitle`, `track`, `title`, `trackArtist`.
+`year`, `disc`, `discs`, `discTitle`, `track`, `title`, `trackArtist`, and
+`otherArtist` (the track's artist, only when it is not the album's).
 `{disc:2}` pads a number to two digits. A part in brackets is kept only when
 all its fields have values, so `[{disc:2}-]` is left out for a single disc, and
 `/` makes a subfolder.
@@ -216,5 +225,12 @@ make build         # the Mac app
 Open `CDRip.xcworkspace` in Xcode for the app, the engine, and the CLI.
 
 ## TODO
+
+- **Discs that MusicBrainz does not know at all.** CDRip finds a release by
+  its disc ID, or by a fuzzy match of the track lengths. When MusicBrainz has
+  neither, the disc can be ripped and verified, but not yet encoded: there is
+  no way yet to give the names and tags by hand. Until then, add the release
+  to MusicBrainz (the `rip` output links to the page), then run
+  `cdrip metadata -i <rip folder>`.
 
 See [docs/Milestones.md](docs/Milestones.md) for the plan.

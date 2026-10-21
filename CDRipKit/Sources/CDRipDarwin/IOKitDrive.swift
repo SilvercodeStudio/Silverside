@@ -58,6 +58,25 @@ public final class IOKitDrive: CDDrive {
         return bytes
     }
 
+    /// Reads the CD-Text with the TOC ioctl in its CD-Text format. A disc with no CD-Text
+    /// gives an error or no packs: either way, nil.
+    public func readCDText() throws -> [UInt8]? {
+        var bytes = [UInt8](repeating: 0, count: 65_535)
+        var request = dk_cd_read_toc_t()
+        request.format = UInt8(kCDTOCFormatTEXT)
+        do {
+            try bytes.withUnsafeMutableBytes { buffer in
+                request.buffer = buffer.baseAddress
+                request.bufferLength = UInt16(buffer.count)
+                try control(Ioctl.readTOC, &request)
+            }
+        } catch {
+            return nil
+        }
+        let length = Int(request.bufferLength)
+        return length > 4 ? Array(bytes.prefix(length)) : nil
+    }
+
     public func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8]) {
         guard lba >= 0 else { throw DriveError.sectorOutOfRange(lba: lba) }
         let sectorSize = CDDA.bytesPerSector + CDDA.errorFlagBytesPerSector

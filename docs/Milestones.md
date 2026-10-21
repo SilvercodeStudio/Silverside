@@ -85,6 +85,7 @@ Still to do:
 
 - Tags for AIFF (an `ID3 ` chunk) and WAV (a `LIST`/`INFO` chunk, or an `id3 ` chunk). Today they have none.
 - Optional external encoder hook (stdin to a command-line tool), for other formats.
+- Names and tags by hand, for a disc that MusicBrainz does not know at all (no disc ID and no fuzzy match): today such a rip cannot be encoded. For example, a template `disc.json` release to fill in, or options for the artist, album, and titles.
 
 ## 5. Metadata
 
@@ -242,15 +243,24 @@ Done:
 - The log names each failing column, when 8 or fewer fail, with its number of suspect words.
 - Tracks that match another pressing are found for the first and last tracks too: the audio past the disc's edges is silence, which AccurateRip skips.
 
-## 8. Rip log, CUE sheets, gaps and indexes
+## 8. Rip log, CUE sheets, gaps and indexes — mostly done
 
-- A rip report in the destination folder, from both the CLI and the app, in more than one format: JSON (for tools, and for encoding and tagging later) and Markdown (to read). It records:
-  - the disc: TOC, pregaps and index points, MCN, ISRCs, CD-Text, pre-emphasis and copy flags, disc IDs (MusicBrainz, freedb, AccurateRip, CTDB), and the MusicBrainz release
-  - the drive: model, firmware, connection, offset and its source
-  - the rip: for each track, the secure status, the reads and re-reads, the suspect and repaired samples, the AccurateRip and CTDB results, and the timing
-- Done for `cdrip rip`: `RipReport`, written as `disc.json` with the WAV files: TOC, disc IDs, drive and offset, and each track's AccurateRip and CTDB result, reads, suspect and unresolved sectors, and repaired samples. Still to do: `cdrip repair` writes it too, and it gets ISRCs, MCN, pregaps, timing, and the Markdown form. Then a verified rip can be encoded and tagged later, with no new rip. (Until then, `~/Music/CDRip Archive/` was filled by a script, `.build/probe/archive.py`.)
-- Accurate CUE sheets, per-track output or image plus CUE.
-- Pregaps, index points, hidden track one audio, pre-emphasis, ISRC, and CD-Text.
+Done:
+
+- The rip report: `disc.json` (`RipReport`, for programs) and `Rip Report.md` (for people: the result, a table of tracks with titles, lengths, pregaps, AccurateRip and CTDB results, reads, suspect, C2, and unreadable sectors, repairs, and ISRCs, then problems, the disc's IDs and CD-Text, and the drive). `rip` writes both in the rip's folder; encoding puts both in the album folder, as `Rip Report (Disc N).json` and `.md`.
+- `rip` records each track's pregap (`PregapFinder`, a binary search of the Q subchannel), ISRC, and the MCN.
+- `CueSheet`: one file for each track, each pregap at the end of the file before it (the "noncompliant" layout, which rebuilds the disc exactly), with `CATALOG` (the MCN), titles, performers, ISRCs, `FLAGS DCP`/`PRE`, and `REM` lines (date, freedb ID, disc number). Track 1's gap of silence is a `PREGAP`. Encoding writes `<album> (Disc N).cue` in the album folder, with the tags' titles and file names.
+- CD-Text (`CDText`, `CDDrive.readCDText`): the TOC ioctl in its CD-Text format, 18-byte packs checked by their CRC-16, block 0 in ISO 8859-1, TAB for "the same as the track before". `info` shows it, and the rip report keeps it. Checked on *Clarity of Cal* (HL-DT-ST): the album, the performer, and all 11 titles ("A1 Big Dipper" ... "B6 This Is Not The Song I Wrote").
+- Hidden track one audio (`HiddenTrackRip`): the part of the disc before track 1 is read; if its peak is 32 or more (out of 32,767), it is audio, ripped as `Track 00.wav` until two reads agree (AccurateRip and CTDB do not cover it), and encoded as track 0 ("01-00 Hidden Track", or MusicBrainz's pregap track's title). The CUE sheet puts track 1's `INDEX 00` in its file. A gap of silence (32 or 33 sectors on six archived discs) stays a `PREGAP`. Tested with the simulator; no disc with a hidden track has been ripped yet.
+- Tags for AIFF (an `ID3 ` chunk) and WAV (an `id3 ` chunk, and a `LIST`/`INFO` chunk), with the audio unchanged.
+- Compilations: the library's track name is `[{disc:2}-]{track} [{otherArtist} - ]{title}`, where `otherArtist` is the track's artist only when it is not the album's ("02 Mark Cromer & Jeff Briggs - Asoka").
+- Pre-emphasis: the rip report and the CUE sheet (`FLAGS PRE`) mark it, and encoding warns. No common tag in FLAC, MP4, or ID3 marks it, and CDRip does not change the audio: de-emphasis would change samples that AccurateRip verified.
+
+Still to do:
+
+- A disc with a real hidden track, on hardware.
+- CD-Text as names for a disc that MusicBrainz does not know (see milestone 4), and CD-Text in other blocks and character sets (MS-JIS).
+- De-emphasis as an option, with the encoded file checked against the de-emphasized samples.
 
 ## CLI finish — done
 
@@ -261,9 +271,12 @@ Done:
 - Rips go in `~/Music/CDRip Rips` (the `rips` setting), not the current folder: not in the library (music apps would import the WAV files), nor a temporary folder (a rip is kept for repairs). After `rip --encode`, a rip that is all verified and encoded is deleted, file by file (only the files the rip wrote, then the folder if it is empty); `--keep-rip` keeps it. Encoding puts the rip report in the album folder as `Rip Report (Disc N).json`. The status line shows the track's elapsed time and the time left in the read.
 - Help for every command, with examples; `cdrip --version`; `make release` (Apple silicon and Intel), `make install` and `make uninstall` with `PREFIX`, and shell completions for zsh, bash, and fish; the README.
 
+- A drive report (`cdrip drives -d diskN --report`, later the app's bug-report tool): `DriveReport` holds the drive's registry (device and protocol characteristics, such as "CD Features", "Retry Count" 20, and "Read Time Out Duration" 30000 ms, and the USB bridge's names and IDs, with no serial numbers), the Mac and macOS, CDRip's profile of the drive, the disc's TOC and disc ID (no audio), and 7 quick checks with the disc in it: the TOC, a read of 2,600 sectors (speed), C2 flags, the Q subchannel, a read past the lead-out, CD-Text, and the cache size. About 10 seconds. From it, a drive that the developer does not have can be modeled in `SimulatedDrive`. Checked on the MATSHITA: its enclosure's bridge is an Initio chip (USB 0x13FD:0x0840).
+- `cdrip cdtext -d diskN`: every field of the disc's CD-Text (titles, performers, songwriters, composers, arrangers, messages, disc ID, genre, UPC and ISRCs, the blocks' languages and character set), with `--packs` for the raw packs and `--json`.
+
 Still to do:
 
-- A drive report (`cdrip drives -d diskN --report`, later the app's bug-report tool): the drive's identity and connection, its profile, and quick checks with the disc in it (C2, Q subchannel, overread, read speed, how it fails on an unreadable sector), with no audio, so that problems with drives the user does not have can be modeled in `SimulatedDrive`.
+- A check in the drive report of how the drive fails on an unreadable sector (it needs a damaged disc).
 - Developer ID signing and notarization, with the user's new developer ID.
 
 ## 9. Multi-disc releases and style recipes

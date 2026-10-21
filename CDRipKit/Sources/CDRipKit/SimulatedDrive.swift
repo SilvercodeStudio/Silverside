@@ -44,6 +44,11 @@ public final class SimulatedDrive: CDDrive {
     private var activeSlip: (shift: Int, from: Int)?
     private var lastRequestEnd: Int?
 
+    /// The disc's CD-Text, as a drive gives it: a 4-byte header, then 18-byte packs.
+    public var cdText: [UInt8]?
+
+    public func readCDText() throws -> [UInt8]? { cdText }
+
     /// If true, C2 reads flag the bytes of corrupt and unstable sectors that read wrong.
     public var reportsC2 = false
 

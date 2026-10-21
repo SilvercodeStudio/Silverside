@@ -13,6 +13,10 @@ public struct OpticalDrive: Equatable, Sendable {
     public var location: String
     /// The BSD name of the CD in the drive, such as "disk14". Nil if there is no CD.
     public var discBSDName: String?
+    /// What the registry says of the drive, as text: its device and protocol characteristics
+    /// (such as "CD Features" and "Retry Count"), and the USB bridge's names, IDs, and speed.
+    /// Serial numbers are left out.
+    public var registry: [String: String] = [:]
 
     /// All CD, DVD, and Blu-ray drives, in registry order.
     public static func all() -> [OpticalDrive] {
@@ -36,7 +40,7 @@ public struct OpticalDrive: Equatable, Sendable {
                     revision: device["Product Revision Level"] as? String ?? "",
                     interconnect: protocolInfo["Physical Interconnect"] as? String ?? "",
                     location: protocolInfo["Physical Interconnect Location"] as? String ?? "",
-                    discBSDName: cdBSDName(below: service)))
+                    discBSDName: cdBSDName(below: service), registry: registry(device, protocolInfo, service)))
         }
         return drives
     }
@@ -56,6 +60,37 @@ public struct OpticalDrive: Equatable, Sendable {
             }
         }
         return nil
+    }
+
+    private static func registry(_ device: [String: Any], _ protocolInfo: [String: Any], _ service: io_service_t)
+        -> [String: String]
+    {
+        var result = [String: String]()
+        for (key, value) in device { result["Device: \(key)"] = "\(value)" }
+        for (key, value) in protocolInfo { result["Protocol: \(key)"] = "\(value)" }
+        // The USB device above the drive: the enclosure's bridge.
+        var entry = service
+        IOObjectRetain(entry)
+        for _ in 0..<12 {
+            var parent: io_registry_entry_t = 0
+            guard IORegistryEntryGetParentEntry(entry, kIOServicePlane, &parent) == KERN_SUCCESS else { break }
+            IOObjectRelease(entry)
+            entry = parent
+            if property(entry, "idVendor") != nil {
+                for key in [
+                    "USB Vendor Name", "USB Product Name", "idVendor", "idProduct", "bcdDevice", "Device Speed",
+                ] {
+                    guard let value = property(entry, key) else { continue }
+                    // USB IDs are looked up in hex, as 0x13FD.
+                    let isID = key.hasPrefix("id") || key == "bcdDevice"
+                    result["USB bridge: \(key)"] =
+                        isID ? (value as? Int).map { String(format: "0x%04X", $0) } ?? "\(value)" : "\(value)"
+                }
+                break
+            }
+        }
+        IOObjectRelease(entry)
+        return result
     }
 
     private static func property(_ entry: io_registry_entry_t, _ key: String) -> Any? {

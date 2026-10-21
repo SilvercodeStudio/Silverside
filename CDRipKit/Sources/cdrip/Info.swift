@@ -48,6 +48,11 @@ struct Info: AsyncParsableCommand {
         print(String(format: "Lead  %10d  ", toc.leadOutLBA) + Self.duration(toc.leadOutLBA))
         print()
         print("MCN (barcode)        \(try SubchannelCodes.mcn(in: toc, drive: drive) ?? "-")")
+        if let text = (try? drive.readCDText()).flatMap({ $0.flatMap(CDText.init(bytes:)) }) {
+            Self.printCDText(text, toc: toc)
+        } else {
+            print("CD-Text              -")
+        }
         print("MusicBrainz disc ID  \(toc.musicBrainzDiscID)")
         print("freedb disc ID       \(String(format: "%08x", toc.freedbDiscID))")
         guard !toc.audioTracks.isEmpty else {
@@ -93,5 +98,18 @@ struct Info: AsyncParsableCommand {
     static func duration(_ sectors: Int) -> String {
         let seconds = sectors / CDDA.sectorsPerSecond
         return String(format: "%02d:%02d:%02d", seconds / 60, seconds % 60, sectors % CDDA.sectorsPerSecond)
+    }
+
+    static func printCDText(_ text: CDText, toc: TOC) {
+        let disc = [text.performers[0], text.titles[0]].compactMap { $0 }.joined(separator: " - ")
+        print("CD-Text              " + (disc.isEmpty ? "(tracks only)" : disc))
+        for track in toc.audioTracks {
+            let parts = [text.performers[track.number], text.titles[track.number]].compactMap { $0 }
+            if !parts.isEmpty {
+                print(String(format: "  %2d  ", track.number) + parts.joined(separator: " - "))
+            }
+        }
+        if let code = text.codes[0] { print("  UPC/EAN  \(code)") }
+        if let genre = text.genre { print("  Genre    \(genre)") }
     }
 }

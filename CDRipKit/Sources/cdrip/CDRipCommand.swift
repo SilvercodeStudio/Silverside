@@ -20,7 +20,9 @@ struct CDRipCommand: AsyncParsableCommand {
               cdrip config                      the settings (library, format, names)
             """,
         version: CDRipVersion.string,
-        subcommands: [Drives.self, Info.self, Rip.self, Repair.self, Metadata.self, Encode.self, Config.self]
+        subcommands: [
+            Drives.self, Info.self, CDTextCommand.self, Rip.self, Repair.self, Metadata.self, Encode.self, Config.self,
+        ]
     )
 
     /// Prints each line at once, also when the output goes to a file or a pipe,

@@ -173,6 +173,22 @@ struct Rip: AsyncParsableCommand {
         var reports = [RipReport.Track]()
         // Each track's audio, with its suspect samples, for CTDB.
         var trackAudio = [TrackAudio]()
+        // Audio before track 1, if the disc hides a track there; silence is not kept.
+        var hiddenTrack: RipReport.HiddenTrack?
+        if selected.first == toc.audioTracks.first,
+            let hidden = try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: profile.cacheFlushSectors)
+        {
+            try WAVFile.write(hidden.samples, to: folder.appending(path: "Track 00.wav"))
+            let sectors = toc.audioTracks[0].startLBA
+            hiddenTrack = .init(
+                file: "Track 00.wav", sectors: sectors, peak: hidden.peak, readsAgree: hidden.readsAgree,
+                reads: hidden.reads)
+            print(
+                String(format: "Track  0  %@         hidden track before track 1: ", Info.duration(sectors))
+                    + (hidden.readsAgree
+                        ? "\(hidden.reads) reads agree (AccurateRip and CTDB do not cover it)"
+                        : "NOT verified: \(hidden.reads) reads all differ"))
+        }
         let progress = ProgressLine()
         secure.progress = progress.show
         for (position, track) in selected.enumerated() {
@@ -187,6 +203,7 @@ struct Rip: AsyncParsableCommand {
                 number: track.number, file: file, startLBA: track.startLBA, sectors: toc.sectorRange(of: track).count,
                 preEmphasis: track.hasPreEmphasis, accurateRip: .notInDatabase)
             report.isrc = try? SubchannelCodes.isrc(of: track, in: toc, drive: drive)
+            report.pregapSectors = try? PregapFinder.pregap(of: track, in: toc, drive: drive)
             if singlePass {
                 let rip = try ripper.rip(track, progress: progress.show)
                 (samples, result) = (rip.samples, Self.describe(rip))
@@ -337,8 +354,11 @@ struct Rip: AsyncParsableCommand {
             offsetSource: source)
         var report = RipReport(drive: driveReport, secure: !singlePass, toc: toc, tracks: reports, ctdb: ctdb)
         report.mcn = mcn
+        report.hiddenTrack = hiddenTrack
+        report.cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         report.release = chosen
         try report.write(to: folder.appending(path: "disc.json"))
+        try Data(report.markdown.utf8).write(to: folder.appending(path: "Rip Report.md"))
         if let chosen {
             do {
                 try await ReleaseChoice.saveArtwork(artwork ?? settings.artwork, of: chosen, in: folder)

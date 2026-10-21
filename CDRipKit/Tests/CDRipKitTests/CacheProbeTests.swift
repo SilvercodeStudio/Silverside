@@ -28,3 +28,18 @@ struct CacheProbeTests {
         #expect(try probe.cacheSectors(toc: toc) == nil)
     }
 }
+
+struct DriveReportTests {
+    @Test func checksASimulatedDrive() throws {
+        let (toc, samples) = try makeDisc(trackSectors: [12_000, 14_000])
+        let drive = SimulatedDrive(toc: toc, samples: samples)
+        drive.reportsC2 = true
+        var report = DriveReport(registry: ["Device: Vendor Name": "SIM"], profile: nil)
+        report.check(drive)
+        #expect(report.checks.map(\.name).count == 7)
+        #expect(report.checks.allSatisfy { $0.passed })
+        #expect(report.disc["musicBrainzDiscID"] == toc.musicBrainzDiscID)
+        #expect(report.checks.first { $0.name.hasPrefix("Read past") }?.result.hasPrefix("does not read") == true)
+        #expect(!report.mac.isEmpty)
+    }
+}

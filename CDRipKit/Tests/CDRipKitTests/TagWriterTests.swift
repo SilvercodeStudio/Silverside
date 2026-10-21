@@ -103,6 +103,46 @@ struct TagWriterTests {
     }
 }
 
+struct ChunkTagsTests {
+    /// Tags in AIFF and WAV must not change the audio, and a second write replaces them.
+    @Test(arguments: [AudioFormat.aiff, .wav])
+    func tagsAIFFAndWAV(format: AudioFormat) throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "CDRipTests-\(UUID()).\(format.fileExtension)")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let samples = Array(AudioEncoderTests.samples.prefix(44_101))
+        if format == .aiff {
+            try AudioEncoder.encode(samples, format: .aiff, to: url)
+        } else {
+            try WAVFile.write(samples, to: url)
+        }
+        let cover = try EmbeddedCover(try makeJPEG(width: 300, height: 300))
+        for title in ["First", "Second"] {
+            let comments: [(key: String, value: String)] = [
+                ("TITLE", title), ("ARTIST", "Grateful Dead"), ("TRACKNUMBER", "3"),
+            ]
+            if format == .aiff {
+                try ChunkTags.writeAIFF(comments, cover: cover, to: url)
+            } else {
+                try ChunkTags.writeWAV(comments, cover: cover, to: url)
+            }
+        }
+        #expect(try AudioEncoder.decode(url) == samples)
+        if format == .wav { #expect(try WAVFile.read(url) == samples) }
+        let bytes = [UInt8](try Data(contentsOf: url))
+        let id3 = format == .aiff ? "ID3 " : "id3 "
+        // One tag chunk, with the second title only.
+        #expect(bytes.indices.filter { bytes[$0...].starts(with: Array(id3.utf8)) }.count == 1)
+        #expect(
+            String(decoding: bytes, as: UTF8.self).contains("Second")
+                && !String(decoding: bytes, as: UTF8.self).contains("First"))
+        // The form's size is the file's size less 8.
+        let size =
+            format == .aiff
+            ? (4..<8).reduce(0) { $0 << 8 | Int(bytes[$1]) } : (4..<8).reversed().reduce(0) { $0 << 8 | Int(bytes[$1]) }
+        #expect(size == bytes.count - 8)
+    }
+}
+
 struct MP3Tests {
     @Test(.enabled(if: MP3Encoder.lame() != nil, "lame is not installed"))
     func encodesThroughLameAndTagsTheFile() throws {

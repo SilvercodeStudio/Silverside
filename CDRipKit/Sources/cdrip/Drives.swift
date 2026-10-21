@@ -1,6 +1,7 @@
 import ArgumentParser
 import CDRipDarwin
 import CDRipKit
+import Foundation
 
 struct Drives: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -26,6 +27,16 @@ struct Drives: ParsableCommand {
 
     @Flag(
         help: """
+            Write a report on the drive that holds the disc, for a bug report: the drive, its connection, what \
+            CDRip knows of it, and quick checks with the disc (about 20 seconds; use a clean disc). It has no audio.
+            """)
+    var report = false
+
+    @Option(name: .shortAndLong, help: "The report's file. Default: \"CDRip Drive Report <drive>.json\" here.")
+    var output: String?
+
+    @Flag(
+        help: """
             Measure the cache of the drive that holds the disc, from read times, and keep it in the drive's profile. \
             Use a clean disc: the test reads near its start and its end.
             """)
@@ -38,6 +49,28 @@ struct Drives: ParsableCommand {
     func run() throws {
         let drives = OpticalDrive.all()
         var store = try DriveProfileStore()
+        if report {
+            let bsdName = try deviceOptions.bsdName()
+            guard let drive = drives.first(where: { $0.discBSDName == bsdName }) else {
+                throw CommandError("Cannot find the drive that holds \(bsdName).")
+            }
+            var report = DriveReport(
+                registry: drive.registry,
+                profile: store.profiles["\(drive.vendor) \(drive.product) \(drive.revision)"])
+            print("Checking \(drive.vendor) \(drive.product) with the disc in it...")
+            report.check(try IOKitDrive(bsdName: bsdName)) { print("  \($0)") }
+            for check in report.checks {
+                print(
+                    String(
+                        format: "  %@ %@: %@ (%d ms)", check.passed ? "ok  " : "FAIL", check.name, check.result,
+                        check.milliseconds))
+            }
+            let name = NameTemplate.safeComponent("CDRip Drive Report \(drive.vendor) \(drive.product)") + ".json"
+            let url = URL(filePath: output ?? name)
+            try report.write(to: url)
+            print("Report: \(url.path)")
+            return
+        }
         if setOffset != nil || clearOffset || measureCache {
             let bsdName = try deviceOptions.bsdName()
             guard let drive = drives.first(where: { $0.discBSDName == bsdName }) else {

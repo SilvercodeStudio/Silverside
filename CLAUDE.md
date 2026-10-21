@@ -94,5 +94,6 @@ The full list is in `docs/Milestones.md`. Keep both up to date.
 7. Done: CTDB verification and repair (`CTDB`, `ReedSolomonDecoder`, `DiscRepairer`), in `cdrip rip` and in `cdrip repair` (from ripped WAV files, pooling several rips, with re-reads when the disc is in a drive). `rip` writes a `RipReport` as `disc.json`.
 5. Mostly done: metadata (`MusicBrainzClient`, `ReleaseRanking`, `CoverArtClient`, `NameTemplate`, `cdrip metadata`; `rip` names its folder from the release).
 4. Mostly done: encoding (`AudioEncoder`, `FLACTags`, `MP4Tags`, `ID3Tags`, `DiscEncoder`, `cdrip encode`, `cdrip rip --encode`), checked by decoding each file again.
+8. Mostly done: the Markdown rip report, CUE sheets, pregaps, CD-Text (`cdrip cdtext`), hidden track one audio, AIFF and WAV tags; and the drive report (`cdrip drives --report`).
 
-The CLI is finished for daily use: settings (`cdrip config`), encoder options, progress, help, `make install`. Next: a drive report, then milestone 8 (Markdown report, CUE sheets), then the app.
+The CLI is finished for daily use. Next: the app.

@@ -41,6 +41,8 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
         /// The disc IDs that MusicBrainz knows for this medium: one for each pressing whose TOC differs.
         public var discIDs: [String]
         public var tracks: [Track]
+        /// The track before track 1 (hidden track one audio), if MusicBrainz lists one: position 0.
+        public var hiddenTrack: Track?
     }
 
     public struct Label: Codable, Equatable, Sendable {
@@ -276,6 +278,7 @@ private struct RawRelease: Decodable {
         var title: String?
         var discs: [Disc]?
         var tracks: [Track]?
+        var pregap: Track?
     }
     struct CoverArt: Decodable {
         var front: Bool?
@@ -305,6 +308,12 @@ private struct RawRelease: Decodable {
 
     var release: MusicBrainzRelease {
         let releaseCredit = (artistCredit ?? []).map(\.credit)
+        func track(_ track: Medium.Track) -> MusicBrainzRelease.Track {
+            .init(
+                position: track.position, number: track.number ?? String(track.position), title: track.title,
+                length: track.length, artistCredit: track.artistCredit.map { $0.map(\.credit) } ?? releaseCredit,
+                recordingID: track.recording?.id)
+        }
         return MusicBrainzRelease(
             id: id, title: title, artistCredit: releaseCredit, date: date.flatMap { $0.isEmpty ? nil : $0 },
             country: country, status: status, barcode: barcode,
@@ -319,14 +328,7 @@ private struct RawRelease: Decodable {
                 .init(
                     position: medium.position, format: medium.format,
                     title: medium.title.flatMap { $0.isEmpty ? nil : $0 }, discIDs: (medium.discs ?? []).map(\.id),
-                    tracks: (medium.tracks ?? []).map { track in
-                        .init(
-                            position: track.position, number: track.number ?? String(track.position),
-                            title: track.title,
-                            length: track.length,
-                            artistCredit: track.artistCredit.map { $0.map(\.credit) } ?? releaseCredit,
-                            recordingID: track.recording?.id)
-                    })
+                    tracks: (medium.tracks ?? []).map(track), hiddenTrack: medium.pregap.map(track))
             },
             hasFrontCover: coverArtArchive?.front ?? false, artworkCount: coverArtArchive?.count)
     }

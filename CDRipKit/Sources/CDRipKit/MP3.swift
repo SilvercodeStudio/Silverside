@@ -25,30 +25,60 @@ public enum MP3Encoder {
         let errors = Pipe()
         process.standardInput = input
         process.standardError = errors
+        // A write to a pipe whose reader has exited must fail, not end this whole process
+        // with SIGPIPE (which Foundation's Pipe does not turn off).
+        _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+        // Take what lame says as it says it, so that a full pipe can never block it.
+        let said = CollectedOutput()
+        errors.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.isEmpty { handle.readabilityHandler = nil } else { said.append(data) }
+        }
         try process.run()
         // Write the PCM in parts of 1 second, as little-endian bytes.
         let writer = input.fileHandleForWriting
-        for start in stride(from: 0, to: samples.count, by: 44_100) {
-            let part = samples[start..<min(start + 44_100, samples.count)]
-            try writer.write(contentsOf: part.withUnsafeBytes { Data($0) })
+        do {
+            for start in stride(from: 0, to: samples.count, by: 44_100) {
+                let part = samples[start..<min(start + 44_100, samples.count)]
+                try writer.write(contentsOf: part.withUnsafeBytes { Data($0) })
+            }
+            try writer.close()
+        } catch {
+            // lame stopped reading, so it has exited or is about to: its message says why.
+            try? writer.close()
         }
-        try writer.close()
         process.waitUntilExit()
+        errors.fileHandleForReading.readabilityHandler = nil
+        said.append(errors.fileHandleForReading.readDataToEndOfFile())
         guard process.terminationStatus == 0 else {
-            let message = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-            throw MP3Error.lameFailed(status: process.terminationStatus, message: message)
+            throw MP3Error.lameFailed(
+                status: process.terminationStatus, message: String(decoding: said.data, as: UTF8.self))
         }
+    }
+
+    /// What a program wrote to a pipe, collected from any thread.
+    private final class CollectedOutput: @unchecked Sendable {
+        private let lock = NSLock()
+        private var collected = Data()
+
+        func append(_ more: Data) {
+            lock.withLock { collected.append(more) }
+        }
+
+        var data: Data { lock.withLock { collected } }
     }
 }
 
 public enum MP3Error: Error, Equatable, CustomStringConvertible {
     case lameNotFound
     case lameFailed(status: Int32, message: String)
+    case malformedID3Tag(URL)
 
     public var description: String {
         switch self {
         case .lameNotFound: "MP3 needs the lame program (for example: brew install lame)."
         case .lameFailed(let status, let message): "lame failed with status \(status): \(message)"
+        case .malformedID3Tag(let url): "\(url.path) has an ID3 tag that CDRip cannot read."
         }
     }
 }
@@ -138,11 +168,13 @@ public enum ID3Tags {
         guard data.count >= 10, data.prefix(3) == Data("ID3".utf8) else { return [:] }
         let bytes = [UInt8](data)
         let end = 10 + bytes[6...9].reduce(0) { $0 << 7 | Int($1 & 0x7F) }
+        guard end <= bytes.count else { throw MP3Error.malformedID3Tag(url) }
         var frames = [String: String]()
         var index = 10
         while index + 10 <= end, bytes[index] != 0 {
             let id = String(decoding: bytes[index..<(index + 4)], as: UTF8.self)
             let size = bytes[(index + 4)..<(index + 8)].reduce(0) { $0 << 7 | Int($1 & 0x7F) }
+            guard index + 10 + size <= end else { throw MP3Error.malformedID3Tag(url) }
             let body = bytes[(index + 10)..<(index + 10 + size)]
             if id.hasPrefix("T"), let encoding = body.first, encoding == 3 {
                 frames[id] = String(decoding: body.dropFirst(), as: UTF8.self)

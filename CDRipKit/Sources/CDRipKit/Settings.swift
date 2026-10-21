@@ -95,12 +95,16 @@ public struct Settings: Codable, Equatable, Sendable {
     }
 
     /// The settings with one key changed, such as "format" or "aac.bitRate". The value is
-    /// JSON if it reads as JSON (a number, true, false), and text if not. Throws if the
-    /// key does not exist, or the value has the wrong type.
+    /// JSON if it reads as JSON (a number, true, false, a list) and the setting takes that,
+    /// else text: a folder named "2024" is text. Throws if the key does not exist, or the
+    /// value has the wrong type.
     public func setting(_ key: String, to value: String) throws -> Settings {
-        let parsed: Any =
-            (try? JSONSerialization.jsonObject(with: Data(value.utf8), options: .fragmentsAllowed)) ?? value
-        return try changing(key) { $0 = parsed }
+        if let parsed = try? JSONSerialization.jsonObject(with: Data(value.utf8), options: .fragmentsAllowed),
+            let settings = try? changing(key, { $0 = parsed })
+        {
+            return settings
+        }
+        return try changing(key) { $0 = value }
     }
 
     /// The settings with one key back to its default.

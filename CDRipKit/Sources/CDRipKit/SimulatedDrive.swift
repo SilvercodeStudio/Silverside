@@ -15,6 +15,14 @@ public final class SimulatedDrive: CDDrive {
     /// Sectors that fail with a read error when asked for.
     public var unreadableSectors: Set<Int> = []
 
+    /// Sectors that fail with a read error the given number of times more, then read. A
+    /// request of several sectors that holds one counts as one time for the first such sector.
+    public var failingReads: [Int: Int] = [:]
+
+    /// If true, a read of a sector outside the disc's audio areas (a data track, or the
+    /// session gap of an enhanced CD) fails with a read error, as on real drives.
+    public var failsOutsideAudio = true
+
     /// Physical sectors that return wrong data with no error, the same on every read.
     public var corruptSectors: Set<Int> = []
 
@@ -109,6 +117,17 @@ public final class SimulatedDrive: CDDrive {
         }
         if let bad = sectors.first(where: unreadableSectors.contains) {
             throw DriveError.readFailed(lba: bad)
+        }
+        if let bad = sectors.first(where: { (failingReads[$0] ?? 0) > 0 }) {
+            failingReads[bad]! -= 1
+            throw DriveError.readFailed(lba: bad)
+        }
+        if failsOutsideAudio {
+            let areas = toc.audioAreas
+            let onDisc = sectors.clamped(to: 0..<toc.leadOutLBA)
+            if let bad = onDisc.first(where: { lba in !areas.contains { $0.contains(lba) } }) {
+                throw DriveError.readFailed(lba: bad)
+            }
         }
         if cacheSectors > 0, sectors.allSatisfy({ cache[$0] != nil }) {
             lastReadWasCached = true

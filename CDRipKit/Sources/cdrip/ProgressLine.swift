@@ -22,7 +22,9 @@ final class ProgressLine {
         guard isShown else { return }
         let text: String
         switch event {
-        case .reading(_, let number, let read, let sectors, let c2, let unreadable):
+        case .reading(_, let number, let progress):
+            let (read, sectors) = (progress.sectorsRead, progress.sectors)
+            let (c2, unreadable) = (progress.flaggedSectors, progress.unreadableSectors)
             if pass?.number != number { pass = (number, []) }
             pass?.points.append((.now, read))
             pass?.points.removeAll { ContinuousClock.now - $0.time > .seconds(5) }
@@ -50,8 +52,8 @@ final class ProgressLine {
         case .rereading(_, let round, let maximum, let suspects, let versions):
             pass = nil
             text =
-                "re-reading \(suspects) suspect sectors  ·  round \(round) of \(maximum)  ·  \(versions) versions  ·  "
-                + Self.minutes(ContinuousClock.now - trackStart)
+                "re-reading \(suspects.count) suspect sectors  ·  round \(round) of \(maximum)  ·  \(versions) versions"
+                + "  ·  " + Self.minutes(ContinuousClock.now - trackStart)
         }
         draw("Track \(label)  " + text)
     }

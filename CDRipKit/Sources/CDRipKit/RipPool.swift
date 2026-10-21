@@ -3,19 +3,41 @@ import Foundation
 /// Earlier rips of a disc, for pooling (`rip --pool` and `repair`): their WAV files, and the
 /// other values of suspect samples that they kept.
 public enum RipPool {
-    /// The versions of a track in `folders` ("Track NN.wav" with the track's length),
-    /// and the alternatives that each folder kept for it ("Track NN.suspects").
+    /// A track file in a pooled folder that could not be used, and why.
+    public struct SkippedFile: Equatable, Sendable {
+        public var url: URL
+        public var reason: String
+    }
+
+    /// The versions of a track in `folders` ("Track NN.wav" with the track's length), the
+    /// alternatives that each folder kept for it ("Track NN.suspects"), and the track files
+    /// that are there but could not be used: not CD audio, or not the track's length.
     public static func versions(
         of track: TOC.Track, toc: TOC, in folders: [URL]
-    ) -> (versions: [[UInt32]], alternatives: [[Int: [UInt32]]]) {
+    ) -> (versions: [[UInt32]], alternatives: [[Int: [UInt32]]], skipped: [SkippedFile]) {
         let length = toc.sectorRange(of: track).count * CDDA.samplesPerSector
         let name = String(format: "Track %02d.wav", track.number)
-        let versions = folders.compactMap { try? WAVFile.read($0.appending(path: name)) }.filter { $0.count == length }
+        var versions = [[UInt32]]()
+        var skipped = [SkippedFile]()
+        for folder in folders {
+            let url = folder.appending(path: name)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            do {
+                let samples = try WAVFile.read(url)
+                if samples.count == length {
+                    versions.append(samples)
+                } else {
+                    skipped.append(.init(url: url, reason: "it has \(samples.count) samples, and the track \(length)"))
+                }
+            } catch {
+                skipped.append(.init(url: url, reason: String(describing: error)))
+            }
+        }
         let alternatives = folders.compactMap {
             try? TrackAudio.readAlternatives(
                 from: $0.appending(path: TrackAudio.alternativesFileName(track: track.number)))
         }
-        return (versions, alternatives)
+        return (versions, alternatives, skipped)
     }
 
     /// How a version of an audio track compares with AccurateRip.

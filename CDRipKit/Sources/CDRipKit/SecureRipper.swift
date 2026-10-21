@@ -11,8 +11,10 @@ public struct SecureTrackRip: Sendable {
         /// Two reads agree, but the track does not match AccurateRip. Either this
         /// pressing is not in the database, or the disc has an error that reads the same every time.
         case consistentButNotAccurate
-        /// Some sectors read differently each time, and no choice of their data
-        /// matches AccurateRip. `unresolvedSectors` lists them.
+        /// Some sectors read differently each time, or could not be read, and no choice of
+        /// their data matches AccurateRip. `unresolvedSectors` lists them. Also when every
+        /// read after the first lost its place, so no read confirms the first: then
+        /// `unresolvedSectors` is empty and `shiftedReads` is not.
         case suspect
     }
 
@@ -47,7 +49,8 @@ public struct SecureTrackRip: Sendable {
     /// The samples, by index in the track, from sectors that the first read could not read.
     public var unreadableSamples: [Int] = []
 
-    /// The sectors, counted from the track's start, that the first read could not read.
+    /// The sectors, counted from the track's start, that the first read could not read. A
+    /// later read may have read some of them; `versionCounts` is 0 for one that none could.
     public var unreadableSectors: [Int] {
         Array(Set(unreadableSamples.map { $0 / CDDA.samplesPerSector })).sorted()
     }
@@ -119,11 +122,19 @@ public struct SecureRipper {
                 .map(\.element)
         }
 
-        /// True if the most frequent version leads every other by `margin` reads.
+        /// True if the most frequent version came back at least twice, and leads every other
+        /// by `margin` reads. A sector with no version (one that no read could read) is not decided.
         func isDecided(by margin: Int) -> Bool {
             let sorted = counts.values.sorted(by: >)
-            return sorted.count == 1 || sorted[0] - sorted[1] >= margin
+            guard let first = sorted.first, first >= 2 else { return false }
+            return sorted.count == 1 || first - sorted[1] >= margin
         }
+    }
+
+    /// True if two reads differ in no run of `minimumRun` sectors or more, so neither is
+    /// shifted against the other. `differing` lists the sectors where they differ.
+    static func agree(differing: [Int], minimumRun: Int) -> Bool {
+        (DiscRepairer.ranges(of: differing).map(\.count).max() ?? 0) < minimumRun
     }
 
     /// Hears about each read and round of re-reads, for a progress display.
@@ -155,16 +166,21 @@ public struct SecureRipper {
         // The read that others are compared with: the first, unless it lost its place.
         var base = first.samples
         var versions = [Int: Versions]()
-        // Sectors with C2 errors, or that could not be read, are suspect even if every read
-        // agrees: re-read them too.
-        func seedC2Sectors() {
-            for index in (result.c2Sectors ?? []) + result.unreadableSectors where versions[index] == nil {
+        // Sectors with C2 errors are suspect even if every read agrees, so they are re-read
+        // too. A sector that could not be read has no version yet: its silence is not data.
+        func seedSuspectSectors(unreadable: [Int]) {
+            for index in result.c2Sectors ?? [] where versions[index] == nil {
                 versions[index] = Versions()
                 versions[index]!.add(block(base, index))
             }
+            for index in unreadable where versions[index] == nil {
+                versions[index] = Versions()
+            }
         }
-        seedC2Sectors()
+        seedSuspectSectors(unreadable: result.unreadableSectors)
         var fullReads = 1
+        // Reads of the whole track that did not lose their place, the first read not counted.
+        var agreeingReads = 0
         func differingSectors(_ a: [UInt32], _ b: [UInt32]) -> [Int] {
             (0..<sectors.count).filter { a[($0 * size)..<(($0 + 1) * size)] != b[($0 * size)..<(($0 + 1) * size)] }
         }
@@ -174,16 +190,17 @@ public struct SecureRipper {
         func readWholeTrack() throws -> Bool {
             var shiftedRead: [UInt32]?
             for _ in 0...maximumShiftedReads {
-                reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
+                try reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
                 let pass = fullReads + 1
+                let readOffset = reader.readOffset
                 let whole = try reader.read(
                     start..<(start + sectors.count * size), withC2: false,
                     progress: progress.map { progress in
                         { read in
                             progress(
                                 .reading(
-                                    track: track.number, pass: pass, sectorsRead: read.sectorsRead,
-                                    sectors: read.sectors, c2Sectors: 0, unreadableSectors: read.unreadableSectors))
+                                    track: track.number, pass: pass,
+                                    progress: read.inTrack(startingAt: start, readOffset: readOffset)))
                         }
                     })
                 let read = whole.samples
@@ -195,29 +212,30 @@ public struct SecureRipper {
                     of: read, against: base, differing: differing, minimumRun: shiftCheckSectors,
                     maximum: maximumShift)
                 {
-                    if let previous = shiftedRead,
-                        Self.shift(
-                            of: read, against: previous, differing: differingSectors(read, previous),
-                            minimumRun: shiftCheckSectors, maximum: maximumShift) == nil
-                    {
-                        // Two reads agree with each other, and not with the base: replace it.
-                        // The base is the shifted read, not the read before this one.
-                        result.shiftedReads[result.shiftedReads.count - 1] = -shift
-                        result.firstReadWasShifted = true
-                        base = read
-                        versions = [:]
-                        for index in differingSectors(read, previous) {
-                            versions[index] = Versions()
-                            versions[index]!.add(block(read, index))
-                            versions[index]!.add(block(previous, index))
+                    if let previous = shiftedRead {
+                        let differingFromPrevious = differingSectors(read, previous)
+                        if Self.agree(differing: differingFromPrevious, minimumRun: shiftCheckSectors) {
+                            // Two reads agree with each other, and not with the base: replace it.
+                            // The base is the shifted read, not the read before this one.
+                            result.shiftedReads[result.shiftedReads.count - 1] = -shift
+                            result.firstReadWasShifted = true
+                            base = read
+                            versions = [:]
+                            for index in differingFromPrevious {
+                                versions[index] = Versions()
+                                versions[index]!.add(block(read, index))
+                                versions[index]!.add(block(previous, index))
+                            }
+                            seedSuspectSectors(unreadable: Array(unreadable))
+                            agreeingReads += 1
+                            return !versions.isEmpty
                         }
-                        seedC2Sectors()
-                        return !versions.isEmpty
                     }
                     result.shiftedReads.append(shift)
                     shiftedRead = read
                     continue
                 }
+                agreeingReads += 1
                 var foundNew = false
                 for index in differing where versions[index] == nil && !unreadable.contains(index) {
                     versions[index] = Versions()
@@ -240,7 +258,10 @@ public struct SecureRipper {
         if versions.isEmpty {
             result.samples = base
             result.status = known.isEmpty ? .consistent : .consistentButNotAccurate
-            if result.firstReadWasShifted && !known.isEmpty {
+            if agreeingReads == 0 {
+                // Every other read lost its place, so nothing confirms the base read.
+                result.status = .suspect
+            } else if result.firstReadWasShifted && !known.isEmpty {
                 let checksum = AccurateRipAccumulator.checksum(
                     of: base[...], isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
                 if case .accurate(let v1, let v2) = TrackRipper.verification(of: checksum, known: known) {
@@ -254,9 +275,11 @@ public struct SecureRipper {
         var samples = base
         var quietRounds = 0
         while true {
-            // Use the most frequent version of each suspect sector.
+            try reader.stop?.check()
+            // Use the most frequent version of each suspect sector. A sector with no version stays silence.
             for (index, sectorVersions) in versions {
-                samples.replaceSubrange((index * size)..<((index + 1) * size), with: sectorVersions.ranked[0])
+                guard let best = sectorVersions.ranked.first else { continue }
+                samples.replaceSubrange((index * size)..<((index + 1) * size), with: best)
             }
             if !known.isEmpty, let (matched, status) = match(samples, versions: versions, known: known, edges: edges) {
                 result.samples = matched
@@ -284,12 +307,17 @@ public struct SecureRipper {
 
             result.rounds += 1
             let versionCount = versions.values.reduce(0) { $0 + $1.order.count }
+            let suspects = versions.keys.sorted()
             progress?(
                 .rereading(
                     track: track.number, round: result.rounds, maximumRounds: maximumRounds,
-                    suspectSectors: versions.count, versions: versionCount))
-            reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
-            for run in Self.runs(of: versions.keys.sorted()) {
+                    suspectSectors: suspects, versions: versionCount))
+            // The flush avoids the suspect sectors only, so a disc with one track still gets one.
+            let runs = Self.runs(of: suspects)
+            try reader.flushCache(
+                awayFrom: runs.map { (sectors.lowerBound + $0.lowerBound)..<(sectors.lowerBound + $0.upperBound) },
+                count: cacheFlushSectors)
+            for run in runs {
                 let read = try reader.read(
                     (start + run.lowerBound * size)..<(start + run.upperBound * size), withC2: false)
                 let unreadable = Set(read.unreadable.map { $0 / size + run.lowerBound })
@@ -420,19 +448,59 @@ public struct SecureRipper {
 }
 
 extension AudioReader {
-    /// Reads `count` sectors far from `sectors`, so the drive's cache holds none of them.
-    /// The sectors read never overlap `sectors`: a read of a damaged sector there would
-    /// count as one of its re-reads.
-    public func flushCache(awayFrom sectors: Range<Int>, count: Int = 4000) {
-        let before = 0..<sectors.lowerBound
-        let after = sectors.upperBound..<toc.leadOutLBA
-        let count = min(count, max(before.count, after.count))
-        guard count > 0 else { return }
-        // Read at the far end of the larger region.
-        let start = before.count >= after.count ? 0 : after.upperBound - count
-        for lba in stride(from: start, to: start + count, by: sectorsPerRead) {
-            // A sector that cannot be read still moves the drive away; its data does not matter.
-            _ = try? drive.readAudioSectors(at: lba, count: min(sectorsPerRead, start + count - lba))
+    /// Reads `count` sectors away from `sectors`, so the drive's cache holds none of them.
+    public func flushCache(awayFrom sectors: Range<Int>, count: Int = 4000) throws {
+        try flushCache(awayFrom: [sectors], count: count)
+    }
+
+    /// Sectors kept unread next to each range that a flush avoids, so that the drive's
+    /// read-ahead after the flush does not reach the range. More than the drives seen so far
+    /// keep in their cache.
+    static let readAheadMargin = 128
+
+    /// Reads `count` sectors of the disc's audio that are in none of `ranges`, so the drive's
+    /// cache holds none of them. The sectors read never touch `ranges`, nor the
+    /// `readAheadMargin` next to them: a read of a damaged sector there would count as one
+    /// of its re-reads. The largest free part comes first, read from its end farthest from
+    /// `ranges`. With one track that spans the disc, the free parts are inside the track,
+    /// away from its suspect sectors. A read that fails still moves the drive, so its error
+    /// does not matter. Throws only when `stop` is stopped.
+    public func flushCache(awayFrom ranges: [Range<Int>], count: Int = 4000) throws {
+        let avoided = ranges.filter { !$0.isEmpty }
+        var remaining = count
+        for gap in Self.gaps(in: toc.audioAreas, around: avoided, margin: Self.readAheadMargin) where remaining > 0 {
+            let size = min(remaining, gap.count)
+            let hasBefore = avoided.contains { $0.upperBound <= gap.lowerBound }
+            let hasAfter = avoided.contains { $0.lowerBound >= gap.upperBound }
+            let start =
+                switch (hasBefore, hasAfter) {
+                case (true, false): gap.upperBound - size
+                case (false, true): gap.lowerBound
+                default: gap.lowerBound + (gap.count - size) / 2
+                }
+            for lba in stride(from: start, to: start + size, by: sectorsPerRead) {
+                try stop?.check()
+                _ = try? drive.readAudioSectors(at: lba, count: min(sectorsPerRead, start + size - lba))
+            }
+            remaining -= size
         }
+    }
+
+    /// The parts of `areas` that are not in `avoided`, less `margin` sectors on each side that
+    /// touches an avoided range, largest first.
+    static func gaps(in areas: [Range<Int>], around avoided: [Range<Int>], margin: Int) -> [Range<Int>] {
+        var gaps = [Range<Int>]()
+        for area in areas {
+            var start = area.lowerBound
+            for range in avoided.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+                let cut = range.clamped(to: area)
+                guard !cut.isEmpty else { continue }
+                let end = cut.lowerBound - margin
+                if end > start { gaps.append(start..<end) }
+                start = max(start, cut.upperBound + margin)
+            }
+            if area.upperBound > start { gaps.append(start..<area.upperBound) }
+        }
+        return gaps.sorted { $0.count > $1.count }
     }
 }

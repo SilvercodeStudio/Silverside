@@ -29,6 +29,17 @@ struct HiddenTrackTests {
         #expect(try HiddenTrackRip.rip(reader: reader) == nil)
     }
 
+    /// On a mixed-mode disc, the audio before the first audio track is a data track, not a hidden track.
+    @Test func leavesADataTrackAlone() throws {
+        let toc = try TOC(
+            tracks: [.init(number: 1, startLBA: 0, kind: .data), .init(number: 2, startLBA: 3000)], leadOutLBA: 6000)
+        let (_, samples) = try makeDisc(trackSectors: [6000])
+        let drive = SimulatedDrive(toc: toc, samples: samples)
+        let reader = AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)
+        #expect(try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: 100) == nil)
+        #expect(drive.discReads == 0)
+    }
+
     @Test func putsTrackOnesIndexZeroInTheHiddenFile() {
         var sheet = CueSheet(tracks: [.init(number: 1, file: "01 One.flac", sectors: 460, pregapSectors: 100)])
         sheet.hiddenTrackFile = "00 Hidden Track.flac"

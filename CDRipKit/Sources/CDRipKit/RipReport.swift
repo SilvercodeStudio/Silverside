@@ -176,6 +176,10 @@ public struct RipReport: Codable, Equatable, Sendable {
     }
     /// The MusicBrainz release that the rip used for its names, with every disc's tracks.
     public var release: MusicBrainzRelease?
+    /// The files that the rip wrote in its folder, as paths relative to it: the WAV files,
+    /// the suspects, the reports, and the artwork. `RippedDisc.deleteRipFiles` deletes
+    /// these and nothing else. Nil in reports from before CDRip kept the list.
+    public var files: [String]?
 
     public init(date: Date = Date(), drive: Drive, secure: Bool, toc: TOC, tracks: [Track], ctdb: CTDBResult) {
         self.date = date

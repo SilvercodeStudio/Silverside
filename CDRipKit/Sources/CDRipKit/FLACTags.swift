@@ -81,15 +81,21 @@ public enum FLACTags {
         for block in blocks where block.type == BlockType.picture.rawValue {
             let body = [UInt8](block.body)
             var index = 0
-            func uint32() -> Int {
+            func uint32() throws -> Int {
+                guard index + 4 <= body.count else { throw FLACError.malformed }
                 defer { index += 4 }
                 return (0..<4).reduce(0) { $0 << 8 | Int(body[index + $1]) }
             }
-            let type = uint32()
-            index += uint32()  // MIME type
-            index += uint32()  // description
-            index += 16  // width, height, depth, colors
-            let length = uint32()
+            func skip(_ count: Int) throws {
+                guard index + count <= body.count else { throw FLACError.malformed }
+                index += count
+            }
+            let type = try uint32()
+            try skip(try uint32())  // MIME type
+            try skip(try uint32())  // description
+            try skip(16)  // width, height, depth, colors
+            let length = try uint32()
+            guard index + length <= body.count else { throw FLACError.malformed }
             if type == 3 { return Data(body[index..<(index + length)]) }
         }
         return nil

@@ -102,10 +102,22 @@ struct Rip: AsyncParsableCommand {
             identity: DriveIdentity(vendor: device.vendor, product: device.product, revision: device.revision),
             settings: settings, options: options, profiles: try DriveProfileStore())
         if encode ?? settings.encodeAfterRip { (rip.encoder, rip.library) = encoding.encoder(settings) }
-        rip.events = RipPrinter().print
+        let printer = RipPrinter()
+        rip.events = printer.print
         // Ask when the choice matters, if someone is at the terminal to answer.
         if isatty(STDIN_FILENO) != 0 { rip.chooseRelease = ReleaseChoice.askForRelease }
-        let result = try await rip.run()
+        // Ctrl-C stops the rip after the read under way; the tracks done so far stay.
+        let interrupt = Interrupt(
+            stop: rip.stop, message: "Stopping after the read under way. Press Ctrl-C again to stop at once.")
+        defer { withExtendedLifetime(interrupt) {} }
+        let result: DiscRipResult
+        do {
+            result = try await rip.run()
+        } catch is CancellationError {
+            printer.progress.clear()
+            print("Stopped." + (printer.folder.map { " The tracks ripped so far are in \($0.path)." } ?? ""))
+            throw ExitCode(130)
+        }
         guard eject ?? settings.ejectAfterRip else { return }
         guard result.report.isVerified else {
             print("Kept the disc in the drive: not every track is verified.")
@@ -135,12 +147,15 @@ struct Rip: AsyncParsableCommand {
     }
 }
 
-/// Prints a rip's events, as `cdrip rip` shows them.
-private final class RipPrinter {
+/// Prints a rip's events, as `cdrip rip` shows them. The events come one at a time, from
+/// the reading thread, so the state here is used by one thread at a time.
+private final class RipPrinter: @unchecked Sendable {
     let progress = ProgressLine()
     var toc: TOC?
     var readOffset = 0
     var checksAccurateRip = false
+    /// The rip's folder, once the rip has claimed it.
+    var folder: URL?
 
     func print(_ event: DiscRipEvent) {
         switch event {
@@ -151,19 +166,20 @@ private final class RipPrinter {
             Swift.print(
                 "Drive: \(drive.name) (firmware \(drive.revision)), read offset \(offset.signedDescription) (\(source))"
             )
+        case .lookupFailed(let lookup, let error):
+            Swift.print("\(lookup.rawValue): the lookup failed (\(error)). The rip goes on without it.")
         case .lookups(let records, let ctdb):
             checksAccurateRip = (records ?? 0) > 0
             Swift.print(
                 "AccurateRip: "
-                    + (records.map { $0 == 0 ? "disc not in the database" : "\($0) records" }
-                        ?? "not checked (--offline)"))
+                    + (records.map { $0 == 0 ? "disc not in the database" : "\($0) records" } ?? "not checked"))
             Swift.print(
                 "CTDB: "
                     + (ctdb.map {
                         $0.entries == 0
                             ? "disc not in the database"
                             : "\($0.entries) entries, up to \($0.mostSubmissions) submissions"
-                    } ?? "not checked (--offline)"))
+                    } ?? "not checked"))
         case .release(nil):
             break
         case .release(let lookup?):
@@ -181,6 +197,7 @@ private final class RipPrinter {
         case .releaseLookupFailed(let error):
             Swift.print("MusicBrainz: the lookup failed (\(error))")
         case .folder(let folder, _):
+            self.folder = folder
             Swift.print("Folder: \(folder.path)")
             Swift.print()
         case .hiddenTrack(let hidden):
@@ -189,6 +206,8 @@ private final class RipPrinter {
                     + (hidden.readsAgree
                         ? "\(hidden.reads) reads agree (AccurateRip and CTDB do not cover it)"
                         : "NOT verified: \(hidden.reads) reads all differ"))
+        case .poolFileSkipped(let file):
+            Swift.print("Pool: \(file.url.path) was not used: \(file.reason).")
         case .trackStarted(let track, let position, let count):
             progress.label = String(format: "%2d", track.number) + (count > 1 ? " (\(position)/\(count))" : "")
         case .reading(let event):

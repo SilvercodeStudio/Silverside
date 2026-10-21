@@ -36,6 +36,9 @@ struct SettingsTests {
         #expect(throws: SettingsError.unknownKey("aac.speed")) { try settings.setting("aac.speed", to: "1") }
         #expect(throws: SettingsError.wrongValue("format")) { try settings.setting("format", to: "ogg") }
         #expect(throws: SettingsError.wrongValue("aac.bitRate")) { try settings.setting("aac.bitRate", to: "fast") }
+        // A value that reads as JSON is still text when the setting takes text.
+        #expect(try settings.setting("library", to: "2024").library == "2024")
+        #expect(try settings.setting("rips", to: "true").rips == "true")
     }
 
     @Test func savesAndReads() throws {

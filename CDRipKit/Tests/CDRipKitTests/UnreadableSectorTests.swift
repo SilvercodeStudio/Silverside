@@ -21,6 +21,24 @@ struct UnreadableSectorTests {
         #expect(read.samples[before] == samples[before] && read.samples[after] == samples[after])
     }
 
+    /// A sector that no read can read stays unresolved: its silence is not a version that
+    /// reads agree on.
+    @Test func leavesASectorThatNeverReadsUnresolved() throws {
+        let (toc, samples) = try makeDisc(trackSectors: [460, 470, 460])
+        let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: 6)
+        drive.unreadableSectors = [600]
+        var reader = AudioReader(drive: drive, toc: toc, readOffset: 6, canOverread: false)
+        reader.unreadableRetries = 1
+        var secure = SecureRipper(ripper: TrackRipper(reader: reader, records: []))
+        secure.cacheFlushSectors = toc.leadOutLBA
+        let rip = try secure.rip(toc.tracks[1])
+        #expect(rip.status == .suspect)
+        #expect(rip.unreadableSectors == [139, 140] && rip.unresolvedSectors == [139, 140])
+        #expect(rip.versionCounts == [139: 0, 140: 0])
+        // The re-reads stop once they give nothing new, well before the limit.
+        #expect(rip.rounds < secure.maximumRounds)
+    }
+
     /// Four unreadable sectors, one in each of four rows at the same place: their samples
     /// are erasures for CTDB, which needs 6 syndromes for 4 erasures and has them.
     @Test func repairsSectorsThatCannotBeRead() async throws {

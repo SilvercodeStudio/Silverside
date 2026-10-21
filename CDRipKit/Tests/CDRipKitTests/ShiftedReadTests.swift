@@ -39,4 +39,27 @@ struct ShiftedReadTests {
         #expect(rip.shiftedReads.isEmpty)
         #expect(rip.suspectSectors == Array(140..<180))
     }
+
+    /// Two reads that slip at different places do not agree with each other, so neither
+    /// replaces the first read. The third read, which does not slip, confirms it.
+    @Test func doesNotTakeTwoDifferentSlipsForAgreement() throws {
+        let (secure, toc, samples, drive) = try tests.setUp(withRecords: false)
+        drive.slips = [.init(sector: 600, shift: 300, onPass: 2), .init(sector: 650, shift: 500, onPass: 3)]
+        let track = toc.tracks[1]
+        let rip = try secure.rip(track)
+        #expect(!rip.firstReadWasShifted)
+        #expect(rip.shiftedReads == [300, 500])
+        #expect(rip.status == .consistent && rip.suspectSectors.isEmpty)
+        #expect(rip.samples[...] == tests.trueSamples(of: track, in: toc, samples))
+    }
+
+    /// When every read after the first loses its place, nothing confirms the first read.
+    @Test func isSuspectWhenNoReadConfirmsTheFirst() throws {
+        let (secure, toc, _, drive) = try tests.setUp(withRecords: false)
+        drive.slips = (2...4).map { .init(sector: 600 + 10 * $0, shift: 100 * $0, onPass: $0) }
+        let rip = try secure.rip(toc.tracks[1])
+        #expect(rip.status == .suspect)
+        #expect(rip.shiftedReads == [200, 300, 400] && !rip.firstReadWasShifted)
+        #expect(rip.suspectSectors.isEmpty && rip.unresolvedSectors.isEmpty)
+    }
 }

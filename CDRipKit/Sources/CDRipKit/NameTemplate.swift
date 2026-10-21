@@ -100,7 +100,9 @@ public struct NameTemplate: Equatable, Sendable {
             }
             index = pattern.index(after: index)
         }
-        return result.split(separator: "/").map { Self.safeComponent(String($0)) }.joined(separator: "/")
+        let name = result.split(separator: "/").map { Self.safeComponent(String($0)) }.filter { !$0.isEmpty }
+        // No name at all (every field empty) would put files in the library's root, or make a hidden file.
+        return name.isEmpty ? "Unknown" : name.joined(separator: "/")
     }
 
     /// The most bytes of UTF-8 in one file name part. macOS allows 255; this leaves room for an extension.

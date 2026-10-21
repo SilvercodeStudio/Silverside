@@ -16,11 +16,14 @@ public struct HiddenTrackRip: Sendable {
     public static let silencePeak = 32
 
     /// Reads the part of the disc before track 1, and returns it if it is audio, not
-    /// silence. Nil if track 1 starts at LBA 0, or the gap is silent.
+    /// silence. Nil if track 1 starts at LBA 0, or the gap is silent, or track 1 is a data
+    /// track (a mixed-mode disc), which no drive reads as audio.
     public static func rip(reader: AudioReader, cacheFlushSectors: Int = 4000, maximumReads: Int = 4) throws
         -> HiddenTrackRip?
     {
-        guard let first = reader.toc.audioTracks.first, first.startLBA > 0 else { return nil }
+        guard let first = reader.toc.audioTracks.first, first == reader.toc.tracks[0], first.startLBA > 0 else {
+            return nil
+        }
         let positions = 0..<(first.startLBA * CDDA.samplesPerSector)
         let read = try reader.readSamples(positions)
         let peak = read.reduce(0) { max($0, magnitude(of: $1)) }
@@ -29,7 +32,7 @@ public struct HiddenTrackRip: Sendable {
         // Read again, after a cache flush, until two reads agree.
         var reads = [read]
         while reads.count < maximumReads {
-            reader.flushCache(awayFrom: 0..<first.startLBA, count: cacheFlushSectors)
+            try reader.flushCache(awayFrom: 0..<first.startLBA, count: cacheFlushSectors)
             let next = try reader.readSamples(positions)
             if let match = reads.first(where: { $0 == next }) {
                 return HiddenTrackRip(samples: match, peak: peak, readsAgree: true, reads: reads.count + 1)

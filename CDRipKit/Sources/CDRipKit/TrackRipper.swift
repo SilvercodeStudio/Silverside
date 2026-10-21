@@ -82,12 +82,13 @@ public struct TrackRipper {
         let positions = (start - margin)..<(start + length + margin)
         var read: AudioReader.Read
         var flagged: [Int]?
+        let readOffset = reader.readOffset
         let report = progress.map { progress in
             { (read: ReadProgress) in
                 progress(
                     .reading(
-                        track: track.number, pass: 1, sectorsRead: read.sectorsRead, sectors: read.sectors,
-                        c2Sectors: read.flaggedSectors, unreadableSectors: read.unreadableSectors))
+                        track: track.number, pass: 1, progress: read.inTrack(startingAt: start, readOffset: readOffset))
+                )
             }
         }
         if readsC2, let withC2 = try? reader.read(positions, withC2: true, progress: report) {

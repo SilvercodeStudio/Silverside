@@ -84,16 +84,38 @@ struct RipEventTests {
         let events = Events()
         secure.progress = { events.list.append($0) }
         let rip = try secure.rip(toc.tracks[1])
-        let firstPass = events.list.compactMap { event -> (Int, Int, Int)? in
-            if case .reading(2, 1, let read, let sectors, let c2, _) = event { return (read, sectors, c2) }
+        let firstPass = events.list.compactMap { event -> ReadProgress? in
+            if case .reading(2, 1, let progress) = event { return progress }
             return nil
         }
         // The first read covers the track and 5 sectors on each side (481 drive sectors, as the
         // offset adds one), and the damaged sector's data lies in two drive sectors.
-        #expect(firstPass.last.map { $0.0 == $0.1 && $0.1 == 470 + 10 + 1 && $0.2 == 2 } == true)
-        #expect(events.list.contains { if case .reading(2, 2, _, _, _, _) = $0 { true } else { false } })
-        let rounds = events.list.filter { if case .rereading = $0 { true } else { false } }
-        #expect(rounds.count == rip.rounds && rip.rounds > 0)
+        let last = try #require(firstPass.last)
+        #expect(last.sectorsRead == last.sectors && last.sectors == 470 + 10 + 1 && last.flaggedSectors == 2)
+        // The chunks run from before the track to past its end, in sectors of the track, and
+        // the flagged drive sectors land on the damaged sector 140 (and its neighbors, since a
+        // drive sector lies in two sectors of the track).
+        #expect(firstPass.first?.chunk.lowerBound == -6 && last.chunk.upperBound == 470 + 6)
+        let flagged = Set(firstPass.flatMap(\.flaggedInChunk))
+        #expect(flagged.contains(140) && flagged.isSubset(of: [138, 139, 140, 141]))
+        #expect(events.list.contains { if case .reading(2, 2, _) = $0 { true } else { false } })
+        let rounds = events.list.compactMap { event -> [Int]? in
+            if case .rereading(2, _, _, let suspects, _) = event { return suspects }
+            return nil
+        }
+        #expect(rounds.count == rip.rounds && rip.rounds > 0 && rounds.allSatisfy { $0 == [140] })
+    }
+
+    @Test func countsProgressInSectorsOfTheTrack() {
+        // A drive at offset +6: its sector 100 holds the last 6 samples of sector 99 and most of 100.
+        let progress = ReadProgress(
+            sectorsRead: 26, sectors: 100, flaggedSectors: 1, unreadableSectors: 1, chunk: 100..<126,
+            flaggedInChunk: [100], unreadableInChunk: [110])
+        let inTrack = progress.inTrack(startingAt: 50 * 588, readOffset: 6)
+        #expect(
+            inTrack.chunk == 49..<76 && inTrack.flaggedInChunk == [49, 50] && inTrack.unreadableInChunk == [59, 60])
+        let aligned = progress.inTrack(startingAt: 50 * 588, readOffset: 0)
+        #expect(aligned.chunk == 50..<76 && aligned.flaggedInChunk == [50] && aligned.unreadableInChunk == [60])
     }
 }
 

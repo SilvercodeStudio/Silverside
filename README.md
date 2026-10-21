@@ -48,6 +48,11 @@ to be installed. All other supported formats are handled natively.
 - **Hidden track one audio** (a song before track 1) is ripped and encoded as
   track 0.
 
+AccurateRip and CTDB answer over plain HTTP, as their other clients use them.
+Their checksums are public, so there is nothing to keep secret, but a network
+that forged their answers could make a bad rip look verified. MusicBrainz and
+the Cover Art Archive are reached over HTTPS.
+
 ### Ripping marginal CDs
 
 Note that it will take longer to rip a marginal CD than a nice
@@ -62,6 +67,9 @@ Tips:
   status line shows each read, the sectors with C2 errors, and the rounds of
   re-reads. Most damaged discs that were tested came out fully accurate from
   one rip, after the CTDB repair.
+- **Ctrl-C stops cleanly.** The read under way finishes, the tracks done so
+  far stay in the rip's folder, and a second rip of the disc takes the folder
+  over. Press Ctrl-C again to stop at once.
 - **Try another drive.** Drives differ in how many versions of a damaged
   sector they return, and more versions help the repair. A disc that one
   drive could not finish was repaired from one rip in another.

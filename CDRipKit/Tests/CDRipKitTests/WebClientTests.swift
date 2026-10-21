@@ -127,6 +127,22 @@ struct WebClientTests {
         #expect(ContinuousClock.now - start >= .milliseconds(600))
     }
 
+    /// Requests from several tasks at once (rips in several drives) take their turns too.
+    @Test func serializesRequestsFromSeveralTasks() async throws {
+        let transport = FakeTransport([.status(200), .status(200), .status(200)])
+        let (client, directory) = client(transport, interval: .milliseconds(200))
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let start = ContinuousClock.now
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for number in 1...3 {
+                group.addTask { _ = try await client.data(from: URL(string: "https://example.org/\(number)")!) }
+            }
+            try await group.waitForAll()
+        }
+        #expect(ContinuousClock.now - start >= .milliseconds(400))
+        #expect(await client.requestsSent == 3)
+    }
+
     @Test func namesItselfToTheServer() async throws {
         let transport = FakeTransport([.status(200)])
         let (client, directory) = client(transport)

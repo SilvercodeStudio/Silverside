@@ -195,12 +195,18 @@ public struct DiscRepairer {
     /// Sectors to read elsewhere before each re-read, so that the drive's cache holds none of them.
     public var cacheFlushSectors = 4000
     /// Receives a line for each step, for people to read.
-    public var log: (String) -> Void = { _ in }
+    public var log: @Sendable (String) -> Void = { _ in }
     /// Gets an entry's repair data. Tests replace the download.
-    public var repairData: (CTDBEntry) async throws -> [UInt16] = { try await $0.downloadRepairData() }
+    public var repairData: @Sendable (CTDBEntry) async throws -> [UInt16] = { try await $0.downloadRepairData() }
+    /// Stops the repair between its steps when set. The reader's own token stops re-reads.
+    public var stop: StopToken?
 
     /// Try at most this many shifts for each entry, fewest errors in column 0 first.
     static let shiftsPerEntry = 3
+
+    /// The most syndromes for each column that CDRip uses. CTDB entries have 8 or 16; an
+    /// entry with more is left out, so that its column 0 cannot overrun the candidates.
+    static let maximumSyndromes = 16
 
     /// Re-read the suspect samples of at most this many columns that cannot be repaired.
     static let maximumColumnsToReread = 512
@@ -248,11 +254,17 @@ public struct DiscRepairer {
 
         let crc = CTDB.discCRC(of: audio, layout: layout)
         if let entry = entries.first(where: { $0.crc32 == crc }) { return finish(.verified(entry: entry, shift: 0)) }
-        let count = min(16, entries.map(\.syndromeCount).max() ?? 0)
+        let usable = entries.filter { $0.syndromeCount <= Self.maximumSyndromes }
+        for entry in entries where entry.syndromeCount > Self.maximumSyndromes {
+            log(
+                "Leaving out entry \(entry.id): \(entry.syndromeCount) syndromes for each column is more than CDRip uses."
+            )
+        }
+        let count = usable.map(\.syndromeCount).max() ?? 0
         guard count > 0 else { return finish(.notVerified) }
 
         log("Finding the shift between the rip and each entry...")
-        let candidates = CTDB.column0Syndromes(of: audio, layout: layout, count: count)
+        let candidates = try await blocking { CTDB.column0Syndromes(of: audio, layout: layout, count: count) }
         // The offsets at which tracks match AccurateRip are other pressings' alignments, so
         // an entry may be stored at one of them. A shift where any of the entry's track CRCs
         // matches is right, even if column 0 has too many errors to find it.
@@ -262,7 +274,7 @@ public struct DiscRepairer {
             (shift: $0, crcs: CTDB.trackCRCs(of: audio, toc: toc, layout: layout, shift: $0))
         }
         var best: (entry: CTDBEntry, shift: Int, tracks: [Int], changed: [Int], audio: [UInt32])?
-        entries: for (rank, entry) in entries.enumerated()
+        entries: for (rank, entry) in usable.enumerated()
         where entry.syndromeCount > 0 && entry.column0Syndromes.count == entry.syndromeCount {
             var matches = [CTDB.ShiftMatch]()
             if entry.trackCRCs.count == tracks.count {
@@ -270,10 +282,12 @@ public struct DiscRepairer {
                     matches.append(CTDB.ShiftMatch(shift: shift, errors: 0))
                 }
             }
-            for match in CTDB.shifts(
-                matching: entry.column0Syndromes, in: candidates, layout: layout,
-                fullSearch: repairing && rank < Self.entriesWithFullSearch)
-            where !matches.contains(where: { $0.shift == match.shift }) {
+            try stop?.check()
+            let fullSearch = repairing && rank < Self.entriesWithFullSearch
+            let found = try await blocking {
+                CTDB.shifts(matching: entry.column0Syndromes, in: candidates, layout: layout, fullSearch: fullSearch)
+            }
+            for match in found where !matches.contains(where: { $0.shift == match.shift }) {
                 matches.append(match)
             }
             for match in matches.prefix(Self.shiftsPerEntry) {
@@ -289,10 +303,16 @@ public struct DiscRepairer {
                 let reference = try await repairData(entry)
                 var quietRounds = 0
                 rounds: for round in 0...(reader == nil ? 0 : rereadRounds) {
-                    var repaired = audio
-                    let repair = CTDB.repair(
-                        &repaired, layout: layout, shift: match.shift, reference: reference,
-                        count: entry.syndromeCount, crc: entry.crc32, suspects: suspects, alternatives: alternatives)
+                    try stop?.check()
+                    // The decoding of every column takes seconds, on the reading thread.
+                    let (shift, syndromeCount, crc) = (match.shift, entry.syndromeCount, entry.crc32)
+                    let (repair, repaired) = try await blocking { [alternatives] in
+                        var repaired = audio
+                        let repair = CTDB.repair(
+                            &repaired, layout: layout, shift: shift, reference: reference, count: syndromeCount,
+                            crc: crc, suspects: suspects, alternatives: alternatives)
+                        return (repair, repaired)
+                    }
                     var unproved = [CTDB.Change]()
                     switch repair {
                     case .noErrors:
@@ -322,7 +342,12 @@ public struct DiscRepairer {
                                 CTDB.suspectSamples(
                                     inColumn: $0, suspects: suspects, layout: layout, shift: match.shift)
                             }
-                            let found = reread(samples, of: audio, reader: reader, into: &alternatives)
+                            let (found, more) = try await blocking { [self, alternatives] in
+                                var alternatives = alternatives
+                                let found = try reread(samples, of: audio, reader: reader, into: &alternatives)
+                                return (found, alternatives)
+                            }
+                            alternatives = more
                             let sectors = Set(samples.map { $0 / CDDA.samplesPerSector }).count
                             log("  Re-read \(sectors) sectors: \(found) new versions.")
                             quietRounds = found == 0 ? quietRounds + 1 : 0
@@ -406,15 +431,17 @@ public struct DiscRepairer {
     /// not the one in `audio`, and not yet known, to `alternatives`. Returns how many it added.
     private func reread(
         _ samples: [Int], of audio: [UInt32], reader: AudioReader, into alternatives: inout [Int: [UInt32]]
-    ) -> Int {
+    ) throws -> Int {
         let firstLBA = toc.audioTracks.first?.startLBA ?? 0
         let firstSample = firstLBA * CDDA.samplesPerSector
         let sectors = Set(samples.map { $0 / CDDA.samplesPerSector }).sorted()
         let wanted = Set(samples)
         var added = 0
         for _ in 0..<4 {
-            let first = firstLBA + (sectors.first ?? 0)
-            reader.flushCache(awayFrom: first..<(first + 1), count: cacheFlushSectors)
+            // Away from every sector to re-read, so none comes back from the cache.
+            try reader.flushCache(
+                awayFrom: Self.ranges(of: sectors).map { (firstLBA + $0.lowerBound)..<(firstLBA + $0.upperBound) },
+                count: cacheFlushSectors)
             for sector in sectors {
                 let start = sector * CDDA.samplesPerSector
                 guard

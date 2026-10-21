@@ -32,7 +32,9 @@ public enum WAVFile {
         try data(for: samples).write(to: url, options: .atomic)
     }
 
-    /// Reads CD audio from a WAV file that holds 44.1 kHz, 16-bit, stereo PCM.
+    /// Reads CD audio from a WAV file that holds 44.1 kHz, 16-bit, stereo PCM, in the plain
+    /// form or the extensible form (format tag 0xFFFE with the PCM subformat) that some
+    /// programs write.
     public static func read(_ url: URL) throws -> [UInt32] {
         let bytes = [UInt8](try Data(contentsOf: url))
         func uint32(_ at: Int) -> Int { (0..<4).reduce(0) { $0 | Int(bytes[at + $1]) << (8 * $1) } }
@@ -46,9 +48,11 @@ public enum WAVFile {
             let size = uint32(at + 4)
             let body = at + 8
             if bytes[at..<(at + 4)].elementsEqual("fmt ".utf8), body + 16 <= bytes.count {
-                isCDAudio =
-                    uint16(body) == 1 && uint16(body + 2) == 2 && uint32(body + 4) == 44100
-                    && uint16(body + 14) == 16
+                let tag = uint16(body)
+                // In the extensible form, the subformat's first two bytes are the format tag.
+                let isPCM =
+                    tag == 1 || (tag == 0xFFFE && size >= 40 && body + 26 <= bytes.count && uint16(body + 24) == 1)
+                isCDAudio = isPCM && uint16(body + 2) == 2 && uint32(body + 4) == 44100 && uint16(body + 14) == 16
             } else if bytes[at..<(at + 4)].elementsEqual("data".utf8) {
                 guard isCDAudio, body + size <= bytes.count, size % CDDA.bytesPerSample == 0 else { break }
                 return CDDA.samples(fromSectorBytes: Array(bytes[body..<(body + size)]))

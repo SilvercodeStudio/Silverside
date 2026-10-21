@@ -45,20 +45,33 @@ public struct DiscRipOptions: Sendable {
     }
 }
 
-/// What a rip is doing, step by step: the CLI prints these, and the app shows them.
-public enum DiscRipEvent {
+/// What a rip is doing, step by step: the CLI prints these, and the app shows them. They
+/// come from the thread that reads the disc, so the app sends them to its main actor.
+public enum DiscRipEvent: Sendable {
     /// The disc's TOC, read before anything else.
     case disc(TOC)
     case drive(DriveIdentity, readOffset: Int, source: String)
+    /// A lookup failed, and the rip goes on without it: AccurateRip, CTDB, or the drive
+    /// offset list. (A failed MusicBrainz lookup is `releaseLookupFailed`.)
+    case lookupFailed(Lookup, any Error)
     /// The number of AccurateRip records, and of CTDB entries with the most submissions.
-    /// Nil if the rip is offline.
+    /// Nil if the rip is offline, or the lookup failed.
     case lookups(accurateRipRecords: Int?, ctdb: (entries: Int, mostSubmissions: Int)?)
+
+    /// The web services that a rip asks before it reads, named for people.
+    public enum Lookup: String, Sendable {
+        case driveOffsetList = "AccurateRip's drive offset list"
+        case accurateRip = "AccurateRip"
+        case ctdb = "CTDB"
+    }
     /// The MusicBrainz lookup. Nil if the rip is offline.
     case release(ReleaseLookupResult?)
     case releaseLookupFailed(any Error)
     /// The rip's folder, and the folder it would have used if another disc's rip did not hold it.
     case folder(URL, insteadOf: URL?)
     case hiddenTrack(RipReport.HiddenTrack)
+    /// A track file in a pooled folder (the `pool` option) could not be used.
+    case poolFileSkipped(RipPool.SkippedFile)
     /// A track starts: its position among the tracks to rip, from 1.
     case trackStarted(TOC.Track, position: Int, count: Int)
     /// A read of the track goes on (see `RipEvent`).
@@ -104,7 +117,7 @@ public enum DiscRipError: Error, Equatable, CustomStringConvertible {
 }
 
 /// What a rip made.
-public struct DiscRipResult {
+public struct DiscRipResult: Sendable {
     public var report: RipReport
     public var folder: URL
     /// The encoded files, if the rip encoded.
@@ -116,6 +129,11 @@ public struct DiscRipResult {
 /// offset, the release and the rip's folder, the hidden track, a secure rip of each track
 /// (with pooling of earlier rips), the CTDB check and repair, the reports, the artwork, and
 /// (with an encoder) the encoding.
+///
+/// `run()` is async, and the reads and the encoding run on a thread of their own (see
+/// `blocking(_:)`), so a task that awaits it holds no thread. To stop a rip, cancel that
+/// task, or call `stop.stop()` from anywhere: `run()` then throws `CancellationError` after
+/// the chunk being read, and the folder keeps the tracks written so far.
 public struct DiscRip {
     public let drive: any CDDrive
     public let identity: DriveIdentity
@@ -124,11 +142,15 @@ public struct DiscRip {
     /// Encodes the disc after the rip, into `library`. Nil does not encode.
     public var encoder: DiscEncoder?
     public var library: URL
-    /// Hears each step.
-    public var events: (DiscRipEvent) -> Void = { _ in }
+    /// Hears each step, on the thread that reads the disc.
+    public var events: @Sendable (DiscRipEvent) -> Void = { _ in }
     /// Picks a release when several fit the disc and the ranking cannot settle it. Nil uses the first.
-    public var chooseRelease: (([MusicBrainzRelease], TOC) -> MusicBrainzRelease?)?
+    public var chooseRelease: (@Sendable ([MusicBrainzRelease], TOC) -> MusicBrainzRelease?)?
     public var profiles: DriveProfileStore
+    /// The client for every lookup and download. Tests give one with a fake transport.
+    public var webClient = WebClient.shared
+    /// Stops the rip when set, from any thread.
+    public var stop = StopToken()
 
     public init(
         drive: any CDDrive, identity: DriveIdentity, settings: Settings, options: DiscRipOptions,
@@ -143,18 +165,32 @@ public struct DiscRip {
     }
 
     public func run() async throws -> DiscRipResult {
+        let stop = self.stop
+        return try await withTaskCancellationHandler {
+            try await ripDisc()
+        } onCancel: {
+            stop.stop()
+        }
+    }
+
+    private func ripDisc() async throws -> DiscRipResult {
         var profiles = self.profiles
         let toc = try drive.readTOC()
         guard !toc.audioTracks.isEmpty else { throw DiscRipError.noAudioTracks }
         events(.disc(toc))
         let selected = try selectedTracks(of: toc)
 
-        // The drive's profile gives the offset, unless the options do.
+        // The drive's profile gives the offset, unless the options do. A drive with no offset
+        // at all is looked up in AccurateRip's list; if that fails, the rip cannot go on.
         var profile = profiles.profile(vendor: identity.vendor, product: identity.product, revision: identity.revision)
-        if profile.listedOffset == nil && !options.offline {
-            profile.listedOffset = try await DriveOffsetList.download().entry(
-                vendor: identity.vendor, product: identity.product)?.offset
-            try profiles.save(profile)
+        if profile.offset == nil && options.readOffset == nil && !options.offline {
+            do {
+                profile.listedOffset = try await DriveOffsetList.download(client: webClient).entry(
+                    vendor: identity.vendor, product: identity.product)?.offset
+                try profiles.save(profile)
+            } catch {
+                events(.lookupFailed(.driveOffsetList, error))
+            }
         }
         let readOffset: Int
         let source: String
@@ -167,18 +203,37 @@ public struct DiscRip {
         }
         events(.drive(identity, readOffset: readOffset, source: source))
 
-        let records = options.offline ? [] : try await AccurateRipRecord.download(for: toc.accurateRipDiscID)
-        let entries = options.offline ? [] : try await CTDBEntry.lookup(toc)
+        // A lookup that fails leaves its check out; the rip goes on, and a repair can check later.
+        var records = [AccurateRipRecord]()
+        var entries = [CTDBEntry]()
+        var checkedAccurateRip = false
+        var checkedCTDB = false
+        if !options.offline {
+            do {
+                records = try await AccurateRipRecord.download(for: toc.accurateRipDiscID, client: webClient)
+                checkedAccurateRip = true
+            } catch {
+                events(.lookupFailed(.accurateRip, error))
+            }
+            do {
+                entries = try await CTDBEntry.lookup(toc, client: webClient)
+                checkedCTDB = true
+            } catch {
+                events(.lookupFailed(.ctdb, error))
+            }
+        }
         events(
             .lookups(
-                accurateRipRecords: options.offline ? nil : records.count,
-                ctdb: options.offline ? nil : (entries.count, entries.map(\.confidence).max() ?? 0)))
+                accurateRipRecords: checkedAccurateRip ? records.count : nil,
+                ctdb: checkedCTDB ? (entries.count, entries.map(\.confidence).max() ?? 0) : nil))
         // CTDB checks the whole disc at once.
         let checksCTDB = !entries.isEmpty && selected.count == toc.audioTracks.count
         try RipPool.check(options.pool, toc: toc)
+        try stop.check()
 
         // MusicBrainz names the folder. A failed lookup does not stop the rip.
-        let mcn = try? SubchannelCodes.mcn(in: toc, drive: drive)
+        let drive = self.drive
+        let mcn = try await blocking { try? SubchannelCodes.mcn(in: toc, drive: drive) }
         var chosen: MusicBrainzRelease?
         if options.offline {
             events(.release(nil))
@@ -186,7 +241,8 @@ public struct DiscRip {
             do {
                 let choose = chooseRelease.map { choose in { (ranked: [MusicBrainzRelease]) in choose(ranked, toc) } }
                 let lookup = try await ReleaseLookup.find(
-                    toc: toc, mcn: mcn, releaseID: options.releaseID, choose: choose)
+                    toc: toc, mcn: mcn, releaseID: options.releaseID, choose: choose,
+                    client: MusicBrainzClient(client: webClient))
                 chosen = lookup.chosen
                 events(.release(lookup))
             } catch {
@@ -203,22 +259,30 @@ public struct DiscRip {
         let folder = try RipFolder.claim(wanted, toc: toc)
         defer { RipFolder.release(folder) }
         events(.folder(folder, insteadOf: folder == wanted ? nil : wanted))
+        try stop.check()
 
         var reader = AudioReader(drive: drive, toc: toc, readOffset: readOffset, canOverread: false)
         // A sector that cannot be read is silence and suspect, so one bad sector does not stop the rip.
         reader.unreadableRetries = 3
+        reader.stop = stop
         var ripper = TrackRipper(reader: reader, records: records)
         ripper.readsC2 = options.readsC2
         var secure = SecureRipper(ripper: ripper)
         secure.cacheFlushSectors = profile.cacheFlushSectors
+        let events = self.events
         secure.progress = { events(.reading($0)) }
+
+        // The files written in the folder, for the report: a later deletion takes only these.
+        var written = Set<String>()
 
         // Audio before track 1, if the disc hides a track there; silence is not kept.
         var hiddenTrack: RipReport.HiddenTrack?
+        let flushSectors = profile.cacheFlushSectors
         if selected.first == toc.audioTracks.first,
-            let hidden = try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: profile.cacheFlushSectors)
+            let hidden = try await blocking({ try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: flushSectors) })
         {
             try WAVFile.write(hidden.samples, to: folder.appending(path: "Track 00.wav"))
+            written.insert("Track 00.wav")
             hiddenTrack = .init(
                 file: "Track 00.wav", sectors: toc.audioTracks[0].startLBA, peak: hidden.peak,
                 readsAgree: hidden.readsAgree, reads: hidden.reads)
@@ -230,19 +294,29 @@ public struct DiscRip {
         // Each track's audio, with its suspect samples, for CTDB.
         var trackAudio = [TrackAudio]()
         for (position, track) in selected.enumerated() {
+            try stop.check()
             events(.trackStarted(track, position: position + 1, count: selected.count))
             let start = ContinuousClock.now
-            var (samples, summary, audio, report) = try ripTrack(
-                track, toc: toc, ripper: ripper, secure: secure, records: records, discOffsets: &discOffsets)
-            pool(
-                track, toc: toc, records: records, samples: &samples, audio: &audio, report: &report, summary: &summary)
-            if checksCTDB { trackAudio.append(audio) }
-            // Keep the other versions of suspect samples, so that a later repair can use them.
-            if !audio.alternatives.isEmpty {
-                try audio.writeAlternatives(
-                    to: folder.appending(path: TrackAudio.alternativesFileName(track: track.number)))
+            // The track's rip, with the pooling and the files, on the reading thread.
+            let (audio, report, ripSummary) = try await blocking { [self] in
+                var (samples, summary, audio, report) = try ripTrack(
+                    track, toc: toc, ripper: ripper, secure: secure, records: records)
+                pool(
+                    track, toc: toc, records: records, samples: &samples, audio: &audio, report: &report,
+                    summary: &summary)
+                // Keep the other versions of suspect samples, so that a later repair can use them.
+                if !audio.alternatives.isEmpty {
+                    try audio.writeAlternatives(
+                        to: folder.appending(path: TrackAudio.alternativesFileName(track: track.number)))
+                }
+                try WAVFile.write(samples, to: folder.appending(path: report.file))
+                return (audio, report, summary)
             }
-            try WAVFile.write(samples, to: folder.appending(path: report.file))
+            var summary = ripSummary
+            discOffsets.formUnion(report.matchingOffsets)
+            if checksCTDB { trackAudio.append(audio) }
+            if !audio.alternatives.isEmpty { written.insert(TrackAudio.alternativesFileName(track: track.number)) }
+            written.insert(report.file)
             reports.append(report)
             if let c2 = report.c2Sectors, !c2.isEmpty { summary += ", C2 errors in \(c2.count) sectors" }
             if let unreadable = report.unreadableSectors, !unreadable.isEmpty {
@@ -254,14 +328,17 @@ public struct DiscRip {
                     report, summary: summary, seconds: Int((ContinuousClock.now - start).components.seconds)))
         }
 
-        var ctdb = RipReport.CTDBResult(status: entries.isEmpty && !options.offline ? .notInDatabase : .notChecked)
+        var ctdb = RipReport.CTDBResult(status: entries.isEmpty && checkedCTDB ? .notInDatabase : .notChecked)
         if checksCTDB {
             events(.checkingCTDB)
             let errorFree = reports.allSatisfy { $0.accurateRip == .accurate || $0.accurateRip == .otherPressings }
             var repairer = DiscRepairer(
                 toc: toc, records: records, entries: entries, reader: options.singlePass ? nil : reader)
             repairer.cacheFlushSectors = profile.cacheFlushSectors
+            repairer.stop = stop
             repairer.log = { events(.repairLog($0)) }
+            let client = webClient
+            repairer.repairData = { try await $0.downloadRepairData(client: client) }
             let repair = try await repairer.repair(trackAudio, repairing: !errorFree && options.repairs)
             trackAudio = []
             ctdb = RipReport.CTDBResult(repair)
@@ -270,14 +347,17 @@ public struct DiscRip {
             try apply(repair, to: &reports, records: records, folder: folder)
             // Keep the alternatives, with the ones that re-reads added, for tracks that are not yet right.
             for (index, report) in reports.enumerated() {
-                let url = folder.appending(path: TrackAudio.alternativesFileName(track: report.number))
+                let name = TrackAudio.alternativesFileName(track: report.number)
+                let url = folder.appending(path: name)
                 var audio = TrackAudio(samples: repair.samples(ofTrack: index))
                 audio.add(repair.alternatives(ofTrack: index))
                 let isRight = report.accurateRip == .accurate || report.accurateRip == .otherPressings
                 if isRight || audio.alternatives.isEmpty || ctdb.status == .repaired {
                     try? FileManager.default.removeItem(at: url)
+                    written.remove(name)
                 } else {
                     try audio.writeAlternatives(to: url)
+                    written.insert(name)
                 }
             }
         } else if !entries.isEmpty {
@@ -288,6 +368,21 @@ public struct DiscRip {
             profile.record(disc: toc.accurateRipDiscID.name, offsets: Array(discOffsets))
             try profiles.save(profile)
         }
+
+        // The artwork comes before the report, which lists its files.
+        if let chosen {
+            do {
+                let artwork = try await CoverArtClient(client: webClient).saveArtwork(
+                    options.artwork, of: chosen, in: folder)
+                if case .saved(let files) = artwork {
+                    for file in files { written.insert(Self.relativePath(of: file, in: folder)) }
+                }
+                events(.artwork(artwork))
+            } catch {
+                events(.artworkFailed(error))
+            }
+        }
+
         let driveReport = RipReport.Drive(
             vendor: identity.vendor, product: identity.product, revision: identity.revision, readOffset: readOffset,
             offsetSource: source)
@@ -296,23 +391,20 @@ public struct DiscRip {
         report.hiddenTrack = hiddenTrack
         report.cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         report.release = chosen
+        written.formUnion(["disc.json", "Rip Report.md"])
+        report.files = written.sorted()
         try report.write(to: folder.appending(path: "disc.json"))
         try Data(report.markdown.utf8).write(to: folder.appending(path: "Rip Report.md"))
         events(.finished(report, discOffsets: discOffsets, profile: profile))
         var result = DiscRipResult(report: report, folder: folder)
 
-        if let chosen {
-            do {
-                events(.artwork(try await CoverArtClient().saveArtwork(options.artwork, of: chosen, in: folder)))
-            } catch {
-                events(.artworkFailed(error))
-            }
-        }
         if var encoder {
+            try stop.check()
             events(.encoding(encoder.format))
             encoder.log = { events(.encodedTrack($0)) }
             let disc = try RippedDisc(folder: folder)
-            result.encodedFiles = try encoder.encode(disc, into: library)
+            let library = self.library
+            result.encodedFiles = try await blocking { [encoder] in try encoder.encode(disc, into: library) }
             events(.encoded(result.encodedFiles, format: encoder.format))
             // The WAV files go only if every track is verified and encoded; the report is in the album folder.
             if !options.keepsRip {
@@ -328,6 +420,14 @@ public struct DiscRip {
         return result
     }
 
+    /// A file's path relative to `folder`, such as "Artwork/back.jpg".
+    static func relativePath(of file: URL, in folder: URL) -> String {
+        let base = folder.standardizedFileURL.pathComponents
+        let path = file.standardizedFileURL.pathComponents
+        guard path.starts(with: base) else { return file.lastPathComponent }
+        return path.dropFirst(base.count).joined(separator: "/")
+    }
+
     private func selectedTracks(of toc: TOC) throws -> [TOC.Track] {
         guard let numbers = options.tracks else { return toc.audioTracks }
         let tracks = toc.audioTracks.filter { numbers.contains($0.number) }
@@ -338,8 +438,7 @@ public struct DiscRip {
 
     /// Rips one track, once (single pass) or securely, and fills in its report.
     private func ripTrack(
-        _ track: TOC.Track, toc: TOC, ripper: TrackRipper, secure: SecureRipper, records: [AccurateRipRecord],
-        discOffsets: inout Set<Int>
+        _ track: TOC.Track, toc: TOC, ripper: TrackRipper, secure: SecureRipper, records: [AccurateRipRecord]
     ) throws -> (samples: [UInt32], summary: String, audio: TrackAudio, report: RipReport.Track) {
         var report = RipReport.Track(
             number: track.number, file: String(format: "Track %02d.wav", track.number), startLBA: track.startLBA,
@@ -348,7 +447,6 @@ public struct DiscRip {
         report.pregapSectors = try? PregapFinder.pregap(of: track, in: toc, drive: drive)
         if options.singlePass {
             let rip = try ripper.rip(track) { events(.reading($0)) }
-            discOffsets.formUnion(rip.matchingOffsets)
             report.matchingOffsets = rip.matchingOffsets
             report.c2Sectors = rip.c2Samples.map { Array(Set($0.map { $0 / CDDA.samplesPerSector })).sorted() }
             report.unreadableSectors = Array(Set(rip.unreadableSamples.map { $0 / CDDA.samplesPerSector })).sorted()
@@ -362,7 +460,6 @@ public struct DiscRip {
             return (rip.samples, rip.summary, TrackAudio(samples: rip.samples), report)
         }
         let rip = try secure.rip(track)
-        discOffsets.formUnion(rip.matchingOffsets)
         report.matchingOffsets = rip.matchingOffsets
         report.fullReads = rip.fullReads
         report.rereadRounds = rip.rounds
@@ -395,6 +492,7 @@ public struct DiscRip {
             return
         }
         let pooled = RipPool.versions(of: track, toc: toc, in: options.pool)
+        for file in pooled.skipped { events(.poolFileSkipped(file)) }
         for version in pooled.versions {
             if case .accurate(let v1, let v2) = RipPool.verification(
                 of: version, track: track, toc: toc, records: records)

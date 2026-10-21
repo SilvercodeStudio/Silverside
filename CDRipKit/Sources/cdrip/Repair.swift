@@ -72,7 +72,16 @@ struct Repair: AsyncParsableCommand {
         repair.reads = reads
         repair.rereadRounds = rereadRounds
         repair.events = Self.print
-        _ = try await repair.run()
+        // Ctrl-C stops the repair after the read under way.
+        let interrupt = Interrupt(
+            stop: repair.stop, message: "Stopping after the read under way. Press Ctrl-C again to stop at once.")
+        defer { withExtendedLifetime(interrupt) {} }
+        do {
+            _ = try await repair.run()
+        } catch is CancellationError {
+            Swift.print("Stopped. Nothing was written to \(repair.output.path).")
+            throw ExitCode(130)
+        }
     }
 
     /// An offset-corrected reader for the disc in the drive, with the drive's offset, and
@@ -103,6 +112,8 @@ struct Repair: AsyncParsableCommand {
             Swift.print(
                 String(format: "Track %2d  ", number)
                     + "\(versions) versions, \(suspectSamples) samples where they disagree")
+        case .poolFileSkipped(let file):
+            Swift.print("\(file.url.path) was not used: \(file.reason).")
         case .ctdbEntries(let count, let mostSubmissions):
             Swift.print("CTDB: \(count) entries, up to \(mostSubmissions) submissions")
         case .repairLog(let line):

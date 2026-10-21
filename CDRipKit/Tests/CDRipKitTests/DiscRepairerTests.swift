@@ -61,6 +61,23 @@ struct DiscRepairerTests {
         #expect(result.trackConfidences == [5, 0, 5])
     }
 
+    /// An entry with more syndromes than CDRip uses is left out, and the others still work.
+    @Test func leavesOutAnEntryWithTooManySyndromes() async throws {
+        let (toc, samples, record) = try TrackRipperTests().disc()
+        var damaged = samples
+        damaged[300_000] ^= 1
+        let (good, syndromes) = entry(for: samples, toc: toc)
+        var big = good
+        big.id = 2
+        big.confidence = 99
+        big.syndromeCount = 32
+        big.column0Syndromes = [UInt16](repeating: 1, count: 32)
+        var repairer = DiscRepairer(toc: toc, records: [record], entries: [big, good])
+        repairer.repairData = { _ in syndromes }
+        let result = try await repairer.repair(tracks(of: damaged, toc: toc))
+        #expect(result.outcome == .repaired(entry: good, shift: 0, changedSamples: [300_000]))
+    }
+
     @Test func refusesPartOfADisc() async throws {
         let (toc, samples, record) = try TrackRipperTests().disc()
         let (entry, _) = entry(for: samples, toc: toc)

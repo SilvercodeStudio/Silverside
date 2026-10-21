@@ -47,6 +47,12 @@ public struct TOC: Equatable, Sendable {
             }
         }
         guard leadOutLBA > last.startLBA else { throw .invalidLeadOut }
+        // On an enhanced CD, the audio session must end after its last track starts.
+        if tracks.count >= 2, last.kind == .data, last.session > tracks[tracks.count - 2].session {
+            guard last.startLBA - CDDA.sessionGapSectors > tracks[tracks.count - 2].startLBA else {
+                throw .invalidStart(track: last.number)
+            }
+        }
         self.tracks = tracks
         self.leadOutLBA = leadOutLBA
     }
@@ -68,6 +74,22 @@ public struct TOC: Equatable, Sendable {
     /// The end of the audio session. On an enhanced CD, this is before the session gap.
     public var audioLeadOutLBA: Int {
         isEnhanced ? tracks[tracks.count - 1].startLBA - CDDA.sessionGapSectors : leadOutLBA
+    }
+
+    /// The sectors that hold audio and that a drive reads as audio: the program area up to
+    /// the audio lead-out, less any data track. The gap before track 1 is included. On a
+    /// mixed-mode disc the data track is left out; on an enhanced CD, the session gap and
+    /// the data session are. A read elsewhere fails with an I/O error.
+    public var audioAreas: [Range<Int>] {
+        var areas = [Range<Int>]()
+        var start = 0
+        for track in tracks where track.kind == .data && track.startLBA < audioLeadOutLBA {
+            let range = sectorRange(of: track)
+            if range.lowerBound > start { areas.append(start..<range.lowerBound) }
+            start = min(range.upperBound, audioLeadOutLBA)
+        }
+        if audioLeadOutLBA > start { areas.append(start..<audioLeadOutLBA) }
+        return areas
     }
 
     public func track(_ number: Int) -> Track? {

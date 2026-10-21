@@ -19,6 +19,9 @@ public struct AudioReader {
     /// If nil, the read throws.
     public var unreadableRetries: Int?
 
+    /// If set, a read checks it before each chunk, and throws `CancellationError` once it is stopped.
+    public var stop: StopToken?
+
     public init(drive: any CDDrive, toc: TOC, readOffset: Int, canOverread: Bool) {
         self.drive = drive
         self.toc = toc
@@ -59,45 +62,54 @@ public struct AudioReader {
         // Sector L of the drive's data starts at true position L * 588 - readOffset.
         let firstSector = (positions.lowerBound + readOffset).floorDivided(by: CDDA.samplesPerSector)
         let endSector = (positions.upperBound + readOffset).ceilingDivided(by: CDDA.samplesPerSector)
-        var sectors = firstSector..<endSector
-        if !canOverread {
-            sectors = sectors.clamped(to: 0..<toc.leadOutLBA)
-        }
+        let wanted = firstSector..<endSector
+        // Without overread, sectors outside the disc's audio (past its edges, in a data track,
+        // or in the session gap of an enhanced CD) are not read: their samples stay silence.
+        let parts = canOverread ? [wanted] : toc.audioAreas.map { wanted.clamped(to: $0) }.filter { !$0.isEmpty }
+        let total = parts.reduce(0) { $0 + $1.count }
 
+        var sectorsRead = 0
         var flaggedSectors = Set<Int>()
         var unreadableSectors = Set<Int>()
-        for lba in stride(from: sectors.lowerBound, to: sectors.upperBound, by: sectorsPerRead) {
-            let count = min(sectorsPerRead, sectors.upperBound - lba)
-            let (bytes, flags, unreadable) = try readChunk(at: lba, count: count, withC2: withC2)
-            let chunk = CDDA.samples(fromSectorBytes: bytes)
-            let chunkStart = lba * CDDA.samplesPerSector - readOffset
-            let overlap = (chunkStart..<(chunkStart + chunk.count)).clamped(to: positions)
-            guard !overlap.isEmpty else { continue }
-            result.samples.replaceSubrange(
-                (overlap.lowerBound - positions.lowerBound)..<(overlap.upperBound - positions.lowerBound),
-                with: chunk[(overlap.lowerBound - chunkStart)..<(overlap.upperBound - chunkStart)]
-            )
-            // Each sample has 4 bytes, so half a flag byte: the high half for even samples.
-            for (index, flag) in flags.enumerated() where flag != 0 {
-                for (half, mask) in [(0, UInt8(0xF0)), (1, UInt8(0x0F))] where flag & mask != 0 {
-                    let position = chunkStart + 2 * index + half
-                    if overlap.contains(position) { result.flagged.append(position - positions.lowerBound) }
+        for part in parts {
+            for lba in stride(from: part.lowerBound, to: part.upperBound, by: sectorsPerRead) {
+                try stop?.check()
+                let count = min(sectorsPerRead, part.upperBound - lba)
+                let (bytes, flags, unreadable) = try readChunk(at: lba, count: count, withC2: withC2)
+                sectorsRead += count
+                let chunk = CDDA.samples(fromSectorBytes: bytes)
+                let chunkStart = lba * CDDA.samplesPerSector - readOffset
+                let overlap = (chunkStart..<(chunkStart + chunk.count)).clamped(to: positions)
+                guard !overlap.isEmpty else { continue }
+                result.samples.replaceSubrange(
+                    (overlap.lowerBound - positions.lowerBound)..<(overlap.upperBound - positions.lowerBound),
+                    with: chunk[(overlap.lowerBound - chunkStart)..<(overlap.upperBound - chunkStart)]
+                )
+                // Each sample has 4 bytes, so half a flag byte: the high half for even samples.
+                for (index, flag) in flags.enumerated() where flag != 0 {
+                    for (half, mask) in [(0, UInt8(0xF0)), (1, UInt8(0x0F))] where flag & mask != 0 {
+                        let position = chunkStart + 2 * index + half
+                        if overlap.contains(position) { result.flagged.append(position - positions.lowerBound) }
+                    }
                 }
-            }
-            for sector in unreadable {
-                let start = sector * CDDA.samplesPerSector - readOffset
-                for position in (start..<(start + CDDA.samplesPerSector)).clamped(to: overlap) {
-                    result.unreadable.append(position - positions.lowerBound)
+                for sector in unreadable {
+                    let start = sector * CDDA.samplesPerSector - readOffset
+                    for position in (start..<(start + CDDA.samplesPerSector)).clamped(to: overlap) {
+                        result.unreadable.append(position - positions.lowerBound)
+                    }
                 }
-            }
-            if let progress {
-                flaggedSectors.formUnion(
-                    flags.indices.filter { flags[$0] != 0 }.map { lba + $0 / CDDA.errorFlagBytesPerSector })
-                unreadableSectors.formUnion(unreadable)
-                progress(
-                    ReadProgress(
-                        sectorsRead: lba + count - sectors.lowerBound, sectors: sectors.count,
-                        flaggedSectors: flaggedSectors.count, unreadableSectors: unreadableSectors.count))
+                if let progress {
+                    let flaggedInChunk = Set(
+                        flags.indices.filter { flags[$0] != 0 }.map { lba + $0 / CDDA.errorFlagBytesPerSector }
+                    ).sorted()
+                    flaggedSectors.formUnion(flaggedInChunk)
+                    unreadableSectors.formUnion(unreadable)
+                    progress(
+                        ReadProgress(
+                            sectorsRead: sectorsRead, sectors: total, flaggedSectors: flaggedSectors.count,
+                            unreadableSectors: unreadableSectors.count, chunk: lba..<(lba + count),
+                            flaggedInChunk: flaggedInChunk, unreadableInChunk: unreadable.sorted()))
+                }
             }
         }
         return result

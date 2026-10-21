@@ -86,6 +86,40 @@ struct EncodingTests {
         #expect(!FileManager.default.fileExists(atPath: second.path))
     }
 
+    /// The rip's report lists the files it wrote: only those go, so the user's own files in
+    /// the folder stay. The other artwork is copied to the album folder before that.
+    @Test func deletesOnlyTheFilesTheRipListed() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let artwork = folder.appending(path: "Artwork", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: artwork, withIntermediateDirectories: true)
+        try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: artwork.appending(path: "back.jpg"))
+        // The user's own files, which the rip did not write.
+        try Data("mine".utf8).write(to: artwork.appending(path: "scan.jpg"))
+        try Data("mine".utf8).write(to: folder.appending(path: "cover.png"))
+        var report = try RipReport.read(from: folder.appending(path: "disc.json"))
+        report.files = ["Track 01.wav", "Track 02.wav", "disc.json", "Rip Report.md", "cover.jpg", "Artwork/back.jpg"]
+        try report.write(to: folder.appending(path: "disc.json"))
+        let disc = try RippedDisc(folder: folder)
+        let files = try DiscEncoder(format: .flac).encode(disc, into: library)
+        let album = files[0].deletingLastPathComponent()
+        #expect(FileManager.default.fileExists(atPath: album.appending(path: "Artwork/back.jpg").path))
+        try disc.deleteRipFiles()
+        #expect(Set(try FileManager.default.contentsOfDirectory(atPath: folder.path)) == ["Artwork", "cover.png"])
+        #expect(try FileManager.default.contentsOfDirectory(atPath: artwork.path) == ["scan.jpg"])
+    }
+
+    /// A file that exists stops the encoding before any file is written.
+    @Test func checksEveryFileBeforeWritingAny() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        let files = try DiscEncoder(format: .flac).encode(disc, into: library)
+        try FileManager.default.removeItem(at: files[1])
+        #expect(throws: EncodingError.exists(files[0])) { try DiscEncoder(format: .flac).encode(disc, into: library) }
+        #expect(!FileManager.default.fileExists(atPath: files[1].path))
+    }
+
     @Test func refusesUnverifiedTracks() throws {
         let (folder, library) = try makeRip(verified: false)
         defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }

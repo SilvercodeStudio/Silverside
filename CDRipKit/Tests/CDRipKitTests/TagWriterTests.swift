@@ -143,6 +143,68 @@ struct ChunkTagsTests {
     }
 }
 
+/// Files that are cut short, or hold atoms and frames that are too small: the readers must
+/// throw or skip them, not stop the process.
+struct MalformedTagTests {
+    func temporaryFile(_ name: String) -> URL {
+        FileManager.default.temporaryDirectory.appending(path: "CDRipTests-\(UUID())-\(name)")
+    }
+
+    @Test func flacPictureBlockThatIsTooShort() throws {
+        let url = temporaryFile("short.flac")
+        defer { try? FileManager.default.removeItem(at: url) }
+        // STREAMINFO, then a last PICTURE block whose MIME type length runs past its end.
+        var file = Data("fLaC".utf8) + Data([0, 0, 0, 34]) + Data(count: 34)
+        let picture = Data([0, 0, 0, 3, 0, 0, 1, 0]) + Data("image/jpeg".utf8)
+        file += Data([0x86, 0, 0, UInt8(picture.count)]) + picture
+        try file.write(to: url)
+        #expect(throws: FLACError.malformed) { try FLACTags.readFrontCover(url) }
+        #expect(try FLACTags.read(url).isEmpty)
+    }
+
+    @Test func mp4ItemsThatAreTooSmall() throws {
+        let url = temporaryFile("short.m4a")
+        defer { try? FileManager.default.removeItem(at: url) }
+        // A title whose data atom has no type and locale, and a freeform item whose name has no flags.
+        let ilst = MP4Tags.atom(
+            "ilst",
+            [
+                MP4Tags.atom("©nam", [MP4Tags.atom("data", [Data([1, 2, 3])])]),
+                MP4Tags.atom("----", [MP4Tags.atom("name", [Data([1])])]),
+                MP4Tags.atom("©alb", [MP4Tags.dataAtom(1, Data("Album".utf8))]),
+            ])
+        let moov = MP4Tags.atom("moov", [MP4Tags.atom("udta", [MP4Tags.meta(ilst)])])
+        try (MP4Tags.atom("ftyp", []) + moov + MP4Tags.atom("mdat", [])).write(to: url)
+        let read = try MP4Tags.read(url)
+        #expect(read.comments.map { "\($0.key)=\($0.value)" } == ["ALBUM=Album"])
+        // A meta atom with no version and flags.
+        let bare = MP4Tags.atom("moov", [MP4Tags.atom("udta", [MP4Tags.atom("meta", [Data([0])])])])
+        try (MP4Tags.atom("ftyp", []) + bare + MP4Tags.atom("mdat", [])).write(to: url)
+        #expect(throws: MP4Error.malformed) { try MP4Tags.read(url) }
+    }
+
+    @Test func id3FrameThatRunsPastTheTag() throws {
+        let url = temporaryFile("short.mp3")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let frame = Data("TIT2".utf8) + ID3Tags.syncsafe(1000) + Data([0, 0, 3]) + Data("x".utf8)
+        try (Data("ID3".utf8) + Data([4, 0, 0]) + ID3Tags.syncsafe(frame.count) + frame).write(to: url)
+        #expect(throws: MP3Error.malformedID3Tag(url)) { try ID3Tags.readTextFrames(url) }
+        // A tag that claims more bytes than the file has.
+        try (Data("ID3".utf8) + Data([4, 0, 0]) + ID3Tags.syncsafe(5000) + frame).write(to: url)
+        #expect(throws: MP3Error.malformedID3Tag(url)) { try ID3Tags.readTextFrames(url) }
+    }
+
+    /// An encoder that exits without reading its input: the writes fail, and the failure is
+    /// reported, in place of SIGPIPE ending the process.
+    @Test func reportsAnEncoderThatStopsReading() throws {
+        let url = temporaryFile("none.mp3")
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(throws: MP3Error.self) {
+            try MP3Encoder.encode(AudioEncoderTests.samples, to: url, lame: URL(filePath: "/usr/bin/false"))
+        }
+    }
+}
+
 struct MP3Tests {
     @Test(.enabled(if: MP3Encoder.lame() != nil, "lame is not installed"))
     func encodesThroughLameAndTagsTheFile() throws {

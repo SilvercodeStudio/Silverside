@@ -19,19 +19,28 @@ public struct RippedDisc: Sendable {
     /// The rip's report, if the folder has one (rips before reports, in the archive, do not).
     public var report: RipReport?
 
-    /// Deletes the files that a rip wrote in its folder (the WAV files, the suspects,
-    /// disc.json, the cover, and Artwork), and the folder too if nothing else is in it.
+    /// Deletes the files that the rip wrote in its folder, as its report lists them (the WAV
+    /// files, the suspects, the reports, and the artwork), and nothing else. Then the Artwork
+    /// folder and the rip's folder go too, if nothing else is in them. A rip from before
+    /// reports listed their files loses the files that a rip writes, by name.
     public func deleteRipFiles() throws {
         let manager = FileManager.default
-        var files = tracks.flatMap { track in
-            [track.file, folder.appending(path: TrackAudio.alternativesFileName(track: track.number))]
+        var files: [URL]
+        if let listed = report?.files {
+            files = listed.map { folder.appending(path: $0) }
+        } else {
+            files = tracks.flatMap { track in
+                [track.file, folder.appending(path: TrackAudio.alternativesFileName(track: track.number))]
+            }
+            files += ["disc.json", "Rip Report.md", "cover.jpg", "cover.png", "Artwork"].map {
+                folder.appending(path: $0)
+            }
         }
-        files += ["disc.json", "Rip Report.md", "cover.jpg", "cover.png", "Artwork", ".cdrip-rip"].map {
-            folder.appending(path: $0)
-        }
+        files.append(folder.appending(path: RipFolder.claimFile))
         for file in files where manager.fileExists(atPath: file.path) { try manager.removeItem(at: file) }
-        if (try? manager.contentsOfDirectory(atPath: folder.path))?.allSatisfy({ $0 == ".DS_Store" }) == true {
-            try manager.removeItem(at: folder)
+        for directory in [folder.appending(path: "Artwork"), folder] {
+            let contents = try? manager.contentsOfDirectory(atPath: directory.path)
+            if contents?.allSatisfy({ $0 == ".DS_Store" }) == true { try manager.removeItem(at: directory) }
         }
     }
 
@@ -126,7 +135,7 @@ public struct DiscEncoder {
     /// Replace files that exist.
     public var overwrites = false
     /// Receives a line for each track, for people to read.
-    public var log: (String) -> Void = { _ in }
+    public var log: @Sendable (String) -> Void = { _ in }
 
     public init(format: AudioFormat) {
         self.format = format
@@ -157,10 +166,17 @@ public struct DiscEncoder {
 
         let cover = try disc.coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }
         let audioTracks = disc.toc.audioTracks
-        var written = [URL]()
-        var albumFolder: URL?
-        var cueTracks = [CueSheet.Track]()
-        var hiddenTrackFile: String?
+
+        // Every track's names first, so that a file that exists stops the encoding before
+        // any file is written, and a half-done album can be finished later.
+        struct Job {
+            var ripped: RippedDisc.Track
+            var index: Int
+            var metadata: TrackMetadata
+            var folder: URL
+            var file: URL
+        }
+        var jobs = [Job]()
         for ripped in disc.tracks {
             // Track 0 is the audio before track 1: MusicBrainz's pregap track, if it lists one.
             let index = ripped.number == 0 ? 0 : audioTracks.firstIndex { $0.number == ripped.number }
@@ -181,8 +197,17 @@ public struct DiscEncoder {
             let values = metadata.nameValues
             let folder = library.appending(path: folderTemplate.name(values), directoryHint: .isDirectory)
             let file = folder.appending(path: trackTemplate.name(values) + "." + format.fileExtension)
-            albumFolder = folder
             if FileManager.default.fileExists(atPath: file.path) && !overwrites { throw EncodingError.exists(file) }
+            jobs.append(Job(ripped: ripped, index: index, metadata: metadata, folder: folder, file: file))
+        }
+
+        var written = [URL]()
+        var albumFolder: URL?
+        var cueTracks = [CueSheet.Track]()
+        var hiddenTrackFile: String?
+        for job in jobs {
+            let (ripped, index, metadata, folder, file) = (job.ripped, job.index, job.metadata, job.folder, job.file)
+            albumFolder = folder
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
             let samples = try WAVFile.read(ripped.file)
@@ -213,11 +238,20 @@ public struct DiscEncoder {
                         + " that does not de-emphasize it. The CUE sheet marks it (FLAGS PRE).")
             }
         }
-        // The album folder keeps the cover at full size, and the rip's report.
+        // The album folder keeps the cover at full size, the other artwork, and the rip's report.
         if let albumFolder, let coverFile = disc.coverFile {
             let destination = albumFolder.appending(path: coverFile.lastPathComponent)
             if !FileManager.default.fileExists(atPath: destination.path) {
                 try FileManager.default.copyItem(at: coverFile, to: destination)
+            }
+        }
+        if let albumFolder {
+            let artwork = disc.folder.appending(path: "Artwork", directoryHint: .isDirectory)
+            let destination = albumFolder.appending(path: "Artwork", directoryHint: .isDirectory)
+            if FileManager.default.fileExists(atPath: artwork.path)
+                && !FileManager.default.fileExists(atPath: destination.path)
+            {
+                try FileManager.default.copyItem(at: artwork, to: destination)
             }
         }
         if let albumFolder {

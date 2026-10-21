@@ -1,3 +1,5 @@
+import Foundation
+
 @testable import CDRipKit
 
 /// A small, fast pseudo-random generator, so test images are the same on every run.
@@ -32,6 +34,39 @@ extension TOC {
     init(musicBrainzOffsets offsets: [Int], sectors: Int) throws {
         try self.init(
             audioTrackStarts: offsets.map { $0 - CDDA.leadInSectors }, leadOutLBA: sectors - CDDA.leadInSectors)
+    }
+}
+
+/// A web that answers each URL that starts with a known prefix, and 404 to any other. With
+/// `failsEverything`, every request fails as if there were no network. Keeps the requests.
+actor FakeWeb: HTTPTransport {
+    var answers: [(prefix: String, data: Data)]
+    var failsEverything = false
+    private(set) var requests: [String] = []
+
+    init(_ answers: [(prefix: String, data: Data)] = [], failsEverything: Bool = false) {
+        self.answers = answers
+        self.failsEverything = failsEverything
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        let url = request.url!.absoluteString
+        requests.append(url)
+        if failsEverything { throw URLError(.cannotConnectToHost) }
+        let status = answers.contains { url.hasPrefix($0.prefix) } ? 200 : 404
+        let body = answers.first { url.hasPrefix($0.prefix) }?.data ?? Data()
+        return (body, HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: [:])!)
+    }
+
+    /// A client that uses this web, with no waits between requests, and its own cache folder.
+    func client(in directory: URL) -> WebClient {
+        let hosts = [
+            "musicbrainz.org", "coverartarchive.org", "www.accuraterip.com", "db.cuetools.net", "p.cuetools.net",
+        ]
+        let policies = hosts.map { ($0, WebClient.HostPolicy(interval: .zero, lifetime: .seconds(60))) }
+        return WebClient(
+            directory: directory, transport: self, policies: Dictionary(uniqueKeysWithValues: policies),
+            firstRetryDelay: .milliseconds(10))
     }
 }
 

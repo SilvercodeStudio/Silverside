@@ -1,13 +1,15 @@
 import Foundation
 
 /// What a repair of ripped files is doing, step by step: the CLI prints these, and the app shows them.
-public enum RipRepairEvent {
+public enum RipRepairEvent: Sendable {
     /// A version of the track matches AccurateRip, and is used.
     case trackAccurate(number: Int)
     /// The track is free of errors: it matches another pressing, `shift` samples away.
     case trackMatchesOtherPressing(number: Int, shift: Int)
     /// The track joins the repair with its versions, which disagree in `suspectSamples` samples.
     case trackPooled(number: Int, versions: Int, suspectSamples: Int)
+    /// A track file in a pooled folder could not be used.
+    case poolFileSkipped(RipPool.SkippedFile)
     case ctdbEntries(count: Int, mostSubmissions: Int)
     /// A line from the CTDB repair, for people to read.
     case repairLog(String)
@@ -49,7 +51,12 @@ public struct RipRepair {
     public var reads = 3
     /// Rounds of re-reads for columns that cannot be repaired.
     public var rereadRounds = 4
-    public var events: (RipRepairEvent) -> Void = { _ in }
+    /// Hears each step, on the thread that reads the files and the disc.
+    public var events: @Sendable (RipRepairEvent) -> Void = { _ in }
+    /// The client for the lookups and the repair data. Tests give one with a fake transport.
+    public var webClient = WebClient.shared
+    /// Stops the repair when set, from any thread. Cancelling the task that awaits `run()` does the same.
+    public var stop = StopToken()
 
     /// Pools `folders` with the re-reads that earlier repairs kept next to the first, as
     /// "<folder> read 2" and so on. The repaired tracks go in "<first folder> repaired".
@@ -61,24 +68,40 @@ public struct RipRepair {
     }
 
     public func run() async throws -> DiscRepairer.Result {
+        let stop = self.stop
+        return try await withTaskCancellationHandler {
+            try await repair()
+        } onCancel: {
+            stop.stop()
+        }
+    }
+
+    private func repair() async throws -> DiscRepairer.Result {
         let audioTracks = toc.audioTracks
         guard !audioTracks.isEmpty else { throw RipRepairError.noAudioTracks }
         let firstFolder = folders[0].standardizedFileURL
+        var reader = self.reader
+        reader?.stop = stop
         // Look everything up first, so that a network problem shows before long re-reads.
-        let records = try await AccurateRipRecord.download(for: toc.accurateRipDiscID)
-        let entries = try await CTDBEntry.lookup(toc).sorted { $0.confidence > $1.confidence }
+        let records = try await AccurateRipRecord.download(for: toc.accurateRipDiscID, client: webClient)
+        let entries = try await CTDBEntry.lookup(toc, client: webClient).sorted { $0.confidence > $1.confidence }
         guard !entries.isEmpty else { throw RipRepairError.notInCTDB }
+        try stop.check()
 
         // Every version of every track, and the disc as the first versions give it, which
         // is enough to find the tracks that match AccurateRip at another pressing's offset.
         try RipPool.check(folders, toc: toc)
-        var versions = [[[UInt32]]]()
-        var saved = [[[Int: [UInt32]]]]()
-        for track in audioTracks {
-            let pooled = RipPool.versions(of: track, toc: toc, in: folders)
-            guard !pooled.versions.isEmpty else { throw RipRepairError.missingTrack(track.number) }
-            versions.append(pooled.versions)
-            saved.append(pooled.alternatives)
+        let (versions, saved) = try await blocking { [folders, toc, events] in
+            var versions = [[[UInt32]]]()
+            var saved = [[[Int: [UInt32]]]]()
+            for track in audioTracks {
+                let pooled = RipPool.versions(of: track, toc: toc, in: folders)
+                for file in pooled.skipped { events(.poolFileSkipped(file)) }
+                guard !pooled.versions.isEmpty else { throw RipRepairError.missingTrack(track.number) }
+                versions.append(pooled.versions)
+                saved.append(pooled.alternatives)
+            }
+            return (versions, saved)
         }
         var trackStarts = [Int]()
         var firstVersions = [UInt32]()
@@ -114,32 +137,40 @@ public struct RipRepair {
             }
             // With the disc in a drive, read a track that has few versions again, so that
             // the reads can disagree where the disc is damaged.
-            var trackVersions = versions[index]
-            if let reader, trackVersions.count < reads {
-                for _ in trackVersions.count..<reads {
-                    reader.flushCache(awayFrom: toc.sectorRange(of: track), count: cacheFlushSectors)
-                    let read = try reader.readTrack(track)
-                    trackVersions.append(read)
-                    // Keep the read, so that a later run can use it.
-                    let folder = Self.nextReadFolder(after: firstFolder, track: track)
-                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                    try WAVFile.write(read, to: folder.appending(path: String(format: "Track %02d.wav", track.number)))
+            try stop.check()
+            let (reads, cacheFlushSectors, toc) = (self.reads, self.cacheFlushSectors, self.toc)
+            let (audio, versionCount) = try await blocking { [trackVersions = versions[index], saved = saved[index]] in
+                var trackVersions = trackVersions
+                if let reader, trackVersions.count < reads {
+                    for _ in trackVersions.count..<reads {
+                        try reader.flushCache(awayFrom: toc.sectorRange(of: track), count: cacheFlushSectors)
+                        let read = try reader.readTrack(track)
+                        trackVersions.append(read)
+                        // Keep the read, so that a later run can use it.
+                        let folder = Self.nextReadFolder(after: firstFolder, track: track)
+                        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                        try WAVFile.write(
+                            read, to: folder.appending(path: String(format: "Track %02d.wav", track.number)))
+                    }
                 }
+                var audio = TrackAudio(versions: trackVersions)
+                // Other values that earlier rips and repairs kept for suspect samples.
+                for alternatives in saved { audio.add(alternatives) }
+                return (audio, trackVersions.count)
             }
-            var audio = TrackAudio(versions: trackVersions)
-            // Other values that earlier rips and repairs kept for suspect samples.
-            for alternatives in saved[index] { audio.add(alternatives) }
             tracks.append(audio)
-            events(
-                .trackPooled(
-                    number: track.number, versions: trackVersions.count, suspectSamples: audio.alternatives.count))
+            events(.trackPooled(number: track.number, versions: versionCount, suspectSamples: audio.alternatives.count))
         }
 
         events(.ctdbEntries(count: entries.count, mostSubmissions: entries[0].confidence))
         var repairer = DiscRepairer(toc: toc, records: records, entries: entries, reader: reader)
         repairer.cacheFlushSectors = cacheFlushSectors
         repairer.rereadRounds = rereadRounds
+        repairer.stop = stop
+        let events = self.events
         repairer.log = { events(.repairLog($0)) }
+        let client = webClient
+        repairer.repairData = { try await $0.downloadRepairData(client: client) }
         let result = try await repairer.repair(tracks)
         // Keep the alternatives, with the ones that re-reads added, so that a later run can use them.
         let proved: Set<Int>? =
@@ -159,7 +190,7 @@ public struct RipRepair {
         }
         events(.finished(result))
         switch result.outcome {
-        case .repaired, .partlyRepaired: try write(result, records: records)
+        case .repaired, .partlyRepaired: try await blocking { [self] in try write(result, records: records) }
         case .verified, .notVerified: break
         }
         return result

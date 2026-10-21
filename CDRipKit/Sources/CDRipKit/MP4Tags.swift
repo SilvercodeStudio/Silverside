@@ -63,7 +63,8 @@ public enum MP4Tags {
         var cover: Data?
         for item in try existingItems(in: data, moov: moov) {
             let children = try atoms(in: data, item.body)
-            let values = children.filter { $0.type == "data" }.map {
+            // A data atom starts with its type and locale, 8 bytes; one without them is skipped.
+            let values = children.filter { $0.type == "data" && $0.body.count >= 8 }.map {
                 data[($0.body.lowerBound + 8)..<$0.body.upperBound]
             }
             switch item.type {
@@ -124,6 +125,8 @@ public enum MP4Tags {
         guard let udta = try atoms(in: data, moov.body).first(where: { $0.type == "udta" }),
             let meta = try atoms(in: data, udta.body).first(where: { $0.type == "meta" })
         else { return [] }
+        // meta is a full atom: its version and flags come before its children.
+        guard meta.body.count >= 4 else { throw MP4Error.malformed }
         let metaChildren = (meta.body.lowerBound + 4)..<meta.body.upperBound
         guard let ilst = try atoms(in: data, metaChildren).first(where: { $0.type == "ilst" }) else { return [] }
         return try atoms(in: data, ilst.body)
@@ -131,7 +134,7 @@ public enum MP4Tags {
 
     static func freeformName(of item: Atom, in data: Data) throws -> String? {
         guard item.type == "----",
-            let name = try atoms(in: data, item.body).first(where: { $0.type == "name" })
+            let name = try atoms(in: data, item.body).first(where: { $0.type == "name" }), name.body.count >= 4
         else { return nil }
         return String(decoding: data[(name.body.lowerBound + 4)..<name.body.upperBound], as: UTF8.self)
     }
@@ -167,7 +170,9 @@ public enum MP4Tags {
                     try visit(child.body)
                 case "stco", "co64":
                     let wide = child.type == "co64"
+                    guard child.body.count >= 8 else { throw MP4Error.malformed }
                     let count = Int(uint32(data, child.body.lowerBound + 4))
+                    guard child.body.count >= 8 + count * (wide ? 8 : 4) else { throw MP4Error.malformed }
                     var at = child.body.lowerBound + 8
                     for _ in 0..<count {
                         if wide {

@@ -101,6 +101,58 @@ struct SecureRipperTests {
         #expect(rip.unresolvedSectors == rip.suspectSectors)
     }
 
+    /// A disc with one track has no room outside it, so the flush reads inside the track,
+    /// away from the suspect sectors. Without it, re-reads come from the cache and repeat one
+    /// version, which wins by the agreement margin although it is wrong.
+    @Test(arguments: [false, true])
+    func flushesInsideADiscWithOneTrack(withRecords: Bool) throws {
+        let (toc, samples) = try makeDisc(trackSectors: [1400])
+        let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: 6)
+        drive.unstableSectors = [700]
+        drive.cacheSectors = 100
+        let trackSamples = Array(samples[0..<(1400 * 588)])
+        let checksum = AccurateRipAccumulator.checksum(of: trackSamples[...], isFirstTrack: true, isLastTrack: true)
+        let sector450 = Array(trackSamples[(450 * 588)..<(451 * 588)])
+        let frame450 = AccurateRipAccumulator.checksum(of: sector450[...], isFirstTrack: false, isLastTrack: false)
+        let record = AccurateRipRecord(
+            discID: toc.accurateRipDiscID,
+            tracks: [.init(confidence: 3, checksum: checksum.v2, frame450Checksum: frame450.v1)])
+        let reader = AudioReader(drive: drive, toc: toc, readOffset: 6, canOverread: false)
+        let secure = SecureRipper(ripper: TrackRipper(reader: reader, records: withRecords ? [record] : []))
+        let rip = try secure.rip(toc.tracks[0])
+        let sector = (700 * 588 - 6)..<(701 * 588 - 6)
+        if withRecords {
+            #expect(rip.status == .accurate(v1Confidence: 0, v2Confidence: 3))
+            #expect(Array(rip.samples[sector]) == Array(samples[sector]))
+        } else {
+            // The sector alternates on every read from the disc, so nothing decides it.
+            #expect(rip.status == .suspect)
+            #expect(rip.unresolvedSectors == [700] && rip.versionCounts[700] == 2)
+        }
+    }
+
+    /// A sector that fails to read is not silence: it has no version until a read gets
+    /// it, and one such read is not enough to decide it.
+    @Test(arguments: [false, true])
+    func readsAnUnreadableSectorAgainLater(withRecords: Bool) throws {
+        let (toc, samples, record) = try TrackRipperTests().disc()
+        let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: Self.driveOffset)
+        // The first read's chunk and its two tries fail; the next read works.
+        drive.failingReads = [600: 3]
+        var reader = AudioReader(drive: drive, toc: toc, readOffset: Self.driveOffset, canOverread: false)
+        reader.unreadableRetries = 1
+        var secure = SecureRipper(ripper: TrackRipper(reader: reader, records: withRecords ? [record] : []))
+        secure.cacheFlushSectors = toc.leadOutLBA
+        let track = toc.tracks[1]
+        let rip = try secure.rip(track)
+        // Drive sector 600, at offset +667, holds the end of sector 138 and most of 139.
+        #expect(rip.unreadableSectors == [138, 139])
+        #expect(rip.status == (withRecords ? .accurate(v1Confidence: 0, v2Confidence: 4) : .consistent))
+        #expect(rip.unresolvedSectors.isEmpty)
+        #expect(rip.samples[...] == trueSamples(of: track, in: toc, samples))
+        if !withRecords { #expect(rip.rounds == 1 && rip.versionCounts == [138: 1, 139: 1]) }
+    }
+
     @Test func joinsNearbySectorsIntoRuns() {
         #expect(SecureRipper.runs(of: [1, 2, 4, 8, 9, 20]) == [1..<5, 8..<10, 20..<21])
         #expect(SecureRipper.runs(of: []) == [])

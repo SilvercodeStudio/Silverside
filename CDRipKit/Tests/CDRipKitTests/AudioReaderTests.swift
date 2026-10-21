@@ -75,4 +75,42 @@ struct AudioReaderTests {
         let reader = AudioReader(drive: drive, toc: toc, readOffset: 6, canOverread: true)
         #expect(throws: DriveError.sectorOutOfRange(lba: toc.leadOutLBA)) { try reader.readTrack(toc.tracks[2]) }
     }
+
+    /// An enhanced CD: the sectors between the audio and the data session cannot be read.
+    /// The last track's read ends at the audio lead-out, and the cache flush stays in the audio.
+    @Test func staysInTheAudioOfAnEnhancedCD() throws {
+        let (plain, samples) = try makeDisc(trackSectors: [400, 500, 600])
+        let dataStart = plain.leadOutLBA + CDDA.sessionGapSectors
+        let toc = try TOC(
+            tracks: plain.tracks + [.init(number: 4, startLBA: dataStart, kind: .data, session: 2)],
+            leadOutLBA: dataStart + 3000)
+        let image = samples + [UInt32](repeating: 0, count: (toc.leadOutLBA - plain.leadOutLBA) * 588)
+        let drive = SimulatedDrive(toc: toc, samples: image, readOffset: 6)
+        let reader = AudioReader(drive: drive, toc: toc, readOffset: 6, canOverread: false)
+        let last = toc.audioTracks[2]
+        // The margin past the audio lead-out is silence, as past the edge of a plain disc. So
+        // are the last 6 samples before it, which the drive's offset puts in the session gap.
+        let margin = 5 * 588
+        let end = toc.audioLeadOutLBA * 588
+        let read = try reader.readSamples((end - margin)..<(end + margin))
+        #expect(read[0..<(margin - 6)] == samples[(end - margin)..<(end - 6)])
+        #expect(read[(margin - 6)...].allSatisfy { $0 == 0 })
+        let before = drive.discReads
+        try reader.flushCache(awayFrom: toc.sectorRange(of: last), count: 500)
+        // Every flush read succeeded, so none was in the session gap or the data track.
+        #expect(drive.discReads - before == (500 + reader.sectorsPerRead - 1) / reader.sectorsPerRead)
+    }
+
+    @Test func flushesInTheLargestGapFirst() {
+        let gaps = AudioReader.gaps(in: [0..<1400], around: [700..<701], margin: 128)
+        #expect(gaps == [0..<572, 829..<1400])
+        #expect(AudioReader.gaps(in: [0..<1400], around: [0..<1400], margin: 128).isEmpty)
+        #expect(
+            AudioReader.gaps(in: [0..<1400], around: [100..<200, 1300..<1400], margin: 0) == [200..<1300, 0..<100])
+        // A data track between two audio areas is not a gap.
+        #expect(
+            AudioReader.gaps(in: [0..<100, 400..<500], around: [450..<460], margin: 10) == [
+                0..<100, 400..<440, 470..<500,
+            ])
+    }
 }

@@ -95,4 +95,11 @@ struct NameTemplateTests {
         #expect(NameTemplate.safeComponent("  ..Hidden: a/b\tc. ") == "Hidden- a-b c")
         #expect(NameTemplate.safeComponent(String(repeating: "é", count: 200)).utf8.count <= 240)
     }
+
+    /// Empty values make no empty folder names, and a name with nothing in it is "Unknown".
+    @Test func neverMakesAnEmptyName() {
+        #expect(NameTemplate("{albumArtist}/{album}").name(["album": "Live"]) == "Live")
+        #expect(NameTemplate("{albumArtist}/{album}").name(["albumArtist": "..", "album": "  "]) == "Unknown")
+        #expect(NameTemplate.libraryTrack.name([:]) == "Unknown")
+    }
 }

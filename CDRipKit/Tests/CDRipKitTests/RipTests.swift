@@ -177,4 +177,75 @@ struct WAVFileTests {
         #expect(data[4] == 40 && data[22] == 2 && data[34] == 16 && data[40] == 4)
         #expect(Array(data[44...]) == [0x01, 0x00, 0x02, 0x00])
     }
+
+    /// Other chunks before the audio, of odd sizes with a pad byte, are stepped over.
+    @Test func stepsOverOtherChunks() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "CDRipTests-\(UUID()).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let samples: [UInt32] = [0x0002_0001, 0xFFFF_8000, 0]
+        var data = [UInt8](WAVFile.data(for: samples))
+        // A LIST chunk of 5 bytes (so a pad byte follows) between "WAVE" and "fmt ".
+        let list: [UInt8] = Array("LIST".utf8) + [5, 0, 0, 0] + Array("INFOa".utf8) + [0]
+        data.insert(contentsOf: list, at: 12)
+        let size = UInt32(data.count - 8)
+        data.replaceSubrange(4..<8, with: withUnsafeBytes(of: size.littleEndian, Array.init))
+        try Data(data).write(to: url)
+        #expect(try WAVFile.read(url) == samples)
+    }
+
+    /// Some programs write 16-bit stereo in the extensible form: format tag 0xFFFE, and the
+    /// PCM format in the subformat.
+    @Test func readsTheExtensibleForm() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "CDRipTests-\(UUID()).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let samples: [UInt32] = [0x0002_0001, 0xFFFF_8000, 0]
+        var data = Data()
+        func append16(_ value: UInt16) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+        func append32(_ value: UInt32) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+        data.append(contentsOf: Array("RIFF".utf8))
+        append32(UInt32(4 + 8 + 40 + 8 + samples.count * 4))
+        data.append(contentsOf: Array("WAVEfmt ".utf8))
+        append32(40)
+        append16(0xFFFE)
+        append16(2)
+        append32(44100)
+        append32(44100 * 4)
+        append16(4)
+        append16(16)
+        append16(22)  // the extension's size
+        append16(16)  // valid bits
+        append32(3)  // channel mask
+        // The PCM subformat GUID.
+        data.append(contentsOf: [1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
+        data.append(contentsOf: Array("data".utf8))
+        append32(UInt32(samples.count * 4))
+        samples.withUnsafeBytes { data.append(contentsOf: $0) }
+        try data.write(to: url)
+        #expect(try WAVFile.read(url) == samples)
+        // Another subformat (floating point) is not CD audio.
+        data[20 + 24] = 3
+        try data.write(to: url)
+        #expect(throws: WAVFileError.self) { try WAVFile.read(url) }
+    }
+}
+
+struct RipPoolTests {
+    /// Track files that are there but cannot be used are reported, not dropped in silence.
+    @Test func reportsTrackFilesItCannotUse() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "CDRipTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let toc = try TOC(audioTrackStarts: [0, 10], leadOutLBA: 20)
+        let folders = ["good", "short", "text", "empty"].map { root.appending(path: $0, directoryHint: .isDirectory) }
+        for folder in folders {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        try WAVFile.write([UInt32](repeating: 7, count: 10 * 588), to: folders[0].appending(path: "Track 01.wav"))
+        try WAVFile.write([UInt32](repeating: 7, count: 100), to: folders[1].appending(path: "Track 01.wav"))
+        try Data("hello".utf8).write(to: folders[2].appending(path: "Track 01.wav"))
+        let pooled = RipPool.versions(of: toc.tracks[0], toc: toc, in: folders)
+        #expect(pooled.versions.count == 1)
+        #expect(pooled.skipped.map { $0.url.deletingLastPathComponent().lastPathComponent } == ["short", "text"])
+        #expect(pooled.skipped[0].reason == "it has 100 samples, and the track 5880")
+        #expect(pooled.skipped[1].reason.contains("not a WAV file"))
+    }
 }

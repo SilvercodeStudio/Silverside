@@ -147,26 +147,33 @@ public actor WebClient {
     }
 
     /// Waits until `interval` has passed since the last request to `host` from any
-    /// CDRip process. The time is kept in a file, under a lock while this waits.
+    /// CDRip process. The time of the last request is kept in a file. The file's lock is
+    /// held only while the time is read or written, never while this waits, so a second
+    /// request in this process (a rip in another drive) waits in its own task rather
+    /// than in `flock`, which would hold a thread.
     private func waitForTurn(host: String, interval: Duration) async throws {
         let folder = directory.appending(path: "rate", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = open(folder.appending(path: host.isEmpty ? "unknown" : host).path, O_RDWR | O_CREAT, 0o644)
         guard file >= 0 else { return }
         defer { close(file) }
-        flock(file, LOCK_EX)
-        defer { flock(file, LOCK_UN) }
-
-        var buffer = [UInt8](repeating: 0, count: 32)
-        let count = pread(file, &buffer, buffer.count, 0)
-        let last = count > 0 ? Double(String(decoding: buffer.prefix(count), as: UTF8.self)) ?? 0 : 0
-        let wait =
-            last + Double(interval.components.seconds) + Double(interval.components.attoseconds) / 1e18
-            - Date().timeIntervalSince1970
-        if wait > 0 { try await Task.sleep(for: .seconds(wait)) }
-        let now = Array(String(Date().timeIntervalSince1970).utf8)
-        ftruncate(file, 0)
-        _ = pwrite(file, now, now.count, 0)
+        let seconds = Double(interval.components.seconds) + Double(interval.components.attoseconds) / 1e18
+        while true {
+            flock(file, LOCK_EX)
+            var buffer = [UInt8](repeating: 0, count: 32)
+            let count = pread(file, &buffer, buffer.count, 0)
+            let last = count > 0 ? Double(String(decoding: buffer.prefix(count), as: UTF8.self)) ?? 0 : 0
+            let wait = last + seconds - Date().timeIntervalSince1970
+            if wait <= 0 {
+                let now = Array(String(Date().timeIntervalSince1970).utf8)
+                ftruncate(file, 0)
+                _ = pwrite(file, now, now.count, 0)
+                flock(file, LOCK_UN)
+                return
+            }
+            flock(file, LOCK_UN)
+            try await Task.sleep(for: .seconds(wait))
+        }
     }
 }
 

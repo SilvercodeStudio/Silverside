@@ -6,12 +6,12 @@ The first goal is a usable CLI: rip a whole disc to tagged FLAC or ALAC files wi
 |---|---|---|
 | 1 | Engine basics | Done |
 | 2 | Hardware access and CLI skeleton | Done |
-| 3 | Rip to WAV with AccurateRip verification | In progress |
-| 4 | Encoding and tags | Not started |
-| 5 | Metadata | Not started |
-| 6 | Secure re-reads | In progress |
-| 7 | CTDB verification and repair | In progress |
-| 8 | Rip log, CUE sheets, gaps and indexes | Not started |
+| 3 | Rip to WAV with AccurateRip verification | Done |
+| 4 | Encoding and tags | Mostly done |
+| 5 | Metadata | Mostly done |
+| 6 | Secure re-reads | Done |
+| 7 | CTDB verification and repair | Done |
+| 8 | Rip log, CUE sheets, gaps and indexes | Mostly done |
 | 9 | Multi-disc releases and style recipes | Not started |
 
 ## 1. Engine basics — done
@@ -274,6 +274,7 @@ Still to do:
 - A drive report (`cdrip drives -d diskN --report`, later the app's bug-report tool): `DriveReport` holds the drive's registry (device and protocol characteristics, such as "CD Features", "Retry Count" 20, and "Read Time Out Duration" 30000 ms, and the USB bridge's names and IDs, with no serial numbers), the Mac and macOS, CDRip's profile of the drive, the disc's TOC and disc ID (no audio), and 7 quick checks with the disc in it: the TOC, a read of 2,600 sectors (speed), C2 flags, the Q subchannel, a read past the lead-out, CD-Text, and the cache size. About 10 seconds. From it, a drive that the developer does not have can be modeled in `SimulatedDrive`. Checked on the MATSHITA: its enclosure's bridge is an Initio chip (USB 0x13FD:0x0840).
 - `cdrip cdtext -d diskN`: every field of the disc's CD-Text (titles, performers, songwriters, composers, arrangers, messages, disc ID, genre, UPC and ISRCs, the blocks' languages and character set), with `--packs` for the raw packs and `--json`.
 - `cdrip eject -d diskN` (or `--all`): unmounts and ejects the disc through DiskArbitration, as the Finder does. Version 0.2.
+- Ctrl-C during `rip` or `repair` stops after the read under way, keeps the tracks done so far, and releases the folder's claim; a second Ctrl-C ends the process at once.
 
 Still to do:
 
@@ -282,9 +283,21 @@ Still to do:
 
 The rip and repair workflows are in the engine (`DiscRip`, `RipRepair`), and the CLI only prints their events, so the app can use the same code.
 
+## Code review of 0.2 — done
+
+Before the app, the whole engine and CLI were reviewed (`docs/Review-0.2.md`: 22 findings, 19 fixed and one in part, each fix with a test; items 21 and 22 belong to the app). The changes that matter most:
+
+- The cache flush reads inside a track when there is no room outside it (a disc with one track), away from the suspect sectors and a read-ahead margin; it stays in the disc's audio areas (`TOC.audioAreas`), so on an enhanced CD it never reads the data session.
+- A sector that could not be read has no version until a read gets it, and a version must come back twice to decide a sector. Two shifted reads agree only when no run of 32 sectors differs. A track that no later read confirms is suspect.
+- Lookups are best effort: a failed AccurateRip or CTDB lookup leaves that check out, and the rip goes on.
+- A rip can be stopped (`StopToken`, or by cancelling the task), its reads and encoding run on a thread of their own (`blocking(_:)`), its events are `Sendable` and carry sector positions for a live graph, and its report lists the files it wrote.
+- `lame` exiting early no longer ends the process (SIGPIPE); the tag readers throw on short files; a CTDB entry with more than 16 syndromes is left out.
+
 ## Loose ends
 
 Built and tested with the simulator, but not yet on hardware:
+
+- The review's changes to the secure rip (the flush inside a track, the shifted-read agreement test, unreadable sectors as unresolved) and to the threads: one short rip of a clean disc and one of a damaged disc, and one `cdrip repair` with the disc in a drive, to check that the output did not change.
 
 - The workflows in the engine (`DiscRip`, `RipRepair`): one short rip and one repair on a drive, to check that the output did not change.
 - The prompt for a release when the ranking cannot pick one (a disc in several releases with no MCN, barcode, or earlier choice to settle it).
@@ -299,6 +312,7 @@ Discs that are not yet fully verified:
 
 Deferred:
 
+- CTDB entry order. `DiscRepairer` tries entries by their submissions, and up to three shifts for each. On *Reckoning* (2026-10-21), the 31-submission entry, which is another pressing's, was tried at three shifts first, each a repair that stopped after 200 columns, before the 19-submission entry repaired the disc at shift 0 with no errors in column 0. Ordering every (entry, shift) pair by the errors in column 0 first (an exact match before any with errors), then by submissions, would try the right one first and save a minute or two on such discs.
 - Discs that MusicBrainz does not know: names from CD-Text, or typed in (see the README's TODO).
 - CD-Text in other blocks and character sets (MS-JIS).
 - De-emphasis as an option.
@@ -317,6 +331,8 @@ Deferred:
 A possible goal after the CD work: extract the audio from a DVD-Audio disc (the user has *American Beauty*) and from a Blu-ray audio disc (a BD-R copy of *The Dark Side of the Moon*). These are different from CD: files on a UDF file system, MLP or PCM streams, and, on DVD-Audio, CPPM copy protection.
 
 ## The app (after the CLI)
+
+What the engine gives the app, after the 0.2 review: `DiscRip.run()` and `RipRepair.run()` are async, run their reads on a thread of their own, and send `Sendable` events from that thread (`events` is `@Sendable`), so the app awaits them from any task and sends each event to its main actor. A Stop button cancels the task or calls `stop.stop()`; `run()` throws `CancellationError` after the chunk under way, and the folder keeps the tracks written so far. `RipEvent.reading` carries each chunk's sectors (counted from the track's start) and the flagged and unreadable ones, and `.rereading` the suspect sectors, for the live graph. Two things to remember: the app runs under App Transport Security, and AccurateRip (`www.accuraterip.com`) and CTDB (`db.cuetools.net`, `p.cuetools.net`) are plain HTTP, so its Info.plist needs exception domains for them; and a whole-disc repair holds the audio and several copies of it, two to three GB for an 80-minute disc, more with two drives at once.
 
 - A simple ripping view by default: insert a disc, check the metadata, rip.
 - All the technical detail is there to open on demand: everything the rip report has, for the disc (TOC, ISRCs, MCN, CD-Text, pregaps, flags) and for the rip.

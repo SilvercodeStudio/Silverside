@@ -45,6 +45,28 @@ struct CueSheetTests {
                 """)
     }
 
+    /// A hidden track before track 1, and a pregap before track 2, in one sheet.
+    @Test func putsAHiddenTrackAndLaterPregapsTogether() {
+        var sheet = CueSheet(tracks: [
+            .init(number: 1, file: "01 One.flac", sectors: 4500, pregapSectors: 32),
+            .init(number: 2, file: "02 Two.flac", sectors: 3000, pregapSectors: 150),
+        ])
+        sheet.hiddenTrackFile = "00 Hidden Track.flac"
+        #expect(
+            sheet.text == """
+                FILE "00 Hidden Track.flac" WAVE
+                  TRACK 01 AUDIO
+                    INDEX 00 00:00:00
+                FILE "01 One.flac" WAVE
+                    INDEX 01 00:00:00
+                  TRACK 02 AUDIO
+                    INDEX 00 00:58:00
+                FILE "02 Two.flac" WAVE
+                    INDEX 01 00:00:00
+
+                """)
+    }
+
     @Test func writesTimesInFrames() {
         #expect(
             CueSheet.time(0) == "00:00:00" && CueSheet.time(74) == "00:00:74" && CueSheet.time(4500 + 76) == "01:01:01")

@@ -17,7 +17,8 @@ final class DriveSlot: Identifiable {
     let id: String
     private(set) var device: OpticalDrive
     private(set) var discState = DiscState.empty
-    private(set) var disc: DiscInfo?
+    /// Views change its edits; the slot sets the rest.
+    var disc: DiscInfo?
     /// The tracks to rip, by number.
     var selectedTracks: Set<Int> = []
     /// Read each track once, with no re-reads.

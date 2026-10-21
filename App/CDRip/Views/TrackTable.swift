@@ -20,7 +20,12 @@ struct TrackTable: View {
             .width(28)
             TableColumn("Title") { track in
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(track.title)
+                    if canEdit {
+                        TextField("", text: title(of: track.number, shown: track.title))
+                            .textFieldStyle(.plain)
+                    } else {
+                        Text(track.title)
+                    }
                     if let artist = track.artist { Text(artist).font(.caption).foregroundStyle(.secondary) }
                 }
             }
@@ -43,6 +48,22 @@ struct TrackTable: View {
             .width(min: 70, ideal: 110)
         }
         .alternatingRowBackgrounds(.disabled)
+    }
+
+    /// Titles are editable from the MusicBrainz names (or the typed-in ones), not while a rip runs.
+    private var canEdit: Bool {
+        slot.rip?.isRunning != true && slot.namesSource == .musicBrainz && slot.disc?.baseRelease != nil
+    }
+
+    /// A binding to a track's title edit: the original title clears the edit.
+    private func title(of number: Int, shown: String) -> Binding<String> {
+        Binding(
+            get: { slot.disc?.tracks(from: .musicBrainz).first { $0.number == number }?.title ?? shown },
+            set: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespaces)
+                let original = slot.disc?.baseTitle(ofTrack: number)
+                slot.disc?.edits.setTitle(trimmed.isEmpty || trimmed == original ? nil : trimmed, ofTrack: number)
+            })
     }
 
     private func binding(for number: Int) -> Binding<Bool> {

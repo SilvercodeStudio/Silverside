@@ -14,7 +14,10 @@ public struct RippedDisc: Sendable {
 
     public var folder: URL
     public var toc: TOC
+    /// The release with the rip's edits applied (see `MetadataEdits`).
     public var release: MusicBrainzRelease?
+    /// The rip's edits, if disc.json has any.
+    public var edits: MetadataEdits?
     public var tracks: [Track]
     /// The rip's report, if the folder has one (rips before reports, in the archive, do not).
     public var report: RipReport?
@@ -60,6 +63,10 @@ public struct RippedDisc: Sendable {
         release = try (object["release"]).map {
             try JSONDecoder().decode(MusicBrainzRelease.self, from: JSONSerialization.data(withJSONObject: $0))
         }
+        edits = try (object["edits"]).map {
+            try JSONDecoder().decode(MetadataEdits.self, from: JSONSerialization.data(withJSONObject: $0))
+        }
+        if let edits, let original = release { release = edits.applied(to: original, toc: toc) }
         // A rip's report is disc.json itself, or the archive's "ripReport".
         let report = (object["ripReport"] as? [String: Any]) ?? (object["tracks"] != nil ? object : nil)
         let decoder = JSONDecoder()

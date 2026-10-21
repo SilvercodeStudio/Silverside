@@ -50,6 +50,10 @@ struct DiscInfo {
     /// The ranking could not settle on a release, and the user has not chosen one.
     var isAmbiguous = false
     var cover: Data?
+    /// A release CDRip made, when MusicBrainz has none: from CD-Text, or "Unknown".
+    var manual: MusicBrainzRelease?
+    /// The user's changes to the names, kept with the rip and, for the album, for the release.
+    var edits = MetadataEdits()
 
     init(bsdName: String?, toc: TOC, mcn: String?, cdText: CDText?) {
         self.bsdName = bsdName
@@ -64,6 +68,19 @@ struct DiscInfo {
         return !cdText.titles.isEmpty || !cdText.performers.isEmpty
     }
 
+    /// The release as MusicBrainz or CDRip made it, before the edits.
+    var baseRelease: MusicBrainzRelease? { release ?? manual }
+
+    /// The release with the edits applied: what the rip names and tags the files with.
+    var shownRelease: MusicBrainzRelease? { baseRelease.map { edits.applied(to: $0, toc: toc) } }
+
+    /// The disc's medium in `shownRelease`.
+    var shownMedium: MusicBrainzRelease.Medium? {
+        guard let shown = shownRelease else { return nil }
+        if let found = shown.medium(for: toc) { return found }
+        return medium.flatMap { known in shown.media.first { $0.position == known.position } }
+    }
+
     /// The album's title: from MusicBrainz, else CD-Text, else the disc ID.
     var title: String { title(from: .musicBrainz) }
 
@@ -71,22 +88,33 @@ struct DiscInfo {
 
     func title(from source: Source) -> String {
         if source == .cdText, let title = cdText?.titles[0] { return title }
-        return release?.title ?? cdText?.titles[0] ?? "Audio CD"
+        return shownRelease?.title ?? cdText?.titles[0] ?? "Audio CD"
     }
 
     func artist(from source: Source) -> String {
         if source == .cdText, let performer = cdText?.performers[0] { return performer }
-        return release?.artist ?? cdText?.performers[0] ?? ""
+        return shownRelease?.artist ?? cdText?.performers[0] ?? ""
+    }
+
+    /// A track's title before the edits, for the table's editing.
+    func baseTitle(ofTrack number: Int) -> String? {
+        guard let base = baseRelease, let index = toc.audioTracks.firstIndex(where: { $0.number == number }) else {
+            return nil
+        }
+        let medium =
+            base.medium(for: toc) ?? medium.flatMap { known in base.media.first { $0.position == known.position } }
+        guard let medium, index < medium.tracks.count else { return nil }
+        return medium.tracks[index].title
     }
 
     /// The release's year, or the year of the release group's first release when this
     /// edition has no date in MusicBrainz (`yearIsFirstRelease`).
     var year: String? {
-        (release?.date ?? release?.releaseGroup?.firstReleaseDate).map { String($0.prefix(4)) }
+        (shownRelease?.date ?? release?.releaseGroup?.firstReleaseDate).map { String($0.prefix(4)) }
     }
 
     var yearIsFirstRelease: Bool {
-        release?.date == nil && release?.releaseGroup?.firstReleaseDate != nil
+        shownRelease?.date == nil && release?.releaseGroup?.firstReleaseDate != nil
     }
 
     var discLabel: String? {
@@ -117,10 +145,10 @@ struct DiscInfo {
                 if let performer = cdText?.performers[track.number], performer != cdText?.performers[0] {
                     row.artist = performer
                 }
-            } else if let medium, index < medium.tracks.count {
+            } else if let medium = shownMedium, index < medium.tracks.count {
                 let named = medium.tracks[index]
                 row.title = named.title
-                if let release, named.artist != release.artist { row.artist = named.artist }
+                if let shown = shownRelease, named.artist != shown.artist { row.artist = named.artist }
             } else if let title = cdText?.titles[track.number] {
                 row.title = title
                 if let performer = cdText?.performers[track.number], performer != cdText?.performers[0] {
@@ -163,6 +191,7 @@ struct DiscInfo {
             result = try await ReleaseLookup.find(toc: toc, mcn: mcn)
         } catch {
             lookup = .failed("\(error)")
+            if release == nil { useManualRelease() }
             return
         }
         releases = result.ranked
@@ -170,7 +199,7 @@ struct DiscInfo {
         guard let chosen = result.chosen else {
             lookup = .notFound
             release = nil
-            medium = nil
+            useManualRelease()
             return
         }
         let remembered = ReleaseChoiceStore().choices(forDiscID: toc.musicBrainzDiscID)
@@ -186,9 +215,19 @@ struct DiscInfo {
         await use(chosen)
     }
 
+    /// Without a release, the names come from CD-Text or are typed in, and the files get no MusicBrainz IDs.
+    private mutating func useManualRelease() {
+        let made = MusicBrainzRelease.manual(toc: toc, cdText: cdText)
+        manual = made
+        medium = made.media.first
+        edits = MetadataEdits()
+    }
+
     private mutating func use(_ chosen: MusicBrainzRelease) async {
         release = chosen
+        manual = nil
         medium = chosen.medium(for: toc) ?? (chosen.media.count == 1 ? chosen.media.first : nil)
+        edits = ReleaseEditsStore().edits(forReleaseID: chosen.id) ?? MetadataEdits()
         cover = nil
         guard chosen.hasFrontCover else { return }
         cover = try? await CoverArtClient().frontCover(releaseID: chosen.id)?.data

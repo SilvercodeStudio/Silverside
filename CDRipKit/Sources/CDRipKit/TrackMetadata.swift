@@ -124,6 +124,7 @@ public struct TrackMetadata: Equatable, Sendable {
             if let number = label.catalogNumber { comments.append(("CATALOGNUMBER", number)) }
         }
         if let country = release.country { comments.append(("RELEASECOUNTRY", country)) }
+        guard !release.isManual else { return comments }
         comments.append(("MUSICBRAINZ_ALBUMID", release.id))
         if let group = release.releaseGroup { comments.append(("MUSICBRAINZ_RELEASEGROUPID", group.id)) }
         if let recording = track.recordingID { comments.append(("MUSICBRAINZ_TRACKID", recording)) }

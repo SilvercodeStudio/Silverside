@@ -95,10 +95,12 @@ extension RipReport {
         lines.append("")
         lines.append("| | |")
         lines.append("|---|---|")
-        if let release {
+        if let release, !release.isManual {
             lines.append(
                 "| MusicBrainz release | [\(Self.escaped(release.title))](https://musicbrainz.org/release/\(release.id)) |"
             )
+        } else if release != nil {
+            lines.append("| MusicBrainz release | none; the names were typed in or came from CD-Text |")
         }
         lines.append("| MusicBrainz disc ID | \(musicBrainzDiscID) |")
         lines.append("| freedb disc ID | \(freedbDiscID) |")

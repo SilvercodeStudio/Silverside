@@ -75,6 +75,7 @@ public struct ReleaseChoiceStore: Sendable {
 
     /// Keeps `release` as the choice for each disc ID of its media.
     public func remember(_ release: MusicBrainzRelease) throws {
+        guard !release.isManual else { return }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let lock = open(url.path + ".lock", O_RDWR | O_CREAT, 0o644)
         guard lock >= 0 else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: url.path]) }

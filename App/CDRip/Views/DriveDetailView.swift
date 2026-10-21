@@ -112,7 +112,7 @@ struct DiscView: View {
     var body: some View {
         VStack(spacing: 0) {
             if let disc = slot.disc {
-                AlbumHeader(disc: disc, releasePickerShown: $releasePickerShown, source: $slot.namesSource)
+                AlbumHeader(slot: slot, disc: disc, releasePickerShown: $releasePickerShown, source: $slot.namesSource)
                     .padding(16)
             }
             if let rip = slot.rip, !rip.isRunning, let report = rip.report {
@@ -132,27 +132,37 @@ struct DiscView: View {
 
 struct AlbumHeader: View {
     @Environment(AppModel.self) private var model
+    @Bindable var slot: DriveSlot
     var disc: DiscInfo
     @Binding var releasePickerShown: Bool
     @Binding var source: DiscInfo.Source
+
+    private var editable: Bool { slot.rip?.isRunning != true && disc.baseRelease != nil && source == .musicBrainz }
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             CoverView(data: disc.cover)
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 16) {
-                    Field(label: "Album", value: disc.title(from: source))
-                    Field(label: disc.yearIsFirstRelease ? "First Release" : "Year", value: disc.year ?? "—")
-                        .frame(width: 120)
-                        .help(
-                            disc.yearIsFirstRelease
-                                ? "This edition has no date in MusicBrainz. The year is the release group's first release."
-                                : "")
+                    EditableField(
+                        label: "Album", text: field(\.album, original: disc.baseRelease?.title),
+                        shown: disc.title(from: source), editable: editable)
+                    EditableField(
+                        label: editable ? "Date" : disc.yearIsFirstRelease ? "First Release" : "Year",
+                        text: field(\.date, original: disc.baseRelease?.date), shown: disc.year ?? "—",
+                        prompt: disc.yearIsFirstRelease ? disc.release?.releaseGroup?.firstReleaseDate : nil,
+                        editable: editable
+                    )
+                    .frame(width: 120)
+                    .help(
+                        disc.yearIsFirstRelease
+                            ? "This edition has no date in MusicBrainz. The grey date is the release group's first release; type a date to tag the files with one."
+                            : "")
                 }
                 HStack(alignment: .top, spacing: 16) {
-                    Field(
-                        label: "Album Artist",
-                        value: disc.artist(from: source).isEmpty ? "—" : disc.artist(from: source))
+                    EditableField(
+                        label: "Album Artist", text: field(\.albumArtist, original: disc.baseRelease?.artist),
+                        shown: disc.artist(from: source).isEmpty ? "—" : disc.artist(from: source), editable: editable)
                     Field(
                         label: "Tracks",
                         value: "\(disc.toc.audioTracks.count) · \(Format.duration(sectors: disc.totalSectors))"
@@ -171,14 +181,21 @@ struct AlbumHeader: View {
                         .help(
                             "Show the names from MusicBrainz, or the CD-Text on the disc. The rip's tags come from MusicBrainz."
                         )
-                    } else if disc.hasCDText {
-                        Chip(text: "CD-Text on the disc", systemImage: "text.quote")
                     }
                     lookupChip
+                    if !disc.edits.isEmpty {
+                        Chip(text: "Edited", tone: .warning, systemImage: "pencil")
+                            .help(
+                                "Names you changed. They go into the rip's tags and names, and the album's into the other discs of the set."
+                            )
+                    }
                     if let label = disc.labelText { Chip(text: label) }
                     if let discLabel = disc.discLabel { Chip(text: discLabel) }
                     if let mcn = disc.mcn { Chip(text: "MCN \(mcn)") }
                     Spacer()
+                    if !disc.edits.isEmpty, editable {
+                        Button("Undo Edits") { slot.disc?.edits = MetadataEdits() }
+                    }
                     if disc.releases.count > 1 {
                         Button(
                             disc.isAmbiguous ? "Choose Release..." : "Other Releases (\(disc.releases.count - 1))..."
@@ -190,6 +207,16 @@ struct AlbumHeader: View {
                 .padding(.top, 2)
             }
         }
+    }
+
+    /// A binding to one album-level edit: the original value clears the edit.
+    private func field(_ key: WritableKeyPath<MetadataEdits, String?>, original: String?) -> Binding<String> {
+        Binding(
+            get: { slot.disc?.edits[keyPath: key] ?? original ?? "" },
+            set: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespaces)
+                slot.disc?.edits[keyPath: key] = trimmed.isEmpty || trimmed == original ? nil : trimmed
+            })
     }
 
     @ViewBuilder private var lookupChip: some View {
@@ -205,9 +232,42 @@ struct AlbumHeader: View {
         case .found:
             Chip(text: "MusicBrainz · Disc ID match", tone: .good, systemImage: "checkmark")
         case .notFound:
-            Chip(text: "Not in MusicBrainz", tone: .warning, systemImage: "xmark")
+            Chip(
+                text: disc.hasCDText
+                    ? "Not in MusicBrainz · names from CD-Text" : "Not in MusicBrainz · type the names",
+                tone: .warning, systemImage: "xmark"
+            )
+            .help("The files get no MusicBrainz IDs. Edit the names here; they are kept with the rip.")
         case .failed:
             Chip(text: "MusicBrainz · lookup failed", tone: .bad, systemImage: "wifi.slash")
+        }
+    }
+}
+
+/// A field the user can edit, laid out like `Field`. `shown` is the text when it is not editable.
+struct EditableField: View {
+    var label: String
+    @Binding var text: String
+    var shown: String
+    /// Grey text in an empty field, such as a date the release does not have itself.
+    var prompt: String?
+    var editable: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label).font(.caption).foregroundStyle(.secondary)
+            Group {
+                if editable {
+                    TextField("", text: $text, prompt: prompt.map { Text($0) }).textFieldStyle(.plain)
+                } else {
+                    Text(shown).lineLimit(1)
+                }
+            }
+            .font(.title3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.secondary.opacity(editable ? 0.12 : 0.08), in: RoundedRectangle(cornerRadius: 6))
         }
     }
 }

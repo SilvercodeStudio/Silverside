@@ -6,7 +6,8 @@ import SwiftUI
 /// The settings window. Every setting is in the file that `cdrip config` shares.
 struct SettingsView: View {
     enum Tab: String { case general, drives, ripping, encoding, naming }
-    @State private var tab = Tab.general
+    /// Debug builds can start on a tab with `-settingsTab drives`.
+    @State private var tab = Tab(rawValue: UserDefaults.standard.string(forKey: "settingsTab") ?? "") ?? .general
 
     var body: some View {
         TabView(selection: $tab) {
@@ -121,15 +122,16 @@ struct DriveSettings: View {
     }
 
     var body: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             List(profiles, id: \.key, selection: $selectedKey) { profile in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(profile.vendor) \(profile.product)")
-                    Text(offsetSummary(profile)).font(.caption).foregroundStyle(.secondary)
+                    Text("\(profile.vendor) \(profile.product)").lineLimit(1)
+                    Text(offsetSummary(profile)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
                 .tag(profile.key)
             }
-            .frame(minWidth: 200, idealWidth: 220)
+            .frame(width: 230)
+            Divider().padding(.vertical, 12)
             Group {
                 if let profile = profiles.first(where: { $0.key == selectedKey }) {
                     details(profile)
@@ -137,7 +139,6 @@ struct DriveSettings: View {
                     Text("Select a drive").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .frame(minWidth: 320)
         }
         .onAppear { if selectedKey == nil { selectedKey = profiles.first?.key } }
         .onChange(of: selectedKey) { _, key in
@@ -191,8 +192,10 @@ struct DriveSettings: View {
                     Text("No rip has checked this drive against AccurateRip yet.").foregroundStyle(.secondary)
                 }
                 ForEach(Array(profile.observations.suffix(8).enumerated()), id: \.offset) { _, observation in
-                    LabeledContent(observation.disc) {
+                    LabeledContent {
                         Text(observation.offsets.map(\.signedDescription).joined(separator: ", "))
+                    } label: {
+                        Text(observation.disc).lineLimit(1).truncationMode(.middle)
                     }
                 }
             }

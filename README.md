@@ -47,6 +47,21 @@ to be installed. All other supported formats are handled natively.
   the disc can be burned again exactly.
 - **Hidden track one audio** (a song before track 1) is ripped and encoded as
   track 0.
+- **Names you can change.** The album's title, artist, and date, and each
+  track's title and artist, can be edited in the app or with
+  `cdrip metadata --set`, and the files are named and tagged with the edits.
+  The album's edits are kept for the release, so the other discs of a set get
+  them. A disc that MusicBrainz does not know gets its names from CD-Text or
+  from you, and its files carry no MusicBrainz IDs.
+
+## Known limits
+
+- **Pre-emphasis.** A few early CDs were mastered with pre-emphasis, a treble
+  boost that the player undoes. CDRip marks such tracks in the rip report and
+  the CUE sheet (`FLAGS PRE`), and warns when it encodes them, but it does not
+  change the audio: the files sound too bright in a player that does not read
+  the flag. De-emphasis is planned. This is not yet confirmed on a real
+  pre-emphasis disc, because none has turned up in testing.
 
 AccurateRip and CTDB answer over plain HTTP, as their other clients use them.
 Their checksums are public, so there is nothing to keep secret, but a network
@@ -236,11 +251,11 @@ Open `CDRip.xcworkspace` in Xcode for the app, the engine, and the CLI.
 
 ## TODO
 
-- **Discs that MusicBrainz does not know at all.** CDRip finds a release by
-  its disc ID, or by a fuzzy match of the track lengths. When MusicBrainz has
-  neither, the disc can be ripped and verified, but not yet encoded: there is
-  no way yet to give the names and tags by hand. Until then, add the release
-  to MusicBrainz (the `rip` output links to the page), then run
-  `cdrip metadata -i <rip folder>`.
+- **Discs that MusicBrainz does not know.** `cdrip metadata --manual` (or
+  the app) names them from CD-Text or by hand, and the files get no
+  MusicBrainz IDs. Adding the release to MusicBrainz (the `rip` output links to
+  the page) and running `cdrip metadata -i <rip folder>` again is better for
+  everyone.
+- **Multi-disc sets as one unit**, and reusable style recipes for titles.
 
 See [docs/Milestones.md](docs/Milestones.md) for the plan.

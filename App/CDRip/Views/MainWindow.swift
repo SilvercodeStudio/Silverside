@@ -6,6 +6,7 @@ import SwiftUI
 struct MainWindow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         @Bindable var model = model
@@ -31,7 +32,9 @@ struct MainWindow: View {
             #if DEBUG
                 DebugScreenshot.scheduleIfRequested()
                 // `-openWindow help` opens a window at launch, for screenshots.
-                if let id = UserDefaults.standard.string(forKey: "openWindow"), !id.isEmpty { openWindow(id: id) }
+                if let id = UserDefaults.standard.string(forKey: "openWindow"), !id.isEmpty {
+                    if id == "settings" { openSettings() } else { openWindow(id: id) }
+                }
             #endif
         }
     }

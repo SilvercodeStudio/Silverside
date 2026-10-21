@@ -136,6 +136,8 @@ final class AppModel {
             options.tracks = disc.toc.audioTracks.map(\.number).filter { selected.contains($0) }
         }
         options.releaseID = disc.release?.id
+        options.edits = disc.edits.isEmpty ? nil : disc.edits
+        options.manualRelease = disc.manual
         options.singlePass = slot.fastMode
         if slot.isDemo {
             options.offline = true

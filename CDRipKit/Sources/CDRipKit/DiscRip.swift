@@ -37,6 +37,10 @@ public struct DiscRipOptions: Sendable {
     public var pool: [URL] = []
     /// After encoding, keep the rip's WAV files.
     public var keepsRip: Bool
+    /// Changes to the release's names, on top of the ones kept for the release (`ReleaseEditsStore`).
+    public var edits: MetadataEdits?
+    /// A release to use when MusicBrainz has none for the disc (see `MusicBrainzRelease.manual`).
+    public var manualRelease: MusicBrainzRelease?
 
     public init(settings: Settings) {
         artwork = settings.artwork
@@ -249,8 +253,15 @@ public struct DiscRip {
                 events(.releaseLookupFailed(error))
             }
         }
+        if chosen == nil, let manual = options.manualRelease { chosen = manual }
+        // The edits kept for the release, with this rip's on top; the folder is named after them.
+        var edits = options.edits ?? MetadataEdits()
+        if let chosen, !chosen.isManual, let kept = ReleaseEditsStore().edits(forReleaseID: chosen.id) {
+            edits = kept.merged(with: edits)
+        }
+        let named = chosen.map { edits.applied(to: $0, toc: toc) }
         let name =
-            chosen.map {
+            named.map {
                 NameTemplate(settings.ripFolderTemplate).name(
                     NameTemplate.values(release: $0, medium: $0.medium(for: toc)))
             } ?? "CDRip \(toc.musicBrainzDiscID)"
@@ -370,7 +381,7 @@ public struct DiscRip {
         }
 
         // The artwork comes before the report, which lists its files.
-        if let chosen {
+        if let chosen, !chosen.isManual {
             do {
                 let artwork = try await CoverArtClient(client: webClient).saveArtwork(
                     options.artwork, of: chosen, in: folder)
@@ -394,7 +405,15 @@ public struct DiscRip {
         written.formUnion(["disc.json", "Rip Report.md"])
         report.files = written.sorted()
         try report.write(to: folder.appending(path: "disc.json"))
-        try Data(report.markdown.utf8).write(to: folder.appending(path: "Rip Report.md"))
+        if !edits.isEmpty {
+            try edits.save(inDiscJSONOf: folder)
+            if let chosen, !chosen.isManual, options.edits != nil {
+                try ReleaseEditsStore().remember(edits, forReleaseID: chosen.id)
+            }
+        }
+        var shown = report
+        shown.release = named
+        try Data(shown.markdown.utf8).write(to: folder.appending(path: "Rip Report.md"))
         events(.finished(report, discOffsets: discOffsets, profile: profile))
         var result = DiscRipResult(report: report, folder: folder)
 

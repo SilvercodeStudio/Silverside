@@ -70,7 +70,8 @@ public struct TrackRipper {
         return v1 + v2 > 0 ? .accurate(v1Confidence: v1, v2Confidence: v2) : .notAccurate
     }
 
-    public func rip(_ track: TOC.Track) throws -> TrackRip {
+    /// Rips a track. `progress` hears about the read as it goes.
+    public func rip(_ track: TOC.Track, progress: ((RipEvent) -> Void)? = nil) throws -> TrackRip {
         let toc = reader.toc
         let (isFirst, isLast) = edges(of: track)
         let sectors = toc.sectorRange(of: track)
@@ -81,10 +82,18 @@ public struct TrackRipper {
         let positions = (start - margin)..<(start + length + margin)
         var read: AudioReader.Read
         var flagged: [Int]?
-        if readsC2, let withC2 = try? reader.read(positions, withC2: true) {
+        let report = progress.map { progress in
+            { (read: ReadProgress) in
+                progress(
+                    .reading(
+                        track: track.number, pass: 1, sectorsRead: read.sectorsRead, sectors: read.sectors,
+                        c2Sectors: read.flaggedSectors, unreadableSectors: read.unreadableSectors))
+            }
+        }
+        if readsC2, let withC2 = try? reader.read(positions, withC2: true, progress: report) {
             (read, flagged) = (withC2, withC2.flagged)
         } else {
-            read = try reader.read(positions, withC2: false)
+            read = try reader.read(positions, withC2: false, progress: report)
         }
         let buffer = read.samples
         // The checksum of the track as if the drive's offset were `shift` samples more.

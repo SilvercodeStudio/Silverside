@@ -5,7 +5,17 @@ import Foundation
 
 struct Metadata: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Look up a disc in MusicBrainz, and show or keep its release and cover art.")
+        abstract: "Look up a disc in MusicBrainz, and show or keep its release and cover art.",
+        discussion: """
+            Shows the releases that have the disc, the most likely first, and the tracks of the one CDRip would \
+            use. With -i, it keeps that release in the rip's disc.json, so the rip can be encoded and tagged, and \
+            saves the cover. A choice made with --release is kept for the other discs of the release.
+
+            Examples:
+              cdrip metadata -d disk14
+              cdrip metadata -i "<rip folder>"
+              cdrip metadata -i "<rip folder>" --release aa0d7d7e-1d78-4f78-ba03-7a32c200f660 --artwork all
+            """)
 
     @OptionGroup var deviceOptions: DeviceOptions
 
@@ -22,7 +32,7 @@ struct Metadata: AsyncParsableCommand {
     var cover: String?
 
     @Option(help: "The artwork to save from the Cover Art Archive: front (cover.jpg), all (also Artwork/), or none.")
-    var artwork: Artwork = .front
+    var artwork: ArtworkChoice?
 
     func run() async throws {
         let folder = input.map { URL(filePath: $0, directoryHint: .isDirectory) }
@@ -67,14 +77,9 @@ struct Metadata: AsyncParsableCommand {
             let image = CoverImage(data: try Data(contentsOf: URL(filePath: cover)))
             print("Cover: \(try image.write(to: folder).path)")
         } else {
-            try await ReleaseChoice.saveArtwork(artwork, of: chosen, in: folder)
+            try await ReleaseChoice.saveArtwork(artwork ?? Settings.load().artwork, of: chosen, in: folder)
         }
     }
-}
-
-/// The artwork to save from the Cover Art Archive.
-enum Artwork: String, ExpressibleByArgument, CaseIterable {
-    case front, all, none
 }
 
 /// The MCN from a rip's disc.json.
@@ -172,7 +177,7 @@ enum ReleaseChoice {
 
     /// Saves the Cover Art Archive's artwork for the release in `folder`: the front cover as
     /// cover.jpg, and with `.all`, the other images in Artwork/.
-    static func saveArtwork(_ artwork: Artwork, of release: MusicBrainzRelease, in folder: URL) async throws {
+    static func saveArtwork(_ artwork: ArtworkChoice, of release: MusicBrainzRelease, in folder: URL) async throws {
         guard artwork != .none else { return }
         guard release.hasFrontCover || (release.artworkCount ?? 0) > 0 else {
             print("Cover: the Cover Art Archive has none for this release.")

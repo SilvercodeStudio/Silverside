@@ -33,6 +33,22 @@ public struct LiveShow: Equatable, Sendable {
     public var titleSuffix: String { "[\(venue), \(shortDate)]" }
 }
 
+/// Typographic punctuation as plain ASCII, as many libraries have it: "Walkin’ Blues" becomes
+/// "Walkin' Blues". Quotes, primes, hyphens and dashes, the ellipsis, and the no-break space change.
+public enum PlainPunctuation {
+    static let replacements: [Character: String] = [
+        "\u{2018}": "'", "\u{2019}": "'", "\u{201A}": "'", "\u{2032}": "'",
+        "\u{201C}": "\"", "\u{201D}": "\"", "\u{201E}": "\"", "\u{2033}": "\"",
+        "\u{2010}": "-", "\u{2011}": "-", "\u{2012}": "-", "\u{2013}": "-", "\u{2014}": "-", "\u{2212}": "-",
+        "\u{2026}": "...", "\u{00A0}": " ",
+    ]
+
+    public static func apply(_ text: String) -> String {
+        guard text.contains(where: { replacements[$0] != nil }) else { return text }
+        return text.map { replacements[$0] ?? String($0) }.joined()
+    }
+}
+
 /// The names and tags of one track, from its release. File names and tags come from
 /// here, so that they agree.
 ///
@@ -49,13 +65,17 @@ public struct TrackMetadata: Equatable, Sendable {
     /// The show on this disc, if the live-show style applies.
     public let show: LiveShow?
 
+    /// Typographic punctuation becomes ASCII in names and tags (see `PlainPunctuation`).
+    public let plainPunctuation: Bool
+
     public init(
         release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium, track: MusicBrainzRelease.Track,
-        isrc: String? = nil, liveShowStyle: Bool = true
+        isrc: String? = nil, liveShowStyle: Bool = true, plainPunctuation: Bool = false
     ) {
         self.release = release
         self.medium = medium
         self.track = track
+        self.plainPunctuation = plainPunctuation
         self.isrc = isrc
         let everyDiscIsAShow = release.media.allSatisfy { $0.title.flatMap(LiveShow.init(discTitle:)) != nil }
         show = liveShowStyle && everyDiscIsAShow ? medium.title.flatMap(LiveShow.init(discTitle:)) : nil
@@ -63,12 +83,16 @@ public struct TrackMetadata: Equatable, Sendable {
 
     /// The title, with the show's suffix if the live-show style applies.
     public var title: String {
-        show.map { "\(track.title) \($0.titleSuffix)" } ?? track.title
+        text(show.map { "\(track.title) \($0.titleSuffix)" } ?? track.title)
+    }
+
+    private func text(_ value: String) -> String {
+        plainPunctuation ? PlainPunctuation.apply(value) : value
     }
 
     /// The fields for `NameTemplate`, with the title as the tags have it.
     public var nameValues: [String: String] {
-        var values = NameTemplate.values(release: release, medium: medium, track: track)
+        var values = NameTemplate.values(release: release, medium: medium, track: track).mapValues(text)
         values["title"] = title
         if let show { values["date"] = show.date }
         return values
@@ -78,11 +102,12 @@ public struct TrackMetadata: Equatable, Sendable {
     /// MusicBrainz IDs (as MusicBrainz Picard names them) and other codes.
     public var vorbisComments: [(key: String, value: String)] {
         var comments: [(String, String)] = [
-            ("TITLE", title), ("ARTIST", track.artist), ("ALBUMARTIST", release.artist), ("ALBUM", release.title),
+            ("TITLE", title), ("ARTIST", text(track.artist)), ("ALBUMARTIST", text(release.artist)),
+            ("ALBUM", text(release.title)),
             ("DISCNUMBER", String(medium.position)), ("DISCTOTAL", String(release.media.count)),
             ("TRACKNUMBER", String(track.position)), ("TRACKTOTAL", String(medium.tracks.count)),
         ]
-        if let discTitle = medium.title { comments.append(("DISCSUBTITLE", discTitle)) }
+        if let discTitle = medium.title { comments.append(("DISCSUBTITLE", text(discTitle))) }
         if let show {
             comments.append(("DATE", show.date))
             if let date = release.date { comments.append(("ORIGINALDATE", date)) }

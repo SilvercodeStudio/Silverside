@@ -50,7 +50,9 @@ public struct AudioReader {
 
     /// Reads the true samples at the given positions, with C2 error flags if `withC2`.
     /// If `unreadableRetries` is set, a sector that cannot be read is silence, not an error.
-    public func read(_ positions: Range<Int>, withC2: Bool) throws -> Read {
+    public func read(
+        _ positions: Range<Int>, withC2: Bool, progress: ((ReadProgress) -> Void)? = nil
+    ) throws -> Read {
         var result = Read(samples: [UInt32](repeating: 0, count: positions.count))
         guard !positions.isEmpty else { return result }
 
@@ -62,6 +64,8 @@ public struct AudioReader {
             sectors = sectors.clamped(to: 0..<toc.leadOutLBA)
         }
 
+        var flaggedSectors = Set<Int>()
+        var unreadableSectors = Set<Int>()
         for lba in stride(from: sectors.lowerBound, to: sectors.upperBound, by: sectorsPerRead) {
             let count = min(sectorsPerRead, sectors.upperBound - lba)
             let (bytes, flags, unreadable) = try readChunk(at: lba, count: count, withC2: withC2)
@@ -85,6 +89,15 @@ public struct AudioReader {
                 for position in (start..<(start + CDDA.samplesPerSector)).clamped(to: overlap) {
                     result.unreadable.append(position - positions.lowerBound)
                 }
+            }
+            if let progress {
+                flaggedSectors.formUnion(
+                    flags.indices.filter { flags[$0] != 0 }.map { lba + $0 / CDDA.errorFlagBytesPerSector })
+                unreadableSectors.formUnion(unreadable)
+                progress(
+                    ReadProgress(
+                        sectorsRead: lba + count - sectors.lowerBound, sectors: sectors.count,
+                        flaggedSectors: flaggedSectors.count, unreadableSectors: unreadableSectors.count))
             }
         }
         return result

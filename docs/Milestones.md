@@ -252,6 +252,20 @@ Done:
 - Accurate CUE sheets, per-track output or image plus CUE.
 - Pregaps, index points, hidden track one audio, pre-emphasis, ISRC, and CD-Text.
 
+## CLI finish — done
+
+- `Settings` (`~/Library/Application Support/CDRip/settings.json`), shared with the app: every key may be missing and has a default. `cdrip config` shows, gets, sets (dotted keys such as `aac.bitRate`, checked by decoding), unsets, and resets. Options on the command line override the file.
+- Encoder options: AAC mode (`cbr`, `abr`, `vbr-constrained`, `vbr`), bit rate, and VBR quality, through AudioToolbox's bit rate control mode; MP3 mode (`vbr`, `cbr`, `abr`), preset, bit rate, and extra `lame` options.
+- `plainPunctuation`: typographic quotes, dashes, the ellipsis, and the no-break space become ASCII in names and tags, as in the user's library ("Walkin' Blues").
+- Progress: `RipEvent` from `AudioReader`, `TrackRipper`, and `SecureRipper` (each read's sectors, C2 and unreadable sectors, and each round of re-reads), for a progress line now and the app's live graph later. In a terminal, `cdrip rip` shows one status line that changes in place.
+- Rips go in `~/Music/CDRip Rips` (the `rips` setting), not the current folder: not in the library (music apps would import the WAV files), nor a temporary folder (a rip is kept for repairs). After `rip --encode`, a rip that is all verified and encoded is deleted, file by file (only the files the rip wrote, then the folder if it is empty); `--keep-rip` keeps it. Encoding puts the rip report in the album folder as `Rip Report (Disc N).json`. The status line shows the track's elapsed time and the time left in the read.
+- Help for every command, with examples; `cdrip --version`; `make release` (Apple silicon and Intel), `make install` and `make uninstall` with `PREFIX`, and shell completions for zsh, bash, and fish; the README.
+
+Still to do:
+
+- A drive report (`cdrip drives -d diskN --report`, later the app's bug-report tool): the drive's identity and connection, its profile, and quick checks with the disc in it (C2, Q subchannel, overread, read speed, how it fails on an unreadable sector), with no audio, so that problems with drives the user does not have can be modeled in `SimulatedDrive`.
+- Developer ID signing and notarization, with the user's new developer ID.
+
 ## 9. Multi-disc releases and style recipes
 
 - A multi-disc release is one unit of work, so metadata stays consistent across discs and sessions.

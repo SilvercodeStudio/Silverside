@@ -77,3 +77,27 @@ struct C2Tests {
         }
     }
 }
+
+struct RipEventTests {
+    @Test func reportsReadsAndRounds() throws {
+        var (secure, toc, _, _) = try C2Tests().setUp(corrupt: [600])
+        let events = Events()
+        secure.progress = { events.list.append($0) }
+        let rip = try secure.rip(toc.tracks[1])
+        let firstPass = events.list.compactMap { event -> (Int, Int, Int)? in
+            if case .reading(2, 1, let read, let sectors, let c2, _) = event { return (read, sectors, c2) }
+            return nil
+        }
+        // The first read covers the track and 5 sectors on each side (481 drive sectors, as the
+        // offset adds one), and the damaged sector's data lies in two drive sectors.
+        #expect(firstPass.last.map { $0.0 == $0.1 && $0.1 == 470 + 10 + 1 && $0.2 == 2 } == true)
+        #expect(events.list.contains { if case .reading(2, 2, _, _, _, _) = $0 { true } else { false } })
+        let rounds = events.list.filter { if case .rereading = $0 { true } else { false } }
+        #expect(rounds.count == rip.rounds && rip.rounds > 0)
+    }
+}
+
+/// Events from a rip, kept in order.
+final class Events: @unchecked Sendable {
+    var list: [RipEvent] = []
+}

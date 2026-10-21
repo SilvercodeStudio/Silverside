@@ -5,7 +5,12 @@ import Foundation
 
 struct Info: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Show a disc's table of contents, pregaps, codes, and disc IDs.")
+        abstract: "Show a disc's table of contents, pregaps, codes, and disc IDs.",
+        discussion: """
+            Shows each track's start, length, pregap, and ISRC, the disc's MCN (barcode), its MusicBrainz, \
+            freedb, AccurateRip, and CTDB IDs, and whether AccurateRip and CTDB have it. It does not ask MusicBrainz \
+            (see cdrip metadata).
+            """)
 
     @OptionGroup var deviceOptions: DeviceOptions
 

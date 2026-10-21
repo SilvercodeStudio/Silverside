@@ -16,6 +16,20 @@ public struct RippedDisc: Sendable {
     public var release: MusicBrainzRelease?
     public var tracks: [Track]
 
+    /// Deletes the files that a rip wrote in its folder (the WAV files, the suspects,
+    /// disc.json, the cover, and Artwork), and the folder too if nothing else is in it.
+    public func deleteRipFiles() throws {
+        let manager = FileManager.default
+        var files = tracks.flatMap { track in
+            [track.file, folder.appending(path: TrackAudio.alternativesFileName(track: track.number))]
+        }
+        files += ["disc.json", "cover.jpg", "cover.png", "Artwork", ".cdrip-rip"].map { folder.appending(path: $0) }
+        for file in files where manager.fileExists(atPath: file.path) { try manager.removeItem(at: file) }
+        if (try? manager.contentsOfDirectory(atPath: folder.path))?.allSatisfy({ $0 == ".DS_Store" }) == true {
+            try manager.removeItem(at: folder)
+        }
+    }
+
     /// The folder's cover image (cover.jpg or cover.png), if it has one.
     public var coverFile: URL? {
         ["cover.jpg", "cover.png"].map { folder.appending(path: $0) }
@@ -88,8 +102,10 @@ public struct DiscEncoder {
     public var folderTemplate = NameTemplate.libraryFolder
     public var trackTemplate = NameTemplate.libraryTrack
     public var liveShowStyle = true
-    public var aacBitRate = AudioEncoder.defaultAACBitRate
-    public var mp3Quality = MP3Encoder.defaultQuality
+    /// Typographic punctuation becomes ASCII in names and tags.
+    public var plainPunctuation = false
+    public var aac = AACOptions()
+    public var mp3 = MP3Options()
     /// Encode tracks that AccurateRip and CTDB do not prove.
     public var allowsUnverified = false
     /// Replace files that exist.
@@ -122,7 +138,7 @@ public struct DiscEncoder {
             else { throw EncodingError.unknownMedium(disc.folder) }
             let metadata = TrackMetadata(
                 release: release, medium: medium, track: medium.tracks[index], isrc: ripped.isrc,
-                liveShowStyle: liveShowStyle)
+                liveShowStyle: liveShowStyle, plainPunctuation: plainPunctuation)
             let values = metadata.nameValues
             let folder = library.appending(path: folderTemplate.name(values), directoryHint: .isDirectory)
             let file = folder.appending(path: trackTemplate.name(values) + "." + format.fileExtension)
@@ -141,12 +157,20 @@ public struct DiscEncoder {
             written.append(file)
             log("\(file.lastPathComponent)")
         }
-        // The album folder keeps the cover at full size.
+        // The album folder keeps the cover at full size, and the rip's report.
         if let albumFolder, let coverFile = disc.coverFile {
             let destination = albumFolder.appending(path: coverFile.lastPathComponent)
             if !FileManager.default.fileExists(atPath: destination.path) {
                 try FileManager.default.copyItem(at: coverFile, to: destination)
             }
+        }
+        if let albumFolder {
+            let name = release.media.count > 1 ? "Rip Report (Disc \(medium.position)).json" : "Rip Report.json"
+            let destination = albumFolder.appending(path: name)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: disc.folder.appending(path: "disc.json"), to: destination)
         }
         return written
     }
@@ -160,14 +184,14 @@ public struct DiscEncoder {
             try AudioEncoder.encode(samples, format: .flac, to: url)
             try FLACTags.write(comments, cover: cover, to: url)
         case .alac, .aac:
-            try AudioEncoder.encode(samples, format: format, to: url, aacBitRate: aacBitRate)
+            try AudioEncoder.encode(samples, format: format, to: url, aac: aac)
             try MP4Tags.write(comments, cover: cover, to: url)
         case .aiff:
             try AudioEncoder.encode(samples, format: .aiff, to: url)
         case .wav:
             try WAVFile.write(samples, to: url)
         case .mp3:
-            try MP3Encoder.encode(samples, to: url, lame: lame!, quality: mp3Quality)
+            try MP3Encoder.encode(samples, to: url, lame: lame!, options: mp3)
             try ID3Tags.write(comments, cover: cover, to: url)
         }
     }

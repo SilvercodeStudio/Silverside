@@ -40,6 +40,19 @@ public struct DriveProfile: Codable, Equatable, Sendable {
         self.revision = revision
     }
 
+    /// Writes every key, with `null` for an empty one, so that a save can clear a value
+    /// in the file (see `DriveProfileStore.save`).
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(vendor, forKey: .vendor)
+        try container.encode(product, forKey: .product)
+        try container.encode(revision, forKey: .revision)
+        try container.encode(manualOffset, forKey: .manualOffset)
+        try container.encode(listedOffset, forKey: .listedOffset)
+        try container.encode(observations, forKey: .observations)
+        try container.encode(cacheSectors, forKey: .cacheSectors)
+    }
+
     /// The key for this drive in a `DriveProfileStore`.
     public var key: String { "\(vendor) \(product) \(revision)" }
 
@@ -100,7 +113,8 @@ public struct DriveProfileStore: Sendable {
     }
 
     /// Saves one profile. Reads the file again under a lock first, so changes
-    /// that other processes saved to other profiles are kept.
+    /// that other processes saved to other profiles are kept. Keys in the file that
+    /// this version of CDRip does not know (from a newer version) are kept too.
     public mutating func save(_ profile: DriveProfile) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let lock = open(url.path + ".lock", O_RDWR | O_CREAT, 0o644)
@@ -109,9 +123,13 @@ public struct DriveProfileStore: Sendable {
         flock(lock, LOCK_EX)
         defer { flock(lock, LOCK_UN) }
 
-        profiles = try Self.load(url)
-        profiles[profile.key] = profile
-        try JSONEncoder.profiles.encode(profiles).write(to: url, options: .atomic)
+        var file = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]) ?? [:]
+        let saved =
+            try JSONSerialization.jsonObject(with: JSONEncoder.profiles.encode(profile)) as? [String: Any] ?? [:]
+        file[profile.key] = JSONMerge.overlay(saved, on: file[profile.key] as? [String: Any] ?? [:])
+        let data = try JSONSerialization.data(withJSONObject: file, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: url, options: .atomic)
+        profiles = try JSONDecoder.profiles.decode([String: DriveProfile].self, from: data)
     }
 }
 

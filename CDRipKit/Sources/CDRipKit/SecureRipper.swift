@@ -126,8 +126,11 @@ public struct SecureRipper {
         }
     }
 
+    /// Hears about each read and round of re-reads, for a progress display.
+    public var progress: ((RipEvent) -> Void)?
+
     public func rip(_ track: TOC.Track) throws -> SecureTrackRip {
-        let first = try ripper.rip(track)
+        let first = try ripper.rip(track, progress: progress)
         var result = SecureTrackRip(
             track: track, samples: first.samples, status: .consistent, suspectSectors: [], unresolvedSectors: [],
             rounds: 0, matchingOffsets: first.matchingOffsets, c2Samples: first.c2Samples,
@@ -172,7 +175,17 @@ public struct SecureRipper {
             var shiftedRead: [UInt32]?
             for _ in 0...maximumShiftedReads {
                 reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
-                let whole = try reader.read(start..<(start + sectors.count * size), withC2: false)
+                let pass = fullReads + 1
+                let whole = try reader.read(
+                    start..<(start + sectors.count * size), withC2: false,
+                    progress: progress.map { progress in
+                        { read in
+                            progress(
+                                .reading(
+                                    track: track.number, pass: pass, sectorsRead: read.sectorsRead,
+                                    sectors: read.sectors, c2Sectors: 0, unreadableSectors: read.unreadableSectors))
+                        }
+                    })
                 let read = whole.samples
                 // A sector that could not be read gives no version: its silence is not data.
                 let unreadable = Set(whole.unreadable.map { $0 / size })
@@ -271,6 +284,10 @@ public struct SecureRipper {
 
             result.rounds += 1
             let versionCount = versions.values.reduce(0) { $0 + $1.order.count }
+            progress?(
+                .rereading(
+                    track: track.number, round: result.rounds, maximumRounds: maximumRounds,
+                    suspectSectors: versions.count, versions: versionCount))
             reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
             for run in Self.runs(of: versions.keys.sorted()) {
                 let read = try reader.read(

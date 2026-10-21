@@ -65,6 +65,27 @@ struct EncodingTests {
         #expect(try again.encode(disc, into: library).count == 2)
     }
 
+    @Test func putsTheReportInTheAlbumFolderAndDeletesOnlyTheRipsFiles() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        let files = try DiscEncoder(format: .flac).encode(disc, into: library)
+        let report = files[0].deletingLastPathComponent().appending(path: "Rip Report (Disc 2).json")
+        #expect(try RipReport.read(from: report).toc == disc.toc.ctdbTOCString)
+
+        // Another file in the folder keeps the folder; the rip's own files go.
+        try Data("mine".utf8).write(to: folder.appending(path: "notes.txt"))
+        try disc.deleteRipFiles()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path) == ["notes.txt"])
+        try FileManager.default.removeItem(at: folder.appending(path: "notes.txt"))
+        let (second, secondLibrary) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: second.deletingLastPathComponent()) }
+        let secondDisc = try RippedDisc(folder: second)
+        _ = try DiscEncoder(format: .flac).encode(secondDisc, into: secondLibrary)
+        try secondDisc.deleteRipFiles()
+        #expect(!FileManager.default.fileExists(atPath: second.path))
+    }
+
     @Test func refusesUnverifiedTracks() throws {
         let (folder, library) = try makeRip(verified: false)
         defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }

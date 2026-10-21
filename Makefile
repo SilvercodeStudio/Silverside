@@ -27,7 +27,13 @@ XCODEBUILD = xcodebuild -workspace $(WORKSPACE) -scheme $(SCHEME) -configuration
 
 SWIFT_SOURCES = $(PACKAGE)/Package.swift $(PACKAGE)/Sources $(PACKAGE)/Tests App/CDRip
 
-.PHONY: help build run app cli test hwtest core format lint
+.PHONY: help build run app cli test hwtest core format lint release install uninstall
+
+# Where make install puts cdrip and its shell completions. /usr/local may need sudo; PREFIX=~/.local does not.
+PREFIX ?= /usr/local
+# A ~ that the shell did not expand (zsh leaves the one in PREFIX=~/.local) means the home folder.
+override PREFIX := $(patsubst ~%,$(HOME)%,$(PREFIX))
+RELEASE_BIN = $(PACKAGE)/.build/out/Products/Release/cdrip
 
 help:
 	@echo "make build          build the app ($(CONFIG)) with xcodebuild"
@@ -39,6 +45,9 @@ help:
 	@echo "make core           build the engine package only (swift build)"
 	@echo "make format         reformat the Swift sources with swift-format (settings in .swift-format)"
 	@echo "make lint           report formatting problems without changing files"
+	@echo "make release        build cdrip for release, for Apple silicon and Intel"
+	@echo "make install        install cdrip and its zsh, bash, and fish completions under PREFIX ($(PREFIX))"
+	@echo "make uninstall      remove what make install put under PREFIX"
 	@echo "Set CONFIG=Release for a release build (Apple silicon and Intel)."
 
 build:
@@ -72,3 +81,19 @@ format:
 
 lint:
 	xcrun swift-format lint --strict --recursive $(SWIFT_SOURCES)
+
+release:
+	swift build --package-path $(PACKAGE) -c release --arch arm64 --arch x86_64 --product cdrip
+
+install: release
+	install -d "$(PREFIX)/bin" "$(PREFIX)/share/zsh/site-functions" "$(PREFIX)/etc/bash_completion.d" \
+		"$(PREFIX)/share/fish/vendor_completions.d"
+	install -m 755 "$(RELEASE_BIN)" "$(PREFIX)/bin/cdrip"
+	"$(RELEASE_BIN)" --generate-completion-script zsh > "$(PREFIX)/share/zsh/site-functions/_cdrip"
+	"$(RELEASE_BIN)" --generate-completion-script bash > "$(PREFIX)/etc/bash_completion.d/cdrip"
+	"$(RELEASE_BIN)" --generate-completion-script fish > "$(PREFIX)/share/fish/vendor_completions.d/cdrip.fish"
+	@echo "Installed $(PREFIX)/bin/cdrip $$("$(PREFIX)/bin/cdrip" --version), and its shell completions."
+
+uninstall:
+	rm -f "$(PREFIX)/bin/cdrip" "$(PREFIX)/share/zsh/site-functions/_cdrip" "$(PREFIX)/etc/bash_completion.d/cdrip" \
+		"$(PREFIX)/share/fish/vendor_completions.d/cdrip.fish"

@@ -4,9 +4,6 @@ import Foundation
 /// and running LAME as a separate program keeps its LGPL code out of CDRip. CDRip writes
 /// the ID3 tag itself (`ID3Tags`).
 public enum MP3Encoder {
-    /// `lame`'s options for quality: `-V 0` is its best variable bit rate (about 245 kbit/s).
-    public static let defaultQuality = ["-V", "0"]
-
     /// The `lame` program: on the PATH, or where Homebrew puts it. Nil if it is not installed.
     public static func lame() -> URL? {
         let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
@@ -17,13 +14,13 @@ public enum MP3Encoder {
 
     /// Writes `samples` to `url` as MP3, through `lame`.
     public static func encode(
-        _ samples: [UInt32], to url: URL, lame: URL, quality: [String] = defaultQuality
+        _ samples: [UInt32], to url: URL, lame: URL, options: MP3Options = MP3Options()
     ) throws {
         let process = Process()
         process.executableURL = lame
         process.arguments =
             ["--quiet", "-r", "-s", "44.1", "--bitwidth", "16", "--signed", "--little-endian", "-m", "j"]
-            + quality + ["-", url.path]
+            + options.lameArguments + ["-", url.path]
         let input = Pipe()
         let errors = Pipe()
         process.standardInput = input

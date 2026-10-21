@@ -4,7 +4,17 @@ import CDRipKit
 
 struct Drives: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "List the optical drives, their discs, and their read offsets.")
+        abstract: "List the optical drives, their discs, and their read offsets.",
+        discussion: """
+            A drive's read offset comes from rips that confirm it (two or more discs that agree), from \
+            AccurateRip's list of drives, or from --set-offset, which overrides both. --measure-cache times reads \
+            to find how much the drive caches, so re-reads empty the cache with fewer reads.
+
+            Examples:
+              cdrip drives
+              cdrip drives -d disk14 --set-offset 6
+              cdrip drives -d disk14 --measure-cache
+            """)
 
     @OptionGroup var deviceOptions: DeviceOptions
 
@@ -53,7 +63,22 @@ struct Drives: ParsableCommand {
             let name = [drive.vendor, drive.product].filter { !$0.isEmpty }.joined(separator: " ")
             let connection = [drive.location, drive.interconnect].filter { !$0.isEmpty }.joined(separator: " ")
             print("\(name) (firmware \(drive.revision), \(connection))")
-            print("  " + (drive.discBSDName.map { "CD: \($0)" } ?? "No CD"))
+            if let bsdName = drive.discBSDName {
+                // macOS already has the TOC, so this does not spin the disc.
+                if let toc = try? IOKitDrive(bsdName: bsdName).readTOC() {
+                    let seconds =
+                        toc.audioTracks.reduce(0) { $0 + toc.sectorRange(of: $1).count } / CDDA.sectorsPerSecond
+                    let data = toc.tracks.count - toc.audioTracks.count
+                    print(
+                        "  CD: \(bsdName), \(toc.audioTracks.count) audio tracks, "
+                            + String(format: "%d:%02d", seconds / 60, seconds % 60)
+                            + (data > 0 ? ", and \(data) data track\(data == 1 ? "" : "s")" : ""))
+                } else {
+                    print("  CD: \(bsdName) (its TOC cannot be read)")
+                }
+            } else {
+                print("  No CD")
+            }
             let profile = store.profile(vendor: drive.vendor, product: drive.product, revision: drive.revision)
             if let (offset, source) = profile.offset {
                 print("  Read offset: \(Rip.signed(offset)) (\(Rip.describe(source)))")

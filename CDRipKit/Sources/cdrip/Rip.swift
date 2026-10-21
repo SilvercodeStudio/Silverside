@@ -5,7 +5,20 @@ import Foundation
 
 struct Rip: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Rip audio tracks to WAV files, check them against AccurateRip and CUETools DB, and repair them.")
+        abstract: "Rip audio tracks to WAV files, check them against AccurateRip and CUETools DB, and repair them.",
+        discussion: """
+            Each track is read once. A track that does not match AccurateRip is read again, and the sectors that \
+            read differently (or have C2 errors) are re-read until their data matches or the re-reads give up. \
+            Then the whole disc is checked against CTDB and, if it has errors, repaired with CTDB's repair data. \
+            The folder gets the WAV files, disc.json (the rip report, the TOC, and the release), and cover.jpg. \
+            In a terminal, a status line shows each read, with C2 errors and sectors that cannot be read.
+
+            Examples:
+              cdrip rip -d disk14
+              cdrip rip -d disk14 --encode --format flac
+              cdrip rip -d disk15 --release 513cbe54-309f-42f6-a883-2b93b3aa776f
+              cdrip rip -d disk16 --pool "<rip of the same disc from another drive>"
+            """)
 
     @OptionGroup var deviceOptions: DeviceOptions
 
@@ -28,15 +41,19 @@ struct Rip: AsyncParsableCommand {
     var release: String?
 
     @Option(help: "The artwork to save from the Cover Art Archive: front (cover.jpg), all (also Artwork/), or none.")
-    var artwork: Artwork = .front
+    var artwork: ArtworkChoice?
 
-    @Option(help: "After the rip, encode the disc into the library in this format (see cdrip encode).")
-    var encode: AudioFormat?
+    @Flag(inversion: .prefixedNo, help: "After the rip, encode the disc into the library (see cdrip encode).")
+    var encode: Bool?
 
-    @Option(help: "The music library's folder, for --encode.")
-    var library: String = Encode.defaultLibrary
+    @Flag(
+        inversion: .prefixedNo,
+        help: "With --encode, keep the rip's WAV files. Without it, a rip that is all verified and encoded is deleted.")
+    var keepRip: Bool?
 
-    @Flag(help: "Do not look up AccurateRip or its drive offset list.")
+    @OptionGroup(title: "Encoding, with --encode") var encoding: EncodingOptions
+
+    @Flag(help: "Do not look up AccurateRip, CTDB, MusicBrainz, or AccurateRip's drive offset list.")
     var offline = false
 
     @Flag(help: "Read each track once, with no re-reads of tracks that do not match AccurateRip.")
@@ -56,6 +73,7 @@ struct Rip: AsyncParsableCommand {
     var pool: [String] = []
 
     func run() async throws {
+        let settings = try Settings.load()
         let bsdName = try deviceOptions.bsdName()
         let drive = try IOKitDrive(bsdName: bsdName)
         let toc = try drive.readTOC()
@@ -132,10 +150,14 @@ struct Rip: AsyncParsableCommand {
         }
         let defaultName =
             chosen.map {
-                NameTemplate.folder.name(
+                NameTemplate(settings.ripFolderTemplate).name(
                     NameTemplate.values(release: $0, medium: $0.medium(for: toc)))
             } ?? "CDRip \(toc.musicBrainzDiscID)"
-        let folder = try RipFolder.claim(URL(filePath: output ?? defaultName, directoryHint: .isDirectory), toc: toc)
+        let ripsFolder = settings.rips.isEmpty ? URL.currentDirectory() : Settings.expand(settings.rips)
+        try FileManager.default.createDirectory(at: ripsFolder, withIntermediateDirectories: true)
+        let folder = try RipFolder.claim(
+            output.map { URL(filePath: $0, directoryHint: .isDirectory) }
+                ?? ripsFolder.appending(path: defaultName, directoryHint: .isDirectory), toc: toc)
         defer { RipFolder.release(folder) }
         print("Folder: \(folder.path)")
         print()
@@ -144,14 +166,18 @@ struct Rip: AsyncParsableCommand {
         // A sector that cannot be read is silence and suspect, so one bad sector does not stop the rip.
         reader.unreadableRetries = 3
         var ripper = TrackRipper(reader: reader, records: records)
-        ripper.readsC2 = !noC2
+        ripper.readsC2 = !noC2 && settings.readC2
         var secure = SecureRipper(ripper: ripper)
         secure.cacheFlushSectors = profile.cacheFlushSectors
         var discOffsets = Set<Int>()
         var reports = [RipReport.Track]()
         // Each track's audio, with its suspect samples, for CTDB.
         var trackAudio = [TrackAudio]()
-        for track in selected {
+        let progress = ProgressLine()
+        secure.progress = progress.show
+        for (position, track) in selected.enumerated() {
+            progress.label =
+                String(format: "%2d", track.number) + (selected.count > 1 ? " (\(position + 1)/\(selected.count))" : "")
             let start = ContinuousClock.now
             var samples: [UInt32]
             var result: String
@@ -162,7 +188,7 @@ struct Rip: AsyncParsableCommand {
                 preEmphasis: track.hasPreEmphasis, accurateRip: .notInDatabase)
             report.isrc = try? SubchannelCodes.isrc(of: track, in: toc, drive: drive)
             if singlePass {
-                let rip = try ripper.rip(track)
+                let rip = try ripper.rip(track, progress: progress.show)
                 (samples, result) = (rip.samples, Self.describe(rip))
                 discOffsets.formUnion(rip.matchingOffsets)
                 report.matchingOffsets = rip.matchingOffsets
@@ -243,6 +269,7 @@ struct Rip: AsyncParsableCommand {
             }
             if track.hasPreEmphasis { result += ", pre-emphasis" }
             let length = toc.sectorRange(of: track).count
+            progress.clear()
             print(String(format: "Track %2d  %@  %3d s  ", track.number, Info.duration(length), seconds) + result)
         }
 
@@ -314,19 +341,30 @@ struct Rip: AsyncParsableCommand {
         try report.write(to: folder.appending(path: "disc.json"))
         if let chosen {
             do {
-                try await ReleaseChoice.saveArtwork(artwork, of: chosen, in: folder)
+                try await ReleaseChoice.saveArtwork(artwork ?? settings.artwork, of: chosen, in: folder)
             } catch {
                 print("Cover: the download failed (\(error))")
             }
         }
-        if let encode {
+        if encode ?? settings.encodeAfterRip {
             print()
-            let libraryURL = URL(filePath: (library as NSString).expandingTildeInPath, directoryHint: .isDirectory)
-            var encoder = DiscEncoder(format: encode)
+            var (encoder, libraryURL) = encoding.encoder(settings)
             encoder.log = { print("  \($0)") }
-            let files = try encoder.encode(RippedDisc(folder: folder), into: libraryURL)
-            print("Encoded \(files.count) tracks as \(encode.rawValue.uppercased()), each checked against the rip.")
+            let disc = try RippedDisc(folder: folder)
+            let files = try encoder.encode(disc, into: libraryURL)
+            print(
+                "Encoded \(files.count) tracks as \(encoder.format.rawValue.uppercased()), each checked against the rip."
+            )
             if let first = files.first { print("Library: \(first.deletingLastPathComponent().path)") }
+            // The WAV files go only if every track is verified and encoded; the report is in the album folder.
+            if !(keepRip ?? settings.keepRipAfterEncoding) && files.count == disc.tracks.count
+                && disc.tracks.allSatisfy(\.isVerified)
+            {
+                try disc.deleteRipFiles()
+                print("Deleted the rip's WAV files (--keep-rip keeps them). The rip report is in the album folder.")
+            } else if !(keepRip ?? settings.keepRipAfterEncoding) {
+                print("Kept the rip in \(folder.path): not every track is verified and encoded.")
+            }
         }
     }
 

@@ -40,9 +40,6 @@ public enum AudioEncoderError: Error, Equatable, CustomStringConvertible {
 /// Encodes ripped audio (16-bit stereo, 44.1 kHz) with AudioToolbox, and decodes files
 /// again, so an encoded file can be checked against the rip.
 public enum AudioEncoder {
-    /// The bit rate for AAC, in bits per second.
-    public static let defaultAACBitRate = 256_000
-
     /// The rip's PCM, as AudioToolbox takes it: interleaved, signed, 16-bit, little-endian.
     static let clientFormat = AudioStreamBasicDescription(
         mSampleRate: 44_100, mFormatID: kAudioFormatLinearPCM,
@@ -52,7 +49,7 @@ public enum AudioEncoder {
     /// Writes `samples` (CDRip samples: one stereo frame each) to `url` in `format`. WAV
     /// and MP3 have their own writers.
     public static func encode(
-        _ samples: [UInt32], format: AudioFormat, to url: URL, aacBitRate: Int = defaultAACBitRate
+        _ samples: [UInt32], format: AudioFormat, to url: URL, aac: AACOptions = AACOptions()
     ) throws {
         var destination = AudioStreamBasicDescription()
         let fileType: AudioFileTypeID
@@ -103,7 +100,7 @@ public enum AudioEncoder {
                 file, kExtAudioFileProperty_ClientDataFormat, UInt32(MemoryLayout<AudioStreamBasicDescription>.size),
                 &client))
         if format == .aac {
-            try setBitRate(aacBitRate, of: file)
+            try configure(aac, of: file)
         }
 
         // Write in parts of 1 second.
@@ -155,18 +152,30 @@ public enum AudioEncoder {
         return samples
     }
 
-    private static func setBitRate(_ bitRate: Int, of file: ExtAudioFileRef) throws {
+    /// Sets the AAC encoder's mode, then its bit rate or its VBR quality.
+    private static func configure(_ options: AACOptions, of file: ExtAudioFileRef) throws {
         var converter: AudioConverterRef?
         var size = UInt32(MemoryLayout<AudioConverterRef?>.size)
         try check(
             "ExtAudioFileGetProperty(AudioConverter)",
             ExtAudioFileGetProperty(file, kExtAudioFileProperty_AudioConverter, &size, &converter))
         guard let converter else { return }
-        var rate = UInt32(bitRate)
+        let valueSize = UInt32(MemoryLayout<UInt32>.size)
+        var mode = options.mode.audioToolboxMode
         try check(
-            "AudioConverterSetProperty(EncodeBitRate)",
-            AudioConverterSetProperty(converter, kAudioConverterEncodeBitRate, UInt32(MemoryLayout<UInt32>.size), &rate)
-        )
+            "AudioConverterSetProperty(BitRateControlMode)",
+            AudioConverterSetProperty(converter, kAudioCodecPropertyBitRateControlMode, valueSize, &mode))
+        if options.mode == .vbr {
+            var quality = UInt32(min(max(options.vbrQuality, 0), 127))
+            try check(
+                "AudioConverterSetProperty(SoundQualityForVBR)",
+                AudioConverterSetProperty(converter, kAudioCodecPropertySoundQualityForVBR, valueSize, &quality))
+        } else {
+            var rate = UInt32(options.bitRate * 1000)
+            try check(
+                "AudioConverterSetProperty(EncodeBitRate)",
+                AudioConverterSetProperty(converter, kAudioConverterEncodeBitRate, valueSize, &rate))
+        }
         // The converter changed: a null configuration makes the file read its settings again.
         var none: UnsafeRawPointer?
         try check(

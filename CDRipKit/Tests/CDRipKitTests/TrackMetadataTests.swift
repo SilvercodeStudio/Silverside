@@ -51,6 +51,22 @@ struct TrackMetadataTests {
                 == "18-03 Walkin' Blues [Merriweather Post Pavilion, 7-1-85]")
     }
 
+    @Test func makesPunctuationPlainWhenAsked() {
+        var release = summerMagic()
+        release.media[17].tracks[2].title = "Walkin’ Blues"
+        release.title = "Brown‐Eyed Women “Live” …"
+        let medium = release.media[17]
+        let typographic = TrackMetadata(release: release, medium: medium, track: medium.tracks[2])
+        #expect(typographic.title.hasPrefix("Walkin’ Blues"))
+        let plain = TrackMetadata(release: release, medium: medium, track: medium.tracks[2], plainPunctuation: true)
+        #expect(plain.title == "Walkin' Blues [Merriweather Post Pavilion, 7-1-85]")
+        #expect(plain.vorbisComments.first { $0.key == "ALBUM" }?.value == "Brown-Eyed Women \"Live\" ...")
+        #expect(
+            NameTemplate.libraryTrack.name(plain.nameValues)
+                == "18-03 Walkin' Blues [Merriweather Post Pavilion, 7-1-85]")
+        #expect(PlainPunctuation.apply("Giants Stadium · East Rutherford") == "Giants Stadium · East Rutherford")
+    }
+
     @Test func leavesTheStyleOutWhenADiscIsNotAShow() {
         var release = summerMagic()
         release.media[4].title = nil

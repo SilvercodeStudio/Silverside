@@ -127,6 +127,8 @@ Each entry names the finding, the files, and the tests. All 197 engine tests pas
 
 All three checks pass: the review's changes to the secure rip, the flush, the threads, and the stop path gave the same audio as before on two damaged discs in two drives.
 
+**Hardware check 4: *Reckoning* in a fourth drive, HL-DT-ST DVDRAM GUC0N (new, 2026-10-21).** The drive report: C2 flags given, Q subchannel 97 of 100 frames valid, no overread, no CD-Text on the disc, cache 32 sectors or fewer, 6×. The rip took the offset (+6) from AccurateRip's drive list, the first use of that path on a new drive since the review: 15 of 15 accurate, tracks 8, 11, 14, and 15 repaired with entry 2111910 at shift 0 (6,452 samples), every WAV file identical to the archive, about 21 minutes. The C2 fallback (item 16b) stays unexercised: this drive gives C2 flags too.
+
 ## For the morning review
 
 Final state: `make format` and `make lint` clean, 216 tests in 48 suites pass. Nothing is staged.

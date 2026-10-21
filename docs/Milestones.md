@@ -346,6 +346,7 @@ What the engine gives the app, after the 0.2 review: `DiscRip.run()` and `RipRep
 | MATSHITA BD-MLT UJ260AF | USB, no hub | +103 | The only offset that matches on all 3 test discs; agrees with the AccurateRip list (648 submissions). No overread. C2, Q subchannel, CD-Text, and ISRC work. |
 | ASUS BW-16D1HT, firmware 3.10, possibly LG inside and modified for LibreDrive | USB | +6 | Agrees with the AccurateRip list (3,015 submissions); matches on *Dozin' at the Knick* disc 1. About 24.7×, the fastest so far. |
 | HL-DT-ST BD-RE BU50N (LG), firmware CC03, possibly modified for LibreDrive (MakeMKV) | USB, no hub | +6 | Agrees with the AccurateRip list (51 submissions); matches on *Clarity of Cal*, with the same checksums as the MATSHITA at +103. No overread. C2 and Q subchannel (with user area) work. Raw P-W subchannel gives `EIO`. Reports 20×. |
+| HL-DT-ST DVDRAM GUC0N (LG slim DVD writer in a generic enclosure), firmware AS01 | USB | +6 | From the AccurateRip list; *Reckoning* matches at +6 (2026-10-21): 15 of 15 accurate in 21 minutes, 4 tracks repaired by CTDB (6,452 samples; track 13 was accurate on the first read, which no other drive managed), every file identical to the archive. Slow: 6× (the others 20–25×). C2 flags, Q subchannel, and the cache (latest read only) as the others; no overread. |
 
 Drives report vendor names that differ from the names in AccurateRip's offset list. Drive profiles need a table of vendor aliases:
 

@@ -91,5 +91,4 @@ The full list is in `docs/Milestones.md`. Keep both up to date.
 6. Done, ahead of 4 and 5 because the user has many damaged discs: `SecureRipper` (cache flush, re-reads of suspect sectors, C2, unreadable sectors, shifted reads, combinations tested against AccurateRip).
 7. Done: CTDB verification and repair (`CTDB`, `ReedSolomonDecoder`, `DiscRepairer`), in `cdrip rip` and in `cdrip repair` (from ripped WAV files, pooling several rips, with re-reads when the disc is in a drive). `rip` writes a `RipReport` as `disc.json`.
 5. Mostly done: metadata (`MusicBrainzClient`, `ReleaseRanking`, `CoverArtClient`, `NameTemplate`, `cdrip metadata`; `rip` names its folder from the release).
-
-Next: encoding (4: FLAC and ALAC, tags with embedded cover art, and encoding from the archive's verified WAVs).
+4. Mostly done: encoding (`AudioEncoder`, `FLACTags`, `MP4Tags`, `ID3Tags`, `DiscEncoder`, `cdrip encode`, `cdrip rip --encode`), checked by decoding each file again.

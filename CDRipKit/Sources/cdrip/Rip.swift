@@ -30,6 +30,12 @@ struct Rip: AsyncParsableCommand {
     @Option(help: "The artwork to save from the Cover Art Archive: front (cover.jpg), all (also Artwork/), or none.")
     var artwork: Artwork = .front
 
+    @Option(help: "After the rip, encode the disc into the library in this format (see cdrip encode).")
+    var encode: AudioFormat?
+
+    @Option(help: "The music library's folder, for --encode.")
+    var library: String = Encode.defaultLibrary
+
     @Flag(help: "Do not look up AccurateRip or its drive offset list.")
     var offline = false
 
@@ -110,9 +116,13 @@ struct Rip: AsyncParsableCommand {
                 if let chosen {
                     let others = choice.ranked.count - (choice.ranked.contains { $0.id == chosen.id } ? 1 : 0)
                     print(
-                        "MusicBrainz: " + ReleaseChoice.describe(chosen, discID: toc.musicBrainzDiscID)
-                            + (choice.isExact ? "" : " (a fuzzy match of the TOC)")
+                        "MusicBrainz: " + ReleaseChoice.describe(chosen, toc: toc)
+                            + (choice.isExact
+                                ? "" : " (a fuzzy match of the TOC; MusicBrainz does not know this disc ID)")
                             + (others > 0 ? "; \(others) other releases (see cdrip metadata)" : ""))
+                    if !choice.isExact {
+                        print("  To add the disc ID: \(MusicBrainzRelease.submissionURL(for: toc).absoluteString)")
+                    }
                 } else {
                     print("MusicBrainz: no release has this disc")
                 }
@@ -123,10 +133,10 @@ struct Rip: AsyncParsableCommand {
         let defaultName =
             chosen.map {
                 NameTemplate.folder.name(
-                    NameTemplate.values(release: $0, medium: $0.medium(withDiscID: toc.musicBrainzDiscID)))
+                    NameTemplate.values(release: $0, medium: $0.medium(for: toc)))
             } ?? "CDRip \(toc.musicBrainzDiscID)"
-        let folder = URL(filePath: output ?? defaultName, directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let folder = try RipFolder.claim(URL(filePath: output ?? defaultName, directoryHint: .isDirectory), toc: toc)
+        defer { RipFolder.release(folder) }
         print("Folder: \(folder.path)")
         print()
 
@@ -308,6 +318,15 @@ struct Rip: AsyncParsableCommand {
             } catch {
                 print("Cover: the download failed (\(error))")
             }
+        }
+        if let encode {
+            print()
+            let libraryURL = URL(filePath: (library as NSString).expandingTildeInPath, directoryHint: .isDirectory)
+            var encoder = DiscEncoder(format: encode)
+            encoder.log = { print("  \($0)") }
+            let files = try encoder.encode(RippedDisc(folder: folder), into: libraryURL)
+            print("Encoded \(files.count) tracks as \(encode.rawValue.uppercased()), each checked against the rip.")
+            if let first = files.first { print("Library: \(first.deletingLastPathComponent().path)") }
         }
     }
 

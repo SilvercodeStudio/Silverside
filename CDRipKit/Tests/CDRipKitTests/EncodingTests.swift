@@ -1,0 +1,79 @@
+import Foundation
+import Testing
+
+@testable import CDRipKit
+
+struct EncodingTests {
+    /// A rip folder of a 2-track disc, disc 2 of a 2-disc release, with a cover.
+    func makeRip(verified: Bool = true) throws -> (folder: URL, library: URL) {
+        let root = FileManager.default.temporaryDirectory.appending(path: "CDRipTests-\(UUID())")
+        let folder = root.appending(path: "rip")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let toc = try TOC(audioTrackStarts: [0, 75], leadOutLBA: 150)
+        let samples = Array(AudioEncoderTests.samples.prefix(75 * 588))
+        for number in 1...2 { try WAVFile.write(samples, to: folder.appending(path: "Track 0\(number).wav")) }
+        try makeJPEG(width: 1400, height: 1400).write(to: folder)
+        func track(_ position: Int, _ title: String) -> MusicBrainzRelease.Track {
+            .init(
+                position: position, number: String(position), title: title, length: 1000,
+                artistCredit: [.init(name: "Grateful Dead")], recordingID: "rec\(position)")
+        }
+        let release = MusicBrainzRelease(
+            id: "rel", title: "Saint of Circumstance: Giants Stadium · East Rutherford · NJ · 6/17/91",
+            artistCredit: [.init(name: "Grateful Dead")], date: "2019-09-27", country: "XE", status: "Official",
+            barcode: "603497852376", disambiguation: nil, labels: [], releaseGroup: nil,
+            media: [
+                .init(
+                    position: 1, format: "CD", title: nil, discIDs: [],
+                    tracks: [track(1, "A"), track(2, "B"), track(3, "C")]),
+                .init(
+                    position: 2, format: "CD", title: nil, discIDs: [],
+                    tracks: [track(1, "Help on the Way >"), track(2, "Slipknot!")]),
+            ], hasFrontCover: true)
+        var report = RipReport(
+            drive: .init(vendor: "V", product: "P", revision: "1", readOffset: 6, offsetSource: "test"), secure: true,
+            toc: toc,
+            tracks: (1...2).map {
+                .init(
+                    number: $0, file: "Track 0\($0).wav", startLBA: ($0 - 1) * 75, sectors: 75, preEmphasis: false,
+                    accurateRip: verified || $0 == 1 ? .accurate : .notAccurate, ctdbConfidence: 0)
+            }, ctdb: .init(status: verified ? .verified : .notVerified))
+        report.tracks[0].isrc = "USRH11900001"
+        report.release = release
+        try report.write(to: folder.appending(path: "disc.json"))
+        return (folder, root.appending(path: "library"))
+    }
+
+    @Test func encodesIntoTheLibraryLayout() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        #expect(disc.tracks.allSatisfy(\.isVerified) && disc.tracks[0].isrc == "USRH11900001")
+        let files = try DiscEncoder(format: .flac).encode(disc, into: library)
+        let album = "Grateful Dead/Saint of Circumstance- Giants Stadium · East Rutherford · NJ · 6-17-91"
+        #expect(
+            files.map { $0.path.replacingOccurrences(of: library.path + "/", with: "") } == [
+                "\(album)/02-01 Help on the Way >.flac", "\(album)/02-02 Slipknot!.flac",
+            ])
+        let tags = Dictionary(try FLACTags.read(files[0]).map { ($0.key, $0.value) }, uniquingKeysWith: { a, _ in a })
+        #expect(tags["TITLE"] == "Help on the Way >" && tags["DISCNUMBER"] == "2" && tags["ISRC"] == "USRH11900001")
+        #expect(try FLACTags.readFrontCover(files[0]).map { try EmbeddedCover(CoverImage(data: $0)).width } == 1000)
+        #expect(FileManager.default.fileExists(atPath: library.appending(path: "\(album)/cover.jpg").path))
+        #expect(throws: EncodingError.self) { try DiscEncoder(format: .flac).encode(disc, into: library) }
+        var again = DiscEncoder(format: .flac)
+        again.overwrites = true
+        #expect(try again.encode(disc, into: library).count == 2)
+    }
+
+    @Test func refusesUnverifiedTracks() throws {
+        let (folder, library) = try makeRip(verified: false)
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        #expect(throws: EncodingError.notVerified(track: 2)) {
+            try DiscEncoder(format: .flac).encode(disc, into: library)
+        }
+        var encoder = DiscEncoder(format: .alac)
+        encoder.allowsUnverified = true
+        #expect(try encoder.encode(disc, into: library).count == 2)
+    }
+}

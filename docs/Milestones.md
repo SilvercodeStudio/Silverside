@@ -66,13 +66,24 @@ The drive's read offset aligns our samples with everyone else's, so AccurateRip 
 
 The rip log records the offset and its source. The drive profiles and past results are a separate store, which the app keeps.
 
-## 4. Encoding and tags
+## 4. Encoding and tags — mostly done
 
-- FLAC, ALAC, AAC, and AIFF through AudioToolbox (each checked with `afconvert` on macOS 27), and WAV. Apple's frameworks have no MP3 encoder (`afconvert` fails with `'fmt?'`).
-- MP3, as an option, through `lame` (LAME 4.0 is installed here; `ffmpeg` with `libmp3lame` also works): CDRip pipes PCM to it and writes the tags itself. The external tool keeps LGPL code out of CDRip. Off unless `lame` is found.
-- After encoding, decode the file and compare it with the ripped PCM.
-- Our own writers for FLAC metadata blocks (Vorbis comments, PICTURE) and MP4 `ilst` atoms (including `covr` for cover art).
-- Encode from saved, verified WAV rips too (`~/Music/CDRip Archive/`), so a disc that was hard to rip never needs ripping again. Each archived disc has a `disc.json` with its TOC, disc IDs, MusicBrainz release, and AccurateRip results.
+Done:
+
+- `AudioEncoder`: FLAC, ALAC, AAC (256 kbit/s by default), and AIFF through AudioToolbox (`ExtAudioFile`), and decoding of any of them. FLAC, ALAC, and AIFF give back every sample. Apple's FLAC files have a correct audio MD5 (`flac -t` passes). WAV uses `WAVFile`.
+- MP3 through `lame` (`MP3Encoder`, `-V 0`, about 245 kbit/s): CDRip pipes the PCM to it, and writes the ID3v2.4 tag itself (`ID3Tags`). Running LAME as a separate program keeps its LGPL code out of CDRip. Apple's frameworks have no MP3 encoder (`afconvert` fails with `'fmt?'`).
+- `FLACTags`: our own metadata blocks. Apple writes STREAMINFO and a small VORBIS_COMMENT; CDRip keeps STREAMINFO and any other blocks, writes its VORBIS_COMMENT (vendor "CDRip 0.1") and a PICTURE block (type 3, front cover), adds 8 KB of padding, and copies the audio frames unchanged.
+- `MP4Tags`: `moov/udta/meta/ilst` with iTunes atoms (`©nam`, `©ART`, `aART`, `©alb`, `©day`, `trkn`, `disk`, `covr`, `©too`), and freeform `----` atoms named as MusicBrainz Picard names them (ISRC, BARCODE, the MusicBrainz IDs, and so on). Apple puts `moov` before `mdat`, so new tags move the audio: the writer drops the `free` atom and moves every `stco`/`co64` chunk offset by the same amount. The encoder's own items (such as `iTunSMPB`, for gapless AAC) are kept.
+- `ID3Tags`: text frames, `TXXX` and `UFID` for the MusicBrainz IDs as Picard writes them, and `APIC` for the cover; any ID3 tags that `lame` wrote are replaced.
+- `EmbeddedCover`: the embedded cover is at most 1000 px on its long side (ImageIO), as in the user's library; a cover within the size is kept byte for byte. The album folder keeps the full-size `cover.jpg`.
+- `RippedDisc` reads a rip's folder in either form (a rip's `disc.json`, or an archive manifest). A track is verified if it is accurate in AccurateRip, matches another pressing, or matches a CTDB entry (or, for older manifests, if the disc is marked complete).
+- `DiscEncoder` encodes each track to a partial file, tags it, decodes it again (a lossless file must equal the rip; a lossy one must be about as long), and only then moves it into place. It refuses unverified tracks (`--allow-unverified`) and files that exist (`--overwrite`).
+- `cdrip encode -i <folder> [-i <folder> ...] [--format flac] [-l <library>]`, with `--folder-template`, `--track-template`, `--no-live-show-style`, and `--aac-bitrate`. The default library is `~/Music/CDRip Library`. `cdrip rip --encode flac` encodes the disc after the rip.
+- Checked with outside tools on *Cornell 5/8/77*: `flac -t` passes on all 20 FLAC files, `metaflac` shows the blocks in order, and `ffprobe` reads the tags and the 1000 × 1000 cover in FLAC, ALAC, AAC, and MP3. 20 FLAC tracks (2 hours 10 minutes) encode and check in 38 s.
+
+Still to do:
+
+- Tags for AIFF (an `ID3 ` chunk) and WAV (a `LIST`/`INFO` chunk, or an `id3 ` chunk). Today they have none.
 - Optional external encoder hook (stdin to a command-line tool), for other formats.
 
 ## 5. Metadata

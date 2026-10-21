@@ -85,6 +85,38 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
         media.first { $0.discIDs.contains(discID) }
     }
 
+    /// The medium that holds the disc with this TOC: the one with its disc ID, else the one
+    /// whose tracks have the TOC's number and lengths. A fuzzy match has no disc ID, and a
+    /// set's discs must not get the same medium. Nil if no medium has that many tracks, or
+    /// if two fit equally well (as when their lengths are not known).
+    public func medium(for toc: TOC) -> Medium? {
+        if let medium = medium(withDiscID: toc.musicBrainzDiscID) { return medium }
+        let lengths = toc.audioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
+        let candidates = media.filter { $0.tracks.count == lengths.count }
+        guard candidates.count > 1 else { return candidates.first }
+        // The total difference in track lengths, in milliseconds; unknown lengths count as far.
+        func distance(_ medium: Medium) -> Int {
+            zip(medium.tracks, lengths).reduce(0) { total, pair in
+                total + (pair.0.length.map { abs($0 - pair.1) } ?? 3_600_000)
+            }
+        }
+        let ranked = candidates.map { ($0, distance($0)) }.sorted { $0.1 < $1.1 }
+        // The best must be better than the next by a second for each track, or it is a guess.
+        guard ranked[1].1 - ranked[0].1 >= 1000 * lengths.count else { return nil }
+        return ranked[0].0
+    }
+
+    /// The page where a user can add this disc ID to a release in MusicBrainz.
+    public static func submissionURL(for toc: TOC) -> URL {
+        var components = URLComponents(string: "https://musicbrainz.org/cdtoc/attach")!
+        components.queryItems = [
+            URLQueryItem(name: "id", value: toc.musicBrainzDiscID),
+            URLQueryItem(name: "tracks", value: String(toc.audioTracks.count)),
+            URLQueryItem(name: "toc", value: toc.musicBrainzTOCString.replacingOccurrences(of: "+", with: " ")),
+        ]
+        return components.url!
+    }
+
     static func joined(_ credit: [Credit]) -> String {
         credit.map { $0.name + $0.joinPhrase }.joined()
     }

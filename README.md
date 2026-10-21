@@ -33,6 +33,3 @@ Using a different drive might help.
 ## CLI app
 
 ## TODO
-
-- App is accidentally set to require macOS 26.
-- Need to reorganize as XC workspace?

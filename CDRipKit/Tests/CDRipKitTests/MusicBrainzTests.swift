@@ -55,6 +55,48 @@ struct MusicBrainzTests {
                 == "Grateful Dead - Cornell 5-8-77 (Disc 1)")
     }
 
+    /// *Saint of Circumstance*: MusicBrainz has no disc IDs for its discs (8, 9, and 5 tracks).
+    /// A fuzzy match must still give each disc its own medium.
+    @Test func findsTheDiscOfAFuzzyMatchByItsTracks() throws {
+        func medium(_ position: Int, lengths: [Int?]) -> MusicBrainzRelease.Medium {
+            .init(
+                position: position, format: "CD", title: nil, discIDs: [],
+                tracks: lengths.enumerated().map {
+                    .init(
+                        position: $0.offset + 1, number: String($0.offset + 1), title: "T", length: $0.element,
+                        artistCredit: [], recordingID: nil)
+                })
+        }
+        let release = MusicBrainzRelease(
+            id: "r", title: "Saint of Circumstance", artistCredit: [], date: nil, country: nil, status: nil,
+            barcode: nil, disambiguation: nil, labels: [], releaseGroup: nil,
+            media: [
+                medium(1, lengths: Array(repeating: 400_000, count: 8)),
+                medium(2, lengths: Array(repeating: 300_000, count: 9)),
+                medium(3, lengths: Array(repeating: 500_000, count: 5)),
+                medium(4, lengths: Array(repeating: 200_000, count: 5)),
+            ], hasFrontCover: false)
+        // Five tracks of 500 s each (37,500 sectors): disc 3, not disc 4, by their lengths.
+        let five = try TOC(audioTrackStarts: (0..<5).map { $0 * 37_500 }, leadOutLBA: 5 * 37_500)
+        #expect(release.medium(for: five)?.position == 3)
+        let nine = try TOC(audioTrackStarts: (0..<9).map { $0 * 22_500 }, leadOutLBA: 9 * 22_500)
+        #expect(release.medium(for: nine)?.position == 2)
+        // Two discs that fit as well: no guess.
+        var unknown = release
+        unknown.media[2] = medium(3, lengths: Array(repeating: nil, count: 5))
+        unknown.media[3] = medium(4, lengths: Array(repeating: nil, count: 5))
+        #expect(unknown.medium(for: five) == nil)
+        #expect(release.medium(for: try TOC(audioTrackStarts: [0, 100], leadOutLBA: 200)) == nil)
+    }
+
+    @Test func linksToTheDiscIDSubmissionPage() throws {
+        let toc = try TOC(musicBrainzOffsets: [150, 20000, 40000], sectors: 60000)
+        let url = MusicBrainzRelease.submissionURL(for: toc).absoluteString
+        #expect(
+            url.hasPrefix("https://musicbrainz.org/cdtoc/attach?id=\(toc.musicBrainzDiscID)&tracks=3&toc=1%203%2060000")
+        )
+    }
+
     @Test func refusesSomethingElse() {
         #expect(throws: MusicBrainzError.malformedResponse) {
             try MusicBrainzClient.lookup(fromJSON: Data("{\"error\": \"Not found\"}".utf8))

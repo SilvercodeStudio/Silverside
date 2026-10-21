@@ -45,17 +45,19 @@ struct Metadata: AsyncParsableCommand {
             return
         }
         if !choice.isExact {
-            print("MusicBrainz does not know this disc ID. These releases have nearly the same TOC:")
+            print("MusicBrainz does not know this disc ID. These releases have nearly the same TOC.")
+            print(
+                "To add the disc ID to the right release: \(MusicBrainzRelease.submissionURL(for: toc).absoluteString)")
         }
         for (index, candidate) in choice.ranked.enumerated() {
             let mark = candidate.id == chosen.id ? "*" : " "
-            print("\(mark) \(index + 1). " + ReleaseChoice.describe(candidate, discID: toc.musicBrainzDiscID))
+            print("\(mark) \(index + 1). " + ReleaseChoice.describe(candidate, toc: toc))
         }
         if !choice.ranked.contains(where: { $0.id == chosen.id }) {
-            print("* " + ReleaseChoice.describe(chosen, discID: toc.musicBrainzDiscID) + " (from --release)")
+            print("* " + ReleaseChoice.describe(chosen, toc: toc) + " (from --release)")
         }
         print()
-        ReleaseChoice.printTracks(of: chosen, discID: toc.musicBrainzDiscID)
+        ReleaseChoice.printTracks(of: chosen, toc: toc)
 
         guard let folder else { return }
         try ReleaseChoice.save(chosen, inDiscJSONOf: folder)
@@ -95,7 +97,7 @@ enum ReleaseChoice {
         guard let releaseID else {
             var chosen = ranked.first
             if ask, ReleaseRanking.isAmbiguous(ranked, mcn: mcn, chosen: store.choices(forDiscID: discID)) {
-                chosen = askForRelease(ranked, discID: discID)
+                chosen = askForRelease(ranked, toc: toc)
                 if let chosen { try store.remember(chosen) }
             }
             return (ranked, chosen, lookup.isExact)
@@ -108,10 +110,10 @@ enum ReleaseChoice {
     }
 
     /// Asks the user to pick a release, on the terminal. The first is the default.
-    static func askForRelease(_ ranked: [MusicBrainzRelease], discID: String) -> MusicBrainzRelease? {
+    static func askForRelease(_ ranked: [MusicBrainzRelease], toc: TOC) -> MusicBrainzRelease? {
         print("Several MusicBrainz releases have this disc:")
         for (index, release) in ranked.enumerated() {
-            print("  \(index + 1). " + describe(release, discID: discID))
+            print("  \(index + 1). " + describe(release, toc: toc))
         }
         while true {
             print("Which release? [1] ", terminator: "")
@@ -124,12 +126,14 @@ enum ReleaseChoice {
     }
 
     /// One line for a release: "Grateful Dead - Cornell 5/8/77 (2017-05-05, US; disc 2 of 3; ...)".
-    static func describe(_ release: MusicBrainzRelease, discID: String) -> String {
+    static func describe(_ release: MusicBrainzRelease, toc: TOC) -> String {
         var details = [[release.date, release.country].compactMap { $0 }.joined(separator: ", ")]
-        if let medium = release.medium(withDiscID: discID) {
-            details.append(release.media.count > 1 ? "disc \(medium.position) of \(release.media.count)" : "1 disc")
+        if let medium = release.medium(for: toc) {
+            let how = release.medium(withDiscID: toc.musicBrainzDiscID) == nil ? " (by track lengths)" : ""
+            details.append(
+                (release.media.count > 1 ? "disc \(medium.position) of \(release.media.count)" : "1 disc") + how)
         } else {
-            details.append("\(release.media.count) discs, none with this disc ID")
+            details.append("\(release.media.count) discs; which one is this disc is not clear")
         }
         if let barcode = release.barcode, !barcode.isEmpty { details.append("barcode \(barcode)") }
         let labels = release.labels.compactMap { label in
@@ -142,8 +146,11 @@ enum ReleaseChoice {
             + "  \(release.id)"
     }
 
-    static func printTracks(of release: MusicBrainzRelease, discID: String) {
-        guard let medium = release.medium(withDiscID: discID) ?? release.media.first else { return }
+    static func printTracks(of release: MusicBrainzRelease, toc: TOC) {
+        guard let medium = release.medium(for: toc) else {
+            print("Which disc of the release this is is not clear: no disc has its track count and lengths.")
+            return
+        }
         let title = medium.title.map { ": \($0)" } ?? ""
         print("Disc \(medium.position) of \(release.media.count)\(title)")
         for track in medium.tracks {

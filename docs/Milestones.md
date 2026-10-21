@@ -68,7 +68,8 @@ The rip log records the offset and its source. The drive profiles and past resul
 
 ## 4. Encoding and tags
 
-- FLAC and ALAC through AudioToolbox. AIFF and WAV.
+- FLAC, ALAC, AAC, and AIFF through AudioToolbox (each checked with `afconvert` on macOS 27), and WAV. Apple's frameworks have no MP3 encoder (`afconvert` fails with `'fmt?'`).
+- MP3, as an option, through `lame` (LAME 4.0 is installed here; `ffmpeg` with `libmp3lame` also works): CDRip pipes PCM to it and writes the tags itself. The external tool keeps LGPL code out of CDRip. Off unless `lame` is found.
 - After encoding, decode the file and compare it with the ripped PCM.
 - Our own writers for FLAC metadata blocks (Vorbis comments, PICTURE) and MP4 `ilst` atoms (including `covr` for cover art).
 - Encode from saved, verified WAV rips too (`~/Music/CDRip Archive/`), so a disc that was hard to rip never needs ripping again. Each archived disc has a `disc.json` with its TOC, disc IDs, MusicBrainz release, and AccurateRip results.
@@ -89,17 +90,22 @@ Done:
 - `MusicBrainzClient`: one request per disc, `discid/<id>?toc=...`. MusicBrainz returns the releases with the disc ID, or, if it does not know the ID, the releases whose TOC is nearly the same (a fuzzy match). The answer has an `id` only for an exact match. Each release has its artist credit, date, country, status, barcode, labels and catalog numbers, release group, every medium with its disc IDs and tracks (title, length, credit, recording ID), and whether the Cover Art Archive has a front cover. `MusicBrainzRelease` is Codable in CDRip's own form, so `disc.json` keeps it.
 - `ReleaseRanking`: one disc ID can belong to several releases (*Madison Square Garden 3/9/81* and the 17-disc box set *In and Out of the Garden*; *Cornell 5/8/77* and the 11-disc *May 1977: Get Shown the Light*). The order: a release the user chose for any disc of the set, a barcode that matches the MCN (a 12-digit UPC is the EAN with a leading zero), an exact match, an official release, fewer media, then MusicBrainz's order.
 - `ReleaseChoiceStore` (`~/Library/Application Support/CDRip/ReleaseChoices.json`): a release chosen with `--release` is kept for every disc ID of its media, so the other discs of the set get it too.
-- `CoverArtClient`: the front cover from the Cover Art Archive, saved as `cover.jpg` or `cover.png` (from the image's first bytes). `cdrip metadata --cover <file>` uses the user's image instead.
-- `NameTemplate`: fields in braces, parts in brackets that are kept only when all their fields have values, `/` for subfolders. The default folder name is the archive's: `{artist} - {album}[ (Disc {disc})]`. Values are made safe for file names (`/` and `:` become `-`, no control characters, no leading dots, at most 240 bytes).
+- `CoverArtClient`: the Cover Art Archive's list of images for a release. The front cover is saved as `cover.jpg` or `cover.png` (from the image's first bytes). With `--artwork all` (on `rip` and `metadata`), the other images go in `Artwork/`, named by type: `back.jpg`, `booklet-01.jpg`, `medium.jpg`. `--artwork none` saves nothing. `cdrip metadata --cover <file>` uses the user's image instead.
+- `NameTemplate`: fields in braces (`{disc:2}` pads to two digits), parts in brackets that are kept only when all their fields have values, `/` for subfolders. The default folder name is the archive's: `{artist} - {album}[ (Disc {disc})]`. The user's library style is `libraryFolder` (`{albumArtist}/{album}`, all discs in one folder) and `libraryTrack` (`[{disc:2}-]{track} {title}`: "18-03 Walkin' Blues"). Values are made safe for file names (`/` and `:` become `-`, no control characters, no leading dots, at most 240 bytes).
 - `cdrip metadata [-d diskN | -i folder] [--release ID] [--cover file]`: shows the ranked releases and the tracks. With `-i`, it writes the release into the folder's `disc.json` (keeping every other key) and saves the cover.
+- `TrackMetadata`: one place for each track's title, Vorbis comments, and name fields, so names and tags agree. The tags follow the user's library (`TITLE`, `ARTIST`, `ALBUMARTIST`, `ALBUM`, `DISCNUMBER`, `DISCTOTAL`, `TRACKNUMBER`, `TRACKTOTAL`, `DISCSUBTITLE`, `DATE`, `ORIGINALDATE`), then `ISRC`, `BARCODE`, `LABEL`, `CATALOGNUMBER`, `RELEASECOUNTRY`, and the MusicBrainz IDs as Picard names them.
+- **The live-show style**, on by default: when every disc of a release has a title such as "1985-07-01 Merriweather Post Pavilion, Columbia, MD", the disc's `DISCSUBTITLE` is that title, its `DATE` is the show's date (the release's date becomes `ORIGINALDATE`), and each title ends with "[Merriweather Post Pavilion, 7-1-85]", in the tags and in the file names. Tested against the user's *Summer Magic 1985* files.
+- **Ambiguous releases:** `ReleaseRanking.isAmbiguous` is true when the first two releases are a real choice: not when the user chose the first before, not when only the first matches the MCN, and not when both are editions of the same release (same title and number of discs). Then `cdrip rip`, run at a terminal, asks which release to use (the first is the default) and remembers the answer for the other discs of the set. A rip in the background uses the first.
 - `cdrip rip` looks up the disc (unless `--offline`), names the folder from the release, keeps the release, the MCN, and each track's ISRC in `disc.json`, and saves the front cover. A failed lookup does not stop the rip.
 - Tests use saved answers (`Tests/CDRipKitTests/Resources/MusicBrainz`), so `make test` never touches the network.
 
 Still to do:
 
 - Embedded cover art (milestone 4): a FLAC PICTURE block (type 3, front cover), or the MP4 `covr` atom for ALAC and AAC, with one size limit (for example, 1000 px on the long side) so files stay small; the folder copy keeps full size.
-- Back covers and booklets from the Cover Art Archive, if wanted.
-- Add the full release to the archive's older `disc.json` files (`cdrip metadata -i <folder>` for each), so they can be encoded and tagged.
+- The live-show style for single shows (milestone 9). MusicBrainz gives no disc titles for any single-show release in the archive, so the venue and date must come from elsewhere: the release title ("Dave's Picks Vol. 59: Boston Garden, Boston, MA 9/26/91"), or the recordings' "recorded at" relationships (a place and a date; the city and state need the place's area). Not every title has a venue ("Cornell 5/8/77" was at Barton Hall).
+- Genres (the user's files have `GENRE=Rock`): MusicBrainz has them with `inc=genres`, from votes; choose how to map them.
+
+Done on the archive: all 31 folders have the full release in `disc.json` (31 requests; one 503 that a retry 30 s later fixed), and the 25 covers that the Cover Art Archive has. The user's library, for reference: `/Volumes/storage/planders/media/Music/Grateful Dead` (*Summer Magic 1985*: 20 discs in one folder, Vorbis comments `TITLE`, `ARTIST`, `ALBUMARTIST`, `ALBUM`, `DISCNUMBER`, `DISCTOTAL`, `TRACKNUMBER`, `TRACKTOTAL`, `DISCSUBTITLE`, `DATE`, `ORIGINALDATE`, `GENRE`, and a 1000 × 1000 JPEG front cover embedded).
 
 After milestone 5, the CLI can rip clean discs for daily use.
 

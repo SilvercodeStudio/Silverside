@@ -21,6 +21,9 @@ struct Metadata: AsyncParsableCommand {
     @Option(help: "An image file (JPEG or PNG) to use as the cover, in place of the Cover Art Archive's.")
     var cover: String?
 
+    @Option(help: "The artwork to save from the Cover Art Archive: front (cover.jpg), all (also Artwork/), or none.")
+    var artwork: Artwork = .front
+
     func run() async throws {
         let folder = input.map { URL(filePath: $0, directoryHint: .isDirectory) }
         let toc: TOC
@@ -62,9 +65,14 @@ struct Metadata: AsyncParsableCommand {
             let image = CoverImage(data: try Data(contentsOf: URL(filePath: cover)))
             print("Cover: \(try image.write(to: folder).path)")
         } else {
-            try await ReleaseChoice.saveFrontCover(of: chosen, in: folder)
+            try await ReleaseChoice.saveArtwork(artwork, of: chosen, in: folder)
         }
     }
+}
+
+/// The artwork to save from the Cover Art Archive.
+enum Artwork: String, ExpressibleByArgument, CaseIterable {
+    case front, all, none
 }
 
 /// The MCN from a rip's disc.json.
@@ -77,19 +85,42 @@ enum ReleaseChoice {
     /// The releases for a disc, the most likely first, and the one to use: the release with
     /// `releaseID` if given (it is then remembered for the other discs of the release), else the first.
     static func find(
-        toc: TOC, mcn: String?, releaseID: String?, client: MusicBrainzClient = MusicBrainzClient()
+        toc: TOC, mcn: String?, releaseID: String?, ask: Bool = false, client: MusicBrainzClient = MusicBrainzClient()
     ) async throws -> (ranked: [MusicBrainzRelease], chosen: MusicBrainzRelease?, isExact: Bool) {
         let lookup = try await client.lookup(toc)
         let discID = toc.musicBrainzDiscID
         let store = ReleaseChoiceStore()
         let ranked = ReleaseRanking.ranked(
             lookup.releases, discID: discID, mcn: mcn, chosen: store.choices(forDiscID: discID))
-        guard let releaseID else { return (ranked, ranked.first, lookup.isExact) }
+        guard let releaseID else {
+            var chosen = ranked.first
+            if ask, ReleaseRanking.isAmbiguous(ranked, mcn: mcn, chosen: store.choices(forDiscID: discID)) {
+                chosen = askForRelease(ranked, discID: discID)
+                if let chosen { try store.remember(chosen) }
+            }
+            return (ranked, chosen, lookup.isExact)
+        }
         var chosen = ranked.first { $0.id == releaseID }
         if chosen == nil { chosen = try await client.release(id: releaseID) }
         guard let chosen else { throw CommandError("MusicBrainz has no release \(releaseID).") }
         try store.remember(chosen)
         return (ranked, chosen, lookup.isExact)
+    }
+
+    /// Asks the user to pick a release, on the terminal. The first is the default.
+    static func askForRelease(_ ranked: [MusicBrainzRelease], discID: String) -> MusicBrainzRelease? {
+        print("Several MusicBrainz releases have this disc:")
+        for (index, release) in ranked.enumerated() {
+            print("  \(index + 1). " + describe(release, discID: discID))
+        }
+        while true {
+            print("Which release? [1] ", terminator: "")
+            fflush(stdout)
+            guard let line = readLine()?.trimmingCharacters(in: .whitespaces) else { return ranked.first }
+            if line.isEmpty { return ranked.first }
+            if let number = Int(line), ranked.indices.contains(number - 1) { return ranked[number - 1] }
+            print("Give a number from 1 to \(ranked.count).")
+        }
     }
 
     /// One line for a release: "Grateful Dead - Cornell 5/8/77 (2017-05-05, US; disc 2 of 3; ...)".
@@ -132,16 +163,19 @@ enum ReleaseChoice {
         try data.write(to: url, options: .atomic)
     }
 
-    /// Saves the Cover Art Archive's front cover in `folder`, if it has one.
-    static func saveFrontCover(of release: MusicBrainzRelease, in folder: URL) async throws {
-        guard release.hasFrontCover else {
+    /// Saves the Cover Art Archive's artwork for the release in `folder`: the front cover as
+    /// cover.jpg, and with `.all`, the other images in Artwork/.
+    static func saveArtwork(_ artwork: Artwork, of release: MusicBrainzRelease, in folder: URL) async throws {
+        guard artwork != .none else { return }
+        guard release.hasFrontCover || (release.artworkCount ?? 0) > 0 else {
             print("Cover: the Cover Art Archive has none for this release.")
             return
         }
-        guard let image = try await CoverArtClient().frontCover(releaseID: release.id) else {
-            print("Cover: not found in the Cover Art Archive.")
-            return
+        let files = try await CoverArtClient().save(releaseID: release.id, in: folder, all: artwork == .all)
+        if files.isEmpty { print("Cover: not found in the Cover Art Archive.") }
+        for file in files {
+            let size = ((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) / 1024
+            print("Cover: \(file.path) (\(size) KB)")
         }
-        print("Cover: \(try image.write(to: folder).path) (\(image.data.count / 1024) KB)")
     }
 }

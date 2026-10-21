@@ -7,8 +7,9 @@ import Foundation
 /// has one only for a release of more than one disc. A `/` in the template makes a
 /// subfolder. Values are made safe for file names first, so a `/` in a title does not.
 ///
-/// Fields: `artist`, `album`, `date`, `year`, `disc`, `discs`, `discTitle`, `track`
-/// (two digits), `title`, `trackArtist`.
+/// Fields: `artist` (also `albumArtist`), `album`, `date`, `year`, `disc`, `discs`,
+/// `discTitle`, `track` (two digits), `title`, `trackArtist`. `{disc:2}` pads a number
+/// with zeros to two digits.
 public struct NameTemplate: Equatable, Sendable {
     public var pattern: String
 
@@ -22,11 +23,20 @@ public struct NameTemplate: Equatable, Sendable {
     /// The file names of tracks, with no extension: "03 Scarlet Begonias".
     public static let track = NameTemplate("{track} {title}")
 
+    /// The user's library: an artist folder with one folder for each album, with every disc in it.
+    public static let libraryFolder = NameTemplate("{albumArtist}/{album}")
+
+    /// Tracks in the user's library: "18-03 Walkin' Blues" (disc 18, track 3), or "03 Deal" for one disc.
+    public static let libraryTrack = NameTemplate("[{disc:2}-]{track} {title}")
+
     /// The fields for one track, or for a disc when `track` is nil.
     public static func values(
         release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium?, track: MusicBrainzRelease.Track? = nil
     ) -> [String: String] {
-        var values = ["artist": release.artist, "album": release.title, "discs": String(release.media.count)]
+        var values = [
+            "artist": release.artist, "albumArtist": release.artist, "album": release.title,
+            "discs": String(release.media.count),
+        ]
         if let date = release.date {
             values["date"] = date
             values["year"] = String(date.prefix(4))
@@ -57,8 +67,11 @@ public struct NameTemplate: Equatable, Sendable {
                 if finished.complete { result += finished.text }
                 group = nil
             } else if character == "{", let close = pattern[index...].firstIndex(of: "}") {
-                let field = String(pattern[pattern.index(after: index)..<close])
-                let value = safe[field]
+                let spec = pattern[pattern.index(after: index)..<close].split(separator: ":", maxSplits: 1)
+                var value = spec.first.flatMap { safe[String($0)] }
+                if spec.count == 2, let width = Int(spec[1]), let text = value, let number = Int(text) {
+                    value = String(format: "%0\(width)d", number)
+                }
                 if group != nil {
                     group!.text += value ?? ""
                     if value == nil || value!.isEmpty { group!.complete = false }

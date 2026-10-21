@@ -73,7 +73,7 @@ Three drives so far (MATSHITA UJ260AF +103, HL-DT-ST BU50N +6, ASUS BW-16D1HT +6
 
 ## Constraints
 
-- **Dependencies:** discuss each outside dependency with the user before you add it. Today the only one is swift-argument-parser, for the `cdrip` target only; the engine targets have none. Prefer Apple frameworks: AudioToolbox encodes FLAC and ALAC, CryptoKit does SHA-1, and URLSession, IOKit, and DiskArbitration cover the rest.
+- **Dependencies:** discuss each outside dependency with the user before you add it. Today the only one is swift-argument-parser, for the `cdrip` target only; the engine targets have none. MP3 output will use `lame` (agreed with the user) as an external program through a pipe, never linked. Prefer Apple frameworks: AudioToolbox encodes FLAC and ALAC, CryptoKit does SHA-1, and URLSession, IOKit, and DiskArbitration cover the rest.
 - **Licensing:** the project will probably be open source under a permissive license such as MIT. Don't port GPL code. You may read whipper, libcdio-paranoia, XLD, and CUETools to understand an algorithm, but write our own implementation.
 - **Distribution and access:** the app uses Developer ID distribution, not the App Store. App Sandbox is off, because ripping needs raw device access.
 - **Platform versions:** Swift 6 language mode. The package and the app both require macOS 15 Sequoia. Don't use APIs from later releases without `if #available`: for example `Span` (macOS 26), and Foundation Models (macOS 26), which must stay optional. The tests run only on the current macOS here, so read the availability of each new API.

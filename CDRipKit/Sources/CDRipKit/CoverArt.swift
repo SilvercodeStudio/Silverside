@@ -25,11 +25,13 @@ public struct CoverImage: Equatable, Sendable {
         }
     }
 
-    /// Writes the image as "cover.jpg" or "cover.png" in `folder`, and returns the file.
+    /// Writes the image as "<name>.jpg" or "<name>.png" in `folder` (by default "cover"),
+    /// and returns the file.
     @discardableResult
-    public func write(to folder: URL) throws -> URL {
+    public func write(to folder: URL, name: String = "cover") throws -> URL {
         guard let fileExtension else { throw CoverArtError.unknownFormat }
-        let url = folder.appending(path: "cover.\(fileExtension)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appending(path: "\(name).\(fileExtension)")
         try data.write(to: url, options: .atomic)
         return url
     }
@@ -37,10 +39,12 @@ public struct CoverImage: Equatable, Sendable {
 
 public enum CoverArtError: Error, Equatable, CustomStringConvertible {
     case unknownFormat
+    case malformedListing
 
     public var description: String {
         switch self {
         case .unknownFormat: "The cover image is not a JPEG or PNG file."
+        case .malformedListing: "The Cover Art Archive's list of images cannot be read."
         }
     }
 }
@@ -60,5 +64,97 @@ public struct CoverArtClient: Sendable {
     /// The release's front cover, at the size it was uploaded, or nil if the archive has none.
     public func frontCover(releaseID: String) async throws -> CoverImage? {
         try await client.data(from: Self.frontCoverURL(releaseID: releaseID)).map(CoverImage.init)
+    }
+
+    /// Every image that the archive has for the release, in the archive's order. Empty if it has none.
+    public func images(releaseID: String) async throws -> [CoverArtImage] {
+        let url = URL(string: "https://coverartarchive.org/release/\(releaseID)")!
+        guard let data = try await client.data(from: url) else { return [] }
+        return try Self.images(fromJSON: data)
+    }
+
+    /// One image, at the size it was uploaded.
+    public func download(_ image: CoverArtImage) async throws -> CoverImage? {
+        try await client.data(from: image.url).map(CoverImage.init)
+    }
+
+    static func images(fromJSON data: Data) throws -> [CoverArtImage] {
+        struct Listing: Decodable {
+            struct Image: Decodable {
+                var id: AnyID
+                var types: [String]?
+                var front: Bool?
+                var back: Bool?
+                var image: String
+                var comment: String?
+            }
+            var images: [Image]
+        }
+        // The archive gives image IDs as numbers, or in older answers as strings.
+        struct AnyID: Decodable {
+            var text: String
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.singleValueContainer()
+                if let number = try? container.decode(Int.self) {
+                    text = String(number)
+                } else {
+                    text = try container.decode(String.self)
+                }
+            }
+        }
+        guard let listing = try? JSONDecoder().decode(Listing.self, from: data) else {
+            throw CoverArtError.malformedListing
+        }
+        return listing.images.compactMap { image in
+            // The archive's links are http; the same files are served over https.
+            guard var components = URLComponents(string: image.image) else { return nil }
+            components.scheme = "https"
+            guard let url = components.url else { return nil }
+            return CoverArtImage(
+                id: image.id.text, types: image.types ?? [], isFront: image.front ?? false,
+                isBack: image.back ?? false, url: url, comment: image.comment ?? "")
+        }
+    }
+
+    /// Saves the release's artwork in `folder`: the front cover as "cover.jpg" (or .png),
+    /// and, if `all`, the other images in "Artwork" (see `CoverArtImage.fileNames`).
+    /// Returns the files written.
+    public func save(releaseID: String, in folder: URL, all: Bool) async throws -> [URL] {
+        let images = try await images(releaseID: releaseID)
+        var written = [URL]()
+        if let front = images.first(where: \.isFront), let image = try await download(front) {
+            written.append(try image.write(to: folder))
+        }
+        guard all else { return written }
+        let others = images.filter { !$0.isFront }
+        for (image, name) in zip(others, CoverArtImage.fileNames(for: others)) {
+            if let data = try await download(image) {
+                written.append(try data.write(to: folder.appending(path: "Artwork"), name: name))
+            }
+        }
+        return written
+    }
+}
+
+/// One image in the Cover Art Archive.
+public struct CoverArtImage: Equatable, Sendable {
+    public var id: String
+    /// "Front", "Back", "Booklet", "Medium", "Tray", "Obi", "Spine", "Track", "Liner", "Sticker", and so on.
+    public var types: [String]
+    public var isFront: Bool
+    public var isBack: Bool
+    public var url: URL
+    public var comment: String
+
+    /// File names, with no extension, for images: the first type in lowercase, such as
+    /// "back", with "-01", "-02", and so on when more than one image has that type.
+    public static func fileNames(for images: [CoverArtImage]) -> [String] {
+        let kinds = images.map { ($0.types.first ?? "other").lowercased().replacingOccurrences(of: " ", with: "-") }
+        var seen = [String: Int]()
+        return kinds.map { kind in
+            guard kinds.filter({ $0 == kind }).count > 1 else { return kind }
+            seen[kind, default: 0] += 1
+            return kind + String(format: "-%02d", seen[kind]!)
+        }
     }
 }

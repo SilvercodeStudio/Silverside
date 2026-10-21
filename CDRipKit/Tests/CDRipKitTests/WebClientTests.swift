@@ -7,6 +7,7 @@ import Testing
 actor FakeTransport: HTTPTransport {
     enum Answer {
         case status(Int, body: String = "", headers: [String: String] = [:])
+        case bytes([UInt8])
         case timeout
     }
 
@@ -23,6 +24,9 @@ actor FakeTransport: HTTPTransport {
         switch answer {
         case .timeout:
             throw URLError(.timedOut)
+        case .bytes(let bytes):
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: [:])!
+            return (Data(bytes), response)
         case .status(let code, let body, let headers):
             let response = HTTPURLResponse(
                 url: request.url!, statusCode: code, httpVersion: nil, headerFields: headers)!

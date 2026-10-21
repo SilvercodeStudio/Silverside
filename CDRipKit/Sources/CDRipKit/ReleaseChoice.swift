@@ -31,6 +31,22 @@ public enum ReleaseRanking {
             .map(\.release)
     }
 
+    /// True if the first two releases of a ranked list are a real choice, so the user
+    /// should pick: not when the user chose the first before, not when only the first
+    /// matches the MCN, and not when both are editions of the same thing (same title and
+    /// number of media, such as the US and European pressings of a release).
+    public static func isAmbiguous(
+        _ ranked: [MusicBrainzRelease], mcn: String? = nil, chosen: Set<String> = []
+    ) -> Bool {
+        guard ranked.count > 1 else { return false }
+        let (first, second) = (ranked[0], ranked[1])
+        if chosen.contains(first.id) { return false }
+        if let mcn, matches(barcode: first.barcode, mcn: mcn), !matches(barcode: second.barcode, mcn: mcn) {
+            return false
+        }
+        return first.title != second.title || first.media.count != second.media.count
+    }
+
     /// True if a barcode is the MCN. An MCN has 13 digits (EAN-13); a 12-digit UPC is the
     /// same number with a leading zero.
     public static func matches(barcode: String?, mcn: String) -> Bool {

@@ -27,6 +27,9 @@ struct Rip: AsyncParsableCommand {
         help: "The MusicBrainz ID of the release to use. CDRip keeps the choice for the other discs of the release.")
     var release: String?
 
+    @Option(help: "The artwork to save from the Cover Art Archive: front (cover.jpg), all (also Artwork/), or none.")
+    var artwork: Artwork = .front
+
     @Flag(help: "Do not look up AccurateRip or its drive offset list.")
     var offline = false
 
@@ -100,7 +103,9 @@ struct Rip: AsyncParsableCommand {
         var chosen: MusicBrainzRelease?
         if !offline {
             do {
-                let choice = try await ReleaseChoice.find(toc: toc, mcn: mcn, releaseID: release)
+                // Ask when the choice matters, if someone is at the terminal to answer.
+                let choice = try await ReleaseChoice.find(
+                    toc: toc, mcn: mcn, releaseID: release, ask: isatty(STDIN_FILENO) != 0)
                 chosen = choice.chosen
                 if let chosen {
                     let others = choice.ranked.count - (choice.ranked.contains { $0.id == chosen.id } ? 1 : 0)
@@ -299,7 +304,7 @@ struct Rip: AsyncParsableCommand {
         try report.write(to: folder.appending(path: "disc.json"))
         if let chosen {
             do {
-                try await ReleaseChoice.saveFrontCover(of: chosen, in: folder)
+                try await ReleaseChoice.saveArtwork(artwork, of: chosen, in: folder)
             } catch {
                 print("Cover: the download failed (\(error))")
             }

@@ -74,6 +74,9 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
     public var media: [Medium]
     /// True if the Cover Art Archive has a front cover for the release.
     public var hasFrontCover: Bool
+    /// The number of images that the Cover Art Archive has for the release: front, back,
+    /// booklet pages, and others. Nil in releases saved before CDRip kept it.
+    public var artworkCount: Int?
 
     public var artist: String { Self.joined(artistCredit) }
 
@@ -242,7 +245,10 @@ private struct RawRelease: Decodable {
         var discs: [Disc]?
         var tracks: [Track]?
     }
-    struct CoverArt: Decodable { var front: Bool? }
+    struct CoverArt: Decodable {
+        var front: Bool?
+        var count: Int?
+    }
 
     var id: String
     var title: String
@@ -290,6 +296,6 @@ private struct RawRelease: Decodable {
                             recordingID: track.recording?.id)
                     })
             },
-            hasFrontCover: coverArtArchive?.front ?? false)
+            hasFrontCover: coverArtArchive?.front ?? false, artworkCount: coverArtArchive?.count)
     }
 }

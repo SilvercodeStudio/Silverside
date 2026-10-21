@@ -47,6 +47,20 @@ struct NameTemplateTests {
                 NameTemplate.values(release: undated, medium: undated.media[0])) == "Grateful Dead/Cornell 5-8-77")
     }
 
+    /// The user's library: "Grateful Dead/Summer Magic 1985/18-03 Walkin' Blues".
+    @Test func namesTracksAsTheLibraryDoes() {
+        let release = makeRelease(discs: 20)
+        let values = NameTemplate.values(
+            release: release, medium: release.media[17], track: release.media[17].tracks[0])
+        #expect(NameTemplate.libraryFolder.name(values) == "Grateful Dead/Cornell 5-8-77")
+        #expect(NameTemplate.libraryTrack.name(values) == "18-03 Scarlet Begonias - Fire on the Mountain")
+        let single = makeRelease(discs: 1)
+        #expect(
+            NameTemplate.libraryTrack.name(
+                NameTemplate.values(release: single, medium: single.media[0], track: single.media[0].tracks[0]))
+                == "03 Scarlet Begonias - Fire on the Mountain")
+    }
+
     @Test func makesValuesSafe() {
         #expect(NameTemplate.safeComponent("  ..Hidden: a/b\tc. ") == "Hidden- a-b c")
         #expect(NameTemplate.safeComponent(String(repeating: "é", count: 200)).utf8.count <= 240)

@@ -47,6 +47,23 @@ struct ReleaseChoiceTests {
         #expect(ranked.map(\.id) == ["box", "standalone"])
     }
 
+    @Test func asksOnlyWhenTheChoiceMatters() {
+        let box = release("box", discIDs: (1...17).map { ["d\($0)"] })
+        let standalone = release("standalone", discIDs: [["d1"], ["d2"], ["d3"]])
+        var europe = release("standalone", discIDs: [["d1"], ["d2"], ["d3"]], barcode: "081227942557")
+        europe.id = "europe"
+        // A show and the box set that holds it.
+        #expect(ReleaseRanking.isAmbiguous([standalone, box]))
+        #expect(!ReleaseRanking.isAmbiguous([standalone, box], chosen: ["standalone"]))
+        // Two editions of the same release.
+        #expect(!ReleaseRanking.isAmbiguous([standalone, europe, box]))
+        // Only the first has the disc's barcode.
+        var matching = standalone
+        matching.barcode = "0603497846168"
+        #expect(!ReleaseRanking.isAmbiguous([matching, box], mcn: "0603497846168"))
+        #expect(!ReleaseRanking.isAmbiguous([standalone]))
+    }
+
     @Test func matchesAUPCWithAnEAN() {
         #expect(ReleaseRanking.matches(barcode: "081227932512", mcn: "0081227932512"))
         #expect(!ReleaseRanking.matches(barcode: "", mcn: "0000000000000"))

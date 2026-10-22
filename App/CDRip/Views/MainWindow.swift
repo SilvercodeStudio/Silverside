@@ -192,7 +192,7 @@ struct NoDiscView: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Image("AppIconOverhead")
+            Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .scaledToFit()
                 .frame(width: 180, height: 180)

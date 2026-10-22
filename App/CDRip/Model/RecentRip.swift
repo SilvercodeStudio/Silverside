@@ -44,7 +44,9 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     var date: Date { report.date }
 
     /// The tracks that AccurateRip or CTDB proves.
-    var verifiedCount: Int {
+    var verifiedCount: Int { Self.verifiedCount(of: report) }
+
+    static func verifiedCount(of report: RipReport) -> Int {
         let wholeDisc = report.ctdb.status == .verified || report.ctdb.status == .repaired
         return report.tracks.filter {
             wholeDisc || $0.accurateRip == .accurate || $0.accurateRip == .otherPressings

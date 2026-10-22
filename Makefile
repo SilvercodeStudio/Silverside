@@ -36,6 +36,8 @@ override PREFIX := $(patsubst ~%,$(HOME)%,$(PREFIX))
 RELEASE_BIN = $(PACKAGE)/.build/out/Products/Release/cdrip
 # Where make install-app puts the app.
 APP_DIR ?= $(HOME)/Applications
+# Registers a copied app with Launch Services, so that the Dock and Finder show its new icon.
+LSREGISTER = /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 help:
 	@echo "make build          build the app ($(CONFIG)) with xcodebuild"
@@ -108,6 +110,8 @@ install-app:
 	install -d "$(APP_DIR)"; \
 	rm -rf "$(APP_DIR)/$$(basename "$$app")"; \
 	ditto "$$app" "$(APP_DIR)/$$(basename "$$app")"; \
+	touch "$(APP_DIR)/$$(basename "$$app")"; \
+	$(LSREGISTER) -f "$(APP_DIR)/$$(basename "$$app")"; \
 	echo "Installed $(APP_DIR)/$$(basename "$$app")"
 
 uninstall:

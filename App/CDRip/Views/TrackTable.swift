@@ -5,6 +5,8 @@ import SwiftUI
 struct TrackTable: View {
     @Bindable var slot: DriveSlot
     @State private var tableSelection: Set<Int> = []
+    /// Tracks whose artist field is open although the track has no artist of its own yet.
+    @State private var artistRows: Set<Int> = []
 
     private var rows: [DiscInfo.Track] { slot.disc?.tracks(from: slot.namesSource) ?? [] }
 
@@ -69,10 +71,30 @@ struct TrackTable: View {
                 if canEdit {
                     TextField("", text: title(of: track.number, shown: track.title))
                         .textFieldStyle(.plain)
+                    // The artist's field shows when the track has an artist of its own, or on request.
+                    if track.artist != nil || artistRows.contains(track.number) {
+                        TextField("", text: artist(of: track.number), prompt: Text("Track artist"))
+                            .textFieldStyle(.plain)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     Text(track.title)
+                    if let artist = track.artist { Text(artist).font(.caption).foregroundStyle(.secondary) }
                 }
-                if let artist = track.artist { Text(artist).font(.caption).foregroundStyle(.secondary) }
+            }
+            .contextMenu {
+                if canEdit {
+                    if track.artist == nil && !artistRows.contains(track.number) {
+                        Button("Add Track Artist") { artistRows.insert(track.number) }
+                    }
+                    Button("Clear This Track's Edits") {
+                        slot.disc?.edits.setTitle(nil, ofTrack: track.number)
+                        slot.disc?.edits.setArtist(nil, ofTrack: track.number)
+                        artistRows.remove(track.number)
+                    }
+                    .disabled(slot.disc?.edits.tracks[track.number] == nil)
+                }
             }
         }
         .width(min: 220, ideal: 360)
@@ -95,6 +117,21 @@ struct TrackTable: View {
                 let trimmed = text.trimmingCharacters(in: .whitespaces)
                 let original = slot.disc?.baseTitle(ofTrack: number)
                 slot.disc?.edits.setTitle(trimmed.isEmpty || trimmed == original ? nil : trimmed, ofTrack: number)
+            })
+    }
+
+    /// A binding to a track's artist edit: empty, or the release's own artist, clears the edit.
+    private func artist(of number: Int) -> Binding<String> {
+        Binding(
+            get: {
+                guard let disc = slot.disc else { return "" }
+                if let edited = disc.edits.tracks[number]?.artist { return edited }
+                return disc.tracks(from: .musicBrainz).first { $0.number == number }?.artist ?? ""
+            },
+            set: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespaces)
+                let original = slot.disc?.baseArtist(ofTrack: number)
+                slot.disc?.edits.setArtist(trimmed.isEmpty || trimmed == original ? nil : trimmed, ofTrack: number)
             })
     }
 

@@ -56,4 +56,29 @@ struct RipReportTests {
         report.hiddenTrack = .init(file: "Track 00.wav", sectors: 300, peak: 900, readsAgree: false, reads: 5)
         #expect(!report.isVerified)
     }
+
+    /// The archive keeps a rip's report inside its manifest, under "ripReport", with the release beside it.
+    @Test func readsAReportFromAnArchiveManifest() throws {
+        let (toc, _) = try makeDisc(trackSectors: [800, 900])
+        let report = RipReport(
+            drive: .init(vendor: "V", product: "P", revision: "1", readOffset: 6, offsetSource: "test"), secure: true,
+            toc: toc, tracks: [], ctdb: .init(status: .verified))
+        let folder = FileManager.default.temporaryDirectory.appending(path: "CDRipTests-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let nested = try JSONSerialization.jsonObject(with: encoder.encode(report))
+        let release = try JSONSerialization.jsonObject(with: JSONEncoder().encode(MusicBrainzRelease.manual(toc: toc)))
+        let manifest: [String: Any] = [
+            "complete": true, "toc": toc.ctdbTOCString, "ripReport": nested, "release": release,
+        ]
+        let file = folder.appending(path: "Rip Report.json")
+        try JSONSerialization.data(withJSONObject: manifest).write(to: file)
+        let read = try RipReport.read(from: file)
+        #expect(read.ctdb.status == .verified && read.toc == toc.ctdbTOCString)
+        #expect(read.release?.isManual == true)
+        try JSONSerialization.data(withJSONObject: ["complete": true, "toc": toc.ctdbTOCString]).write(to: file)
+        #expect(throws: (any Error).self) { try RipReport.read(from: file) }
+    }
 }

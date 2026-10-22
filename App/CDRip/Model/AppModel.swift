@@ -8,6 +8,8 @@ import Observation
 enum SidebarItem: Hashable {
     case drive(String)
     case rip(URL)
+    /// Every earlier rip, in a table.
+    case history
 }
 
 struct AppAlert: Identifiable {
@@ -150,6 +152,7 @@ final class AppModel {
         options.folder = slot.choices.folder
         options.offline = slot.choices.offline
         options.release = disc.release
+        options.cover = disc.userCover
         if slot.choices.poolsEarlierRips {
             options.pool = earlierRips(of: disc.toc.ctdbTOCString).map(\.folder)
         }

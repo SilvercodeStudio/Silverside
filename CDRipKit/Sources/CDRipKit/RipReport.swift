@@ -200,10 +200,25 @@ public struct RipReport: Codable, Equatable, Sendable {
         try encoder.encode(self).write(to: url, options: .atomic)
     }
 
+    /// Reads a report: a rip's disc.json, or an archive manifest that holds one under
+    /// "ripReport" (the manifest's release fills in for a report without one). A manifest
+    /// from before rips had reports has none to read, and throws.
     public static func read(from url: URL) throws -> RipReport {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(RipReport.self, from: Data(contentsOf: url))
+        let data = try Data(contentsOf: url)
+        if let report = try? decoder.decode(RipReport.self, from: data) { return report }
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let nested = object?["ripReport"] else {
+            throw DecodingError.dataCorrupted(
+                .init(codingPath: [], debugDescription: "\(url.lastPathComponent) has no rip report."))
+        }
+        var report = try decoder.decode(RipReport.self, from: JSONSerialization.data(withJSONObject: nested))
+        if report.release == nil, let release = object?["release"] {
+            report.release = try? JSONDecoder().decode(
+                MusicBrainzRelease.self, from: JSONSerialization.data(withJSONObject: release))
+        }
+        return report
     }
 }
 

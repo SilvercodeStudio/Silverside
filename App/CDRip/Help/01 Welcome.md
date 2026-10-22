@@ -8,7 +8,7 @@ CDRip rips audio CDs on the Mac with the care of Exact Audio Copy: every track i
 - **The disc** is in the middle: the cover, the album and artist from MusicBrainz, and the tracks with their rip status.
 - **The toolbar** has Eject, Look Up Metadata, the read mode (Secure or Fast), and Rip Disc.
 - **The status bar** shows what the rip is doing, how far it is, and the time left. Show Log opens the rip's log.
-- **Recent Rips** lists the rips in your rips folder, and the rips that were encoded into the library (their reports stay in the album folders, marked "encoded"). Select one to see its results and report.
+- **Recent Rips** lists the newest rips: the rips in your rips folder, and the rips that were encoded into the library (their reports stay in the album folders, marked "encoded"). Select one to see its results and report. **All Rips** at the end of the list, or Rip History in the View menu (⌘Y), is every rip in a table you can search and sort.
 
 ## A rip, step by step
 

@@ -50,6 +50,10 @@ struct DiscInfo {
     /// The ranking could not settle on a release, and the user has not chosen one.
     var isAmbiguous = false
     var cover: Data?
+    /// A cover the user dropped or chose, used in place of the Cover Art Archive's.
+    var userCover: CoverImage?
+    /// The cover to show and to save with the rip.
+    var shownCover: Data? { userCover?.data ?? cover }
     /// A release CDRip made, when MusicBrainz has none: from CD-Text, or "Unknown".
     var manual: MusicBrainzRelease?
     /// The user's changes to the names, kept with the rip and, for the album, for the release.
@@ -105,6 +109,17 @@ struct DiscInfo {
             base.medium(for: toc) ?? medium.flatMap { known in base.media.first { $0.position == known.position } }
         guard let medium, index < medium.tracks.count else { return nil }
         return medium.tracks[index].title
+    }
+
+    /// The track's artist as the release has it, before any edit.
+    func baseArtist(ofTrack number: Int) -> String? {
+        guard let base = baseRelease, let index = toc.audioTracks.firstIndex(where: { $0.number == number }) else {
+            return nil
+        }
+        let medium =
+            base.medium(for: toc) ?? medium.flatMap { known in base.media.first { $0.position == known.position } }
+        guard let medium, index < medium.tracks.count else { return nil }
+        return medium.tracks[index].artist
     }
 
     /// The release's year, or the year of the release group's first release when this

@@ -21,7 +21,7 @@ struct DiscRipTests {
     /// is audio before track 1. `prepare` can damage the drive.
     func rip(
         trackSectors: [Int] = [800, 900], hidesFirstTrack: Bool = false, tracks: [Int]? = nil, web: FakeWeb? = nil,
-        prepare: (SimulatedDrive) -> Void = { _ in }
+        cover: CoverImage? = nil, prepare: (SimulatedDrive) -> Void = { _ in }
     ) async throws -> (DiscRipResult, [DiscRipEvent], samples: [UInt32], root: URL) {
         let root = FileManager.default.temporaryDirectory.appending(path: "CDRipTests-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -37,6 +37,7 @@ struct DiscRipTests {
         var options = DiscRipOptions(settings: settings)
         options.offline = web == nil
         options.tracks = tracks
+        options.cover = cover
         let profiles = try DriveProfileStore(url: root.appending(path: "DriveProfiles.json"))
         var rip = DiscRip(
             drive: drive, identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"),
@@ -273,5 +274,16 @@ struct DiscRipTests {
         #expect(events.contains { if case .hiddenTrack = $0 { true } else { false } })
         let audio = try WAVFile.read(result.folder.appending(path: "Track 00.wav"))
         #expect(audio == Array(samples[0..<(300 * CDDA.samplesPerSector)]))
+    }
+
+    /// A cover the user gives is the rip's cover, even offline and with no release.
+    @Test func savesTheCoverTheUserGives() async throws {
+        let png = CoverImage(data: Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3]))
+        let (result, events, _, root) = try await rip(cover: png)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = result.folder.appending(path: "cover.png")
+        #expect(try Data(contentsOf: file) == png.data)
+        #expect(result.report.files?.contains("cover.png") == true)
+        #expect(events.contains { if case .artwork(.saved([file])) = $0 { true } else { false } })
     }
 }

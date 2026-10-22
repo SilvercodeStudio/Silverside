@@ -1,6 +1,7 @@
 import CDRipDarwin
 import CDRipKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// A drive's disc: the album, the tracks, and the rip's progress, with the toolbar.
 struct DriveDetailView: View {
@@ -38,10 +39,18 @@ struct DriveDetailView: View {
             }
         }
         #if DEBUG
-            // `-ripOptions 1` opens the options popover at launch, for screenshots.
+            // `-ripOptions 1` opens the options popover at launch, for screenshots; `-coverFile
+            // /path.jpg` gives the disc a cover, as a drop would.
             .onAppear {
                 if UserDefaults.standard.bool(forKey: "ripOptions") {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1) { optionsShown = true }
+                }
+                if let path = UserDefaults.standard.string(forKey: "coverFile"), !path.isEmpty {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        if let data = CoverDrop.imageData(from: URL(filePath: path)) {
+                            slot.disc?.userCover = CoverImage(data: data)
+                        }
+                    }
                 }
             }
         #endif
@@ -159,10 +168,40 @@ struct AlbumHeader: View {
     @Binding var source: DiscInfo.Source
 
     private var editable: Bool { slot.rip?.isRunning != true && disc.baseRelease != nil && source == .musicBrainz }
+    @State private var coverTargeted = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
-            CoverView(data: disc.cover)
+            CoverView(data: disc.shownCover)
+                .overlay {
+                    if coverTargeted {
+                        RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 3)
+                    }
+                }
+                .onDrop(of: [.fileURL, .image], isTargeted: $coverTargeted) { providers in
+                    guard slot.rip?.isRunning != true, let provider = providers.first else { return false }
+                    CoverDrop.load(provider) { data in
+                        if let data { slot.disc?.userCover = CoverImage(data: data) }
+                    }
+                    return true
+                }
+                .onTapGesture { if slot.rip?.isRunning != true { chooseCover() } }
+                .onDrag { CoverDrop.provider(for: disc.shownCover, name: coverFileName) ?? NSItemProvider() }
+                .contextMenu {
+                    Button("Choose Cover...") { chooseCover() }.disabled(slot.rip?.isRunning == true)
+                    if disc.userCover != nil {
+                        Button(disc.cover == nil ? "Remove Cover" : "Use the Cover Art Archive's") {
+                            slot.disc?.userCover = nil
+                        }
+                        .disabled(slot.rip?.isRunning == true)
+                    }
+                    Divider()
+                    Button("Export Cover...") { CoverDrop.export(disc.shownCover, name: coverFileName) }
+                        .disabled(disc.shownCover == nil)
+                }
+                .help(
+                    "Drop an image here, or click, to use your own cover. It goes in the rip and the tags. Drag the cover out to save a copy."
+                )
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 16) {
                     EditableField(
@@ -195,6 +234,10 @@ struct AlbumHeader: View {
                 }
                 HStack(spacing: 8) {
                     lookupChip
+                    if disc.userCover != nil {
+                        Chip(text: "Your cover", tone: .warning, systemImage: "photo")
+                            .help("The cover you gave is saved with the rip and embedded in the files.")
+                    }
                     if !disc.edits.isEmpty {
                         Chip(text: "Edited", tone: .warning, systemImage: "pencil")
                             .help(
@@ -241,6 +284,21 @@ struct AlbumHeader: View {
                 .padding(.top, 2)
             }
         }
+    }
+
+    /// "Grateful Dead - Cornell 5-8-77 cover", for a cover dragged out or exported.
+    private var coverFileName: String {
+        NameTemplate.safeComponent(
+            [disc.artist, disc.title].filter { !$0.isEmpty }.joined(separator: " - ") + " cover")
+    }
+
+    private func chooseCover() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.image]
+        panel.message = "Choose an image for the cover. JPEG and PNG are kept as they are; other formats become JPEG."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if let data = CoverDrop.imageData(from: url) { slot.disc?.userCover = CoverImage(data: data) }
     }
 
     /// A binding to one album-level edit: the original value clears the edit.
@@ -461,6 +519,67 @@ struct ResultBanner: View {
         .padding(12)
         .background(
             (report.isVerified ? Theme.good : Theme.warning).opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+/// Images dropped or chosen for the cover: a file, or image data from another app. JPEG
+/// and PNG are kept byte for byte; anything else becomes a JPEG, because that is what the
+/// tags can hold.
+enum CoverDrop {
+    static func load(_ provider: NSItemProvider, then apply: @escaping @MainActor (Data?) -> Void) {
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
+                let url = data.flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
+                let image = url.flatMap(imageData(from:))
+                Task { @MainActor in apply(image) }
+            }
+        } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                let image = data.flatMap(imageData(from:))
+                Task { @MainActor in apply(image) }
+            }
+        } else {
+            apply(nil)
+        }
+    }
+
+    nonisolated static func imageData(from url: URL) -> Data? {
+        (try? Data(contentsOf: url)).flatMap(imageData(from:))
+    }
+
+    /// The cover as a file to drag out: a copy in a temporary folder, named for the album,
+    /// which the Finder copies where it is dropped.
+    static func provider(for data: Data?, name: String) -> NSItemProvider? {
+        guard let data, let fileExtension = CoverImage(data: data).fileExtension else { return nil }
+        let folder = URL.temporaryDirectory.appending(path: "CDRip Covers", directoryHint: .isDirectory)
+        let file = folder.appending(path: "\(name).\(fileExtension)")
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: file, options: .atomic)
+        } catch {
+            return nil
+        }
+        return NSItemProvider(contentsOf: file)
+    }
+
+    /// Saves the cover where the user says.
+    static func export(_ data: Data?, name: String) {
+        guard let data, let fileExtension = CoverImage(data: data).fileExtension else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(name).\(fileExtension)"
+        panel.allowedContentTypes = [fileExtension == "png" ? .png : .jpeg]
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    /// The data as JPEG or PNG: as given if it already is one, else re-encoded as JPEG.
+    nonisolated static func imageData(from data: Data) -> Data? {
+        if CoverImage(data: data).fileExtension != nil { return data }
+        guard let image = NSImage(data: data), let tiff = image.tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiff)
+        else { return nil }
+        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.92])
     }
 }
 

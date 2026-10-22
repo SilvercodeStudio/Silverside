@@ -38,6 +38,8 @@ struct MainWindow: View {
                 if let id = UserDefaults.standard.string(forKey: "openWindow"), !id.isEmpty {
                     if id == "settings" { openSettings() } else { openWindow(id: id) }
                 }
+                // `-selectHistory 1` shows the rip history.
+                if UserDefaults.standard.bool(forKey: "selectHistory") { model.selection = .history }
                 // `-selectRecent 1` shows the newest earlier rip, for screenshots of the results;
                 // with `-repair 1` too, its repair starts.
                 if UserDefaults.standard.bool(forKey: "selectRecent") {
@@ -60,6 +62,8 @@ struct DetailView: View {
     var body: some View {
         if let slot = model.selectedDrive {
             DriveDetailView(slot: slot)
+        } else if model.selection == .history {
+            HistoryView()
         } else if let rip = model.selectedRip {
             ResultsView(folder: rip.folder, report: rip.report, hasAudio: rip.hasAudio)
         } else if model.drives.isEmpty {
@@ -72,6 +76,8 @@ struct DetailView: View {
 
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
+    /// The newest rips the sidebar lists; the rest are in the history.
+    static let recentCount = 8
 
     var body: some View {
         @Bindable var model = model
@@ -92,7 +98,7 @@ struct SidebarView: View {
                 if model.recentRips.isEmpty {
                     Text("No rips yet").foregroundStyle(.secondary)
                 }
-                ForEach(model.recentRips) { rip in
+                ForEach(model.recentRips.prefix(Self.recentCount)) { rip in
                     SidebarRow(
                         title: rip.title, subtitle: rip.subtitle,
                         systemImage: rip.isVerified ? "checkmark.circle" : "exclamationmark.triangle",
@@ -100,6 +106,11 @@ struct SidebarView: View {
                     )
                     .tag(SidebarItem.rip(rip.file))
                     .help(rip.details)
+                }
+                if model.recentRips.count > Self.recentCount || model.selection == .history {
+                    Label("All Rips (\(model.recentRips.count))", systemImage: "clock")
+                        .tag(SidebarItem.history)
+                        .help("Every rip CDRip knows, in a table you can search and sort")
                 }
             }
         }

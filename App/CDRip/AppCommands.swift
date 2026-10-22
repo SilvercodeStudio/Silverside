@@ -12,6 +12,10 @@ struct AppCommands: Commands {
             Button("CDRip Help") { openWindow(id: "help") }
                 .keyboardShortcut("?", modifiers: .command)
         }
+        CommandGroup(after: .sidebar) {
+            Button("Rip History") { model.selection = .history }
+                .keyboardShortcut("y", modifiers: .command)
+        }
         CommandMenu("Disc") {
             Button("Rip") { if let slot = model.selectedDrive { model.startRip(slot) } }
                 .keyboardShortcut("r", modifiers: .command)

@@ -38,6 +38,10 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     }
     var artist: String { report.release?.artist ?? "" }
     var isVerified: Bool { report.isVerified }
+    /// Where the rip is: its folder with the audio, or the library with its encoded files.
+    var location: String { hasAudio ? "Rips folder" : "Library" }
+    var driveName: String { "\(report.drive.vendor) \(report.drive.product)" }
+    var date: Date { report.date }
 
     /// The tracks that AccurateRip or CTDB proves.
     var verifiedCount: Int {

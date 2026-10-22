@@ -44,6 +44,9 @@ public struct DiscRipOptions: Sendable {
     /// For an offline rip: a release already looked up (the app looks one up when the disc
     /// appears), so that the folder and the report still have the names.
     public var release: MusicBrainzRelease?
+    /// A cover the user gave (a JPEG or PNG), saved as the rip's cover in place of the
+    /// Cover Art Archive's. It works for a disc MusicBrainz does not know too.
+    public var cover: CoverImage?
 
     public init(settings: Settings) {
         artwork = settings.artwork
@@ -387,7 +390,15 @@ public struct DiscRip {
         }
 
         // The artwork comes before the report, which lists its files.
-        if let chosen, !chosen.isManual {
+        if let cover = options.cover {
+            do {
+                let file = try cover.write(to: folder)
+                written.insert(Self.relativePath(of: file, in: folder))
+                events(.artwork(.saved([file])))
+            } catch {
+                events(.artworkFailed(error))
+            }
+        } else if let chosen, !chosen.isManual {
             do {
                 let artwork = try await CoverArtClient(client: webClient).saveArtwork(
                     options.artwork, of: chosen, in: folder)

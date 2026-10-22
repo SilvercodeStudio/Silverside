@@ -152,6 +152,7 @@ silverside encode -i "<rip folder>"       # encode a rip later
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
 | `config` | Shows and changes the settings. |
 | `eject` | Ejects the disc from a drive (`-d diskN`), or from every drive (`--all`). |
+| `license` | Shows the license, and the code from others that the CLI includes. |
 
 ### What a rip makes
 
@@ -266,3 +267,9 @@ Open `Silverside.xcworkspace` in Xcode for the app, the engine, and the CLI.
   to do: reusable style recipes for titles.
 
 See [docs/internal/Milestones.md](docs/internal/Milestones.md) for the plan.
+
+## License
+
+The code is under the MIT License; see [LICENSE](LICENSE). The name "Silverside"
+and the icon and logo artwork are not covered by it: a modified version that
+you distribute needs a different name and icon.

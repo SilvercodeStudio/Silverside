@@ -38,6 +38,10 @@ struct AboutView: View {
         .frame(width: 460)
         .task { drivesKnown = (try? DriveProfileStore().profiles.count) ?? 0 }
         .sheet(isPresented: $acknowledgmentsShown) { AcknowledgmentsSheet() }
+        #if DEBUG
+            // `-showAcknowledgments 1` (and `-showLicense 1`) open the sheets, for screenshots.
+            .onAppear { acknowledgmentsShown = UserDefaults.standard.bool(forKey: "showAcknowledgments") }
+        #endif
     }
 
     private var version: String {
@@ -142,6 +146,7 @@ private struct StatTile: View {
 /// Who and what Silverside builds on.
 private struct AcknowledgmentsSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var licenseShown = false
 
     private let entries: [(name: String, text: String)] = [
         (
@@ -182,11 +187,44 @@ private struct AcknowledgmentsSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
+                Button("License...") { licenseShown = true }
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(24)
         .frame(width: 420)
+        .sheet(isPresented: $licenseShown) { LicenseSheet() }
+        #if DEBUG
+            .onAppear { licenseShown = UserDefaults.standard.bool(forKey: "showLicense") }
+        #endif
+    }
+}
+
+/// The license, from the copy of LICENSE in the app's bundle.
+private struct LicenseSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    private var text: String {
+        Bundle.main.url(forResource: "LICENSE", withExtension: nil)
+            .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? SilversideLicense.text
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("License").font(.title2.bold())
+            ScrollView {
+                Text(text)
+                    .font(.callout)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 520, height: 540)
     }
 }

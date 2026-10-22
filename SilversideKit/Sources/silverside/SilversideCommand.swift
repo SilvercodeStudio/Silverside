@@ -22,7 +22,7 @@ struct SilversideCommand: AsyncParsableCommand {
         version: SilversideVersion.string,
         subcommands: [
             Drives.self, Info.self, CDTextCommand.self, Rip.self, Repair.self, Metadata.self, Encode.self, Config.self,
-            Eject.self,
+            Eject.self, License.self,
         ]
     )
 

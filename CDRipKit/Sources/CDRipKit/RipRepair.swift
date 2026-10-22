@@ -19,6 +19,9 @@ public enum RipRepairEvent: Sendable {
     case writing(URL, repairedSamples: Int)
     /// A repaired track, written, and its AccurateRip result.
     case trackWritten(number: Int, repairedSamples: Int, accurateRip: AccurateRipVerification)
+    /// The rip's report (disc.json and Rip Report.md) was written in the folder with the
+    /// repair's result: the repaired folder's, or the rip's own when the rip was verified.
+    case reportWritten(URL)
 }
 
 public enum RipRepairError: Error, Equatable, CustomStringConvertible {
@@ -190,10 +193,79 @@ public struct RipRepair {
         }
         events(.finished(result))
         switch result.outcome {
-        case .repaired, .partlyRepaired: try await blocking { [self] in try write(result, records: records) }
-        case .verified, .notVerified: break
+        case .repaired, .partlyRepaired:
+            try await blocking { [self] in
+                try write(result, records: records)
+                try writeReport(result, records: records, in: output)
+            }
+        case .verified:
+            // The rip was right all along: its own report says so from now on.
+            try writeReport(result, records: records, in: firstFolder)
+        case .notVerified:
+            break
         }
         return result
+    }
+
+    /// Writes the first folder's report into `folder` with the repair's result (the CTDB
+    /// status, each track's confidence, the repaired samples, and the AccurateRip result of
+    /// a repaired track), so that the folder is a rip that the app lists and the encoder
+    /// reads. Into another folder, the files that are not audio (the cover, the CUE sheet,
+    /// the hidden track) come along. Nothing happens if the first folder has no report.
+    private func writeReport(_ result: DiscRepairer.Result, records: [AccurateRipRecord], in folder: URL) throws {
+        let firstFolder = folders[0].standardizedFileURL
+        let source = firstFolder.appending(path: "disc.json")
+        guard FileManager.default.fileExists(atPath: source.path), var report = try? RipReport.read(from: source)
+        else { return }
+        let audioTracks = toc.audioTracks
+        report.ctdb = RipReport.CTDBResult(result)
+        for (position, track) in report.tracks.enumerated() {
+            guard let index = audioTracks.firstIndex(where: { $0.number == track.number }),
+                index < result.trackConfidences.count
+            else { continue }
+            report.tracks[position].ctdbConfidence = result.trackConfidences[index]
+            report.tracks[position].repairedSamples += result.changedSamples(inTrack: index)
+            // Every track is checked against AccurateRip again: a rip made offline has no result yet.
+            let samples = result.samples(ofTrack: index)
+            let checksum = AccurateRipAccumulator.checksum(
+                of: samples[...], isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
+            let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
+            switch TrackRipper.verification(of: checksum, known: known) {
+            case .accurate(let v1, let v2):
+                report.tracks[position].accurateRip = .accurate
+                report.tracks[position].accurateRipConfidence = [v1, v2]
+            case .notAccurate where report.tracks[position].accurateRip != .otherPressings:
+                report.tracks[position].accurateRip = .notAccurate
+            case .notAccurate, .notChecked:
+                break
+            }
+        }
+        report.program = "CDRip \(CDRipVersion.string)"
+        if folder.standardizedFileURL != firstFolder {
+            var files = Set(report.tracks.map(\.file))
+            let others = (report.files ?? []).filter {
+                !files.contains($0) && $0 != "disc.json" && $0 != "Rip Report.md" && !$0.hasSuffix(".suspects")
+            }
+            let manager = FileManager.default
+            for name in others {
+                let from = firstFolder.appending(path: name)
+                let to = folder.appending(path: name)
+                guard manager.fileExists(atPath: from.path) else { continue }
+                try manager.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? manager.removeItem(at: to)
+                try manager.copyItem(at: from, to: to)
+                files.insert(name)
+            }
+            if let hidden = report.hiddenTrack, !files.contains(hidden.file) { report.hiddenTrack = nil }
+            report.files = (files + ["disc.json", "Rip Report.md"]).sorted()
+        }
+        let edits = MetadataEdits.read(fromDiscJSONOf: firstFolder)
+        try report.write(to: folder.appending(path: "disc.json"))
+        if let edits { try edits.save(inDiscJSONOf: folder) }
+        var shown = report
+        if let edits, let release = report.release { shown.release = edits.applied(to: release, toc: toc) }
+        try Data(shown.markdown.utf8).write(to: folder.appending(path: "Rip Report.md"))
+        events(.reportWritten(folder))
     }
 
     /// Writes the repaired tracks, and checks them against AccurateRip, which does not depend on CTDB.

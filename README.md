@@ -256,6 +256,8 @@ Open `CDRip.xcworkspace` in Xcode for the app, the engine, and the CLI.
   MusicBrainz IDs. Adding the release to MusicBrainz (the `rip` output links to
   the page) and running `cdrip metadata -i <rip folder>` again is better for
   everyone.
-- **Multi-disc sets as one unit**, and reusable style recipes for titles.
+- **Multi-disc sets.** The discs of a release share the release choice and
+  the album's edits, and the app says which discs of a set are ripped. Still
+  to do: reusable style recipes for titles.
 
 See [docs/Milestones.md](docs/Milestones.md) for the plan.

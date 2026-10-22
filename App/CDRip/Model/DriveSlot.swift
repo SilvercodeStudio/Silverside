@@ -3,6 +3,16 @@ import CDRipKit
 import Foundation
 import Observation
 
+/// Choices for the next rip only, as `cdrip rip` has them: the folder, the pool, offline.
+struct RipChoices: Equatable {
+    /// The rip's folder. Nil names it from the release, in the rips folder.
+    var folder: URL?
+    /// Pool the earlier rips of the disc with this one.
+    var poolsEarlierRips = true
+    /// Look nothing up: no AccurateRip, CTDB, or drive offset list.
+    var offline = false
+}
+
 /// One drive in the sidebar: the hardware, the disc in it, and its rip.
 @Observable
 final class DriveSlot: Identifiable {
@@ -21,8 +31,14 @@ final class DriveSlot: Identifiable {
     var disc: DiscInfo?
     /// The tracks to rip, by number.
     var selectedTracks: Set<Int> = []
-    /// Read each track once, with no re-reads.
-    var fastMode = false
+    /// Read each track once, with no re-reads. Kept between launches.
+    var fastMode = UserDefaults.standard.bool(forKey: "fastMode") {
+        didSet { UserDefaults.standard.set(fastMode, forKey: "fastMode") }
+    }
+    /// Choices for the next rip. The folder is forgotten with the disc.
+    var choices = RipChoices()
+    /// True while a repair or a drive test holds the drive.
+    var isBusy = false
     /// Which names the header and the table show.
     var namesSource = DiscInfo.Source.musicBrainz
     var rip: RipRun?
@@ -92,6 +108,7 @@ final class DriveSlot: Identifiable {
         discState = .reading
         disc = nil
         rip = nil
+        choices.folder = nil
         let make = makeDrive
         readTask?.cancel()
         readTask = Task { @MainActor in

@@ -28,7 +28,7 @@ final class AppModel {
             } catch {
                 alert = AppAlert(title: "The settings could not be saved", message: "\(error)")
             }
-            if settings.rips != oldValue.rips { refreshRecentRips() }
+            if settings.rips != oldValue.rips || settings.library != oldValue.library { refreshRecentRips() }
         }
     }
     private(set) var drives: [DriveSlot] = []
@@ -37,6 +37,9 @@ final class AppModel {
     var alert: AppAlert?
     /// True while a sheet or panel shows the rip's log.
     var logShown = false
+    /// The repair under way, or the last one, shown in a sheet.
+    private(set) var repair: RepairRun?
+    var repairShown = false
 
     @ObservationIgnored private var watcher: DiskWatcher?
     @ObservationIgnored private var observers: [any NSObjectProtocol] = []
@@ -75,7 +78,20 @@ final class AppModel {
 
     var selectedRip: RecentRip? {
         guard case .rip(let url) = selection else { return nil }
-        return recentRips.first { $0.folder == url }
+        return recentRips.first { $0.file == url }
+    }
+
+    /// The earlier rips of a disc that still have their audio, by its TOC: the pool for a new rip or a repair.
+    func earlierRips(of tocString: String) -> [RecentRip] {
+        recentRips.filter { $0.hasAudio && $0.report.toc == tocString }
+    }
+
+    /// The multi-disc releases among the earlier rips, with the discs ripped so far.
+    var sets: [RipSet] { RipSet.sets(in: recentRips.map { ($0.folder, $0.report) }) }
+
+    func set(for release: MusicBrainzRelease?) -> RipSet? {
+        guard let release, release.media.count > 1 else { return nil }
+        return sets.first { $0.releaseID == release.id }
     }
 
     // MARK: Drives
@@ -129,8 +145,14 @@ final class AppModel {
     // MARK: Rips
 
     func startRip(_ slot: DriveSlot) {
-        guard slot.rip?.isRunning != true, let disc = slot.disc else { return }
+        guard slot.rip?.isRunning != true, !slot.isBusy, let disc = slot.disc else { return }
         var options = DiscRipOptions(settings: settings)
+        options.folder = slot.choices.folder
+        options.offline = slot.choices.offline
+        options.release = disc.release
+        if slot.choices.poolsEarlierRips {
+            options.pool = earlierRips(of: disc.toc.ctdbTOCString).map(\.folder)
+        }
         let selected = slot.selectedTracks
         if selected.count != disc.toc.audioTracks.count {
             options.tracks = disc.toc.audioTracks.map(\.number).filter { selected.contains($0) }
@@ -146,27 +168,74 @@ final class AppModel {
         }
         let run = RipRun(disc: disc)
         slot.rip = run
+        run.onProgress = { [weak self] in self?.updateDock() }
         run.start(
             makeDrive: slot.makeDrive, identity: slot.identity, settings: settings, options: options,
             encodes: settings.encodeAfterRip && !slot.isDemo
         ) { [weak self] in
             guard let self else { return }
+            updateDock()
             refreshRecentRips()
+            RipNotifier.ripFinished(title: notificationTitle(for: run), body: run.statusText)
             if settings.ejectAfterRip, run.result?.report.isVerified == true, !slot.isDemo { eject(slot) }
         }
+    }
+
+    private func notificationTitle(for run: RipRun) -> String {
+        switch run.phase {
+        case .finished: "\(run.disc.title) ripped"
+        case .stopped: "\(run.disc.title): rip stopped"
+        default: "\(run.disc.title): rip failed"
+        }
+    }
+
+    /// The Dock tile shows the running rips' progress, as one bar.
+    private func updateDock() {
+        let running = drives.compactMap(\.rip).filter(\.isRunning)
+        let fractions = running.map { $0.phase == .encoding ? $0.encodeFraction : $0.fraction }
+        DockProgress.show(running.isEmpty ? nil : fractions.reduce(0, +) / Double(running.count))
     }
 
     func stopRip(_ slot: DriveSlot) {
         slot.rip?.stop()
     }
 
+    // MARK: Repairs
+
+    /// Repairs an earlier rip with CTDB's data, pooled with the other rips of the disc,
+    /// and with re-reads when the disc is in a drive that is free.
+    func startRepair(_ rip: RecentRip) {
+        guard repair?.isRunning != true else {
+            repairShown = true
+            return
+        }
+        let pool = earlierRips(of: rip.report.toc).map(\.folder).filter { $0 != rip.folder }
+        let slot = drives.first {
+            !$0.isDemo && !$0.isBusy && $0.rip?.isRunning != true && $0.disc?.toc.ctdbTOCString == rip.report.toc
+        }
+        let run = RepairRun(rip: rip, pool: pool, drive: slot)
+        repair = run
+        repairShown = true
+        run.start { [weak self] in
+            guard let self else { return }
+            refreshRecentRips { [weak self] in
+                // The repaired rip, or the rip with its new report, is what to look at now.
+                if let folder = run.reportFolder { self?.selection = .rip(folder.appending(path: "disc.json")) }
+            }
+        }
+    }
+
     // MARK: Earlier rips
 
-    func refreshRecentRips() {
+    func refreshRecentRips(then completion: (@MainActor () -> Void)? = nil) {
         let folder = settings.ripsURL
+        let library = settings.libraryURL
         Task.detached(priority: .utility) {
-            let rips = RecentRip.scan(folder)
-            await MainActor.run { self.recentRips = rips }
+            let rips = RecentRip.scan(rips: folder, library: library)
+            await MainActor.run {
+                self.recentRips = rips
+                completion?()
+            }
         }
     }
 

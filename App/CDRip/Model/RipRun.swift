@@ -55,6 +55,9 @@ final class RipRun {
     private(set) var repairedTracks: [Int: Int] = [:]
     private(set) var result: DiscRipResult?
     private(set) var encodedFiles: [URL] = []
+    /// Tracks encoded so far, for the progress bar while encoding.
+    private(set) var encodedCount = 0
+    private(set) var encodingFormat: AudioFormat?
     private(set) var startDate = Date()
     private(set) var endDate: Date?
     /// Sectors read so far, over every track to rip, for the whole-rip progress.
@@ -65,6 +68,8 @@ final class RipRun {
     private(set) var speed: Double?
 
     let disc: DiscInfo
+    /// Hears each step of progress, for the Dock tile.
+    @ObservationIgnored var onProgress: (@MainActor () -> Void)?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var passStart: (date: Date, sectors: Int)?
     @ObservationIgnored private var tracksToRip: [Int] = []
@@ -87,6 +92,12 @@ final class RipRun {
     var fraction: Double {
         guard sectorsTotal > 0 else { return 0 }
         return min(1, Double(sectorsDone + sectorsInPass) / Double(sectorsTotal))
+    }
+
+    /// The fraction of the tracks encoded, while encoding.
+    var encodeFraction: Double {
+        guard !tracksToRip.isEmpty else { return 0 }
+        return min(1, Double(encodedCount) / Double(tracksToRip.count))
     }
 
     var secondsLeft: Int? {
@@ -200,7 +211,9 @@ final class RipRun {
             }
             return text
         case .checkingCTDB: return "Checking the disc against CUETools DB..."
-        case .encoding: return "Encoding..."
+        case .encoding:
+            let format = encodingFormat?.rawValue.uppercased() ?? ""
+            return "Encoding as \(format) · track \(min(encodedCount + 1, tracksToRip.count)) of \(tracksToRip.count)"
         case .finished:
             if let report { return RipRun.headline(for: report) }
             return "Done"
@@ -289,6 +302,7 @@ final class RipRun {
             trackErrors[track.number]?.unresolved.formUnion(track.unresolvedSectors)
             sectorsDone = (sectorsBefore[track.number] ?? 0) + track.sectors
             sectorsInPass = 0
+            onProgress?()
             add(
                 String(format: "Track %2d  %@  %d s  ", track.number, Format.duration(sectors: track.sectors), seconds)
                     + summary)
@@ -326,8 +340,13 @@ final class RipRun {
             add("Cover: the download failed (\(error))")
         case .encoding(let format):
             phase = .encoding
+            encodingFormat = format
+            encodedCount = 0
+            onProgress?()
             add("Encoding as \(format.rawValue.uppercased())...")
         case .encodedTrack(let line):
+            encodedCount += 1
+            onProgress?()
             add("  \(line)")
         case .encoded(let files, let format):
             encodedFiles = files
@@ -349,6 +368,7 @@ final class RipRun {
             }
             trackErrors[track]?.flagged.formUnion(progress.flaggedInChunk)
             trackErrors[track]?.unreadable.formUnion(progress.unreadableInChunk)
+            onProgress?()
             if let passStart {
                 let seconds = Date().timeIntervalSince(passStart.date)
                 if progress.chunk.lowerBound <= 0 || progress.sectorsRead < passStart.sectors {

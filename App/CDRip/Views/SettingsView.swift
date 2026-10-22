@@ -107,10 +107,12 @@ struct DriveSettings: View {
     @State private var selectedKey: String?
     @State private var manualOffset = ""
     @State private var message: String?
+    @State private var testRun: DriveTestRun?
 
     private var profiles: [DriveProfile] {
         var all = store?.profiles ?? [:]
-        for slot in model.drives where !slot.isDemo {
+        // The demo's simulated drive is listed too, so the checks can be tried without hardware.
+        for slot in model.drives {
             let identity = slot.identity
             if all[DriveProfile(vendor: identity.vendor, product: identity.product, revision: identity.revision).key]
                 == nil
@@ -142,10 +144,47 @@ struct DriveSettings: View {
                 }
             }
         }
-        .onAppear { if selectedKey == nil { selectedKey = profiles.first?.key } }
+        .onAppear {
+            if selectedKey == nil { selectedKey = profiles.first?.key }
+            #if DEBUG
+                // `-driveTest test` or `-driveTest cache` runs a check of the demo drive at once, for screenshots.
+                if let kind = UserDefaults.standard.string(forKey: "driveTest"),
+                    let slot = model.drives.first(where: \.isDemo),
+                    let profile = profiles.first(where: { matches(slot, $0) })
+                {
+                    selectedKey = profile.key
+                    DispatchQueue.main.async { start(kind == "cache" ? .cache : .test, profile) }
+                }
+            #endif
+        }
         .onChange(of: selectedKey) { _, key in
             manualOffset = profiles.first { $0.key == key }?.manualOffset.map(String.init) ?? ""
         }
+        .sheet(item: $testRun, onDismiss: { store = try? DriveProfileStore() }, content: { DriveTestSheet(run: $0) })
+    }
+
+    private func matches(_ slot: DriveSlot, _ profile: DriveProfile) -> Bool {
+        slot.identity == DriveIdentity(vendor: profile.vendor, product: profile.product, revision: profile.revision)
+    }
+
+    /// The drive of a profile, when it holds a disc and nothing else uses it.
+    private func slot(for profile: DriveProfile) -> DriveSlot? {
+        model.drives.first { matches($0, profile) && $0.disc != nil && $0.rip?.isRunning != true && !$0.isBusy }
+    }
+
+    private func checksHint(for profile: DriveProfile) -> String {
+        guard let slot = slot(for: profile) else {
+            return "Put a clean audio CD in the drive first. The checks read near its start and end."
+        }
+        return
+            "With the disc in \(slot.name). The checks take about 20 seconds, the measurement up to a minute; use a clean disc, because they read near its start and end."
+    }
+
+    private func start(_ kind: DriveTestRun.Kind, _ profile: DriveProfile) {
+        guard let slot = slot(for: profile) else { return }
+        let run = DriveTestRun(kind: kind, slot: slot)
+        testRun = run
+        run.start(profile: profile) { store = try? DriveProfileStore() }
     }
 
     private func offsetSummary(_ profile: DriveProfile) -> String {
@@ -213,9 +252,19 @@ struct DriveSettings: View {
             }
             Section("Cache") {
                 LabeledContent("Measured cache") {
-                    Text(profile.cacheSectors.map { "\($0) sectors" } ?? "Not measured (cdrip drives --measure-cache)")
+                    Text(profile.cacheSectors.map { "\($0) sectors" } ?? "Not measured: a large, safe flush is used")
                 }
                 LabeledContent("Flush before a re-read", value: "\(profile.cacheFlushSectors) sectors")
+            }
+            Section("Checks") {
+                HStack {
+                    Button("Test Drive...") { start(.test, profile) }
+                        .help("Read the TOC, audio, C2 flags, and the Q subchannel, and time the reads")
+                    Button("Measure Cache") { start(.cache, profile) }
+                        .help("Time re-reads to find how many sectors the drive keeps in memory")
+                }
+                .disabled(slot(for: profile) == nil)
+                Text(checksHint(for: profile)).font(.caption).foregroundStyle(.secondary)
             }
             if let message { Text(message).foregroundStyle(Theme.bad) }
         }
@@ -243,6 +292,8 @@ struct DriveSettings: View {
     private func save(_ profile: DriveProfile, change: (inout DriveProfile) -> Void) {
         var changed = profile
         change(&changed)
+        // The demo drive's profile stays out of the real profiles.
+        guard !model.drives.contains(where: { $0.isDemo && matches($0, profile) }) else { return }
         do {
             try store?.save(changed)
             message = nil

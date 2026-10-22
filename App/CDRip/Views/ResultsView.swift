@@ -6,6 +6,8 @@ struct ResultsView: View {
     @Environment(AppModel.self) private var model
     var folder: URL
     var report: RipReport
+    /// False for a report kept in the library after the rip's WAV files were deleted.
+    var hasAudio = true
     @State private var reportShown = true
 
     private var toc: TOC? { try? TOC(ctdbTOCString: report.toc) }
@@ -20,6 +22,9 @@ struct ResultsView: View {
         HSplitView {
             VStack(alignment: .leading, spacing: 0) {
                 header.padding(16)
+                DiscGraph(tracks: DiscGraph.tracks(of: report))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
                 Divider()
                 table
             }
@@ -53,6 +58,13 @@ struct ResultsView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
+                    model.startRepair(RecentRip(folder: folder, report: report))
+                } label: {
+                    Label("Repair", systemImage: "bandage")
+                }
+                .help(repairHelp)
+                .disabled(!canRepair)
+                Button {
                     model.revealInFinder(folder)
                 } label: {
                     Label("Show in Finder", systemImage: "folder")
@@ -63,6 +75,22 @@ struct ResultsView: View {
                 .help("Show or hide the rip report")
             }
         }
+    }
+
+    private var canRepair: Bool {
+        hasAudio && !report.isVerified && report.ctdb.status != .notInDatabase && model.repair?.isRunning != true
+    }
+
+    private var repairHelp: String {
+        if !hasAudio { return "The rip was encoded and its WAV files deleted, so there is nothing to repair" }
+        if report.isVerified { return "The rip is verified: there is nothing to repair" }
+        if report.ctdb.status == .notInDatabase { return "CTDB does not have this disc, so it cannot repair the rip" }
+        let others = model.earlierRips(of: report.toc).count - 1
+        let drive = model.drives.first { $0.disc?.toc.ctdbTOCString == report.toc && !$0.isDemo }
+        var text = "Check the rip against CTDB again, and repair it with CTDB's data"
+        if others > 0 { text += ", pooled with \(Format.count(others, "other rip")) of this disc" }
+        if let drive { text += ", with re-reads in \(drive.name)" }
+        return text + "."
     }
 
     /// The report without its Tracks section: the table beside it shows the same, with room.
@@ -88,8 +116,20 @@ struct ResultsView: View {
                 )
                 .foregroundStyle(.secondary)
                 ChipRow(chips: ResultChips.chips(for: report))
+                if let advice = report.advice {
+                    Text(advice).font(.callout).foregroundStyle(.secondary)
+                }
+                if let set = model.set(for: report.release) {
+                    Text(setText(set)).font(.callout).foregroundStyle(.secondary)
+                }
             }
         }
+    }
+
+    /// "Disc 2 of 3 · Discs 1 and 2 of 3 ripped; disc 3 still to do".
+    private func setText(_ set: RipSet) -> String {
+        let position = report.discPosition.map { "Disc \($0) of \(set.discCount) · " } ?? ""
+        return position + set.summary
     }
 
     private var table: some View {

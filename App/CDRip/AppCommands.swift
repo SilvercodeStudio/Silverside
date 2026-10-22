@@ -1,4 +1,5 @@
 import CDRipDarwin
+import CDRipKit
 import SwiftUI
 
 struct AppCommands: Commands {
@@ -26,6 +27,10 @@ struct AppCommands: Commands {
                 .keyboardShortcut("l", modifiers: [.command, .shift])
                 .disabled(model.selectedDrive?.rip == nil)
             Divider()
+            Button("Repair Rip...") { if let rip = model.selectedRip { model.startRepair(rip) } }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(!canRepair)
+            Divider()
             Button("Eject") { if let slot = model.selectedDrive { model.eject(slot) } }
                 .keyboardShortcut("e", modifiers: .command)
                 .disabled(model.selectedDrive?.device.discBSDName == nil)
@@ -35,6 +40,11 @@ struct AppCommands: Commands {
 
     private var canRip: Bool {
         guard let slot = model.selectedDrive, slot.disc != nil else { return false }
-        return slot.rip?.isRunning != true && !slot.selectedTracks.isEmpty
+        return slot.rip?.isRunning != true && !slot.isBusy && !slot.selectedTracks.isEmpty
+    }
+
+    private var canRepair: Bool {
+        guard let rip = model.selectedRip else { return false }
+        return !rip.isVerified && rip.report.ctdb.status != .notInDatabase && model.repair?.isRunning != true
     }
 }

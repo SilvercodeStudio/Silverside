@@ -18,7 +18,8 @@
             let delay = configured > 0 ? configured : 4
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 capture(to: URL(fileURLWithPath: path))
-                NSApp.terminate(nil)
+                // A plain exit: terminate(nil) waits while a sheet or a repair is up, and this is a debug aid.
+                exit(0)
             }
         }
 

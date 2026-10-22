@@ -41,6 +41,9 @@ public struct DiscRipOptions: Sendable {
     public var edits: MetadataEdits?
     /// A release to use when MusicBrainz has none for the disc (see `MusicBrainzRelease.manual`).
     public var manualRelease: MusicBrainzRelease?
+    /// For an offline rip: a release already looked up (the app looks one up when the disc
+    /// appears), so that the folder and the report still have the names.
+    public var release: MusicBrainzRelease?
 
     public init(settings: Settings) {
         artwork = settings.artwork
@@ -240,6 +243,7 @@ public struct DiscRip {
         let mcn = try await blocking { try? SubchannelCodes.mcn(in: toc, drive: drive) }
         var chosen: MusicBrainzRelease?
         if options.offline {
+            chosen = options.release
             events(.release(nil))
         } else {
             do {

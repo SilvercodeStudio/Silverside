@@ -148,6 +148,8 @@ struct Repair: AsyncParsableCommand {
             case .notChecked: line += "AccurateRip: not in the database"
             }
             Swift.print(line)
+        case .reportWritten(let folder):
+            Swift.print("  Report: \(folder.appending(path: "disc.json").path)")
         }
     }
 }

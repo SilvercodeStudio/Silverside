@@ -7,6 +7,7 @@ struct DriveDetailView: View {
     @Environment(AppModel.self) private var model
     @Bindable var slot: DriveSlot
     @State private var releasePickerShown = false
+    @State private var optionsShown = false
 
     var body: some View {
         Group {
@@ -36,6 +37,14 @@ struct DriveDetailView: View {
                 ReleasePickerSheet(disc: disc) { release in slot.choose(release) }
             }
         }
+        #if DEBUG
+            // `-ripOptions 1` opens the options popover at launch, for screenshots.
+            .onAppear {
+                if UserDefaults.standard.bool(forKey: "ripOptions") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { optionsShown = true }
+                }
+            }
+        #endif
     }
 
     private var subtitle: String {
@@ -64,6 +73,18 @@ struct DriveDetailView: View {
             .disabled(slot.disc == nil || isRipping)
         }
         ToolbarItem(placement: .primaryAction) {
+            Button {
+                optionsShown.toggle()
+            } label: {
+                Label("Options", systemImage: "slider.horizontal.3").padding(.horizontal, 4)
+            }
+            .help("Choices for the next rip: its folder, earlier rips to pool, offline")
+            .disabled(slot.disc == nil || isRipping)
+            .popover(isPresented: $optionsShown, arrowEdge: .bottom) {
+                RipOptionsView(slot: slot)
+            }
+        }
+        ToolbarItem(placement: .primaryAction) {
             Picker("Mode", selection: $slot.fastMode) {
                 Text("Secure").tag(false)
                 Text("Fast (one read)").tag(true)
@@ -79,7 +100,7 @@ struct DriveDetailView: View {
                 Button {
                     model.stopRip(slot)
                 } label: {
-                    Label("Stop", systemImage: "stop.fill").labelStyle(.titleAndIcon)
+                    Label("Stop", systemImage: "stop.fill").labelStyle(.titleAndIcon).padding(.horizontal, 6)
                 }
                 .help("Stop after the read under way. The tracks ripped so far stay.")
             }
@@ -93,7 +114,7 @@ struct DriveDetailView: View {
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut("r", modifiers: .command)
-            .disabled(slot.disc == nil || isRipping || slot.selectedTracks.isEmpty)
+            .disabled(slot.disc == nil || isRipping || slot.isBusy || slot.selectedTracks.isEmpty)
         }
     }
 
@@ -182,6 +203,13 @@ struct AlbumHeader: View {
                     }
                     if let label = disc.labelText { Chip(text: label) }
                     if let discLabel = disc.discLabel { Chip(text: discLabel) }
+                    if let set = model.set(for: disc.release) {
+                        Chip(
+                            text: "\(set.discs.count) of \(set.discCount) discs ripped",
+                            tone: set.isComplete ? .good : .neutral, systemImage: "square.stack"
+                        )
+                        .help(set.summary + ". The album's edits and the release choice are shared by the set.")
+                    }
                     if let mcn = disc.mcn { Chip(text: "MCN \(mcn)") }
                     Spacer()
                     if disc.hasCDText, disc.release != nil {
@@ -310,6 +338,13 @@ struct StatusBar: View {
                 Text(timeText).font(.callout).foregroundStyle(.secondary).monospacedDigit()
                 HStack(spacing: 10) {
                     Text(slot.fastMode ? "Fast" : "Secure")
+                    if slot.choices.offline { Text("Offline") }
+                    if slot.choices.poolsEarlierRips, !earlierRips.isEmpty {
+                        Text("Pool \(earlierRips.count)").help("Earlier rips of this disc that join the rip")
+                    }
+                    if let folder = slot.choices.folder {
+                        Text("Own folder").help("The rip goes in \(folder.path)")
+                    }
                     if let offset = slot.rip?.readOffset { Text("Offset \(offset.signedDescription)") }
                     Text(model.settings.encodeAfterRip ? model.settings.format.rawValue.uppercased() : "WAV")
                     if slot.rip != nil {
@@ -321,13 +356,52 @@ struct StatusBar: View {
                 .padding(.leading, 8)
             }
             if let rip = slot.rip, rip.phase != .stopped {
+                // While encoding, the bar starts again and counts the encoded tracks.
                 SheenProgressBar(
-                    fraction: rip.phase == .finished ? 1 : rip.fraction, verified: rip.report?.isVerified == true)
-                if let track = rip.currentTrack, let errors = rip.trackErrors[track], !errors.isEmpty {
-                    TrackErrorStrip(errors: errors)
-                }
+                    fraction: rip.phase == .finished ? 1 : rip.phase == .encoding ? rip.encodeFraction : rip.fraction,
+                    verified: rip.report?.isVerified == true)
+            }
+            if slot.rip != nil {
+                DiscGraph(tracks: graphTracks, cursor: graphCursor).padding(.top, 2)
             }
         }
+    }
+
+    private var earlierRips: [RecentRip] {
+        guard let disc = slot.disc else { return [] }
+        return model.earlierRips(of: disc.toc.ctdbTOCString)
+    }
+
+    /// The graph's rows: each track's state and trouble so far.
+    private var graphTracks: [DiscGraph.Track] {
+        guard let rip = slot.rip, let disc = slot.disc else { return [] }
+        return disc.toc.audioTracks.map { track in
+            var row = DiscGraph.Track(number: track.number, sectors: disc.toc.sectorRange(of: track).count)
+            if let errors = rip.trackErrors[track.number] {
+                row.flagged = errors.flagged
+                row.unreadable = errors.unreadable
+                row.suspect = errors.suspect
+                row.unresolved = errors.unresolved
+            }
+            switch rip.trackStates[track.number] {
+            case .reading(_, let fraction): row.readFraction = fraction
+            case .rereading: row.readFraction = 1
+            case .finished(let report):
+                row.readFraction = 1
+                let verdict = TrackVerdict(report, ctdb: rip.ctdb)
+                row.isVerified = verdict == .verified || verdict == .repaired
+            case .skipped: row.isSkipped = true
+            case .queued, nil: break
+            }
+            return row
+        }
+    }
+
+    private var graphCursor: (track: Int, sector: Int)? {
+        guard let rip = slot.rip, rip.isRunning, let track = rip.currentTrack,
+            case .reading(_, let fraction) = rip.trackStates[track], let errors = rip.trackErrors[track]
+        else { return nil }
+        return (track, Int(fraction * Double(errors.sectors)))
     }
 
     private var statusText: String {
@@ -369,8 +443,16 @@ struct ResultBanner: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(RipRun.headline(for: report)).font(.headline)
                 ChipRow(chips: ResultChips.chips(for: report))
+                if let advice = report.advice {
+                    Text(advice).font(.callout).foregroundStyle(.secondary)
+                }
             }
             Spacer()
+            if let folder, !report.isVerified, report.ctdb.status != .notInDatabase {
+                Button("Repair...") { model.startRepair(RecentRip(folder: folder, report: report)) }
+                    .help("Check the rip against CTDB again, pooled with the other rips of this disc, and repair it")
+                    .disabled(model.repair?.isRunning == true)
+            }
             if let folder {
                 Button("Show in Finder") { model.revealInFinder(folder) }
             }
@@ -379,6 +461,68 @@ struct ResultBanner: View {
         .padding(12)
         .background(
             (report.isVerified ? Theme.good : Theme.warning).opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+/// The choices for the next rip, in a popover from the toolbar.
+struct RipOptionsView: View {
+    @Environment(AppModel.self) private var model
+    @Bindable var slot: DriveSlot
+
+    private var earlierRips: [RecentRip] {
+        guard let disc = slot.disc else { return [] }
+        return model.earlierRips(of: disc.toc.ctdbTOCString)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("For the next rip").font(.headline)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Folder").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text(slot.choices.folder?.path ?? "Named from the release, in the rips folder")
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .foregroundStyle(slot.choices.folder == nil ? .secondary : .primary)
+                    Spacer()
+                    if slot.choices.folder != nil {
+                        Button("Default") { slot.choices.folder = nil }
+                    }
+                    Button("Choose...") { chooseFolder() }
+                }
+            }
+            Divider()
+            Toggle(isOn: $slot.choices.poolsEarlierRips) {
+                Text(
+                    earlierRips.isEmpty
+                        ? "Pool earlier rips of this disc (none yet)"
+                        : "Pool \(Format.count(earlierRips.count, "earlier rip")) of this disc")
+            }
+            .disabled(earlierRips.isEmpty)
+            Text(
+                "Sectors that an earlier rip read right are kept, and where the rips disagree, the re-reads and the CTDB repair have more to work with."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+            Divider()
+            Toggle("Offline: look nothing up", isOn: $slot.choices.offline)
+            Text(
+                "No AccurateRip, CTDB, or drive offset list. The names come from the lookup already made. Repair can check the rip later."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .frame(width: 400)
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Rip Here"
+        panel.message = "The rip's WAV files, report, and cover go in this folder."
+        panel.directoryURL = model.settings.ripsURL
+        if panel.runModal() == .OK, let url = panel.url { slot.choices.folder = url }
     }
 }
 

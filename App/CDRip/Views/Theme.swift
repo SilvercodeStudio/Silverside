@@ -21,6 +21,8 @@ enum Theme {
     static let good = Color.green
     static let warning = Color.orange
     static let bad = Color.red
+    /// Sectors that reads never settled, but CTDB fixed.
+    static let fixed = Color.blue
 
     /// The color for an AccurateRip result.
     static func color(for status: RipReport.AccurateRipStatus) -> Color {
@@ -92,30 +94,6 @@ struct SheenProgressBar: View {
             }
         }
         .frame(height: 6)
-    }
-}
-
-/// The sectors of a track with trouble, by position: C2 flags, unreadable, suspect, unresolved.
-struct TrackErrorStrip: View {
-    var errors: RipRun.TrackErrors
-
-    var body: some View {
-        Canvas { context, size in
-            guard errors.sectors > 0 else { return }
-            let width = size.width / Double(errors.sectors)
-            func mark(_ sectors: Set<Int>, _ color: Color) {
-                for sector in sectors where sector >= 0 && sector < errors.sectors {
-                    let rect = CGRect(x: Double(sector) * width, y: 0, width: max(width, 1), height: size.height)
-                    context.fill(Path(rect), with: .color(color))
-                }
-            }
-            mark(errors.suspect, Theme.warning.opacity(0.7))
-            mark(errors.flagged, Theme.warning)
-            mark(errors.unreadable, Theme.bad)
-            mark(errors.unresolved, Theme.bad)
-        }
-        .frame(height: 4)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 2))
     }
 }
 

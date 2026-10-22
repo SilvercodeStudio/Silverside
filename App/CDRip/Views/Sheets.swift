@@ -87,18 +87,7 @@ struct RipLogView: View {
                 }
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            ScrollViewReader { proxy in
-                ScrollView {
-                    Text(text)
-                        .font(Theme.monoSmall)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                        .id("end")
-                }
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-                .onChange(of: run?.log.count) { proxy.scrollTo("end", anchor: .bottom) }
-            }
+            LogText(lines: run?.log ?? ["No rip yet."])
         }
         .padding(16)
         .frame(width: 720, height: 480)
@@ -107,5 +96,111 @@ struct RipLogView: View {
     private var text: String {
         guard let run else { return "No rip yet." }
         return run.log.joined(separator: "\n")
+    }
+}
+
+/// Lines of a log, in a box that follows the newest line.
+struct LogText: View {
+    var lines: [String]
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                Text(lines.joined(separator: "\n"))
+                    .font(Theme.monoSmall)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .id("end")
+            }
+            .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+            .onChange(of: lines.count) { proxy.scrollTo("end", anchor: .bottom) }
+        }
+    }
+}
+
+/// A repair of an earlier rip: what it does, and what it found.
+struct RepairSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    var run: RepairRun
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                if run.isRunning {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: isGood ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.title2)
+                        .foregroundStyle(isGood ? Theme.good : Theme.warning)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Repair · \(run.rip.title)").font(.headline)
+                    Text(run.headline).font(.callout).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let folder = run.writtenFolder {
+                    Button("Show in Finder") { model.revealInFinder(folder) }
+                }
+                if run.isRunning {
+                    Button("Stop") { run.stop() }.help("Stop after the read under way. Nothing is written.")
+                } else {
+                    Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                }
+            }
+            LogText(lines: run.log)
+        }
+        .padding(16)
+        .frame(width: 720, height: 480)
+    }
+
+    private var isGood: Bool {
+        switch run.outcome {
+        case .verified, .repaired: run.phase == .finished
+        default: false
+        }
+    }
+}
+
+/// A drive test or a cache measurement from Settings › Drives: the checks and their results.
+struct DriveTestSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    var run: DriveTestRun
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                if run.isRunning { ProgressView().controlSize(.small) }
+                Text("\(run.title) · \(run.slot.name)").font(.headline)
+                Spacer()
+                if run.report != nil {
+                    Button("Save Report...") { run.saveReport() }
+                        .help("Save the checks and the drive's registry entries as JSON, for a bug report")
+                }
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction).disabled(run.isRunning)
+            }
+            if let report = run.report {
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+                    ForEach(report.checks, id: \.name) { check in
+                        GridRow {
+                            Image(systemName: check.passed ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .foregroundStyle(check.passed ? Theme.good : Theme.bad)
+                            Text(check.name)
+                            Text(check.result).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                            Text("\(check.milliseconds) ms").foregroundStyle(.secondary).monospacedDigit()
+                                .gridColumnAlignment(.trailing)
+                        }
+                    }
+                }
+                .font(.callout)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+            }
+            LogText(lines: run.log)
+        }
+        .padding(16)
+        .frame(width: 680, height: run.report == nil ? 320 : 540)
     }
 }

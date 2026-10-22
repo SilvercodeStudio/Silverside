@@ -1,13 +1,41 @@
 import CDRipKit
 import Foundation
 
-/// An earlier rip in the rips folder: its report, for the sidebar and the results view.
+/// An earlier rip, for the sidebar and the results view: a rip in the rips folder (its
+/// WAV files and `disc.json`), or one that was encoded, whose report is kept in the
+/// library's album folder as "Rip Report (Disc N).json" after the WAV files are deleted.
 nonisolated struct RecentRip: Identifiable, Sendable {
+    /// The rip's folder, or the album folder in the library.
     var folder: URL
+    /// The report file: `disc.json` in a rip folder, or the album folder's copy.
+    var file: URL
     var report: RipReport
-    var id: URL { folder }
+    /// True when the folder has the rip's audio, so the rip can be pooled or repaired.
+    var hasAudio: Bool
+    var id: URL { file }
 
-    var title: String { report.release?.title ?? folder.lastPathComponent }
+    /// A rip in the rips folder.
+    init(folder: URL, report: RipReport) {
+        self.folder = folder
+        file = folder.appending(path: "disc.json")
+        self.report = report
+        hasAudio = true
+    }
+
+    /// A report kept in the library, next to the encoded files.
+    init(libraryReport file: URL, report: RipReport) {
+        folder = file.deletingLastPathComponent()
+        self.file = file
+        self.report = report
+        hasAudio = false
+    }
+
+    /// The album, with the disc's number in a set: "Europe '72 (Disc 2)".
+    var title: String {
+        guard let release = report.release else { return folder.lastPathComponent }
+        guard release.media.count > 1, let position = report.discPosition else { return release.title }
+        return "\(release.title) (Disc \(position))"
+    }
     var artist: String { report.release?.artist ?? "" }
     var isVerified: Bool { report.isVerified }
 
@@ -28,15 +56,30 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         parts.append(report.date.formatted(date: .abbreviated, time: .omitted))
         let unverified = report.tracks.count - verifiedCount
         if unverified > 0 { parts.append("\(unverified) unverified") }
+        if !hasAudio { parts.append("encoded") }
         return parts.joined(separator: " · ")
     }
 
     var details: String {
         "Ripped \(report.date.formatted(date: .abbreviated, time: .shortened)) on \(report.drive.vendor) \(report.drive.product), read offset \(report.drive.readOffset.signedDescription)."
+            + (hasAudio ? "" : " Encoded into the library; the rip's WAV files were deleted, and this is its report.")
     }
 
-    /// The rips in a folder, the newest first.
-    static func scan(_ folder: URL) -> [RecentRip] {
+    /// The rips in the rips folder, and the reports in the library's album folders, the
+    /// newest first. A rip that is in both places (kept after encoding) is listed once.
+    static func scan(rips: URL, library: URL) -> [RecentRip] {
+        var found = scanRips(rips)
+        var seen = Set(found.map { "\($0.report.toc) \($0.report.date.timeIntervalSince1970)" })
+        for rip in scanLibrary(library, skipping: rips) {
+            let key = "\(rip.report.toc) \(rip.report.date.timeIntervalSince1970)"
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            found.append(rip)
+        }
+        return found.sorted { $0.report.date > $1.report.date }
+    }
+
+    private static func scanRips(_ folder: URL) -> [RecentRip] {
         let manager = FileManager.default
         guard
             let entries = try? manager.contentsOfDirectory(
@@ -49,6 +92,31 @@ nonisolated struct RecentRip: Identifiable, Sendable {
             guard manager.fileExists(atPath: json.path), let report = try? RipReport.read(from: json) else { continue }
             rips.append(RecentRip(folder: entry, report: report))
         }
-        return rips.sorted { $0.report.date > $1.report.date }
+        return rips
+    }
+
+    /// "Rip Report*.json" files up to four levels down (the album folder template is
+    /// usually artist/album), leaving the rips folder alone if it is inside the library.
+    private static func scanLibrary(_ library: URL, skipping rips: URL) -> [RecentRip] {
+        let manager = FileManager.default
+        guard
+            let enumerator = manager.enumerator(
+                at: library, includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants])
+        else { return [] }
+        let skipped = rips.standardizedFileURL.path
+        var found = [RecentRip]()
+        while let entry = enumerator.nextObject() as? URL {
+            let isDirectory = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+            if isDirectory {
+                if enumerator.level >= 4 || entry.standardizedFileURL.path == skipped { enumerator.skipDescendants() }
+                continue
+            }
+            let name = entry.lastPathComponent
+            guard name.hasPrefix("Rip Report"), name.hasSuffix(".json"), let report = try? RipReport.read(from: entry)
+            else { continue }
+            found.append(RecentRip(libraryReport: entry, report: report))
+        }
+        return found
     }
 }

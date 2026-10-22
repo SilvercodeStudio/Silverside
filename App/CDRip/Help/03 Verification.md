@@ -29,6 +29,18 @@ Every drive reads a few samples early or late, by a fixed amount. CDRip corrects
 
 ## When tracks stay unverified
 
-- Clean the disc and rip again. The new rip pools with the first: sectors the first rip read right are kept.
+The result banner says what is most likely to help next. In short:
+
+- Clean the disc and rip again. The new rip pools with the first (see Options under Ripping a Disc): sectors the first rip read right are kept.
 - Rip in another drive. Each drive reads damage differently, so two drives together often get what one cannot.
-- The command line's `cdrip repair` pools several rips of one disc and tries the CTDB repair again.
+- Repair the rip.
+
+## Repair
+
+Repair, in the toolbar of an earlier rip and in the Disc menu, checks the rip against CTDB again and repairs it with CTDB's data, as `cdrip repair` does. Every other rip of the same disc in the rips folder joins the pool, and when the disc is in a drive that is free, the tracks that AccurateRip does not know are read again, so that the reads can disagree where the disc is damaged.
+
+A rip that CTDB verifies as it is gets its report brought up to date: a rip made offline becomes a verified rip. A rip that the repair changes stays as it was, and the repaired rip goes in a folder of its own next to it ("… repaired"), with its own report, so it can be encoded like any rip.
+
+## Multi-disc sets
+
+The discs of one release share their release choice and the album's edits, and the chips say how far the set is: "Disc 2 of 3" for the disc in the drive, and how many discs of the set are ripped. The sidebar names each disc of a set.

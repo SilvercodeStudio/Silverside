@@ -28,6 +28,9 @@ struct MainWindow: View {
         .sheet(isPresented: $model.logShown) {
             RipLogView(run: model.selectedDrive?.rip)
         }
+        .sheet(isPresented: $model.repairShown) {
+            if let run = model.repair { RepairSheet(run: run) }
+        }
         .onAppear {
             #if DEBUG
                 DebugScreenshot.scheduleIfRequested()
@@ -35,11 +38,14 @@ struct MainWindow: View {
                 if let id = UserDefaults.standard.string(forKey: "openWindow"), !id.isEmpty {
                     if id == "settings" { openSettings() } else { openWindow(id: id) }
                 }
-                // `-selectRecent 1` shows the newest earlier rip, for screenshots of the results.
+                // `-selectRecent 1` shows the newest earlier rip, for screenshots of the results;
+                // with `-repair 1` too, its repair starts.
                 if UserDefaults.standard.bool(forKey: "selectRecent") {
                     Task { @MainActor in
                         try? await Task.sleep(for: .seconds(1))
-                        if let rip = model.recentRips.first { model.selection = .rip(rip.folder) }
+                        guard let rip = model.recentRips.first else { return }
+                        model.selection = .rip(rip.file)
+                        if UserDefaults.standard.bool(forKey: "repair") { model.startRepair(rip) }
                     }
                 }
             #endif
@@ -55,7 +61,7 @@ struct DetailView: View {
         if let slot = model.selectedDrive {
             DriveDetailView(slot: slot)
         } else if let rip = model.selectedRip {
-            ResultsView(folder: rip.folder, report: rip.report)
+            ResultsView(folder: rip.folder, report: rip.report, hasAudio: rip.hasAudio)
         } else if model.drives.isEmpty {
             NoDriveView()
         } else {
@@ -92,7 +98,7 @@ struct SidebarView: View {
                         systemImage: rip.isVerified ? "checkmark.circle" : "exclamationmark.triangle",
                         tone: rip.isVerified ? .good : .warning
                     )
-                    .tag(SidebarItem.rip(rip.folder))
+                    .tag(SidebarItem.rip(rip.file))
                     .help(rip.details)
                 }
             }

@@ -138,7 +138,7 @@ public struct RipReport: Codable, Equatable, Sendable {
         }
     }
 
-    public var program = "CDRip \(CDRipVersion.string)"
+    public var program = "Silverside \(CDRipVersion.string)"
     public var date: Date
     public var drive: Drive
     /// True for a secure rip, with re-reads; false for a single pass.

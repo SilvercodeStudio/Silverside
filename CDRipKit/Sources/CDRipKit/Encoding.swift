@@ -39,7 +39,7 @@ public struct RippedDisc: Sendable {
                 folder.appending(path: $0)
             }
         }
-        files.append(folder.appending(path: RipFolder.claimFile))
+        files += [RipFolder.claimFile, RipFolder.oldClaimFile].map { folder.appending(path: $0) }
         for file in files where manager.fileExists(atPath: file.path) { try manager.removeItem(at: file) }
         for directory in [folder.appending(path: "Artwork"), folder] {
             let contents = try? manager.contentsOfDirectory(atPath: directory.path)
@@ -116,7 +116,7 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
         switch self {
         case .noDiscJSON(let folder): "\(folder.path) has no disc.json with a TOC."
         case .noRelease(let folder):
-            "\(folder.path) has no MusicBrainz release. Add one with cdrip metadata -i \"\(folder.path)\"."
+            "\(folder.path) has no MusicBrainz release. Add one with silverside metadata -i \"\(folder.path)\"."
         case .unknownMedium(let folder): "Which disc of the release \(folder.path) holds is not clear."
         case .notVerified(let track):
             "Track \(track) is not verified by AccurateRip or CTDB. Use --allow-unverified to encode it anyway."

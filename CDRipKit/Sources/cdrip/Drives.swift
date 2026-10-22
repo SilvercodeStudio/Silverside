@@ -12,9 +12,9 @@ struct Drives: ParsableCommand {
             to find how much the drive caches, so re-reads empty the cache with fewer reads.
 
             Examples:
-              cdrip drives
-              cdrip drives -d disk14 --set-offset 6
-              cdrip drives -d disk14 --measure-cache
+              silverside drives
+              silverside drives -d disk14 --set-offset 6
+              silverside drives -d disk14 --measure-cache
             """)
 
     @OptionGroup var deviceOptions: DeviceOptions
@@ -28,11 +28,11 @@ struct Drives: ParsableCommand {
     @Flag(
         help: """
             Write a report on the drive that holds the disc, for a bug report: the drive, its connection, what \
-            CDRip knows of it, and quick checks with the disc (about 20 seconds; use a clean disc). It has no audio.
+            Silverside knows of it, and quick checks with the disc (about 20 seconds; use a clean disc). It has no audio.
             """)
     var report = false
 
-    @Option(name: .shortAndLong, help: "The report's file. Default: \"CDRip Drive Report <drive>.json\" here.")
+    @Option(name: .shortAndLong, help: "The report's file. Default: \"Silverside Drive Report <drive>.json\" here.")
     var output: String?
 
     @Flag(
@@ -65,7 +65,7 @@ struct Drives: ParsableCommand {
                         format: "  %@ %@: %@ (%d ms)", check.passed ? "ok  " : "FAIL", check.name, check.result,
                         check.milliseconds))
             }
-            let name = NameTemplate.safeComponent("CDRip Drive Report \(drive.vendor) \(drive.product)") + ".json"
+            let name = NameTemplate.safeComponent("Silverside Drive Report \(drive.vendor) \(drive.product)") + ".json"
             let url = URL(filePath: output ?? name)
             try report.write(to: url)
             print("Report: \(url.path)")
@@ -116,7 +116,7 @@ struct Drives: ParsableCommand {
             if let (offset, source) = profile.offset {
                 print("  Read offset: \(offset.signedDescription) (\(source.description))")
             } else {
-                print("  Read offset: not known (cdrip rip looks it up in AccurateRip's drive list)")
+                print("  Read offset: not known (silverside rip looks it up in AccurateRip's drive list)")
             }
             if let sectors = profile.cacheSectors {
                 let megabytes = Double(sectors * CDDA.bytesPerSector) / 1_048_576

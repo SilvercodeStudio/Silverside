@@ -85,7 +85,8 @@ extension RipReport {
                 ? "and they did."
                 : "and in \(unresolved.count == 1 ? "1 track" : "\(unresolved.count) tracks") they did not: "
                     + "clean the disc and rip it again, or rip it in another drive."
-            return "No database knows this disc, so the rip cannot be proved. CDRip can only show that reads agree, "
+            return
+                "No database knows this disc, so the rip cannot be proved. Silverside can only show that reads agree, "
                 + reads
         }
         if !secure {

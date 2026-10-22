@@ -271,7 +271,7 @@ public struct DiscRip {
             named.map {
                 NameTemplate(settings.ripFolderTemplate).name(
                     NameTemplate.values(release: $0, medium: $0.medium(for: toc)))
-            } ?? "CDRip \(toc.musicBrainzDiscID)"
+            } ?? "Silverside \(toc.musicBrainzDiscID)"
         let wanted =
             options.folder ?? settings.ripsURL.appending(path: name, directoryHint: .isDirectory)
         let folder = try RipFolder.claim(wanted, toc: toc)

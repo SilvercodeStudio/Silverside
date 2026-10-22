@@ -1,7 +1,7 @@
 import CDRipKit
 import SwiftUI
 
-/// Every rip CDRip knows, from the rips folder and the library: a table to search and sort.
+/// Every rip Silverside knows, from the rips folder and the library: a table to search and sort.
 /// A row opens the rip's results.
 struct HistoryView: View {
     @Environment(AppModel.self) private var model

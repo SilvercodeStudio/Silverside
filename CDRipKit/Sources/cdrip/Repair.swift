@@ -7,14 +7,14 @@ struct Repair: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Check ripped WAV files against CUETools DB, and repair them with its repair data.",
         discussion: """
-            cdrip rip already repairs a disc that it can. Use repair to pool rips of the same disc from several \
+            silverside rip already repairs a disc that it can. Use repair to pool rips of the same disc from several \
             drives (one -i for each), or to try again with the disc in a drive, which can re-read the samples of \
             columns that cannot be repaired. Each rip's saved suspect samples (Track NN.suspects) join the pool. \
             With no disc in a drive, the TOC comes from the first folder's disc.json.
 
             Examples:
-              cdrip repair -d disk16 -i "<rip on this drive>" -i "<rip on another drive>"
-              cdrip repair -i "<rip folder>"
+              silverside repair -d disk16 -i "<rip on this drive>" -i "<rip on another drive>"
+              silverside repair -i "<rip folder>"
             """)
 
     @OptionGroup var deviceOptions: DeviceOptions

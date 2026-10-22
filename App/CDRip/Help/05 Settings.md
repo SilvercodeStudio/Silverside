@@ -1,6 +1,6 @@
 # Settings
 
-CDRip and the `cdrip` command line share one settings file, so a change in either applies to both.
+Silverside and the `silverside` command line share one settings file, so a change in either applies to both.
 
 ## General
 
@@ -11,11 +11,11 @@ CDRip and the `cdrip` command line share one settings file, so a change in eithe
 
 ## Ripping
 
-C2 error flags are a drive's own report of sectors it had trouble with. CDRip re-reads them first. The flags are a hint only; the reads decide.
+C2 error flags are a drive's own report of sectors it had trouble with. Silverside re-reads them first. The flags are a hint only; the reads decide.
 
 ## Encoding
 
-FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit rate mode, bit rate, and VBR quality. MP3 needs the `lame` program on the Mac, which CDRip runs as a separate program; it takes lame's modes and VBR quality.
+FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit rate mode, bit rate, and VBR quality. MP3 needs the `lame` program on the Mac, which Silverside runs as a separate program; it takes lame's modes and VBR quality.
 
 Every encoded file is decoded again and compared with the rip before it goes into the library.
 

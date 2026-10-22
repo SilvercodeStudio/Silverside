@@ -9,7 +9,7 @@ struct AppCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .newItem) {}
         CommandGroup(replacing: .help) {
-            Button("CDRip Help") { openWindow(id: "help") }
+            Button("Silverside Help") { openWindow(id: "help") }
                 .keyboardShortcut("?", modifiers: .command)
         }
         CommandGroup(after: .sidebar) {

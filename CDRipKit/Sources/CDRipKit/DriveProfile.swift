@@ -95,7 +95,7 @@ public struct DriveProfileStore: Sendable {
 
     /// ~/Library/Application Support/CDRip, where the app and the CLI keep their data.
     public static var defaultDirectory: URL {
-        URL.applicationSupportDirectory.appending(path: "CDRip", directoryHint: .isDirectory)
+        URL.applicationSupportDirectory.appending(path: "Silverside", directoryHint: .isDirectory)
     }
 
     /// Loads the store, or starts an empty one if the file does not exist.

@@ -110,7 +110,7 @@ struct SidebarView: View {
                 if model.recentRips.count > Self.recentCount || model.selection == .history {
                     Label("All Rips (\(model.recentRips.count))", systemImage: "clock")
                         .tag(SidebarItem.history)
-                        .help("Every rip CDRip knows, in a table you can search and sort")
+                        .help("Every rip Silverside knows, in a table you can search and sort")
                 }
             }
         }
@@ -209,7 +209,7 @@ struct NoDriveView: View {
         ContentUnavailableView {
             Label("No optical drive", systemImage: "opticaldiscdrive")
         } description: {
-            Text("Connect a CD, DVD, or Blu-ray drive. CDRip finds it as soon as macOS does.")
+            Text("Connect a CD, DVD, or Blu-ray drive. Silverside finds it as soon as macOS does.")
         }
     }
 }

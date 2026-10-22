@@ -165,7 +165,7 @@ final class RipRun {
     nonisolated static func message(for error: any Error) -> String {
         if case DiscRipError.unknownOffset(let drive) = error {
             return
-                "The read offset of \(drive) is not known. CDRip looks it up in AccurateRip's drive list when it is online, or set it in Settings › Drives."
+                "The read offset of \(drive) is not known. Silverside looks it up in AccurateRip's drive list when it is online, or set it in Settings › Drives."
         }
         return "\(error)"
     }

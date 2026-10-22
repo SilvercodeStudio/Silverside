@@ -3,7 +3,7 @@ import CDRipKit
 import Foundation
 
 /// The options for encoding, shared by `encode` and `rip --encode`. Each one that is not
-/// given comes from the settings file (see `cdrip config`).
+/// given comes from the settings file (see `silverside config`).
 struct EncodingOptions: ParsableArguments {
     @Option(help: "The format. MP3 needs the lame program.")
     var format: AudioFormat?

@@ -3,7 +3,7 @@ import CDRipKit
 import Foundation
 import Observation
 
-/// Choices for the next rip only, as `cdrip rip` has them: the folder, the pool, offline.
+/// Choices for the next rip only, as `silverside rip` has them: the folder, the pool, offline.
 struct RipChoices: Equatable {
     /// The rip's folder. Nil names it from the release, in the rips folder.
     var folder: URL?

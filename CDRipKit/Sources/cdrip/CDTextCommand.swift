@@ -10,13 +10,13 @@ struct CDTextCommand: ParsableCommand {
         discussion: """
             CD-Text can hold, for the disc and each track: a title, performer, songwriter, composer, arranger, \
             and message; and for the disc: a disc ID (the label's), a genre, and the UPC or EAN, with each \
-            track's ISRC. A disc can carry it in up to 8 languages; cdrip reads the first (block 0). Few discs \
+            track's ISRC. A disc can carry it in up to 8 languages; silverside reads the first (block 0). Few discs \
             have CD-Text at all.
 
             Examples:
-              cdrip cdtext -d disk14
-              cdrip cdtext -d disk14 --packs     the raw packs, as the drive gives them
-              cdrip cdtext -d disk14 --json
+              silverside cdtext -d disk14
+              silverside cdtext -d disk14 --packs     the raw packs, as the drive gives them
+              silverside cdtext -d disk14 --json
             """)
 
     @OptionGroup var deviceOptions: DeviceOptions

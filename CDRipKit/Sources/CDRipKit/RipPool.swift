@@ -86,7 +86,9 @@ public enum RipFolderError: Error, Equatable, CustomStringConvertible {
 /// A rip's folder, claimed for one disc, so that two rips never write into the same folder.
 /// The claim is a file that holds the disc's TOC, created atomically, and removed at the end.
 public enum RipFolder {
-    static let claimFile = ".cdrip-rip"
+    static let claimFile = ".silverside-rip"
+    /// The claim's name before the app was called Silverside, removed with the claim.
+    static let oldClaimFile = ".cdrip-rip"
 
     /// Claims `folder` for the disc. If another disc's rip has it, or it holds another disc's
     /// disc.json, claims "<folder> [<disc ID>]" instead. Returns the folder claimed.
@@ -99,7 +101,7 @@ public enum RipFolder {
     }
 
     public static func release(_ folder: URL) {
-        try? FileManager.default.removeItem(at: folder.appending(path: claimFile))
+        for name in [claimFile, oldClaimFile] { try? FileManager.default.removeItem(at: folder.appending(path: name)) }
     }
 
     private static func claimIfFree(_ folder: URL, toc: TOC) throws -> Bool {

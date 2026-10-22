@@ -24,7 +24,7 @@ public struct URLSessionTransport: HTTPTransport {
 ///   When a request fails, a copy from the cache is used even if it is old, so that
 ///   lookups work offline.
 public actor WebClient {
-    public static let userAgent = "CDRip/\(CDRipVersion.string) ( https://preston-landers.github.io/CDRip )"
+    public static let userAgent = "Silverside/\(CDRipVersion.string) ( https://preston-landers.github.io/Silverside )"
 
     /// How CDRip treats one host.
     public struct HostPolicy: Sendable {
@@ -60,7 +60,7 @@ public actor WebClient {
     public static let maximumAttempts = 4
 
     public static let shared = WebClient(
-        directory: URL.cachesDirectory.appending(path: "CDRip", directoryHint: .isDirectory))
+        directory: URL.cachesDirectory.appending(path: "Silverside", directoryHint: .isDirectory))
 
     let transport: any HTTPTransport
     let directory: URL

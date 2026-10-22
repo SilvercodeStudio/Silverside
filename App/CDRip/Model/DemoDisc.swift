@@ -43,7 +43,7 @@
                 disc.lookup = .found
             }
             let device = OpticalDrive(
-                vendor: "CDRip", product: "Simulated Drive", revision: "demo", interconnect: "None",
+                vendor: "Silverside", product: "Simulated Drive", revision: "demo", interconnect: "None",
                 location: "Internal")
             return DriveSlot(id: "demo", device: device, disc: disc, makeDrive: makeDrive)
         }

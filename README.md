@@ -1,4 +1,4 @@
-# CDRip.app
+# Silverside
 
 This is a CD ripping app for macOS intended to produce secure,
 verified rips of audio CDs similar to Exact Audio Copy (EAC) for
@@ -8,7 +8,8 @@ encode the tracks to the format of your choice such as FLAC, Apple
 Lossless, AAC, WAV, or (with a helper app) MP3, as well as tag
 the tracks with appropriate metadata (song and album titles.)
 
-Today it is a command-line tool, `cdrip`. The Mac app comes next.
+It is a Mac app, Silverside, and a command-line tool, `silverside`, which share
+one engine and one settings file.
 
 ## Requirements
 
@@ -49,7 +50,7 @@ to be installed. All other supported formats are handled natively.
   track 0.
 - **Names you can change.** The album's title, artist, and date, and each
   track's title and artist, can be edited in the app or with
-  `cdrip metadata --set`, and the files are named and tagged with the edits.
+  `silverside metadata --set`, and the files are named and tagged with the edits.
   The album's edits are kept for the release, so the other discs of a set get
   them. A disc that MusicBrainz does not know gets its names from CD-Text or
   from you, and its files carry no MusicBrainz IDs.
@@ -57,7 +58,7 @@ to be installed. All other supported formats are handled natively.
 ## Known limits
 
 - **Pre-emphasis.** A few early CDs were mastered with pre-emphasis, a treble
-  boost that the player undoes. CDRip marks such tracks in the rip report and
+  boost that the player undoes. Silverside marks such tracks in the rip report and
   the CUE sheet (`FLAGS PRE`), and warns when it encodes them, but it does not
   change the audio: the files sound too bright in a player that does not read
   the flag. De-emphasis is planned. This is not yet confirmed on a real
@@ -92,14 +93,14 @@ Tips:
   `--pool` and the first rip's folder: an accurate track from either rip is
   used, and the other versions join the repair.
 - **Keep the rip.** Each rip keeps its suspect samples next to its WAV files,
-  so `cdrip repair` can try again later, with more rips or more re-reads.
+  so `silverside repair` can try again later, with more rips or more re-reads.
 - **Some discs cannot be repaired.** When too much of a disc is damaged (a
   scratch across many tracks, or damage to the reflective layer), the tracks
   that verify are still marked as verified, and the others are not.
 
 ### Encoding to MP3
 
-Apple's audio frameworks cannot write MP3, so CDRip uses the free
+Apple's audio frameworks cannot write MP3, so Silverside uses the free
 [LAME](https://lame.sourceforge.io) encoder for it. Install it with
 [Homebrew](https://brew.sh):
 
@@ -107,7 +108,7 @@ Apple's audio frameworks cannot write MP3, so CDRip uses the free
 brew install lame
 ```
 
-CDRip finds `lame` on your `PATH` (or in `/opt/homebrew/bin` or
+Silverside finds `lame` on your `PATH` (or in `/opt/homebrew/bin` or
 `/usr/local/bin`), sends it the audio, and writes the tags itself. By default
 it uses LAME's best variable bit rate (`-V 0`, about 245 kbit/s); see
 `--mp3-mode`, `--mp3-quality`, `--mp3-bitrate`, and `--lame-option`.
@@ -119,24 +120,24 @@ it uses LAME's best variable bit rate (`-V 0`, about 245 kbit/s); see
 From a copy of this repository, with Xcode installed:
 
 ```sh
-make install                    # cdrip in /usr/local/bin (may need sudo)
+make install                    # silverside in /usr/local/bin (may need sudo)
 make install PREFIX=~/.local    # or in ~/.local/bin
 ```
 
-`make install` builds `cdrip` for Apple silicon and Intel, and installs shell
+`make install` builds `silverside` for Apple silicon and Intel, and installs shell
 completions for zsh, bash, and fish. `make uninstall` takes them away.
 
 ### Quick start
 
 ```sh
-cdrip drives                         # the drives, and the disc in each
-cdrip info -d disk14                 # the disc: tracks, ISRCs, disc IDs
-cdrip rip -d disk14                  # rip to WAV, verify, repair
-cdrip rip -d disk14 --encode         # rip, then encode into the library
-cdrip encode -i "<rip folder>"       # encode a rip later
+silverside drives                         # the drives, and the disc in each
+silverside info -d disk14                 # the disc: tracks, ISRCs, disc IDs
+silverside rip -d disk14                  # rip to WAV, verify, repair
+silverside rip -d disk14 --encode         # rip, then encode into the library
+silverside encode -i "<rip folder>"       # encode a rip later
 ```
 
-`cdrip help <command>` explains each command, with examples.
+`silverside help <command>` explains each command, with examples.
 
 ### Commands
 
@@ -154,7 +155,7 @@ cdrip encode -i "<rip folder>"       # encode a rip later
 
 ### What a rip makes
 
-A rip's folder is in `~/Music/CDRip Rips` (the `rips` setting), named from the
+A rip's folder is in `~/Music/Silverside Rips` (the `rips` setting), named from the
 release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
 
 - `Track 01.wav` and so on: one file for each track, from its index 01 to the
@@ -162,10 +163,10 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
 - `disc.json`: the rip report, with the TOC and the MusicBrainz release
 - `cover.jpg`, and `Artwork/` with `--artwork all`
 - `Track NN.suspects`, for tracks that are not verified: the other values that
-  reads gave for their suspect samples, for a later `cdrip repair`
+  reads gave for their suspect samples, for a later `silverside repair`
 - `Rip Report.md`, and `Track 00.wav` if the disc has hidden track one audio
 
-`cdrip encode` (or `rip --encode`) puts the files in the library as
+`silverside encode` (or `rip --encode`) puts the files in the library as
 `Artist/Album/18-03 Title.flac` (disc 18, track 3), with every disc of a
 release in one album folder, a full-size `cover.jpg`, and a CUE sheet for each
 disc. On a compilation, each track's artist comes first:
@@ -181,28 +182,28 @@ After `rip --encode`, a rip whose tracks are all verified and encoded is
 deleted, because the library has everything. `--keep-rip` (or the
 `keepRipAfterEncoding` setting) keeps the WAV files, for example as an
 archive. A rip with any track that is not verified is always kept, so that
-`cdrip repair` can try again.
+`silverside repair` can try again.
 
 ### Settings
 
 The settings are a JSON file that the CLI and the app share:
-`~/Library/Application Support/CDRip/settings.json` (`cdrip config path`). An
+`~/Library/Application Support/Silverside/settings.json` (`silverside config path`). An
 option on the command line overrides its setting.
 
 ```sh
-cdrip config                                    # every setting
-cdrip config set library /Volumes/storage/Music
-cdrip config set format alac
-cdrip config set plainPunctuation true          # Walkin’ becomes Walkin'
-cdrip config set encodeAfterRip true
-cdrip config set aac.mode cbr
-cdrip config unset aac.mode                     # back to the default
+silverside config                                    # every setting
+silverside config set library /Volumes/storage/Music
+silverside config set format alac
+silverside config set plainPunctuation true          # Walkin’ becomes Walkin'
+silverside config set encodeAfterRip true
+silverside config set aac.mode cbr
+silverside config unset aac.mode                     # back to the default
 ```
 
 | Setting | Default | |
 |---|---|---|
-| `library` | `~/Music/CDRip Library` | where encoded files go |
-| `rips` | `~/Music/CDRip Rips` | where rips go |
+| `library` | `~/Music/Silverside Library` | where encoded files go |
+| `rips` | `~/Music/Silverside Rips` | where rips go |
 | `format` | `flac` | `flac`, `alac`, `aac`, `aiff`, `wav`, or `mp3` |
 | `folderTemplate` | `{albumArtist}/{album}` | the album folder, in the library |
 | `trackTemplate` | `[{disc:2}-]{track} [{otherArtist} - ]{title}` | each file's name |
@@ -228,15 +229,15 @@ all its fields have values, so `[{disc:2}-]` is left out for a single disc, and
 
 ### Drives and offsets
 
-Every drive reads audio a few samples early or late: its read offset. CDRip
+Every drive reads audio a few samples early or late: its read offset. Silverside
 finds it in AccurateRip's list of drives, then confirms it from your own rips
-(two discs that agree). `cdrip drives -d diskN --set-offset N` sets it by hand.
-`cdrip drives -d diskN --measure-cache` measures how much the drive caches, so
+(two discs that agree). `silverside drives -d diskN --set-offset N` sets it by hand.
+`silverside drives -d diskN --measure-cache` measures how much the drive caches, so
 re-reads empty the cache with fewer reads.
 
 ### MusicBrainz
 
-CDRip looks up each disc in MusicBrainz once, waits between requests, and
+Silverside looks up each disc in MusicBrainz once, waits between requests, and
 keeps the answers in a cache, as MusicBrainz asks of programs that use it. When
 MusicBrainz does not know a disc's ID, `rip` finds the release by its track
 lengths, and prints a link to add the disc ID to MusicBrainz. When several
@@ -247,7 +248,7 @@ asks which one, and remembers the answer for the other discs.
 
 ```sh
 make test          # the engine's tests
-make cli ARGS=...  # build and run cdrip from the source
+make cli ARGS=...  # build and run silverside from the source
 make build         # the Mac app
 ```
 
@@ -255,10 +256,10 @@ Open `CDRip.xcworkspace` in Xcode for the app, the engine, and the CLI.
 
 ## TODO
 
-- **Discs that MusicBrainz does not know.** `cdrip metadata --manual` (or
+- **Discs that MusicBrainz does not know.** `silverside metadata --manual` (or
   the app) names them from CD-Text or by hand, and the files get no
   MusicBrainz IDs. Adding the release to MusicBrainz (the `rip` output links to
-  the page) and running `cdrip metadata -i <rip folder>` again is better for
+  the page) and running `silverside metadata -i <rip folder>` again is better for
   everyone.
 - **Multi-disc sets.** The discs of a release share the release choice and
   the album's edits, and the app says which discs of a set are ripped. Still

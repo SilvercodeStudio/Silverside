@@ -3,7 +3,7 @@ import CDRipDarwin
 import CDRipKit
 import SwiftUI
 
-/// The settings window. Every setting is in the file that `cdrip config` shares.
+/// The settings window. Every setting is in the file that `silverside config` shares.
 struct SettingsView: View {
     enum Tab: String { case general, drives, ripping, encoding, naming }
     /// Debug builds can start on a tab with `-settingsTab drives`.
@@ -385,7 +385,7 @@ struct EncodingSettings: View {
                         }
                     }
                 }
-                Text("CDRip runs lame as a separate program, which keeps its LGPL code out of the app.")
+                Text("Silverside runs lame as a separate program, which keeps its LGPL code out of the app.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Lossless") {

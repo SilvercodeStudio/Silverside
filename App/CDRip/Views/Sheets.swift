@@ -71,7 +71,7 @@ struct ReleasePickerSheet: View {
     }
 }
 
-/// The rip's log, as `cdrip rip` prints it.
+/// The rip's log, as `silverside rip` prints it.
 struct RipLogView: View {
     @Environment(\.dismiss) private var dismiss
     var run: RipRun?

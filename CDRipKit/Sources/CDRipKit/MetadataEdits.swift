@@ -183,11 +183,13 @@ public struct ReleaseEditsStore: Sendable {
 }
 
 extension MusicBrainzRelease {
-    /// The ID prefix of a release that CDRip made itself, for a disc MusicBrainz does not know.
-    public static let manualIDPrefix = "cdrip:"
+    /// The ID prefix of a release that Silverside made itself, for a disc MusicBrainz does not know.
+    public static let manualIDPrefix = "silverside:"
+    /// The prefix of such releases made before the app was called Silverside.
+    public static let oldManualIDPrefix = "cdrip:"
 
-    /// True for a release CDRip made: it has no MusicBrainz IDs, and no cover in the archive.
-    public var isManual: Bool { id.hasPrefix(Self.manualIDPrefix) }
+    /// True for a release Silverside made: it has no MusicBrainz IDs, and no cover in the archive.
+    public var isManual: Bool { id.hasPrefix(Self.manualIDPrefix) || id.hasPrefix(Self.oldManualIDPrefix) }
 
     /// A release for a disc that MusicBrainz does not know: one medium with the disc's
     /// tracks, named from CD-Text where the disc has it, else "Track N". Edits fill in the rest.

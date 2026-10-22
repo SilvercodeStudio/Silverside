@@ -79,14 +79,17 @@ struct DiscRipTests {
         let task = Task { [rip] in try await rip.run() }
         if byCancellingTheTask {
             // After the first track's file is there.
-            let folder = root.appending(path: "CDRip \(toc.musicBrainzDiscID)")
+            let folder = root.appending(path: "Silverside \(toc.musicBrainzDiscID)")
+            let deadline = ContinuousClock.now + .seconds(60)
             while !FileManager.default.fileExists(atPath: folder.appending(path: "Track 01.wav").path) {
+                // A wrong folder name fails the test instead of hanging it.
+                try #require(ContinuousClock.now < deadline, "Track 01.wav never appeared in \(folder.path)")
                 try await Task.sleep(for: .milliseconds(5))
             }
             task.cancel()
         }
         await #expect(throws: CancellationError.self) { try await task.value }
-        let folder = root.appending(path: "CDRip \(toc.musicBrainzDiscID)")
+        let folder = root.appending(path: "Silverside \(toc.musicBrainzDiscID)")
         #expect(FileManager.default.fileExists(atPath: folder.appending(path: "Track 01.wav").path))
         #expect(!FileManager.default.fileExists(atPath: folder.appending(path: "Track 02.wav").path))
         #expect(!FileManager.default.fileExists(atPath: folder.appending(path: RipFolder.claimFile).path))
@@ -220,7 +223,7 @@ struct DiscRipTests {
         let (result, events, samples, root) = try await rip()
         defer { try? FileManager.default.removeItem(at: root) }
         let toc = try TOC(ctdbTOCString: result.report.toc)
-        #expect(result.folder.lastPathComponent == "CDRip \(toc.musicBrainzDiscID)")
+        #expect(result.folder.lastPathComponent == "Silverside \(toc.musicBrainzDiscID)")
         #expect(result.report.tracks.map(\.number) == [1, 2])
         #expect(result.report.tracks[0].isrc == "USRC17607839")
         // The offset-corrected audio, as the WAV files hold it.

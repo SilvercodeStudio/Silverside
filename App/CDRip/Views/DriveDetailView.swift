@@ -555,7 +555,7 @@ enum CoverDrop {
     /// which the Finder copies where it is dropped.
     static func provider(for data: Data?, name: String) -> NSItemProvider? {
         guard let data, let fileExtension = CoverImage(data: data).fileExtension else { return nil }
-        let folder = URL.temporaryDirectory.appending(path: "CDRip Covers", directoryHint: .isDirectory)
+        let folder = URL.temporaryDirectory.appending(path: "Silverside Covers", directoryHint: .isDirectory)
         let file = folder.appending(path: "\(name).\(fileExtension)")
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

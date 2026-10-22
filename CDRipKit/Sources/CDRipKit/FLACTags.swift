@@ -7,7 +7,7 @@ import Foundation
 /// VORBIS_COMMENT and PICTURE, adds padding so that tags can change later without a new
 /// file, and copies the audio frames unchanged.
 public enum FLACTags {
-    public static let vendor = "CDRip \(CDRipVersion.string)"
+    public static let vendor = "Silverside \(CDRipVersion.string)"
 
     /// Padding after the tags, for later edits.
     static let paddingBytes = 8192
@@ -160,7 +160,7 @@ public enum FLACError: Error, Equatable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .malformed: "The file is not a FLAC file that CDRip can read."
+        case .malformed: "The file is not a FLAC file that Silverside can read."
         case .blockTooLarge: "A tag is larger than a FLAC metadata block can hold (16 MB)."
         }
     }

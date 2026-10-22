@@ -2,13 +2,13 @@
 
 ## Metadata
 
-When a disc appears, CDRip reads its table of contents and asks MusicBrainz which releases have it. The chip under the album name says how sure the match is:
+When a disc appears, Silverside reads its table of contents and asks MusicBrainz which releases have it. The chip under the album name says how sure the match is:
 
 | Chip | Meaning |
 |---|---|
 | Disc ID match | MusicBrainz knows this exact disc. |
 | Nearly the same TOC | MusicBrainz does not know the disc ID, but these releases have almost the same track lengths. Check the release, and consider adding the disc ID to MusicBrainz (the link is in the release picker). |
-| Several releases match | More than one release has the disc, and CDRip cannot tell which. Choose one. The choice is kept for the other discs of the set. |
+| Several releases match | More than one release has the disc, and Silverside cannot tell which. Choose one. The choice is kept for the other discs of the set. |
 | Not in MusicBrainz | No release has the disc. The rip works, but the files cannot be tagged yet. |
 
 Other Releases shows every release that matches. A disc with CD-Text gets a switch between the MusicBrainz names and the names on the disc. The rip's tags always come from MusicBrainz.
@@ -34,7 +34,7 @@ The Secure or Fast choice is kept between launches.
 
 The status column shows each track's progress: the read, later reads, and rounds of re-reads. The status bar shows the whole rip, the drive's speed, and the time left. Under it, a graph shows the whole disc by position, each track to scale: a bar marks sectors with trouble, and its height is how many of the sectors at that spot are marked. Orange is a sector the drive flagged or that reads disagreed on and then settled, blue a sector that never agreed but CTDB fixed, red a sector that never agreed or could not be read. The line is the read under way. Hold the pointer over a track for its numbers.
 
-Behind another app, the Dock icon shows a progress bar, and when the rip is done, the icon bounces and a notification says how it went (macOS asks once whether CDRip may send notifications).
+Behind another app, the Dock icon shows a progress bar, and when the rip is done, the icon bounces and a notification says how it went (macOS asks once whether Silverside may send notifications).
 
 Stop ends the rip after the read under way. The tracks ripped so far stay in the folder, and a later rip of the same disc can use them.
 

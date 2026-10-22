@@ -9,7 +9,7 @@ struct Info: AsyncParsableCommand {
         discussion: """
             Shows each track's start, length, pregap, and ISRC, the disc's MCN (barcode), its MusicBrainz, \
             freedb, AccurateRip, and CTDB IDs, and whether AccurateRip and CTDB have it. It does not ask MusicBrainz \
-            (see cdrip metadata).
+            (see silverside metadata).
             """)
 
     @OptionGroup var deviceOptions: DeviceOptions

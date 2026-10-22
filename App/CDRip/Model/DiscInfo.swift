@@ -54,7 +54,7 @@ struct DiscInfo {
     var userCover: CoverImage?
     /// The cover to show and to save with the rip.
     var shownCover: Data? { userCover?.data ?? cover }
-    /// A release CDRip made, when MusicBrainz has none: from CD-Text, or "Unknown".
+    /// A release Silverside made, when MusicBrainz has none: from CD-Text, or "Unknown".
     var manual: MusicBrainzRelease?
     /// The user's changes to the names, kept with the rip and, for the album, for the release.
     var edits = MetadataEdits()
@@ -72,7 +72,7 @@ struct DiscInfo {
         return !cdText.titles.isEmpty || !cdText.performers.isEmpty
     }
 
-    /// The release as MusicBrainz or CDRip made it, before the edits.
+    /// The release as MusicBrainz or Silverside made it, before the edits.
     var baseRelease: MusicBrainzRelease? { release ?? manual }
 
     /// The release with the edits applied: what the rip names and tags the files with.

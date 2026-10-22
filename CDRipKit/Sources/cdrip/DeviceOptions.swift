@@ -3,7 +3,7 @@ import CDRipDarwin
 
 /// The `--device` option. Without it, commands use the only drive that has a CD.
 struct DeviceOptions: ParsableArguments {
-    @Option(name: .shortAndLong, help: "The disc's BSD name, such as disk14 (see `cdrip drives`).")
+    @Option(name: .shortAndLong, help: "The disc's BSD name, such as disk14 (see `silverside drives`).")
     var device: String?
 
     func bsdName() throws -> String {

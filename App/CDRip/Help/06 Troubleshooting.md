@@ -2,7 +2,7 @@
 
 ## Apple Music opens when I insert a disc
 
-macOS opens Music for every audio CD, and Music has no "do nothing" setting. CDRip reads the disc while Music shows it; close Music or leave it. Do not let Music import the disc at the same time as a rip: two readers slow each other down. You can set "When CD inserted: Show" as the default action in AM Settings, to avoid automatically playing or ripping the CD through Apple Music.
+macOS opens Music for every audio CD, and Music has no "do nothing" setting. Silverside reads the disc while Music shows it; close Music or leave it. Do not let Music import the disc at the same time as a rip: two readers slow each other down. You can set "When CD inserted: Show" as the default action in AM Settings, to avoid automatically playing or ripping the CD through Apple Music.
 
 ## The disc could not be read
 
@@ -22,4 +22,4 @@ Some drives retry a bad sector for a long time. Stop ends the rip after the read
 
 ## Where are the settings and the profiles
 
-`~/Library/Application Support/CDRip/` holds `settings.json`, `DriveProfiles.json`, and the releases you chose. `~/Library/Caches/CDRip/` keeps the answers from MusicBrainz, AccurateRip, and CTDB, so a disc you rip again sends no new requests.
+`~/Library/Application Support/Silverside/` holds `settings.json`, `DriveProfiles.json`, and the releases you chose. `~/Library/Caches/Silverside/` keeps the answers from MusicBrainz, AccurateRip, and CTDB, so a disc you rip again sends no new requests.

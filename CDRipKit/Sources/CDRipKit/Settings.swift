@@ -16,11 +16,11 @@ public enum ArtworkChoice: String, Codable, CaseIterable, Sendable {
 /// line override the file.
 public struct Settings: Codable, Equatable, Sendable {
     /// The music library, for encoded files.
-    public var library = "~/Music/CDRip Library"
+    public var library = "~/Music/Silverside Library"
     /// Where rips go when `cdrip rip -o` is not given: a folder of their own, out of the
     /// library (music apps would import the WAV files) and out of temporary folders (a rip
     /// is kept for repairs and later encoding).
-    public var rips = "~/Music/CDRip Rips"
+    public var rips = "~/Music/Silverside Rips"
     public var format = AudioFormat.flac
     /// The album folder in the library (see `NameTemplate`).
     public var folderTemplate = NameTemplate.libraryFolder.pattern
@@ -51,9 +51,9 @@ public struct Settings: Codable, Equatable, Sendable {
 
     public init() {}
 
-    /// The settings file. The environment variable `CDRIP_SETTINGS` can name another one.
+    /// The settings file. The environment variable `SILVERSIDE_SETTINGS` can name another one.
     public static var defaultURL: URL {
-        if let path = ProcessInfo.processInfo.environment["CDRIP_SETTINGS"], !path.isEmpty {
+        if let path = ProcessInfo.processInfo.environment["SILVERSIDE_SETTINGS"], !path.isEmpty {
             return URL(filePath: path)
         }
         return DriveProfileStore.defaultDirectory.appending(path: "settings.json")
@@ -192,7 +192,7 @@ public enum SettingsError: Error, Equatable, CustomStringConvertible {
     public var description: String {
         switch self {
         case .unreadable(let url, let reason): "Cannot read the settings in \(url.path): \(reason)"
-        case .unknownKey(let key): "There is no setting \"\(key)\". See cdrip config show."
+        case .unknownKey(let key): "There is no setting \"\(key)\". See silverside config show."
         case .wrongValue(let key): "That is not a valid value for \"\(key)\"."
         }
     }

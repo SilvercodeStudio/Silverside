@@ -7,7 +7,7 @@ let package = Package(
     products: [
         .library(name: "CDRipKit", targets: ["CDRipKit"]),
         .library(name: "CDRipDarwin", targets: ["CDRipDarwin"]),
-        .executable(name: "cdrip", targets: ["cdrip"]),
+        .executable(name: "silverside", targets: ["cdrip"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2")

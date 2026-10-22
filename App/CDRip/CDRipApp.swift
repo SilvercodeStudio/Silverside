@@ -5,7 +5,7 @@ import SwiftUI
     @State private var model = AppModel()
 
     var body: some Scene {
-        WindowGroup("CDRip") {
+        WindowGroup("Silverside") {
             MainWindow()
                 .environment(model)
         }
@@ -17,7 +17,7 @@ import SwiftUI
                 .environment(model)
         }
 
-        Window("CDRip Help", id: "help") {
+        Window("Silverside Help", id: "help") {
             HelpView()
         }
         .defaultSize(width: 900, height: 620)

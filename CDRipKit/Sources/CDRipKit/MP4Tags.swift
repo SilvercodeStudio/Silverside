@@ -283,7 +283,7 @@ public enum MP4Error: Error, Equatable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .malformed: "The file is not an MP4 file that CDRip can read."
+        case .malformed: "The file is not an MP4 file that Silverside can read."
         case .tooLarge: "The file is too large for its 32-bit chunk offsets."
         }
     }

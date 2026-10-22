@@ -4,7 +4,7 @@ import CDRipKit
 import Foundation
 import Observation
 
-/// A check of a drive with the disc in it (`cdrip drives --report`), or a measurement of
+/// A check of a drive with the disc in it (`silverside drives --report`), or a measurement of
 /// its cache (`--measure-cache`), from Settings › Drives.
 @Observable
 final class DriveTestRun: Identifiable {
@@ -109,7 +109,7 @@ final class DriveTestRun: Identifiable {
     func saveReport() {
         guard let report else { return }
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = NameTemplate.safeComponent("CDRip Drive Report \(slot.name)") + ".json"
+        panel.nameFieldStringValue = NameTemplate.safeComponent("Silverside Drive Report \(slot.name)") + ".json"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {

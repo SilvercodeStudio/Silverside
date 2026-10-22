@@ -1,7 +1,7 @@
 import CDRipKit
 import SwiftUI
 
-/// The Rip button under the track table: the design's "rip" picture (`App/Icon/CDRip.rip_btn.svg`),
+/// The Rip button under the track table: the design's "rip" picture (`App/Icon/Silverside.rip_btn.svg`),
 /// drawn here so that it can move. Before a rip it starts one. During the rip the disc turns,
 /// the bars on the beam bounce, and a line fills around the frame; a click asks to stop.
 /// After it, a badge shows the verdict, and a click opens the rip's results.
@@ -22,7 +22,7 @@ struct RipButton: View {
         .confirmationDialog("Stop the rip?", isPresented: $stopAsked) {
             Button("Stop", role: .destructive) { model.stopRip(slot) }
         } message: {
-            Text("CDRip stops after the read under way. The tracks ripped so far stay.")
+            Text("Silverside stops after the read under way. The tracks ripped so far stay.")
         }
     }
 
@@ -205,7 +205,7 @@ nonisolated private struct FrameOutline: InsettableShape {
     }
 }
 
-/// Draws `CDRip.rip_btn.svg` from the design's CSS numbers: a 256-unit square with a metal
+/// Draws `Silverside.rip_btn.svg` from the design's CSS numbers: a 256-unit square with a metal
 /// frame around a 238-unit tile. `time` (nil when still) turns the disc, bounces the bars,
 /// and pulses the beam.
 struct RipArt {

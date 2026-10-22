@@ -3,7 +3,7 @@ import CDRipKit
 import Foundation
 import Observation
 
-/// A repair of an earlier rip, as `cdrip repair` does it: the rip pools with the other
+/// A repair of an earlier rip, as `silverside repair` does it: the rip pools with the other
 /// rips of the disc, and the disc is read again when it is in a drive. The engine's
 /// events become a log, and the outcome a headline.
 @Observable

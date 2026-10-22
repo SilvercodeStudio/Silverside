@@ -257,7 +257,7 @@ public struct DiscRepairer {
         let usable = entries.filter { $0.syndromeCount <= Self.maximumSyndromes }
         for entry in entries where entry.syndromeCount > Self.maximumSyndromes {
             log(
-                "Leaving out entry \(entry.id): \(entry.syndromeCount) syndromes for each column is more than CDRip uses."
+                "Leaving out entry \(entry.id): \(entry.syndromeCount) syndromes for each column is more than Silverside uses."
             )
         }
         let count = usable.map(\.syndromeCount).max() ?? 0

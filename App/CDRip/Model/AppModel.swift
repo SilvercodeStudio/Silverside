@@ -21,7 +21,7 @@ struct AppAlert: Identifiable {
 /// The app's state: the settings, the drives and their discs, and the earlier rips.
 @Observable
 final class AppModel {
-    /// The settings file that `cdrip config` shares. A change saves at once.
+    /// The settings file that `silverside config` shares. A change saves at once.
     var settings: Settings {
         didSet {
             guard settings != oldValue else { return }
@@ -167,7 +167,7 @@ final class AppModel {
         if slot.isDemo {
             options.offline = true
             options.readOffset = 6
-            options.folder = URL.temporaryDirectory.appending(path: "CDRip Demo \(UUID().uuidString)")
+            options.folder = URL.temporaryDirectory.appending(path: "Silverside Demo \(UUID().uuidString)")
         }
         let run = RipRun(disc: disc)
         slot.rip = run

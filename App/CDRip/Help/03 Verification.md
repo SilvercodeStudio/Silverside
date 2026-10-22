@@ -1,20 +1,20 @@
 # Verification
 
-A rip is only as good as the check that proves it. CDRip uses two databases, and both are independent of the drive.
+A rip is only as good as the check that proves it. Silverside uses two databases, and both are independent of the drive.
 
 ## AccurateRip
 
 AccurateRip holds checksums of each track from many people's rips of the same disc. A track that matches is **accurate**: the data is bit for bit what other drives read. The number after it (conf 52) is how many rips agree. A track can also match **another pressing**: the same audio at a different alignment, which also proves it free of errors.
 
-A disc that is not in AccurateRip cannot be proved this way. Then CDRip reads each track twice and reports whether the reads agree.
+A disc that is not in AccurateRip cannot be proved this way. Then Silverside reads each track twice and reports whether the reads agree.
 
 ## CUETools database (CTDB)
 
-CTDB checks the whole disc at once, and it holds repair data: when a few thousand samples are wrong, CTDB can correct them. CDRip tries a repair when AccurateRip says a track is wrong, then checks the repaired track against AccurateRip again. **Verified** means the disc matches an entry; **repaired** means it matches after the repair.
+CTDB checks the whole disc at once, and it holds repair data: when a few thousand samples are wrong, CTDB can correct them. Silverside tries a repair when AccurateRip says a track is wrong, then checks the repaired track against AccurateRip again. **Verified** means the disc matches an entry; **repaired** means it matches after the repair.
 
 ## Read offsets
 
-Every drive reads a few samples early or late, by a fixed amount. CDRip corrects it, so rips from different drives come out the same, and AccurateRip checksums match. The offset comes from AccurateRip's list of drives, or from rips that confirm it. It is shown in Settings › Drives, where you can also set it by hand.
+Every drive reads a few samples early or late, by a fixed amount. Silverside corrects it, so rips from different drives come out the same, and AccurateRip checksums match. The offset comes from AccurateRip's list of drives, or from rips that confirm it. It is shown in Settings › Drives, where you can also set it by hand.
 
 ## What the statuses mean
 
@@ -37,7 +37,7 @@ The result banner says what is most likely to help next. In short:
 
 ## Repair
 
-Repair, in the toolbar of an earlier rip and in the Disc menu, checks the rip against CTDB again and repairs it with CTDB's data, as `cdrip repair` does. Every other rip of the same disc in the rips folder joins the pool, and when the disc is in a drive that is free, the tracks that AccurateRip does not know are read again, so that the reads can disagree where the disc is damaged.
+Repair, in the toolbar of an earlier rip and in the Disc menu, checks the rip against CTDB again and repairs it with CTDB's data, as `silverside repair` does. Every other rip of the same disc in the rips folder joins the pool, and when the disc is in a drive that is free, the tracks that AccurateRip does not know are read again, so that the reads can disagree where the disc is damaged.
 
 A rip that CTDB verifies as it is gets its report brought up to date: a rip made offline becomes a verified rip. A rip that the repair changes stays as it was, and the repaired rip goes in a folder of its own next to it ("… repaired"), with its own report, so it can be encoded like any rip.
 

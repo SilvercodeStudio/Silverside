@@ -78,7 +78,7 @@ public enum MP3Error: Error, Equatable, CustomStringConvertible {
         switch self {
         case .lameNotFound: "MP3 needs the lame program (for example: brew install lame)."
         case .lameFailed(let status, let message): "lame failed with status \(status): \(message)"
-        case .malformedID3Tag(let url): "\(url.path) has an ID3 tag that CDRip cannot read."
+        case .malformedID3Tag(let url): "\(url.path) has an ID3 tag that Silverside cannot read."
         }
     }
 }

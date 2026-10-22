@@ -7,16 +7,16 @@ struct Metadata: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Look up a disc in MusicBrainz, and show or keep its release and cover art.",
         discussion: """
-            Shows the releases that have the disc, the most likely first, and the tracks of the one CDRip would \
+            Shows the releases that have the disc, the most likely first, and the tracks of the one Silverside would \
             use. With -i, it keeps that release in the rip's disc.json, so the rip can be encoded and tagged, and \
             saves the cover. A choice made with --release is kept for the other discs of the release.
 
             Examples:
-              cdrip metadata -d disk14
-              cdrip metadata -i "<rip folder>"
-              cdrip metadata -i "<rip folder>" --release aa0d7d7e-1d78-4f78-ba03-7a32c200f660 --artwork all
-              cdrip metadata -i "<rip folder>" --set "album=Cornell 5/8/77" --set "track3.title=El Paso"
-              cdrip metadata -i "<rip folder>" --manual --set "albumArtist=Phish" --set "album=Live in Vegas"
+              silverside metadata -d disk14
+              silverside metadata -i "<rip folder>"
+              silverside metadata -i "<rip folder>" --release aa0d7d7e-1d78-4f78-ba03-7a32c200f660 --artwork all
+              silverside metadata -i "<rip folder>" --set "album=Cornell 5/8/77" --set "track3.title=El Paso"
+              silverside metadata -i "<rip folder>" --manual --set "albumArtist=Phish" --set "album=Live in Vegas"
             """)
 
     @OptionGroup var deviceOptions: DeviceOptions
@@ -27,7 +27,8 @@ struct Metadata: AsyncParsableCommand {
     var input: String?
 
     @Option(
-        help: "The MusicBrainz ID of the release to use. CDRip keeps the choice for the other discs of the release.")
+        help:
+            "The MusicBrainz ID of the release to use. Silverside keeps the choice for the other discs of the release.")
     var release: String?
 
     @Option(help: "An image file (JPEG or PNG) to use as the cover, in place of the Cover Art Archive's.")

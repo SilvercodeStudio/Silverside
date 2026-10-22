@@ -14,10 +14,10 @@ struct Rip: AsyncParsableCommand {
             In a terminal, a status line shows each read, with C2 errors and sectors that cannot be read.
 
             Examples:
-              cdrip rip -d disk14
-              cdrip rip -d disk14 --encode --format flac
-              cdrip rip -d disk15 --release 513cbe54-309f-42f6-a883-2b93b3aa776f
-              cdrip rip -d disk16 --pool "<rip of the same disc from another drive>"
+              silverside rip -d disk14
+              silverside rip -d disk14 --encode --format flac
+              silverside rip -d disk15 --release 513cbe54-309f-42f6-a883-2b93b3aa776f
+              silverside rip -d disk16 --pool "<rip of the same disc from another drive>"
             """)
 
     @OptionGroup var deviceOptions: DeviceOptions
@@ -32,18 +32,19 @@ struct Rip: AsyncParsableCommand {
         name: .shortAndLong,
         help: """
             The folder for the WAV files. Default: named from the MusicBrainz release, such as \
-            "Grateful Dead - Cornell 5-8-77 (Disc 1)", or "CDRip <disc ID>" if there is none.
+            "Grateful Dead - Cornell 5-8-77 (Disc 1)", or "Silverside <disc ID>" if there is none.
             """)
     var output: String?
 
     @Option(
-        help: "The MusicBrainz ID of the release to use. CDRip keeps the choice for the other discs of the release.")
+        help:
+            "The MusicBrainz ID of the release to use. Silverside keeps the choice for the other discs of the release.")
     var release: String?
 
     @Option(help: "The artwork to save from the Cover Art Archive: front (cover.jpg), all (also Artwork/), or none.")
     var artwork: ArtworkChoice?
 
-    @Flag(inversion: .prefixedNo, help: "After the rip, encode the disc into the library (see cdrip encode).")
+    @Flag(inversion: .prefixedNo, help: "After the rip, encode the disc into the library (see silverside encode).")
     var encode: Bool?
 
     @Flag(
@@ -147,7 +148,7 @@ struct Rip: AsyncParsableCommand {
     }
 }
 
-/// Prints a rip's events, as `cdrip rip` shows them. The events come one at a time, from
+/// Prints a rip's events, as `silverside rip` shows them. The events come one at a time, from
 /// the reading thread, so the state here is used by one thread at a time.
 private final class RipPrinter: @unchecked Sendable {
     let progress = ProgressLine()
@@ -190,7 +191,7 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print(
                 "MusicBrainz: " + chosen.summary(for: toc)
                     + (lookup.isExact ? "" : " (a fuzzy match of the TOC; MusicBrainz does not know this disc ID)")
-                    + (lookup.otherCount > 0 ? "; \(lookup.otherCount) other releases (see cdrip metadata)" : ""))
+                    + (lookup.otherCount > 0 ? "; \(lookup.otherCount) other releases (see silverside metadata)" : ""))
             if !lookup.isExact {
                 Swift.print("  To add the disc ID: \(MusicBrainzRelease.submissionURL(for: toc).absoluteString)")
             }

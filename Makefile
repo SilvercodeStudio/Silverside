@@ -1,4 +1,4 @@
-# Shortcuts for building, running and testing CDRip.
+# Shortcuts for building, running and testing Silverside.
 #
 #   make test
 #   make run
@@ -29,11 +29,11 @@ SWIFT_SOURCES = $(PACKAGE)/Package.swift $(PACKAGE)/Sources $(PACKAGE)/Tests App
 
 .PHONY: help build run app cli test hwtest core format lint release install install-cli-local install-app uninstall
 
-# Where make install puts cdrip and its shell completions. /usr/local may need sudo; PREFIX=~/.local does not.
+# Where make install puts silverside and its shell completions. /usr/local may need sudo; PREFIX=~/.local does not.
 PREFIX ?= /usr/local
 # A ~ that the shell did not expand (zsh leaves the one in PREFIX=~/.local) means the home folder.
 override PREFIX := $(patsubst ~%,$(HOME)%,$(PREFIX))
-RELEASE_BIN = $(PACKAGE)/.build/out/Products/Release/cdrip
+RELEASE_BIN = $(PACKAGE)/.build/out/Products/Release/silverside
 # Where make install-app puts the app.
 APP_DIR ?= $(HOME)/Applications
 # Registers a copied app with Launch Services, so that the Dock and Finder show its new icon.
@@ -43,14 +43,14 @@ help:
 	@echo "make build          build the app ($(CONFIG)) with xcodebuild"
 	@echo "make run            build, then start the app in the foreground; ARGS='...' passes launch arguments"
 	@echo "make app            print the path of the built app"
-	@echo "make cli            build and run the cdrip CLI; ARGS='info -d disk14' passes arguments"
+	@echo "make cli            build and run the silverside CLI; ARGS='info -d disk14' passes arguments"
 	@echo "make test           run the engine tests (swift test)"
 	@echo "make hwtest         run the tests that need a drive and an AccurateRip disc (DEVICE=diskN, OFFSET=n to check the drive's offset)"
 	@echo "make core           build the engine package only (swift build)"
 	@echo "make format         reformat the Swift sources with swift-format (settings in .swift-format)"
 	@echo "make lint           report formatting problems without changing files"
-	@echo "make release        build cdrip for release, for Apple silicon and Intel"
-	@echo "make install        install cdrip and its zsh, bash, and fish completions under PREFIX ($(PREFIX))"
+	@echo "make release        build silverside for release, for Apple silicon and Intel"
+	@echo "make install        install silverside and its zsh, bash, and fish completions under PREFIX ($(PREFIX))"
 	@echo "make install-cli-local  the same, under ~/.local (no sudo)"
 	@echo "make install-app    build the app for release (Apple silicon and Intel) and copy it to APP_DIR ($(APP_DIR))"
 	@echo "make uninstall      remove what make install put under PREFIX"
@@ -68,8 +68,8 @@ app:
 	@$(XCODEBUILD) -showBuildSettings 2>/dev/null | awk -F' = ' '/^ *BUILT_PRODUCTS_DIR =/ {dir=$$2} /^ *FULL_PRODUCT_NAME =/ {name=$$2} END {print dir "/" name}'
 
 cli:
-	@swift build --package-path $(PACKAGE) --product cdrip -q
-	@"$$(swift build --package-path $(PACKAGE) --show-bin-path)/cdrip" $(ARGS)
+	@swift build --package-path $(PACKAGE) --product silverside -q
+	@"$$(swift build --package-path $(PACKAGE) --show-bin-path)/silverside" $(ARGS)
 
 test:
 	swift test --package-path $(PACKAGE)
@@ -89,16 +89,16 @@ lint:
 	xcrun swift-format lint --strict --recursive $(SWIFT_SOURCES)
 
 release:
-	swift build --package-path $(PACKAGE) -c release --arch arm64 --arch x86_64 --product cdrip
+	swift build --package-path $(PACKAGE) -c release --arch arm64 --arch x86_64 --product silverside
 
 install: release
 	install -d "$(PREFIX)/bin" "$(PREFIX)/share/zsh/site-functions" "$(PREFIX)/etc/bash_completion.d" \
 		"$(PREFIX)/share/fish/vendor_completions.d"
-	install -m 755 "$(RELEASE_BIN)" "$(PREFIX)/bin/cdrip"
-	"$(RELEASE_BIN)" --generate-completion-script zsh > "$(PREFIX)/share/zsh/site-functions/_cdrip"
-	"$(RELEASE_BIN)" --generate-completion-script bash > "$(PREFIX)/etc/bash_completion.d/cdrip"
-	"$(RELEASE_BIN)" --generate-completion-script fish > "$(PREFIX)/share/fish/vendor_completions.d/cdrip.fish"
-	@echo "Installed $(PREFIX)/bin/cdrip $$("$(PREFIX)/bin/cdrip" --version), and its shell completions."
+	install -m 755 "$(RELEASE_BIN)" "$(PREFIX)/bin/silverside"
+	"$(RELEASE_BIN)" --generate-completion-script zsh > "$(PREFIX)/share/zsh/site-functions/_silverside"
+	"$(RELEASE_BIN)" --generate-completion-script bash > "$(PREFIX)/etc/bash_completion.d/silverside"
+	"$(RELEASE_BIN)" --generate-completion-script fish > "$(PREFIX)/share/fish/vendor_completions.d/silverside.fish"
+	@echo "Installed $(PREFIX)/bin/silverside $$("$(PREFIX)/bin/silverside" --version), and its shell completions."
 
 install-cli-local:
 	@$(MAKE) install PREFIX=$(HOME)/.local
@@ -115,5 +115,5 @@ install-app:
 	echo "Installed $(APP_DIR)/$$(basename "$$app")"
 
 uninstall:
-	rm -f "$(PREFIX)/bin/cdrip" "$(PREFIX)/share/zsh/site-functions/_cdrip" "$(PREFIX)/etc/bash_completion.d/cdrip" \
-		"$(PREFIX)/share/fish/vendor_completions.d/cdrip.fish"
+	rm -f "$(PREFIX)/bin/silverside" "$(PREFIX)/share/zsh/site-functions/_silverside" "$(PREFIX)/etc/bash_completion.d/silverside" \
+		"$(PREFIX)/share/fish/vendor_completions.d/silverside.fish"

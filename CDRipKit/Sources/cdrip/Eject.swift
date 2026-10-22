@@ -8,8 +8,8 @@ struct Eject: AsyncParsableCommand {
             Unmounts the disc (macOS mounts each audio CD) and ejects it, as the Finder does.
 
             Examples:
-              cdrip eject -d disk14
-              cdrip eject --all
+              silverside eject -d disk14
+              silverside eject --all
             """)
 
     @OptionGroup var deviceOptions: DeviceOptions

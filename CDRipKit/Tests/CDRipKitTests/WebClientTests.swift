@@ -149,7 +149,7 @@ struct WebClientTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         _ = try await client.data(from: Self.url)
         let agent = await transport.requests.first?.value(forHTTPHeaderField: "User-Agent")
-        #expect(agent == "CDRip/\(CDRipVersion.string) ( https://preston-landers.github.io/CDRip )")
+        #expect(agent == "Silverside/\(CDRipVersion.string) ( https://preston-landers.github.io/Silverside )")
     }
 
     @Test func waitsTwoSecondsBetweenMusicBrainzRequests() {

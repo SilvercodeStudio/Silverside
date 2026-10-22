@@ -6,16 +6,16 @@ struct Encode: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Encode ripped discs into a music library, named and tagged from MusicBrainz.",
         discussion: """
-            Each input is a rip's folder, from cdrip rip or the archive, with a disc.json that has the release \
-            (cdrip metadata -i adds it). The files are checked after encoding: a lossless file must decode to the \
+            Each input is a rip's folder, from silverside rip or the archive, with a disc.json that has the release \
+            (silverside metadata -i adds it). The files are checked after encoding: a lossless file must decode to the \
             ripped audio. Each disc of a release goes into the same album folder, as "18-03 Title.flac". Options \
-            that are not given come from the settings (cdrip config).
+            that are not given come from the settings (silverside config).
 
             Examples:
-              cdrip encode -i "Grateful Dead - Cornell 5-8-77 (Disc 1)" -i "... (Disc 2)" -i "... (Disc 3)"
-              cdrip encode -i <folder> --format alac --library /Volumes/storage/Music
-              cdrip encode -i <folder> --format mp3 --mp3-mode cbr --mp3-bitrate 320
-              cdrip encode -i <folder> --format aac --aac-mode cbr --aac-bitrate 192
+              silverside encode -i "Grateful Dead - Cornell 5-8-77 (Disc 1)" -i "... (Disc 2)" -i "... (Disc 3)"
+              silverside encode -i <folder> --format alac --library /Volumes/storage/Music
+              silverside encode -i <folder> --format mp3 --mp3-mode cbr --mp3-bitrate 320
+              silverside encode -i <folder> --format aac --aac-mode cbr --aac-bitrate 192
             """)
 
     @Option(name: .shortAndLong, help: "A rip's folder. Give it once for each disc.")

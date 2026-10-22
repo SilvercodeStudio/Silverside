@@ -4,18 +4,18 @@ import Foundation
 
 struct Config: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Show or change the settings that cdrip and the app share.",
+        abstract: "Show or change the settings that silverside and the app share.",
         discussion: """
-            The settings are a JSON file (see cdrip config path). An option on the command line overrides its \
+            The settings are a JSON file (see silverside config path). An option on the command line overrides its \
             setting. Keys with a dot are in a group, such as aac.bitRate. Values are JSON (192, true, \
             ["-q", "0"]) or plain text.
 
             Examples:
-              cdrip config set library /Volumes/storage/Music
-              cdrip config set format alac
-              cdrip config set plainPunctuation true
-              cdrip config set aac.mode cbr
-              cdrip config unset aac.mode
+              silverside config set library /Volumes/storage/Music
+              silverside config set format alac
+              silverside config set plainPunctuation true
+              silverside config set aac.mode cbr
+              silverside config unset aac.mode
             """,
         subcommands: [Show.self, Path.self, Get.self, Set.self, Unset.self, Reset.self],
         defaultSubcommand: Show.self)

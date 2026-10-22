@@ -79,5 +79,5 @@ public enum ChunkTags {
 public enum ChunkTagsError: Error, Equatable, CustomStringConvertible {
     case malformed
 
-    public var description: String { "The file is not an AIFF or WAV file that CDRip can read." }
+    public var description: String { "The file is not an AIFF or WAV file that Silverside can read." }
 }

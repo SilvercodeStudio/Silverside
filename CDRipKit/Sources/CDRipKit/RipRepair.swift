@@ -240,7 +240,7 @@ public struct RipRepair {
                 break
             }
         }
-        report.program = "CDRip \(CDRipVersion.string)"
+        report.program = "Silverside \(CDRipVersion.string)"
         if folder.standardizedFileURL != firstFolder {
             var files = Set(report.tracks.map(\.file))
             let others = (report.files ?? []).filter {

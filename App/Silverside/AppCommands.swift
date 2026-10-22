@@ -7,6 +7,9 @@ struct AppCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About Silverside") { openWindow(id: "about") }
+        }
         CommandGroup(replacing: .newItem) {}
         CommandGroup(replacing: .help) {
             Button("Silverside Help") { openWindow(id: "help") }

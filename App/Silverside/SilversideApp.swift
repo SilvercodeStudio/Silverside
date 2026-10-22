@@ -17,6 +17,17 @@ import SwiftUI
                 .environment(model)
         }
 
+        Window("About Silverside", id: "about") {
+            AboutView()
+                .environment(model)
+                .windowMinimizeBehavior(.disabled)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .windowBackgroundDragBehavior(.enabled)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
+
         Window("Silverside Help", id: "help") {
             HelpView()
         }

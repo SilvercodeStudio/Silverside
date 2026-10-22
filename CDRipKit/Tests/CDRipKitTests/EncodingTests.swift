@@ -53,8 +53,9 @@ struct EncodingTests {
         let album = "Grateful Dead/Saint of Circumstance- Giants Stadium · East Rutherford · NJ · 6-17-91"
         #expect(
             files.map { $0.path.replacingOccurrences(of: library.path + "/", with: "") } == [
-                "\(album)/02-01 Help on the Way >.flac", "\(album)/02-02 Slipknot!.flac",
+                "\(album)/02-01 Help on the Way.flac", "\(album)/02-02 Slipknot!.flac",
             ])
+        // The segue mark stays in the tag and leaves the file name, as the user's library has it.
         let tags = Dictionary(try FLACTags.read(files[0]).map { ($0.key, $0.value) }, uniquingKeysWith: { a, _ in a })
         #expect(tags["TITLE"] == "Help on the Way >" && tags["DISCNUMBER"] == "2" && tags["ISRC"] == "USRH11900001")
         #expect(try FLACTags.readFrontCover(files[0]).map { try EmbeddedCover(CoverImage(data: $0)).width } == 1000)

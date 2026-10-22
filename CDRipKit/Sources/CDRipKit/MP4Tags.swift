@@ -17,6 +17,7 @@ public enum MP4Tags {
     /// Vorbis comment keys and the names of their freeform atoms, as MusicBrainz Picard writes them.
     static let freeformNames: [String: String] = [
         "DISCSUBTITLE": "DISCSUBTITLE", "ORIGINALDATE": "ORIGINALDATE", "ISRC": "ISRC", "BARCODE": "BARCODE",
+        "COMPILATION": "COMPILATION",
         "LABEL": "LABEL", "CATALOGNUMBER": "CATALOGNUMBER", "RELEASECOUNTRY": "MusicBrainz Album Release Country",
         "MUSICBRAINZ_ALBUMID": "MusicBrainz Album Id", "MUSICBRAINZ_RELEASEGROUPID": "MusicBrainz Release Group Id",
         "MUSICBRAINZ_TRACKID": "MusicBrainz Track Id", "MUSICBRAINZ_ALBUMARTISTID": "MusicBrainz Album Artist Id",

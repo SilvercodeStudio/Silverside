@@ -36,4 +36,9 @@ Templates name the album folder and the track files in the library, and the rip'
 
 A part in square brackets is left out when its field is empty, so `[{disc:2}-]{track} {title}` gives `03 Title` on a single disc and `02-03 Title` in a set.
 
-**Live-show style** adds `[Venue, date]` to titles when every disc of the release is a dated show. **Plain punctuation** turns typographic quotes and dashes into ASCII in names and tags.
+The styles, each with an example in the window:
+
+- **Live shows** adds `[Venue, date]` to titles when every disc of the release is a dated show, and tags each disc with the show's date.
+- **Segue marks**: MusicBrainz ends a title with `>` when the song runs into the next. The mark can stay in the tags only (the default: `China Cat Sunflower >` in the tag, `04-01 China Cat Sunflower.flac` on disk), in the tags and the file names, or go.
+- **Compilations folder**: a release credited to Various Artists is tagged COMPILATION, and each track's file name carries its own artist. The album folder is named Various Artists unless you give another name here.
+- **Plain punctuation** turns typographic quotes and dashes into ASCII in names and tags.

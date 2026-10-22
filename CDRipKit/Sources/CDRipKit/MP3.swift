@@ -89,6 +89,7 @@ public enum ID3Tags {
     static let textFrames: [String: String] = [
         "TITLE": "TIT2", "ARTIST": "TPE1", "ALBUMARTIST": "TPE2", "ALBUM": "TALB", "DATE": "TDRC",
         "ORIGINALDATE": "TDOR", "DISCSUBTITLE": "TSST", "ISRC": "TSRC", "LABEL": "TPUB", "GENRE": "TCON",
+        "COMPILATION": "TCMP",
     ]
 
     /// Vorbis comment keys and the descriptions of their TXXX frames, as MusicBrainz Picard writes them.

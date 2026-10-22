@@ -171,7 +171,9 @@ release in one album folder, a full-size `cover.jpg`, and a CUE sheet for each
 disc. On a compilation, each track's artist comes first:
 `02 Mark Cromer & Jeff Briggs - Asoka`. For live shows whose
 MusicBrainz disc titles have a date and venue, titles end with
-`[Venue, M-D-YY]`. It encodes only tracks that AccurateRip or CTDB verified,
+`[Venue, M-D-YY]`. A segue mark (`Scarlet Begonias >`) stays in the TITLE
+tag and leaves the file name; `segueMarks` in the settings changes that.
+It encodes only tracks that AccurateRip or CTDB verified,
 unless you give `--allow-unverified`. The rip's report goes into the album
 folder too, as `Rip Report (Disc 1).json`.
 
@@ -206,6 +208,8 @@ cdrip config unset aac.mode                     # back to the default
 | `trackTemplate` | `[{disc:2}-]{track} [{otherArtist} - ]{title}` | each file's name |
 | `ripFolderTemplate` | `{artist} - {album}[ (Disc {disc})]` | each rip's folder |
 | `liveShowStyle` | `true` | `[Venue, M-D-YY]` for live shows |
+| `segueMarks` | `tags` | a title's trailing `>`: in `tags` only, `everywhere`, or `none` |
+| `compilationFolder` | `""` | the folder for Various Artists releases, if not "Various Artists" |
 | `plainPunctuation` | `false` | ASCII quotes and dashes in names and tags |
 | `artwork` | `front` | `front`, `all`, or `none` |
 | `readC2` | `true` | ask the drive for C2 error flags |

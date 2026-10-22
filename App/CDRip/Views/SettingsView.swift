@@ -451,6 +451,7 @@ struct NamingSettings: View {
             Section("Example") {
                 let example = NamingExample(model: model)
                 LabeledContent("Library file") { Text(example.libraryPath).textSelection(.enabled) }
+                LabeledContent("Title tag") { Text(example.titleTag).textSelection(.enabled) }
                 LabeledContent("Rip folder") { Text(example.ripFolder).textSelection(.enabled) }
                 Text(example.source).font(.caption).foregroundStyle(.secondary)
             }
@@ -458,7 +459,20 @@ struct NamingSettings: View {
                 TextField("Rip folder", text: $model.settings.ripFolderTemplate)
             }
             Section("Style") {
-                Toggle("Live-show style: add [Venue, date] to titles", isOn: $model.settings.liveShowStyle)
+                Toggle(
+                    "Live shows: add [Venue, date] to titles, and take the date from the disc",
+                    isOn: $model.settings.liveShowStyle)
+                Picker("Segue marks (a title's trailing \">\")", selection: $model.settings.segueMarks) {
+                    Text("In tags only, not in file names").tag(SegueMarks.tagsOnly)
+                    Text("In tags and file names").tag(SegueMarks.everywhere)
+                    Text("Removed").tag(SegueMarks.none)
+                }
+                TextField(
+                    "Compilations folder", text: $model.settings.compilationFolder, prompt: Text("Various Artists"))
+                Text(
+                    "A compilation is a release credited to Various Artists. Its files are tagged COMPILATION, and each track's name carries its own artist through {otherArtist}. The folder takes this name in place of the album artist."
+                )
+                .font(.caption).foregroundStyle(.secondary)
                 Toggle(
                     "Plain punctuation: ASCII quotes and dashes in names and tags",
                     isOn: $model.settings.plainPunctuation)
@@ -471,6 +485,7 @@ struct NamingSettings: View {
 /// The names the templates give, for the disc in the selected drive, or for a sample disc.
 struct NamingExample {
     var libraryPath: String
+    var titleTag: String
     var ripFolder: String
     var source: String
 
@@ -493,15 +508,17 @@ struct NamingExample {
         }
         let metadata = TrackMetadata(
             release: release, medium: medium, track: track, liveShowStyle: settings.liveShowStyle,
-            plainPunctuation: settings.plainPunctuation)
+            plainPunctuation: settings.plainPunctuation, segueMarks: settings.segueMarks,
+            compilationFolder: settings.compilationFolder)
         let values = metadata.nameValues
+        titleTag = metadata.title
         libraryPath =
             NameTemplate(settings.folderTemplate).name(values) + "/" + NameTemplate(settings.trackTemplate).name(values)
             + "." + settings.format.fileExtension
         ripFolder = NameTemplate(settings.ripFolderTemplate).name(NameTemplate.values(release: release, medium: medium))
     }
 
-    /// *Clarity of Cal*, with a guest on track 3.
+    /// *Clarity of Cal*, with a guest on track 3, and a segue mark on it.
     static let sample: MusicBrainzRelease = {
         let vulfpeck = MusicBrainzRelease.Credit(name: "Vulfpeck", artistID: "sample")
         var release = MusicBrainzRelease.manual(
@@ -509,7 +526,7 @@ struct NamingExample {
         release.title = "Clarity of Cal"
         release.artistCredit = [vulfpeck]
         release.date = "2025-03-04"
-        for (index, title) in ["Big Dipper", "Matter of Time", "Can You Tell"].enumerated() {
+        for (index, title) in ["Big Dipper", "Matter of Time", "Can You Tell >"].enumerated() {
             release.media[0].tracks[index].title = title
             release.media[0].tracks[index].artistCredit = [vulfpeck]
         }

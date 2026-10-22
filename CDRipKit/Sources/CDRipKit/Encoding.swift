@@ -135,6 +135,9 @@ public struct DiscEncoder {
     public var liveShowStyle = true
     /// Typographic punctuation becomes ASCII in names and tags.
     public var plainPunctuation = false
+    public var segueMarks = SegueMarks.tagsOnly
+    /// The album artist for names on a compilation, in place of "Various Artists". Empty keeps it.
+    public var compilationFolder = ""
     public var aac = AACOptions()
     public var mp3 = MP3Options()
     /// Encode tracks that AccurateRip and CTDB do not prove.
@@ -156,6 +159,8 @@ public struct DiscEncoder {
         trackTemplate = NameTemplate(settings.trackTemplate)
         liveShowStyle = settings.liveShowStyle
         plainPunctuation = settings.plainPunctuation
+        segueMarks = settings.segueMarks
+        compilationFolder = settings.compilationFolder
         aac = settings.aac
         mp3 = settings.mp3
     }
@@ -200,7 +205,7 @@ public struct DiscEncoder {
                 : medium.tracks[index]
             let metadata = TrackMetadata(
                 release: release, medium: medium, track: track, isrc: ripped.isrc, liveShowStyle: liveShowStyle,
-                plainPunctuation: plainPunctuation)
+                plainPunctuation: plainPunctuation, segueMarks: segueMarks, compilationFolder: compilationFolder)
             let values = metadata.nameValues
             let folder = library.appending(path: folderTemplate.name(values), directoryHint: .isDirectory)
             let file = folder.appending(path: trackTemplate.name(values) + "." + format.fileExtension)
@@ -286,7 +291,8 @@ public struct DiscEncoder {
         disc: RippedDisc, to folder: URL, discPart: String
     ) throws {
         let sample = TrackMetadata(
-            release: release, medium: medium, track: medium.tracks[0], plainPunctuation: plainPunctuation)
+            release: release, medium: medium, track: medium.tracks[0], plainPunctuation: plainPunctuation,
+            segueMarks: segueMarks, compilationFolder: compilationFolder)
         let comments = sample.vorbisComments
         var sheet = CueSheet(
             title: comments.first { $0.key == "ALBUM" }?.value,

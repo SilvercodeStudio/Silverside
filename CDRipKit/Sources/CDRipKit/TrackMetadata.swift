@@ -33,6 +33,37 @@ public struct LiveShow: Equatable, Sendable {
     public var titleSuffix: String { "[\(venue), \(shortDate)]" }
 }
 
+/// Where a segue mark (the ">" at the end of "Scarlet Begonias >") goes. The user's library
+/// keeps it in the TITLE tag and leaves it out of the file name.
+public enum SegueMarks: String, Codable, CaseIterable, Sendable {
+    /// In the tags and the file names.
+    case everywhere
+    /// In the tags only.
+    case tagsOnly = "tags"
+    /// Nowhere: the mark is removed.
+    case none
+
+    /// The title without a trailing segue mark: "Scarlet Begonias >" becomes "Scarlet Begonias".
+    /// A mark in the middle of a title, as in "Dark Star > Jam", is part of the title and stays.
+    public static func withoutMark(_ title: String) -> String {
+        var text = Substring(title)
+        while let last = text.last, last == ">" || last == "→" || last == " " {
+            text = text.dropLast()
+        }
+        return text.isEmpty ? title : String(text)
+    }
+}
+
+extension MusicBrainzRelease {
+    /// MusicBrainz's "Various Artists".
+    public static let variousArtistsID = "89ad4ac3-39f7-470e-963a-56509c546377"
+
+    /// True for a release credited to Various Artists.
+    public var isCompilation: Bool {
+        artistCredit.contains { $0.artistID == Self.variousArtistsID || $0.name == "Various Artists" }
+    }
+}
+
 /// Typographic punctuation as plain ASCII, as many libraries have it: "Walkin’ Blues" becomes
 /// "Walkin' Blues". Quotes, primes, hyphens and dashes, the ellipsis, and the no-break space change.
 public enum PlainPunctuation {
@@ -67,23 +98,38 @@ public struct TrackMetadata: Equatable, Sendable {
 
     /// Typographic punctuation becomes ASCII in names and tags (see `PlainPunctuation`).
     public let plainPunctuation: Bool
+    /// Where a trailing ">" in a title goes.
+    public let segueMarks: SegueMarks
+    /// The album artist for names on a compilation, in place of "Various Artists". Empty keeps it.
+    public let compilationFolder: String
 
     public init(
         release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium, track: MusicBrainzRelease.Track,
-        isrc: String? = nil, liveShowStyle: Bool = true, plainPunctuation: Bool = false
+        isrc: String? = nil, liveShowStyle: Bool = true, plainPunctuation: Bool = false,
+        segueMarks: SegueMarks = .tagsOnly, compilationFolder: String = ""
     ) {
         self.release = release
         self.medium = medium
         self.track = track
         self.plainPunctuation = plainPunctuation
+        self.segueMarks = segueMarks
+        self.compilationFolder = compilationFolder
         self.isrc = isrc
         let everyDiscIsAShow = release.media.allSatisfy { $0.title.flatMap(LiveShow.init(discTitle:)) != nil }
         show = liveShowStyle && everyDiscIsAShow ? medium.title.flatMap(LiveShow.init(discTitle:)) : nil
     }
 
-    /// The title, with the show's suffix if the live-show style applies.
+    /// The title as the tags have it, with the show's suffix if the live-show style applies:
+    /// "China Cat Sunflower > [Greek Theatre, 6-15-85]".
     public var title: String {
-        text(show.map { "\(track.title) \($0.titleSuffix)" } ?? track.title)
+        let base = segueMarks == .none ? SegueMarks.withoutMark(track.title) : track.title
+        return text(show.map { "\(base) \($0.titleSuffix)" } ?? base)
+    }
+
+    /// The title as the file name has it: the same, without the segue mark unless it goes everywhere.
+    public var fileTitle: String {
+        let base = segueMarks == .everywhere ? track.title : SegueMarks.withoutMark(track.title)
+        return text(show.map { "\(base) \($0.titleSuffix)" } ?? base)
     }
 
     private func text(_ value: String) -> String {
@@ -93,8 +139,12 @@ public struct TrackMetadata: Equatable, Sendable {
     /// The fields for `NameTemplate`, with the title as the tags have it.
     public var nameValues: [String: String] {
         var values = NameTemplate.values(release: release, medium: medium, track: track).mapValues(text)
-        values["title"] = title
+        values["title"] = fileTitle
         if let show { values["date"] = show.date }
+        if release.isCompilation, !compilationFolder.isEmpty {
+            values["albumArtist"] = compilationFolder
+            values["artist"] = compilationFolder
+        }
         return values
     }
 
@@ -108,6 +158,7 @@ public struct TrackMetadata: Equatable, Sendable {
             ("TRACKNUMBER", String(track.position)), ("TRACKTOTAL", String(medium.tracks.count)),
         ]
         if let discTitle = medium.title { comments.append(("DISCSUBTITLE", text(discTitle))) }
+        if release.isCompilation { comments.append(("COMPILATION", "1")) }
         if let show {
             comments.append(("DATE", show.date))
             if let date = release.date { comments.append(("ORIGINALDATE", date)) }

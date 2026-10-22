@@ -77,4 +77,46 @@ struct TrackMetadataTests {
         #expect(off.title == "Walkin' Blues")
         #expect(off.vorbisComments.first { $0.key == "DATE" }?.value == "2026")
     }
+
+    /// As the library has it: "China Cat Sunflower > [Greek Theatre, 6-15-85]" in the TITLE
+    /// tag, "04-01 China Cat Sunflower [Greek Theatre, 6-15-85]" as the file name.
+    @Test func keepsSegueMarksInTagsAndOutOfFileNames() {
+        var release = summerMagic()
+        release.media[3].tracks[0].title = "China Cat Sunflower >"
+        let medium = release.media[3]
+        let track = medium.tracks[0]
+        let tagsOnly = TrackMetadata(release: release, medium: medium, track: track)
+        #expect(tagsOnly.title == "China Cat Sunflower > [Greek Theatre, 6-14-85]")
+        #expect(
+            NameTemplate.libraryTrack.name(tagsOnly.nameValues) == "04-01 China Cat Sunflower [Greek Theatre, 6-14-85]")
+        let everywhere = TrackMetadata(release: release, medium: medium, track: track, segueMarks: .everywhere)
+        #expect(
+            NameTemplate.libraryTrack.name(everywhere.nameValues)
+                == "04-01 China Cat Sunflower > [Greek Theatre, 6-14-85]")
+        let none = TrackMetadata(release: release, medium: medium, track: track, segueMarks: .none)
+        #expect(none.title == "China Cat Sunflower [Greek Theatre, 6-14-85]")
+        // A mark in the middle is part of the title.
+        #expect(SegueMarks.withoutMark("Dark Star > Jam >") == "Dark Star > Jam")
+        #expect(SegueMarks.withoutMark("Drums →") == "Drums")
+        #expect(SegueMarks.withoutMark(">") == ">")
+    }
+
+    /// A Various Artists release: COMPILATION in the tags, and the folder named as the user likes.
+    @Test func namesACompilation() {
+        var release = summerMagic()
+        release.artistCredit = [.init(name: "Various Artists", artistID: MusicBrainzRelease.variousArtistsID)]
+        release.media = [release.media[0]]
+        release.media[0].title = nil
+        let medium = release.media[0]
+        let track = medium.tracks[2]
+        #expect(release.isCompilation)
+        let plain = TrackMetadata(release: release, medium: medium, track: track)
+        #expect(plain.vorbisComments.contains { $0.key == "COMPILATION" && $0.value == "1" })
+        #expect(NameTemplate.libraryFolder.name(plain.nameValues) == "Various Artists/Summer Magic 1985")
+        #expect(NameTemplate.libraryTrack.name(plain.nameValues) == "03 Grateful Dead - Walkin' Blues")
+        let named = TrackMetadata(release: release, medium: medium, track: track, compilationFolder: "Compilations")
+        #expect(NameTemplate.libraryFolder.name(named.nameValues) == "Compilations/Summer Magic 1985")
+        #expect(named.vorbisComments.first { $0.key == "ALBUMARTIST" }?.value == "Various Artists")
+        #expect(!summerMagic().isCompilation)
+    }
 }

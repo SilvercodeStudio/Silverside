@@ -25,6 +25,12 @@ struct EncodingOptions: ParsableArguments {
     @Flag(inversion: .prefixedNo, help: "Turn typographic punctuation into ASCII in names and tags (’ becomes ').")
     var plainPunctuation: Bool?
 
+    @Option(help: "Where the \">\" at the end of a title goes: everywhere (tags and file names), tags, or none.")
+    var segueMarks: SegueMarks?
+
+    @Option(help: "The folder for compilations in the library, in place of \"Various Artists\".")
+    var compilationFolder: String?
+
     @Option(help: "The AAC mode: constant, average, or variable bit rate; vbr-constrained is Apple's choice.")
     var aacMode: AACOptions.Mode?
 
@@ -53,6 +59,8 @@ struct EncodingOptions: ParsableArguments {
         if let trackTemplate { encoder.trackTemplate = NameTemplate(trackTemplate) }
         if let liveShowStyle { encoder.liveShowStyle = liveShowStyle }
         if let plainPunctuation { encoder.plainPunctuation = plainPunctuation }
+        if let segueMarks { encoder.segueMarks = segueMarks }
+        if let compilationFolder { encoder.compilationFolder = compilationFolder }
         if let aacMode { encoder.aac.mode = aacMode }
         if let aacBitrate { encoder.aac.bitRate = aacBitrate }
         if let aacQuality { encoder.aac.vbrQuality = aacQuality }
@@ -68,3 +76,4 @@ extension AudioFormat: ExpressibleByArgument {}
 extension AACOptions.Mode: ExpressibleByArgument {}
 extension MP3Options.Mode: ExpressibleByArgument {}
 extension ArtworkChoice: ExpressibleByArgument {}
+extension SegueMarks: ExpressibleByArgument {}

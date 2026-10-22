@@ -32,6 +32,10 @@ public struct Settings: Codable, Equatable, Sendable {
     public var liveShowStyle = true
     /// Turn typographic punctuation into ASCII in names and tags ("Walkin’" becomes "Walkin'").
     public var plainPunctuation = false
+    /// Where the ">" at the end of a title goes: the tags and the file names, the tags only, or nowhere.
+    public var segueMarks = SegueMarks.tagsOnly
+    /// The folder for compilations in the library, in place of "Various Artists". Empty keeps it.
+    public var compilationFolder = ""
     public var artwork = ArtworkChoice.front
     /// Ask the drive for C2 error flags.
     public var readC2 = true
@@ -168,6 +172,8 @@ public struct Settings: Codable, Equatable, Sendable {
         ripFolderTemplate = try value(.ripFolderTemplate, defaults.ripFolderTemplate)
         liveShowStyle = try value(.liveShowStyle, defaults.liveShowStyle)
         plainPunctuation = try value(.plainPunctuation, defaults.plainPunctuation)
+        segueMarks = try value(.segueMarks, defaults.segueMarks)
+        compilationFolder = try value(.compilationFolder, defaults.compilationFolder)
         artwork = try value(.artwork, defaults.artwork)
         readC2 = try value(.readC2, defaults.readC2)
         encodeAfterRip = try value(.encodeAfterRip, defaults.encodeAfterRip)

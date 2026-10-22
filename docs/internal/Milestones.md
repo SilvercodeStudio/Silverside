@@ -325,7 +325,7 @@ Deferred:
 
 - A multi-disc release is one unit of work, so metadata stays consistent across discs and sessions.
 - Apple Foundation Models for verification and cleanup of metadata from conventional sources only, with a non-AI path.
-- Reusable style recipes, such as segue `>` marks and `[Venue, date]` suffixes.
+- Done (2026-10-21): the style choices in Settings › Naming and `cdrip encode`: the live-show style (the `[Venue, date]` suffix and the show's date), segue marks (in tags only by default, as the user's library has them: the TITLE tag keeps `China Cat Sunflower >`, the file is `04-01 China Cat Sunflower`), and compilations (COMPILATION in the tags, the track's artist in the file name, a folder name in place of Various Artists). Kept to named settings, not a recipe language.
 
 ## Later: DVD-Audio and Blu-ray audio
 
@@ -359,11 +359,12 @@ The app links `CDRipKit` and `CDRipDarwin`, and follows the design in `docs/asse
 
 Not yet, roughly in order:
 
-- Stop, eject, and repair with re-reads on hardware. (The drive test and the cache measurement ran on the HL-DT-ST GUC0N from Settings: every check passed, 7.7× from the middle of the disc, no overread, cache 32 sectors or fewer, saved in the profile.)
-- Editing the names of an earlier rip in the app (the CLI can: `cdrip metadata -i folder --set ...`), and track artists in the app's table.
+- Stop and repair with re-reads on hardware; not urgent. (Eject, the drive test, and the cache measurement ran on real drives: every check passed on the HL-DT-ST GUC0N, 7.7× from the middle of the disc, no overread, cache 32 sectors or fewer, saved in the profile.)
+- Next: a large test run of rips in the app, with several multi-disc sets (decided 2026-10-21).
+- Deferred, as most people rip straight to their final format: editing the names of an earlier rip in the app (the CLI can: `cdrip metadata -i folder --set ...`), track artists in the app's table, and encoding a set as one step.
 - Pre-emphasis: confirm the flag, the CUE sheet, and the warning on a real pre-emphasis disc before a public release; then de-emphasis as an option. Two pressed test discs with pre-emphasis are on order (see the test discs below), which also show whether the flag is in the TOC, the Q subchannel, or both. The plan for the edge cases (a project of its own, later): burn a test CD from a CUE sheet with `FLAGS PRE` on some tracks, with a tool that writes the flag into the Q subchannel (cdrdao from a TOC file does; Music and the Finder do not), from audio that was pre-emphasized by the standard filter (50/15 µs, a first-order shelf; SoX's `deemph` is the reference for the inverse), so that the de-emphasized output can be compared with the original samples. Cases: a flag on track 1 only, flagged and unflagged tracks mixed, a flagged track after a long pregap, and a flag in the subchannel only (some discs set it there but not in the TOC; CDRip reads the TOC's control bits today). De-emphasis must come after verification: AccurateRip and CTDB checksums are of the samples as pressed.
 - A queue of several drives at once; a rip's folder claim is already per disc.
-- Encoding a whole set at once when its last disc is ripped, and style recipes (milestone 9).
+- More style choices, if they come up; the three from milestone 9 are in (segue marks, the venue suffix, compilations).
 - An Icon Composer `.icon` for macOS 26 and later, the About window, Developer ID signing and notarization.
 - Checked with a real disc so far: reading and the MusicBrainz lookup (*Reckoning*, *Clarity of Cal*), and the disc-inserted-after-launch path, which failed at first because the drive slot kept the device name from launch.
 

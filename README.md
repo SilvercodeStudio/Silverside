@@ -252,7 +252,7 @@ make cli ARGS=...  # build and run silverside from the source
 make build         # the Mac app
 ```
 
-Open `CDRip.xcworkspace` in Xcode for the app, the engine, and the CLI.
+Open `Silverside.xcworkspace` in Xcode for the app, the engine, and the CLI.
 
 ## TODO
 
@@ -265,4 +265,4 @@ Open `CDRip.xcworkspace` in Xcode for the app, the engine, and the CLI.
   the album's edits, and the app says which discs of a set are ripped. Still
   to do: reusable style recipes for titles.
 
-See [docs/Milestones.md](docs/Milestones.md) for the plan.
+See [docs/internal/Milestones.md](docs/internal/Milestones.md) for the plan.

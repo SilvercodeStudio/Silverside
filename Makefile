@@ -3,14 +3,14 @@
 #   make test
 #   make run
 #
-# The app is built with xcodebuild from CDRip.xcworkspace, the workspace to open
+# The app is built with xcodebuild from Silverside.xcworkspace, the workspace to open
 # in Xcode, into Xcode's DerivedData, so builds from Xcode and from here share the
-# same incremental state. The engine is a Swift package in CDRipKit/ and builds
+# same incremental state. The engine is a Swift package in SilversideKit/ and builds
 # with SwiftPM.
 
-WORKSPACE = CDRip.xcworkspace
-SCHEME = CDRip
-PACKAGE = CDRipKit
+WORKSPACE = Silverside.xcworkspace
+SCHEME = Silverside
+PACKAGE = SilversideKit
 CONFIG ?= Debug
 ARGS ?=
 # The disc for hardware tests; the first disc that drutil reports, unless set.
@@ -25,7 +25,7 @@ comma := ,
 DESTINATION = $(if $(filter Release,$(CONFIG)),generic/platform=macOS,platform=macOS$(comma)arch=$(ARCH))
 XCODEBUILD = xcodebuild -workspace $(WORKSPACE) -scheme $(SCHEME) -configuration $(CONFIG) -destination '$(DESTINATION)'
 
-SWIFT_SOURCES = $(PACKAGE)/Package.swift $(PACKAGE)/Sources $(PACKAGE)/Tests App/CDRip
+SWIFT_SOURCES = $(PACKAGE)/Package.swift $(PACKAGE)/Sources $(PACKAGE)/Tests App/Silverside
 
 .PHONY: help build run app cli test hwtest core format lint release install install-cli-local install-app uninstall
 
@@ -76,7 +76,7 @@ test:
 
 hwtest:
 	@[ -n "$(DEVICE)" ] || { echo "No disc found. Insert one, or set DEVICE=diskN."; exit 1; }
-	CDRIP_TEST_DEVICE=$(DEVICE) CDRIP_TEST_OFFSET=$(OFFSET) swift test --package-path $(PACKAGE) --filter HardwareTests
+	SILVERSIDE_TEST_DEVICE=$(DEVICE) SILVERSIDE_TEST_OFFSET=$(OFFSET) swift test --package-path $(PACKAGE) --filter HardwareTests
 
 core:
 	swift build --package-path $(PACKAGE)

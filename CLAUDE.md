@@ -4,24 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Silverside (called CDRip until 2026-10-22; the code and folders still use that name) is a native macOS CD ripper. The goal is ripping quality equal to or better than Exact Audio Copy (EAC), with a modern UI and MusicBrainz-first metadata. It encodes to FLAC, ALAC, AAC, AIFF, and WAV, and to MP3 through an external `lame`.
+Silverside (called CDRip until 2026-10-22) is a native macOS CD ripper. The goal is ripping quality equal to or better than Exact Audio Copy (EAC), with a modern UI and MusicBrainz-first metadata. It encodes to FLAC, ALAC, AAC, AIFF, and WAV, and to MP3 through an external `lame`.
 
-The work is done in layers: engine library (`CDRipKit`), then a `silverside` CLI, then the SwiftUI app (`App/`: `CDRip.xcodeproj` and its sources in `App/CDRip/`). The CLI is finished for daily use; the app is next (see **App** below).
+The work is done in layers: engine library (`SilversideKit`), then a `silverside` CLI, then the SwiftUI app (`App/`: `Silverside.xcodeproj` and its sources in `App/Silverside/`). The CLI is finished for daily use; the app is next (see **App** below).
 
 Ripping is verification-first: rip fast with offset correction, verify each track against AccurateRip and CUETools DB (CTDB), and do secure re-reads only for tracks that don't match.
 
 ## Commands
 
-Open `CDRip.xcworkspace` in Xcode: it has the app project and the `CDRipKit` package, with schemes for the app, `silverside`, and the engine tests.
+Open `Silverside.xcworkspace` in Xcode: it has the app project and the `SilversideKit` package, with schemes for the app, `silverside`, and the engine tests.
 
 ```sh
 make cli ARGS='info'   # build and run the silverside CLI (drives, info, cdtext, rip, repair, metadata, encode, config, eject; -d diskN)
 make install PREFIX=~/.local   # universal release build of silverside, and shell completions (make install-cli-local does the same)
 make install-app               # universal release build of the app, copied to ~/Applications (APP_DIR=... for another folder)
-swift build --package-path CDRipKit -c release --product silverside   # CTDB repair needs the release build to be fast
-make test        # swift test --package-path CDRipKit
+swift build --package-path SilversideKit -c release --product silverside   # CTDB repair needs the release build to be fast
+make test        # swift test --package-path SilversideKit
 make hwtest OFFSET=103   # hardware tests; needs a disc in AccurateRip (DEVICE=diskN to choose; OFFSET checks the drive's offset)
-make core        # swift build --package-path CDRipKit
+make core        # swift build --package-path SilversideKit
 make build       # xcodebuild the app (CONFIG=Release for a universal build)
 make run         # build and start the app; ARGS='...' passes launch arguments
 make format      # swift-format in place (.swift-format: 4 spaces, 120 columns)
@@ -31,17 +31,17 @@ make lint        # swift-format lint --strict; must be clean
 To run one suite or one test (Swift Testing):
 
 ```sh
-swift test --package-path CDRipKit --filter AudioReaderTests
-swift test --package-path CDRipKit --filter 'DiscIDTests/ctdbTOCString'
+swift test --package-path SilversideKit --filter AudioReaderTests
+swift test --package-path SilversideKit --filter 'DiscIDTests/ctdbTOCString'
 ```
 
 Run `make format`, `make lint`, and `make test` before you report work as done.
 
 ## Architecture
 
-The engine does the work, and the CLI only parses options and prints. Put new behavior in `CDRipKit`, so that the app gets it too. Engine files (`CDRipKit/Sources/CDRipKit/`), by layer:
+The engine does the work, and the CLI only parses options and prints. Put new behavior in `SilversideKit`, so that the app gets it too. Engine files (`SilversideKit/Sources/SilversideKit/`), by layer:
 
-- **Disc and drive:** `CDDA` (constants), `TOC`, `DiscIDs` (MusicBrainz, AccurateRip, freedb, CTDB), `Drive` (`CDDrive`), `SimulatedDrive`, `QSubchannel`, `SubchannelCodes` (MCN, ISRC), `PregapFinder`, `CDText`, `CacheProbe`, `DriveProfile` (`DriveProfileStore`), `DriveOffsetList`, `DriveReport`. The Darwin target (`CDRipDarwin`) has `IOKitDrive` and `OpticalDrive` (the drive list from the I/O Registry).
+- **Disc and drive:** `CDDA` (constants), `TOC`, `DiscIDs` (MusicBrainz, AccurateRip, freedb, CTDB), `Drive` (`CDDrive`), `SimulatedDrive`, `QSubchannel`, `SubchannelCodes` (MCN, ISRC), `PregapFinder`, `CDText`, `CacheProbe`, `DriveProfile` (`DriveProfileStore`), `DriveOffsetList`, `DriveReport`. The Darwin target (`SilversideDarwin`) has `IOKitDrive` and `OpticalDrive` (the drive list from the I/O Registry).
 - **Reading:** `AudioReader` (offset correction, cache flush), `TrackRipper` (one pass, AccurateRip check), `SecureRipper` (re-reads, C2, shifted reads), `HiddenTrack`, `RipEvent` (progress).
 - **Verification and repair:** `AccurateRipChecksum`, `AccurateRipOffsetFinder`, `AccurateRipRecord` and `OnlineLookup` (AccurateRip and CTDB downloads), `CTDB`, `GaloisField16` (with `ReedSolomonDecoder`), `DiscRepairer` (with `TrackAudio`, the suspects).
 - **Metadata:** `WebClient` (rate limits, cache, retries), `MusicBrainz`, `ReleaseChoice` (`ReleaseRanking`, `ReleaseChoiceStore`), `ReleaseLookup`, `CoverArt`, `NameTemplate`, `TrackMetadata`, `MetadataEdits` (the user's changes to names, `ReleaseEditsStore` by release ID, and `MusicBrainzRelease.manual` for discs MusicBrainz does not know).
@@ -50,18 +50,18 @@ The engine does the work, and the CLI only parses options and prints. Put new be
 
 ## App
 
-The app is in `App/` (`CDRip.xcodeproj`, sources in `App/CDRip/`) and links the local package's `CDRipKit` and `CDRipDarwin` products. It is a first version (2026-10-21): the main window rips a disc end to end through `DiscRip`, and Settings edits the shared settings file and the drive profiles. The design (a Claude Design artifact; its PDF and icon assets are in `docs/asset_import/`) is an inspiration, not a spec. What is built, and what is not yet, is in `docs/Milestones.md` under **The app**.
+The app is in `App/` (`Silverside.xcodeproj`, sources in `App/Silverside/`) and links the local package's `SilversideKit` and `SilversideDarwin` products. It is a first version (2026-10-21): the main window rips a disc end to end through `DiscRip`, and Settings edits the shared settings file and the drive profiles. The design (a Claude Design artifact, kept outside the repo) is an inspiration, not a spec. What is built, and what is not yet, is in `docs/internal/Milestones.md` under **The app**.
 
-Layout of `App/CDRip/`:
+Layout of `App/Silverside/`:
 
-- `CDRipApp.swift`: the scenes (main window, Settings) and `AppCommands.swift` (the Disc menu).
+- `SilversideApp.swift`: the scenes (main window, Settings) and `AppCommands.swift` (the Disc menu).
 - `Model/`: `AppModel` (settings, drives, earlier rips and their sets, the DiskArbitration watcher, the repair), `DriveSlot` (one drive: its disc, its rip, the choices for the next rip), `DiscInfo` (TOC, MCN, CD-Text, the MusicBrainz release and cover), `RipRun` (one rip: the engine's events turned into track states, progress, and a log), `RepairRun` (one repair: `RipRepair` with the pool and the drive), `DriveTestRun` (`DriveReport` and `CacheProbe` from Settings), `RecentRip` (earlier rips from `disc.json`), `Background` (the Dock tile's progress bar, the notification when a rip ends), and the debug-only `DemoDisc` and `DebugScreenshot`.
 - `Views/`: `MainWindow` (split view, sidebar with the newest rips, empty states), `DriveDetailView` (toolbar, options popover, album header, status bar, result banner), `RipButton` (the Rip button centered under the track table: `App/Icon/Silverside.rip_btn.svg` drawn in a `Canvas` from the design's numbers, so that during a rip the disc turns, the bars bounce in the progress bar's colors, and a line fills around the frame; after it, a badge with the verdict), `TrackTable` (titles and track artists editable), `DiscGraph` (the disc by position, live or from a report), `ResultsView` (an earlier rip, with its Markdown report and Repair), `HistoryView` (every rip, searchable and sortable), `Sheets` (release picker, rip log, repair, drive test), `SettingsView` (General, Drives, Ripping, Encoding, Naming), `HelpWindow` (the Help window, a small Markdown-to-HTML converter, a WebKit view), `Theme` (the sheen gradient, chips, progress bar, cover).
 - `Help/`: the help pages as Markdown (`NN Title.md`; the number orders them, the first heading names them). The synchronized folder bundles them as resources.
 
 Rules for the app:
 
-- Put behavior in the engine. The app only turns engine types into views; when the app needs something the engine lacks (a public init, `Identifiable`), add it to `CDRipKit`.
+- Put behavior in the engine. The app only turns engine types into views; when the app needs something the engine lacks (a public init, `Identifiable`), add it to `SilversideKit`.
 - The target uses `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`: every type is main-actor unless marked `nonisolated`. Engine work runs in `Task.detached`; the engine's `@Sendable` event closures hop back with `DispatchQueue.main.async` + `MainActor.assumeIsolated`, which keeps the events in order. Build the drive (`IOKitDrive`, `SimulatedDrive`) inside the detached task: `any CDDrive` is not `Sendable`.
 - A disc is read (TOC, MCN, CD-Text) when it appears, then looked up in MusicBrainz once (the web cache keeps the answer, so the rip's own lookup sends no second request). The rip gets the chosen release by ID.
 - **Edits to names** live in `MetadataEdits`, never in a changed `MusicBrainzRelease`: the release in `disc.json` is what MusicBrainz said, "edits" sits next to it, and `RippedDisc` applies them for the encoder. The album-level edits are kept by release ID (`ReleaseEdits.json`), so the other discs of a set get them; `DiscRip` reads that store and writes to it. A disc with no release gets `MusicBrainzRelease.manual` (ID `silverside:<disc ID>`; older rips have `cdrip:`, which still counts): no MusicBrainz IDs in the tags, no cover download, not remembered as a choice.
@@ -72,7 +72,7 @@ Rules for the app:
 - Running the app with a disc in a real drive reads that disc's TOC and MCN at once. Ask before a test that needs a drive.
 - `-openWindow help` opens the Help window at launch. WebKit draws out of process, so a screenshot shows the Help window's title but not its page; check the converter's HTML instead.
 
-## Engine conventions (CDRipKit)
+## Engine conventions (SilversideKit)
 
 These rules apply in many files. Errors here give results that are a few samples wrong, and no test fails on real discs until much later.
 
@@ -86,10 +86,10 @@ These rules apply in many files. Errors here give results that are a few samples
 - **Re-reads need a cache flush.** Drives return cached data for a re-read in under 1 ms. `AudioReader.flushCache(awayFrom:)` reads in the disc's audio areas away from the ranges it is given (plus a read-ahead margin), because a read of a damaged sector there counts as one of its re-reads: `SecureRipper` passes the whole track before a full read again, and only the suspect runs before a round of re-reads, so a disc with one track still gets a flush. The flush size comes from the drive's profile (`silverside drives --measure-cache`); all three test drives keep only the latest read, so 256 sectors is plenty, and the default for an unmeasured drive is 4,000.
 - **Audio areas.** `TOC.audioAreas` lists the sectors a drive reads as audio: no data track, no session gap. `AudioReader` reads only there and fills the rest with silence, as past the disc's edges. `SimulatedDrive` fails reads elsewhere, as hardware does.
 - **Stopping, threads, and lookups.** Long reads and CPU-heavy decoding go inside `blocking(_:)`, so no cooperative-pool thread is held; the code checks `StopToken` between chunks, rounds, and tracks, and throws `CancellationError`. A failed AccurateRip or CTDB lookup sends `.lookupFailed` and the rip goes on as not checked; only a drive with no offset at all needs the drive offset list.
-- **Files that several versions share** (`DriveProfiles.json`, `settings.json`) keep keys they do not know: a save merges into the file's JSON (`JSONMerge`), and optional values are written as `null` so that clearing one still works. An older `cdrip` once erased the measured cache sizes of every drive this way.
+- **Files that several versions share** (`DriveProfiles.json`, `settings.json`) keep keys they do not know: a save merges into the file's JSON (`JSONMerge`), and optional values are written as `null` so that clearing one still works. An older version once erased the measured cache sizes of every drive this way.
 - **Suspects** are samples that may be wrong: where reads disagree, or with C2 errors (294 flag bytes per sector, one bit per byte, bit 7 first; a hint only). `TrackAudio` holds them with their other values, and `Track NN.suspects` files keep them next to the WAVs, so `repair` can pool rips from several drives. A read that loses its place is shifted, not damaged: `SecureRipper` finds the shift and leaves the read out.
 - **CTDB** (`CTDB.swift`, verified against real entries): the audio from the first audio track to the lead-out is 16-bit words (left, right, ...). Rows are 11,760 words (5,880 samples, 10 sectors; the XML `stride` counts samples). The first row, and the last row plus the remainder, are left out of the CRC and the repair data. The disc CRC is plain CRC-32 (zlib) of that middle part; track CRCs leave out the same parts in the first and last tracks. Each column is a Reed–Solomon codeword over GF(2¹⁶), polynomial 0x1100B, α = 2: S_i = Σ word × α^(i × degree), with the first row at the highest degree. The `hasparity` file holds syndromes (not parity), syndrome by syndrome, one value per column; the lookup's `syndrome` attribute is column 0's. **Entries can be stored at another pressing's alignment** (*Two from the Vault* disc 1: shift +1195), so find the shift from column 0's syndromes; `CTDB.column0Syndromes` gets every shift from two passes. Reed–Solomon can miscorrect past its limit, so always check the CRC after a repair.
-- `CDDrive` is the hardware boundary. `IOKitDrive` (target `CDRipDarwin`) implements it with the `DKIOCCD*` ioctls on `/dev/rdiskN`. Swift does not import the `_IOWR` macros, so `Ioctl` computes the request codes, and a test checks them against the SDK. The node belongs to the console user, and the ioctls work while cddafs has the disc mounted. `SimulatedDrive` stands in for hardware in tests. It can simulate a read offset, overread, unreadable sectors (by requested LBA), and silent corruption (by physical sector). New drive behavior (cache, C2, subchannel, jitter) goes into both the protocol and the simulator, so you can test it without hardware.
+- `CDDrive` is the hardware boundary. `IOKitDrive` (target `SilversideDarwin`) implements it with the `DKIOCCD*` ioctls on `/dev/rdiskN`. Swift does not import the `_IOWR` macros, so `Ioctl` computes the request codes, and a test checks them against the SDK. The node belongs to the console user, and the ioctls work while cddafs has the disc mounted. `SimulatedDrive` stands in for hardware in tests. It can simulate a read offset, overread, unreadable sectors (by requested LBA), and silent corruption (by physical sector). New drive behavior (cache, C2, subchannel, jitter) goes into both the protocol and the simulator, so you can test it without hardware.
 
 ## Verified vs. unverified
 
@@ -100,7 +100,7 @@ The test values in `DiscIDTests` are real data from MusicBrainz, AccurateRip, an
 
 ## Hardware findings
 
-Three drives so far (MATSHITA UJ260AF +103, HL-DT-ST BU50N +6, ASUS BW-16D1HT +6); details for each are in `docs/Milestones.md`. MATSHITA BD-MLT UJ260AF on USB (no hub), probed with `DKIOCCD*` ioctls:
+Three drives so far (MATSHITA UJ260AF +103, HL-DT-ST BU50N +6, ASUS BW-16D1HT +6); details for each are in `docs/internal/Milestones.md`. MATSHITA BD-MLT UJ260AF on USB (no hub), probed with `DKIOCCD*` ioctls:
 
 - The read offset is +103. It agrees with AccurateRip's drive offset list, and it is the only offset that matches on all three test discs. One disc cannot prove a drive's offset: other pressings match too, and they can have more submissions (*The Endless River*: +773 has v1 66 and v2 200, +103 has 27 and 200). AccurateRip confidences stop at 200. Find a drive's offset from the offsets that several discs share, or from the AccurateRip drive offset list.
 - These work: full TOC, audio reads, C2 error flags, and Q subchannel together with the user area (Q alone gives `EINVAL`).
@@ -113,7 +113,7 @@ Three drives so far (MATSHITA UJ260AF +103, HL-DT-ST BU50N +6, ASUS BW-16D1HT +6
 
 ## Constraints
 
-- **Dependencies:** discuss each outside dependency with the user before you add it. Today the only one is swift-argument-parser, for the `cdrip` target only; the engine targets have none. MP3 output will use `lame` (agreed with the user) as an external program through a pipe, never linked. Prefer Apple frameworks: AudioToolbox encodes FLAC and ALAC, CryptoKit does SHA-1, and URLSession, IOKit, and DiskArbitration cover the rest.
+- **Dependencies:** discuss each outside dependency with the user before you add it. Today the only one is swift-argument-parser, for the `silverside` target only; the engine targets have none. MP3 output will use `lame` (agreed with the user) as an external program through a pipe, never linked. Prefer Apple frameworks: AudioToolbox encodes FLAC and ALAC, CryptoKit does SHA-1, and URLSession, IOKit, and DiskArbitration cover the rest.
 - **Licensing:** the project will probably be open source under a permissive license such as MIT. Don't port GPL code. You may read whipper, libcdio-paranoia, XLD, and CUETools to understand an algorithm, but write our own implementation.
 - **Distribution and access:** the app uses Developer ID distribution, not the App Store. App Sandbox is off, because ripping needs raw device access.
 - **Platform versions:** Swift 6 language mode. The package and the app both require macOS 15 Sequoia. Don't use APIs from later releases without `if #available`: for example `Span` (macOS 26), and Foundation Models (macOS 26), which must stay optional. The tests run only on the current macOS here, so read the availability of each new API.
@@ -122,7 +122,7 @@ Three drives so far (MATSHITA UJ260AF +103, HL-DT-ST BU50N +6, ASUS BW-16D1HT +6
 
 ## Roadmap
 
-The full list is in `docs/Milestones.md`. Keep both up to date.
+The full list is in `docs/internal/Milestones.md`. Keep both up to date.
 
 
 1. Done: TOC, disc IDs, AccurateRip checksums, simulated drive, offset-corrected reader.
@@ -134,4 +134,4 @@ The full list is in `docs/Milestones.md`. Keep both up to date.
 4. Mostly done: encoding (`AudioEncoder`, `FLACTags`, `MP4Tags`, `ID3Tags`, `DiscEncoder`, `silverside encode`, `silverside rip --encode`), checked by decoding each file again.
 8. Mostly done: the Markdown rip report, CUE sheets, pregaps, CD-Text (`silverside cdtext`), hidden track one audio, AIFF and WAV tags; and the drive report (`silverside drives --report`).
 
-The CLI is finished for daily use. Next: the app. The loose ends (built but not tested on hardware, and deferred work) are in `docs/Milestones.md`.
+The CLI is finished for daily use. Next: the app. The loose ends (built but not tested on hardware, and deferred work) are in `docs/internal/Milestones.md`.

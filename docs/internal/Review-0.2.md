@@ -1,6 +1,6 @@
-# Code review of CDRip 0.2
+# Code review of Silverside 0.2
 
-Date: 2026-10-20. Scope: the whole engine (`CDRipKit`), `CDRipDarwin`, the `cdrip` CLI, the tests, and the docs, before work on the app starts. Method: every file was read; the suspected secure-rip bugs were checked against `SimulatedDrive` with throwaway tests; one Foundation behavior was checked with a script. No drive or disc was used.
+Date: 2026-10-20. Scope: the whole engine (`SilversideKit`), `SilversideDarwin`, the `silverside` CLI, the tests, and the docs, before work on the app starts. Method: every file was read; the suspected secure-rip bugs were checked against `SimulatedDrive` with throwaway tests; one Foundation behavior was checked with a script. No drive or disc was used.
 
 Baseline: `make lint` clean, 187 tests in 46 suites pass.
 
@@ -117,7 +117,7 @@ Each entry names the finding, the files, and the tests. All 197 engine tests pas
 
 **Batch 7: docs (items 16d, 16e).** The status table in `Milestones.md`, a "Code review of 0.2" section there with the loose ends to check on hardware, the app section's notes on threads, events, stopping, ATS, and memory; the README's note on plain HTTP; CLAUDE.md's App section and engine conventions.
 
-**Batch 8 (2026-10-21, with Preston): Ctrl-C.** `cdrip rip` and `cdrip repair` turn the first Ctrl-C into `stop.stop()` (`Interrupt` in the CLI): the read under way finishes, the tracks done so far stay, the folder's claim is released, and the command exits with status 130 after saying where the tracks are. A second Ctrl-C ends the process at once. Also the first hardware check of the review's changes: *Reckoning* in the HL-DT-ST and *Dick's Picks Vol. 2* in the MATSHITA, compared with the archive's verified rips (results below).
+**Batch 8 (2026-10-21, with Preston): Ctrl-C.** `silverside rip` and `silverside repair` turn the first Ctrl-C into `stop.stop()` (`Interrupt` in the CLI): the read under way finishes, the tracks done so far stay, the folder's claim is released, and the command exits with status 130 after saying where the tracks are. A second Ctrl-C ends the process at once. Also the first hardware check of the review's changes: *Reckoning* in the HL-DT-ST and *Dick's Picks Vol. 2* in the MATSHITA, compared with the archive's verified rips (results below).
 
 **Hardware check 1: *Reckoning*, HL-DT-ST BU50N at +6 (2026-10-21).** 15 of 15 tracks accurate; tracks 8, 11, 13, 14, and 15 repaired with CTDB entry 2111910 at shift 0 (5,598 samples; the rip of 2026-10-20 repaired the same tracks with 5,993). Every WAV file is byte for byte the archive's verified rip. About 11 minutes. Nothing in the output changed: the flush, the re-reads, the suspects, and the repair behaved as before.
 
@@ -147,11 +147,11 @@ Decisions taken without asking:
 - **`MP3Error.malformedID3Tag`** is a new case.
 - **`blocking(_:)` uses one `@unchecked Sendable` box** for the closure it hands to the GCD thread; the CLI's `RipPrinter` and the tests' event collectors are `@unchecked Sendable` because events come one at a time.
 
-Worth a look on hardware when a disc is in a drive (no code depends on it, but the output should not change): one `cdrip rip` of a clean disc, one of a damaged disc, one `cdrip repair -d` with re-reads, and a `--pool` with a folder that holds a non-WAV "Track 01.wav" to see the new message.
+Worth a look on hardware when a disc is in a drive (no code depends on it, but the output should not change): one `silverside rip` of a clean disc, one of a damaged disc, one `silverside repair -d` with re-reads, and a `--pool` with a folder that holds a non-WAV "Track 01.wav" to see the new message.
 
 Left as is:
 
 - 16b: the C2 fallback in `TrackRipper` still catches any error from the C2 read. A C2 probe per drive, kept in the profile, needs a drive that refuses C2 to test against.
 - 21: ATS exceptions belong in the app's Info.plist, which the project does not have yet (it generates one from build settings).
 - 22: memory; noted in Milestones.
-- The untracked `App/CDRip.xcodeproj/xcshareddata/xcschemes/CDRip.xcscheme` appeared during the session; nothing here wrote to the Xcode project, so it is probably Xcode's.
+- The untracked `App/Silverside.xcodeproj/xcshareddata/xcschemes/Silverside.xcscheme` appeared during the session; nothing here wrote to the Xcode project, so it is probably Xcode's.

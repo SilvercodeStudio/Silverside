@@ -14,6 +14,7 @@ struct AppCommands: Commands {
         CommandGroup(replacing: .help) {
             Button("Silverside Help") { openWindow(id: "help") }
                 .keyboardShortcut("?", modifiers: .command)
+            Button("Welcome to Silverside") { model.welcomeShown = true }
         }
         CommandGroup(after: .sidebar) {
             Button("Rip History") { model.selection = .history }
@@ -34,7 +35,7 @@ struct AppCommands: Commands {
                 .keyboardShortcut("l", modifiers: [.command, .shift])
                 .disabled(model.selectedDrive?.rip == nil)
             Divider()
-            Button("Repair Rip...") { if let rip = model.selectedRip { model.startRepair(rip) } }
+            Button("Repair Rip…") { if let rip = model.selectedRip { model.startRepair(rip) } }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(!canRepair)
             Divider()

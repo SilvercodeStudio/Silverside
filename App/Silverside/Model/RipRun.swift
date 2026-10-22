@@ -25,6 +25,24 @@ final class RipRun {
         case skipped
     }
 
+    /// Where a track is in the encoding after the rip.
+    enum EncodeState: Equatable {
+        case queued
+        case encoding
+        case encoded(URL)
+        /// Not encoded: the files in the library were kept, or the rip stopped first.
+        case notEncoded
+        case failed
+    }
+
+    /// The library already has files of the disc: the rip waits for `answer(replaces:)`.
+    struct OverwriteQuestion: Identifiable {
+        let id = UUID()
+        var existing: [URL]
+        var album: String
+        var folder: URL? { existing.first?.deletingLastPathComponent() }
+    }
+
     /// The sectors of a track that the drive flagged, could not read, or that reads disagree on,
     /// counted from the track's start, for the error strip.
     struct TrackErrors: Equatable {
@@ -58,6 +76,12 @@ final class RipRun {
     /// Tracks encoded so far, for the progress bar while encoding.
     private(set) var encodedCount = 0
     private(set) var encodingFormat: AudioFormat?
+    /// True if the rip encodes into the library when it ends.
+    private(set) var encodes = false
+    private(set) var encodeStates: [Int: EncodeState] = [:]
+    /// The files that the library already had and the user kept, so the rip was not encoded.
+    private(set) var keptFiles: [URL]?
+    private(set) var overwriteQuestion: OverwriteQuestion?
     private(set) var startDate = Date()
     private(set) var endDate: Date?
     /// Sectors read so far, over every track to rip, for the whole-rip progress.
@@ -74,6 +98,9 @@ final class RipRun {
     @ObservationIgnored private var passStart: (date: Date, sectors: Int)?
     @ObservationIgnored private var tracksToRip: [Int] = []
     @ObservationIgnored private var sectorsBefore: [Int: Int] = [:]
+    @ObservationIgnored private var overwriteAnswer: CheckedContinuation<Bool, Never>?
+    /// Hears the question about files in the library, so the app can show the drive and ask for attention.
+    @ObservationIgnored var onQuestion: (@MainActor () -> Void)?
 
     init(disc: DiscInfo) {
         self.disc = disc
@@ -108,8 +135,10 @@ final class RipRun {
     /// Starts the rip on a thread of its own. The engine's events come back on the main queue, in order.
     func start(
         makeDrive: @escaping @Sendable () throws -> any CDDrive, identity: DriveIdentity, settings: Settings,
-        options: DiscRipOptions, encodes: Bool, onFinish: @escaping @MainActor () -> Void
+        options: DiscRipOptions, encodes: Bool, allowsUnverified: Bool = false, library: URL? = nil,
+        onFinish: @escaping @MainActor () -> Void
     ) {
+        self.encodes = encodes
         tracksToRip = options.tracks ?? disc.toc.audioTracks.map(\.number)
         for track in disc.toc.audioTracks {
             trackStates[track.number] = tracksToRip.contains(track.number) ? .queued : .skipped
@@ -129,9 +158,21 @@ final class RipRun {
                 var rip = DiscRip(
                     drive: drive, identity: identity, settings: settings, options: options,
                     profiles: try DriveProfileStore())
-                if encodes { rip.encoder = DiscEncoder(settings: settings) }
+                if encodes {
+                    var encoder = DiscEncoder(settings: settings)
+                    encoder.allowsUnverified = allowsUnverified
+                    rip.encoder = encoder
+                    if let library { rip.library = library }
+                }
                 rip.events = { event in
                     DispatchQueue.main.async { MainActor.assumeIsolated { run.handle(event) } }
+                }
+                rip.confirmOverwrite = { existing in
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated { run.ask(existing, answer: continuation) }
+                        }
+                    }
                 }
                 let result = try await rip.run()
                 DispatchQueue.main.async {
@@ -163,11 +204,18 @@ final class RipRun {
 
     /// The engine's errors, worded for the app where they name the CLI.
     nonisolated static func message(for error: any Error) -> String {
-        if case DiscRipError.unknownOffset(let drive) = error {
+        switch error {
+        case DiscRipError.unknownOffset(let drive):
             return
                 "The read offset of \(drive) is not known. Silverside looks it up in AccurateRip's drive list when it is online, or set it in Settings › Drives."
+        case EncodingError.notVerified(let track):
+            return
+                "Not encoded: track \(track) is not verified by AccurateRip or CTDB. The rip is in the rips folder."
+        case EncodingError.exists(let file):
+            return "Not encoded: \(file.path) is already in the library. The rip is in the rips folder."
+        default:
+            return "\(error)"
         }
-        return "\(error)"
     }
 
     /// Stops after the read under way. The tracks ripped so far stay in the folder.
@@ -175,11 +223,37 @@ final class RipRun {
         guard isRunning else { return }
         add("Stopping after the read under way...")
         task?.cancel()
+        // A rip that waits for the question stops when it hears the answer.
+        if overwriteQuestion != nil { answer(replaces: false) }
+    }
+
+    private func ask(_ existing: [URL], answer: CheckedContinuation<Bool, Never>) {
+        overwriteAnswer = answer
+        overwriteQuestion = OverwriteQuestion(existing: existing, album: disc.title)
+        add("The library already has \(Format.count(existing.count, "file")) of this disc. Waiting for an answer...")
+        onQuestion?()
+    }
+
+    /// Answers the question about files in the library: true replaces them, false keeps them and the rip.
+    func answer(replaces: Bool) {
+        guard let overwriteAnswer else { return }
+        self.overwriteAnswer = nil
+        overwriteQuestion = nil
+        add(replaces ? "Replacing the files in the library." : "Keeping the files in the library.")
+        overwriteAnswer.resume(returning: replaces)
     }
 
     private func end(_ phase: Phase) {
+        let wasEncoding = self.phase == .encoding
         endDate = Date()
         self.phase = phase
+        for (number, state) in encodeStates {
+            switch state {
+            case .encoding: encodeStates[number] = wasEncoding && phase != .stopped ? .failed : .notEncoded
+            case .queued: encodeStates[number] = .notEncoded
+            default: break
+            }
+        }
         currentTrack = nil
         for (number, state) in trackStates {
             if case .finished = state { continue }
@@ -199,9 +273,9 @@ final class RipRun {
     /// The text that the status bar shows.
     var statusText: String {
         switch phase {
-        case .starting: return "Starting..."
+        case .starting: return "Starting…"
         case .ripping:
-            guard let currentTrack else { return "Ripping..." }
+            guard let currentTrack else { return "Ripping…" }
             var text = "Ripping track \(currentTrack)" + (count > 1 ? " (\(position) of \(count))" : "")
             switch trackStates[currentTrack] {
             case .reading(let pass, _) where pass > 1: text += " · read \(pass)"
@@ -210,7 +284,7 @@ final class RipRun {
             default: break
             }
             return text
-        case .checkingCTDB: return "Checking the disc against CUETools DB..."
+        case .checkingCTDB: return "Checking the disc against CUETools DB…"
         case .encoding:
             let format = encodingFormat?.rawValue.uppercased() ?? ""
             return "Encoding as \(format) · track \(min(encodedCount + 1, tracksToRip.count)) of \(tracksToRip.count)"
@@ -342,12 +416,21 @@ final class RipRun {
             phase = .encoding
             encodingFormat = format
             encodedCount = 0
+            for number in tracksToRip { encodeStates[number] = .queued }
+            startNextEncode()
             onProgress?()
             add("Encoding as \(format.rawValue.uppercased())...")
         case .encodedTrack(let line):
-            encodedCount += 1
-            onProgress?()
             add("  \(line)")
+        case .trackEncoded(let number, let file):
+            encodedCount += 1
+            encodeStates[number] = .encoded(file)
+            startNextEncode()
+            onProgress?()
+        case .encodingDeclined(let existing):
+            keptFiles = existing
+            for number in tracksToRip { encodeStates[number] = .notEncoded }
+            add("Not encoded: the library keeps its files. The rip is in \(folder?.path ?? "the rips folder").")
         case .encoded(let files, let format):
             encodedFiles = files
             add("Encoded \(files.count) tracks as \(format.rawValue.uppercased()), each checked against the rip.")
@@ -355,6 +438,13 @@ final class RipRun {
             add("Deleted the rip's WAV files. The rip report is in the album folder.")
         case .ripKept(let folder):
             add("Kept the rip in \(folder.path): not every track is verified and encoded.")
+        }
+    }
+
+    /// The encoder writes the tracks in order, so the first one still queued is under way.
+    private func startNextEncode() {
+        if let next = tracksToRip.sorted().first(where: { encodeStates[$0] == .queued }) {
+            encodeStates[next] = .encoding
         }
     }
 

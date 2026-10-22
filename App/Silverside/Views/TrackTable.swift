@@ -44,6 +44,12 @@ struct TrackTable: View {
                     CTDBCell(run: rip, number: track.number)
                 }
                 .width(min: 70, ideal: 110)
+                if rip.encodes {
+                    TableColumn("Encoding") { track in
+                        EncodeCell(state: rip.encodeStates[track.number], format: rip.encodingFormat)
+                    }
+                    .width(min: 80, ideal: 100)
+                }
             }
             .alternatingRowBackgrounds(.disabled)
         } else {
@@ -336,6 +342,33 @@ struct CTDBCell: View {
                 Text("—").foregroundStyle(.secondary)
             }
         } else {
+            Text("—").foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct EncodeCell: View {
+    var state: RipRun.EncodeState?
+    var format: AudioFormat?
+
+    var body: some View {
+        switch state {
+        case .queued:
+            Text("Queued").foregroundStyle(.secondary)
+        case .encoding:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Encoding")
+            }
+        case .encoded(let file):
+            Label(format?.rawValue.uppercased() ?? "Encoded", systemImage: "checkmark.circle")
+                .foregroundStyle(Theme.good)
+                .help(file.path)
+        case .notEncoded:
+            Text("Not encoded").foregroundStyle(.secondary)
+        case .failed:
+            Text("Failed").foregroundStyle(Theme.bad)
+        case nil:
             Text("—").foregroundStyle(.secondary)
         }
     }

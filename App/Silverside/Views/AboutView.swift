@@ -24,7 +24,7 @@ struct AboutView: View {
                 stats
                 credits
                 HStack(spacing: 12) {
-                    Button("Acknowledgments...") { acknowledgmentsShown = true }
+                    Button("Acknowledgments…") { acknowledgmentsShown = true }
                     Button("Website") { NSWorkspace.shared.open(Self.website) }
                 }
                 .controlSize(.large)
@@ -90,24 +90,26 @@ struct AboutView: View {
     }
 }
 
-/// The app's icon over a dark blue field with a disc's grooves around it.
-private struct Hero: View {
-    static let height: CGFloat = 232
+/// The app's icon over a dark blue field with a disc's grooves around it, for the About
+/// window and the welcome.
+struct Hero: View {
+    var height: CGFloat = 232
+    var iconSize: CGFloat = 190
 
     var body: some View {
         Image(nsImage: NSApp.applicationIconImage)
             .resizable()
             .scaledToFit()
-            .frame(width: 190, height: 190)
+            .frame(width: iconSize, height: iconSize)
             .shadow(color: .black.opacity(0.45), radius: 18, y: 10)
             .frame(maxWidth: .infinity)
-            .frame(height: Self.height)
+            .frame(height: height)
             // Only the background reaches under the title bar, so the window keeps its height.
             // Its grooves and glow center on the icon, measured from the bottom: the part
             // under the title bar is above the hero's own height.
             .background {
                 Canvas { context, size in
-                    let center = CGPoint(x: size.width / 2, y: size.height - Self.height / 2)
+                    let center = CGPoint(x: size.width / 2, y: size.height - height / 2)
                     context.fill(
                         Path(CGRect(origin: .zero, size: size)),
                         with: .radialGradient(
@@ -151,7 +153,7 @@ private struct AcknowledgmentsSheet: View {
     private let entries: [(name: String, text: String)] = [
         (
             "[Exact Audio Copy](https://www.exactaudiocopy.de)",
-            "by Andre Wiethoff, set the standard for secure ripping that Silverside follows."
+            "by Andre Wiethoff set the standard for secure ripping that Silverside follows."
         ),
         (
             "[AccurateRip](http://www.accuraterip.com)",
@@ -162,8 +164,8 @@ private struct AcknowledgmentsSheet: View {
             "by Grigory Chudov keeps checksums of whole discs, and the data that repairs damaged rips."
         ),
         (
-            "[MusicBrainz](https://musicbrainz.org) and the [Cover Art Archive](https://coverartarchive.org)",
-            "of the MetaBrainz Foundation give the names, and the covers, from the work of their volunteers."
+            "[MusicBrainz](https://musicbrainz.org) and the [Cover Art Archive](https://coverartarchive.org),",
+            "run by the MetaBrainz Foundation, provide album names and cover art, built by their volunteers."
         ),
         (
             "[LAME](https://lame.sourceforge.io)",
@@ -187,7 +189,7 @@ private struct AcknowledgmentsSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                Button("License...") { licenseShown = true }
+                Button("License…") { licenseShown = true }
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }

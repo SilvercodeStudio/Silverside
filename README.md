@@ -1,12 +1,12 @@
 # Silverside
 
-This is a CD ripping app for macOS intended to produce secure,
-verified rips of audio CDs similar to Exact Audio Copy (EAC) for
-Windows. It extracts the audio from CDs into a folder of your choice
-in a highly accurate manner with an extraction report, and can optionally
-encode the tracks to the format of your choice such as FLAC, Apple
-Lossless, AAC, WAV, or (with a helper app) MP3, as well as tag
-the tracks with appropriate metadata (song and album titles.)
+Silverside is a CD ripping app for macOS intended to produce secure,
+verified rips of audio CDs, inspired by Exact Audio Copy (EAC) for
+Windows but with modern Mac interface. It extracts the audio from CDs into
+a folder of your choice in a highly accurate manner with an extraction
+report, and can optionally encode the tracks into your preferred format
+such as FLAC, Apple Lossless, AAC, WAV, or (with a helper app) MP3, as well
+as tag the tracks with appropriate metadata (song and album titles).
 
 It is a Mac app, Silverside, and a command-line tool, `silverside`, which share
 one engine and one settings file.
@@ -177,7 +177,9 @@ MusicBrainz disc titles have a date and venue, titles end with
 tag and leaves the file name; `segueMarks` in the settings changes that.
 It encodes only tracks that AccurateRip or CTDB verified,
 unless you give `--allow-unverified`. The rip's report goes into the album
-folder too, as `Rip Report (Disc 1).json`.
+folder too, as `Rip Report (Disc 1).json`. Files that are already in the
+library stay unless you give `--overwrite`; at a terminal, `rip --encode`
+asks first.
 
 After `rip --encode`, a rip whose tracks are all verified and encoded is
 deleted, because the library has everything. `--keep-rip` (or the
@@ -255,7 +257,7 @@ make build         # the Mac app
 
 Open `Silverside.xcworkspace` in Xcode for the app, the engine, and the CLI.
 
-## TODO
+## TODO or future ideas
 
 - **Discs that MusicBrainz does not know.** `silverside metadata --manual` (or
   the app) names them from CD-Text or by hand, and the files get no
@@ -265,6 +267,16 @@ Open `Silverside.xcworkspace` in Xcode for the app, the engine, and the CLI.
 - **Multi-disc sets.** The discs of a release share the release choice and
   the album's edits, and the app says which discs of a set are ripped. Still
   to do: reusable style recipes for titles.
+- Pre-emphasis support as mentioned above.
+- Localization in other languages. 
+- Recognition of HDCD; possible 24-bit decode.
+- ReplayGain tags.
+- Ripping of data tracks for mixed-mode / Enhanced CDs.
+- Option to slow down drive speed (quieter)
+- Multiple encodings at once (e.g. FLAC + AAC)
+- AcoustID?
+- Rip log checksum
+- Per-track pregap adjustments
 
 See [docs/internal/Milestones.md](docs/internal/Milestones.md) for the plan.
 

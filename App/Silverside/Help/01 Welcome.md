@@ -12,10 +12,12 @@ Silverside rips audio CDs on the Mac with the care of Exact Audio Copy: every tr
 
 ## A rip, step by step
 
-1. Insert a disc. Apple Music may open too; you can close it, or leave it open. However, you should set "When CD inserted: Show" as the default action in Apple Music Settings to avoid automatically playing or ripping the CD through Apple Music.
+1. Insert a disc. Apple Music may open too; you can close it, or leave it open. However, you should set “When a CD is inserted” to Show CD in the Music app's settings, so that Music does not play or import the disc while Silverside reads it.
 2. Check the album and the tracks. If several releases match, choose one with Other Releases.
 3. Click Rip Disc, or uncheck tracks and click Rip Selected.
 4. Watch the status. A green check means the track matches AccurateRip.
-5. The rip's folder opens from the banner at the end. If encoding is on in Settings, the album goes into your library.
+5. The rip's folder opens from the banner at the end. If encoding is on in Settings, the album goes into your library, and the Encoding column shows each track's file. If the library already has the album, Silverside asks before it replaces the files; if you keep them, the rip stays in the rips folder.
+
+The first time Silverside opens, it asks what a rip should become: Apple Lossless, FLAC, AAC, or WAV files only. Settings › General changes the choice later, and Help › Welcome to Silverside shows the welcome again.
 
 The `silverside` command-line tool does the same work from a terminal, with the same settings.

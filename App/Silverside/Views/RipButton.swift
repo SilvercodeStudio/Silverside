@@ -271,7 +271,9 @@ struct RipArt {
         context.fill(
             Path(ellipseIn: CGRect(x: center.x - rx, y: 199 - ry, width: 2 * rx, height: 2 * ry)),
             with: .color(Color(hex: 0x6f7786)))
-        let turn = time.map { -$0 * 90 } ?? 0
+        // Within one turn: the time is seconds since 2001, and macOS 15 draws a conic gradient
+        // at an angle of billions of degrees as its first color only (a white disc).
+        let turn = time.map { (-$0 * 90).truncatingRemainder(dividingBy: 360) } ?? 0
         context.fill(
             shape,
             with: .conicGradient(Gradient(stops: Self.rainbow), center: center, angle: .degrees(110 + turn)))

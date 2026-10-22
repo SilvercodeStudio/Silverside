@@ -39,6 +39,9 @@ final class AppModel {
     var alert: AppAlert?
     /// True while a sheet or panel shows the rip's log.
     var logShown = false
+    /// The welcome sheet: at the first launch, and from the Help menu. `-welcomeDone 0` shows
+    /// it again at launch, and `-welcomeDone 1` keeps it out of a screenshot.
+    var welcomeShown = !UserDefaults.standard.bool(forKey: WelcomeView.doneKey)
     /// The repair under way, or the last one, shown in a sheet.
     private(set) var repair: RepairRun?
     var repairShown = false
@@ -172,9 +175,16 @@ final class AppModel {
         let run = RipRun(disc: disc)
         slot.rip = run
         run.onProgress = { [weak self] in self?.updateDock() }
+        // The question waits for the user, so it shows the drive, and asks for attention behind other apps.
+        run.onQuestion = { [weak self] in
+            self?.selection = .drive(slot.id)
+            if !NSApp.isActive { NSApp.requestUserAttention(.criticalRequest) }
+        }
+        // A demo rip is offline, so nothing is verified, and it encodes into a library of its own.
         run.start(
             makeDrive: slot.makeDrive, identity: slot.identity, settings: settings, options: options,
-            encodes: settings.encodeAfterRip && !slot.isDemo
+            encodes: settings.encodeAfterRip, allowsUnverified: slot.isDemo,
+            library: slot.isDemo ? URL.temporaryDirectory.appending(path: "Silverside Demo Library") : nil
         ) { [weak self] in
             guard let self else { return }
             updateDock()

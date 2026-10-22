@@ -42,7 +42,7 @@ final class RepairRun: Identifiable {
     /// What the repair found, in a line.
     var headline: String {
         switch phase {
-        case .running: return "Repairing..."
+        case .running: return "Repairing…"
         case .stopped: return "Stopped. Nothing was written."
         case .failed(let message): return "The repair failed: \(message)"
         case .finished:

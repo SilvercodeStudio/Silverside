@@ -8,12 +8,32 @@ struct MainWindow: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
+    /// A rip that waits to hear whether to replace files in the library.
+    private var questionRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.overwriteQuestion != nil } }
+
+    private static func message(for question: RipRun.OverwriteQuestion) -> String {
+        let files = question.existing.count == 1 ? "1 file" : "\(question.existing.count) files"
+        let folder = question.folder.map { " in \(($0.path as NSString).abbreviatingWithTildeInPath)" } ?? ""
+        return "The library already has \(files) of “\(question.album)”\(folder). Replace them with this rip?\n\n"
+            + "If you keep them, nothing is encoded, and the rip stays in the rips folder."
+    }
+
     var body: some View {
         @Bindable var model = model
         NavigationSplitView {
             SidebarView()
         } detail: {
             DetailView()
+                .alert(
+                    "Replace the files in the library?",
+                    isPresented: Binding(get: { questionRip != nil }, set: { _ in }),
+                    presenting: questionRip
+                ) { rip in
+                    Button("Replace", role: .destructive) { rip.answer(replaces: true) }
+                    Button("Keep the Files", role: .cancel) { rip.answer(replaces: false) }
+                } message: { rip in
+                    if let question = rip.overwriteQuestion { Text(Self.message(for: question)) }
+                }
         }
         .frame(minWidth: 980, minHeight: 600)
         .alert(
@@ -27,6 +47,9 @@ struct MainWindow: View {
         }
         .sheet(isPresented: $model.logShown) {
             RipLogView(run: model.selectedDrive?.rip)
+        }
+        .sheet(isPresented: $model.welcomeShown) {
+            WelcomeView()
         }
         .sheet(isPresented: $model.repairShown) {
             if let run = model.repair { RepairSheet(run: run) }
@@ -140,7 +163,7 @@ struct SidebarView: View {
         if let rip = slot.rip, rip.isRunning { return "Ripping · \(Int(rip.fraction * 100))%" }
         switch slot.discState {
         case .empty: return "No disc"
-        case .reading: return "Reading the disc..."
+        case .reading: return "Reading the disc…"
         case .failed: return "Cannot read the disc"
         case .ready:
             guard let disc = slot.disc else { return "" }

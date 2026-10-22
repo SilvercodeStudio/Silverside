@@ -85,7 +85,7 @@ struct FolderField: View {
         LabeledContent(label) {
             HStack {
                 TextField("", text: $path).labelsHidden().textFieldStyle(.roundedBorder)
-                Button("Choose...") {
+                Button("Choose…") {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = true
                     panel.canChooseFiles = false
@@ -258,7 +258,7 @@ struct DriveSettings: View {
             }
             Section("Checks") {
                 HStack {
-                    Button("Test Drive...") { start(.test, profile) }
+                    Button("Test Drive…") { start(.test, profile) }
                         .help("Read the TOC, audio, C2 flags, and the Q subchannel, and time the reads")
                     Button("Measure Cache") { start(.cache, profile) }
                         .help("Time re-reads to find how many sectors the drive keeps in memory")

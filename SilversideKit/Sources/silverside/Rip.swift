@@ -106,7 +106,13 @@ struct Rip: AsyncParsableCommand {
         let printer = RipPrinter()
         rip.events = printer.print
         // Ask when the choice matters, if someone is at the terminal to answer.
-        if isatty(STDIN_FILENO) != 0 { rip.chooseRelease = ReleaseChoice.askForRelease }
+        if isatty(STDIN_FILENO) != 0 {
+            rip.chooseRelease = ReleaseChoice.askForRelease
+            rip.confirmOverwrite = { [printer] existing in
+                printer.progress.clear()
+                return Self.askToOverwrite(existing)
+            }
+        }
         // Ctrl-C stops the rip after the read under way; the tracks done so far stay.
         let interrupt = Interrupt(
             stop: rip.stop, message: "Stopping after the read under way. Press Ctrl-C again to stop at once.")
@@ -134,6 +140,18 @@ struct Rip: AsyncParsableCommand {
     }
 
     /// The track numbers in a list such as "1,3-5".
+    /// Asks at the terminal whether to replace the files of the disc in the library. No is the default.
+    static func askToOverwrite(_ existing: [URL]) -> Bool {
+        let folder = existing.first?.deletingLastPathComponent().path ?? ""
+        print(
+            "The library already has \(existing.count == 1 ? "1 file" : "\(existing.count) files") of this disc, in \(folder)."
+        )
+        print("Replace them? [y/N] ", terminator: "")
+        fflush(stdout)
+        let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        return answer == "y" || answer == "yes"
+    }
+
     static func trackNumbers(_ list: String) throws -> [Int] {
         var numbers = Set<Int>()
         for part in list.split(separator: ",") {
@@ -245,6 +263,11 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print()
         case .encodedTrack(let line):
             Swift.print("  \(line)")
+        case .trackEncoded:
+            break
+        case .encodingDeclined(let existing):
+            let folder = existing.first?.deletingLastPathComponent().path ?? ""
+            Swift.print("Did not encode: kept the files in \(folder). The rip is kept, for silverside encode later.")
         case .encoded(let files, let format):
             Swift.print(
                 "Encoded \(files.count) tracks as \(format.rawValue.uppercased()), each checked against the rip.")

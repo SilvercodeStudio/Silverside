@@ -146,6 +146,8 @@ public struct DiscEncoder {
     public var overwrites = false
     /// Receives a line for each track, for people to read.
     public var log: @Sendable (String) -> Void = { _ in }
+    /// Hears each track when its file is written and checked: the track's number and the file.
+    public var trackEncoded: @Sendable (_ number: Int, _ file: URL) -> Void = { _, _ in }
 
     public init(format: AudioFormat) {
         self.format = format
@@ -165,29 +167,31 @@ public struct DiscEncoder {
         mp3 = settings.mp3
     }
 
-    /// Encodes the disc's tracks into `library`, and returns the files written.
-    @discardableResult
-    public func encode(_ disc: RippedDisc, into library: URL) throws -> [URL] {
+    /// The files that `encode` would write, one for each track, in order. It throws as `encode`
+    /// does for a disc that cannot be encoded, but not for files that exist, so a caller can
+    /// ask before it replaces them (see `overwrites`).
+    public func plannedFiles(_ disc: RippedDisc, into library: URL) throws -> [URL] {
+        try plan(disc, into: library).jobs.map(\.file)
+    }
+
+    private struct Job {
+        var ripped: RippedDisc.Track
+        var index: Int
+        var metadata: TrackMetadata
+        var folder: URL
+        var file: URL
+    }
+
+    /// Every track's names, before any file is written.
+    private func plan(_ disc: RippedDisc, into library: URL) throws -> (
+        release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium, jobs: [Job]
+    ) {
         guard let release = disc.release else { throw EncodingError.noRelease(disc.folder) }
         guard let medium = release.medium(for: disc.toc) else { throw EncodingError.unknownMedium(disc.folder) }
         if !allowsUnverified, let track = disc.tracks.first(where: { !$0.isVerified }) {
             throw EncodingError.notVerified(track: track.number)
         }
-        let lame = format == .mp3 ? MP3Encoder.lame() : nil
-        if format == .mp3 && lame == nil { throw MP3Error.lameNotFound }
-
-        let cover = try disc.coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }
         let audioTracks = disc.toc.audioTracks
-
-        // Every track's names first, so that a file that exists stops the encoding before
-        // any file is written, and a half-done album can be finished later.
-        struct Job {
-            var ripped: RippedDisc.Track
-            var index: Int
-            var metadata: TrackMetadata
-            var folder: URL
-            var file: URL
-        }
         var jobs = [Job]()
         for ripped in disc.tracks {
             // Track 0 is the audio before track 1: MusicBrainz's pregap track, if it lists one.
@@ -209,9 +213,25 @@ public struct DiscEncoder {
             let values = metadata.nameValues
             let folder = library.appending(path: folderTemplate.name(values), directoryHint: .isDirectory)
             let file = folder.appending(path: trackTemplate.name(values) + "." + format.fileExtension)
-            if FileManager.default.fileExists(atPath: file.path) && !overwrites { throw EncodingError.exists(file) }
             jobs.append(Job(ripped: ripped, index: index, metadata: metadata, folder: folder, file: file))
         }
+        return (release, medium, jobs)
+    }
+
+    /// Encodes the disc's tracks into `library`, and returns the files written.
+    @discardableResult
+    public func encode(_ disc: RippedDisc, into library: URL) throws -> [URL] {
+        let (release, medium, jobs) = try plan(disc, into: library)
+        let lame = format == .mp3 ? MP3Encoder.lame() : nil
+        if format == .mp3 && lame == nil { throw MP3Error.lameNotFound }
+        // A file that exists stops the encoding before any file is written, so a half-done
+        // album can be finished later.
+        if !overwrites, let job = jobs.first(where: { FileManager.default.fileExists(atPath: $0.file.path) }) {
+            throw EncodingError.exists(job.file)
+        }
+
+        let cover = try disc.coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }
+        let audioTracks = disc.toc.audioTracks
 
         var written = [URL]()
         var albumFolder: URL?
@@ -232,6 +252,7 @@ public struct DiscEncoder {
             try FileManager.default.moveItem(at: partial, to: file)
             written.append(file)
             log("\(file.lastPathComponent)")
+            trackEncoded(ripped.number, file)
             let tocTrack = audioTracks[index]
             if ripped.number == 0 {
                 hiddenTrackFile = file.lastPathComponent

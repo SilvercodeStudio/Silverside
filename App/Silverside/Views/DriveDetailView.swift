@@ -16,7 +16,7 @@ struct DriveDetailView: View {
             case .empty:
                 NoDiscView(driveName: slot.name)
             case .reading:
-                ProgressView("Reading the disc...")
+                ProgressView("Reading the disc…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(let message):
                 ContentUnavailableView {
@@ -192,7 +192,7 @@ struct AlbumHeader: View {
                 .onTapGesture { if slot.rip?.isRunning != true { chooseCover() } }
                 .onDrag { CoverDrop.provider(for: disc.shownCover, name: coverFileName) ?? NSItemProvider() }
                 .contextMenu {
-                    Button("Choose Cover...") { chooseCover() }.disabled(slot.rip?.isRunning == true)
+                    Button("Choose Cover…") { chooseCover() }.disabled(slot.rip?.isRunning == true)
                     if disc.userCover != nil {
                         Button(disc.cover == nil ? "Remove Cover" : "Use the Cover Art Archive's") {
                             slot.disc?.userCover = nil
@@ -200,7 +200,7 @@ struct AlbumHeader: View {
                         .disabled(slot.rip?.isRunning == true)
                     }
                     Divider()
-                    Button("Export Cover...") { CoverDrop.export(disc.shownCover, name: coverFileName) }
+                    Button("Export Cover…") { CoverDrop.export(disc.shownCover, name: coverFileName) }
                         .disabled(disc.shownCover == nil)
                 }
                 .help(
@@ -279,7 +279,7 @@ struct AlbumHeader: View {
                     }
                     if disc.releases.count > 1 {
                         Button(
-                            disc.isAmbiguous ? "Choose Release..." : "Other Releases (\(disc.releases.count - 1))..."
+                            disc.isAmbiguous ? "Choose Release…" : "Other Releases (\(disc.releases.count - 1))…"
                         ) {
                             releasePickerShown = true
                         }
@@ -320,7 +320,7 @@ struct AlbumHeader: View {
         case .notLookedUp:
             Chip(text: "MusicBrainz · not looked up", systemImage: "minus")
         case .lookingUp:
-            Chip(text: "MusicBrainz · looking up...", systemImage: "ellipsis")
+            Chip(text: "MusicBrainz · looking up…", systemImage: "ellipsis")
         case .found where disc.isAmbiguous:
             Chip(text: "MusicBrainz · several releases match", tone: .warning, systemImage: "questionmark")
         case .found where disc.isFuzzy:
@@ -508,10 +508,14 @@ struct ResultBanner: View {
                 if let advice = report.advice {
                     Text(advice).font(.callout).foregroundStyle(.secondary)
                 }
+                if rip.keptFiles != nil {
+                    Text("Not encoded: the library keeps the files it had. The rip is in the rips folder.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
             }
             Spacer()
             if let folder, !report.isVerified, report.ctdb.status != .notInDatabase {
-                Button("Repair...") { model.startRepair(RecentRip(folder: folder, report: report)) }
+                Button("Repair…") { model.startRepair(RecentRip(folder: folder, report: report)) }
                     .help("Check the rip against CTDB again, pooled with the other rips of this disc, and repair it")
                     .disabled(model.repair?.isRunning == true)
             }
@@ -611,7 +615,7 @@ struct RipOptionsView: View {
                     if slot.choices.folder != nil {
                         Button("Default") { slot.choices.folder = nil }
                     }
-                    Button("Choose...") { chooseFolder() }
+                    Button("Choose…") { chooseFolder() }
                 }
             }
             Divider()

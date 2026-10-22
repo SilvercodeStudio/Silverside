@@ -157,6 +157,60 @@ struct DiscRipTests {
         ])
     }
 
+    /// A second rip of a disc that is already in the library asks before it replaces the
+    /// files: no keeps them and the rip, and yes encodes over them.
+    @Test func asksBeforeReplacingFilesInTheLibrary() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900])
+        var settings = Settings()
+        settings.rips = root.appending(path: "rips").path
+        settings.keepRipAfterEncoding = true
+        let library = root.appending(path: "library")
+        let asked = DiscRipEvents()
+
+        func rip(replaces: Bool?) async throws -> (DiscRipResult, [DiscRipEvent]) {
+            var options = DiscRipOptions(settings: settings)
+            options.offline = true
+            options.readOffset = 6
+            options.manualRelease = .manual(toc: toc)
+            var rip = DiscRip(
+                drive: SimulatedDrive(toc: toc, samples: samples, readOffset: 6),
+                identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"), settings: settings,
+                options: options, profiles: try DriveProfileStore(url: root.appending(path: "DriveProfiles.json")))
+            var encoder = DiscEncoder(format: .wav)
+            encoder.allowsUnverified = true
+            rip.encoder = encoder
+            rip.library = library
+            if let replaces {
+                rip.confirmOverwrite = { existing in
+                    asked.append(.encodingDeclined(existing))
+                    return replaces
+                }
+            }
+            let events = DiscRipEvents()
+            rip.events = { events.append($0) }
+            return (try await rip.run(), events.list)
+        }
+
+        let (first, firstEvents) = try await rip(replaces: false)
+        #expect(first.encodedFiles.count == 2 && asked.list.isEmpty)
+        #expect(firstEvents.filter { if case .trackEncoded = $0 { true } else { false } }.count == 2)
+
+        let (declined, declinedEvents) = try await rip(replaces: false)
+        #expect(asked.list.count == 1 && declined.encodedFiles.isEmpty && !declined.deletedRip)
+        #expect(
+            declinedEvents.contains { if case .encodingDeclined(let files) = $0 { files.count == 2 } else { false } })
+        #expect(!declinedEvents.contains { if case .encoding = $0 { true } else { false } })
+
+        let (replaced, _) = try await rip(replaces: true)
+        #expect(asked.list.count == 2 && replaced.encodedFiles == first.encodedFiles)
+
+        // With no one to ask, the encoding stops as before.
+        await #expect(throws: EncodingError.exists(first.encodedFiles[0])) { try await rip(replaces: nil) }
+    }
+
     @Test func verifiesWithAccurateRipAndCTDB() async throws {
         let (toc, samples) = try makeDisc(trackSectors: [800, 900])
         let web = Self.web(toc: toc, samples: samples)

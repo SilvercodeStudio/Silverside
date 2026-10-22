@@ -52,6 +52,9 @@ struct EncodingOptions: ParsableArguments {
     @Option(help: "One more option for lame, such as --lame-option=-q --lame-option=0. Give it once for each word.")
     var lameOption: [String] = []
 
+    @Flag(help: "Replace files that exist in the library.")
+    var overwrite = false
+
     /// The encoder, and the library, from these options over the settings.
     func encoder(_ settings: Settings) -> (encoder: DiscEncoder, library: URL) {
         var encoder = DiscEncoder(settings: settings, format: format)
@@ -68,6 +71,7 @@ struct EncodingOptions: ParsableArguments {
         if let mp3Bitrate { encoder.mp3.bitRate = mp3Bitrate }
         if let mp3Quality { encoder.mp3.vbrQuality = mp3Quality }
         if !lameOption.isEmpty { encoder.mp3.extraArguments = lameOption }
+        encoder.overwrites = overwrite
         return (encoder, library.map(Settings.expand) ?? settings.libraryURL)
     }
 }

@@ -175,7 +175,7 @@ struct DriveTestSheet: View {
                 Text("\(run.title) · \(run.slot.name)").font(.headline)
                 Spacer()
                 if run.report != nil {
-                    Button("Save Report...") { run.saveReport() }
+                    Button("Save Report…") { run.saveReport() }
                         .help("Save the checks and the drive's registry entries as JSON, for a bug report")
                 }
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction).disabled(run.isRunning)

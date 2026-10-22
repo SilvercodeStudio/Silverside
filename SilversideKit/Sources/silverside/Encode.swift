@@ -26,9 +26,6 @@ struct Encode: ParsableCommand {
     @Flag(help: "Encode tracks that AccurateRip and CTDB do not prove.")
     var allowUnverified = false
 
-    @Flag(help: "Replace files that exist in the library.")
-    var overwrite = false
-
     func validate() throws {
         if input.isEmpty { throw ValidationError("Give at least one --input folder.") }
     }
@@ -37,7 +34,6 @@ struct Encode: ParsableCommand {
         var (encoder, libraryURL) = encoding.encoder(try Settings.load())
         let format = encoder.format
         encoder.allowsUnverified = allowUnverified
-        encoder.overwrites = overwrite
         encoder.log = { print("  \($0)") }
         var total = 0
         for folder in input.map({ URL(filePath: $0, directoryHint: .isDirectory) }) {

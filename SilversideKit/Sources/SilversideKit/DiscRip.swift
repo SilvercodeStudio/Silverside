@@ -105,6 +105,11 @@ public enum DiscRipEvent: Sendable {
     case encoding(AudioFormat)
     /// A line from the encoder, for people to read.
     case encodedTrack(String)
+    /// A track's file is written and checked.
+    case trackEncoded(number: Int, file: URL)
+    /// The library already had these files of the disc, and `confirmOverwrite` kept them:
+    /// nothing was encoded, and the rip is kept.
+    case encodingDeclined([URL])
     case encoded([URL], format: AudioFormat)
     /// After encoding: the rip's files were deleted, or kept because not every track is verified and encoded.
     case ripDeleted
@@ -156,6 +161,10 @@ public struct DiscRip {
     public var events: @Sendable (DiscRipEvent) -> Void = { _ in }
     /// Picks a release when several fit the disc and the ranking cannot settle it. Nil uses the first.
     public var chooseRelease: (@Sendable ([MusicBrainzRelease], TOC) -> MusicBrainzRelease?)?
+    /// Asks whether to replace the files of the disc that are already in the library, after
+    /// the rip and before the encoder writes any. False keeps them, and the rip is not encoded.
+    /// Nil asks nothing: the encoding stops with `EncodingError.exists` unless the encoder overwrites.
+    public var confirmOverwrite: (@Sendable (_ existing: [URL]) async -> Bool)?
     public var profiles: DriveProfileStore
     /// The client for every lookup and download. Tests give one with a fake transport.
     public var webClient = WebClient.shared
@@ -436,10 +445,25 @@ public struct DiscRip {
 
         if var encoder {
             try stop.check()
-            events(.encoding(encoder.format))
-            encoder.log = { events(.encodedTrack($0)) }
             let disc = try RippedDisc(folder: folder)
             let library = self.library
+            if !encoder.overwrites, let confirmOverwrite {
+                let existing = try encoder.plannedFiles(disc, into: library).filter {
+                    FileManager.default.fileExists(atPath: $0.path)
+                }
+                if !existing.isEmpty {
+                    let replaces = await confirmOverwrite(existing)
+                    try stop.check()
+                    guard replaces else {
+                        events(.encodingDeclined(existing))
+                        return result
+                    }
+                    encoder.overwrites = true
+                }
+            }
+            events(.encoding(encoder.format))
+            encoder.log = { events(.encodedTrack($0)) }
+            encoder.trackEncoded = { events(.trackEncoded(number: $0, file: $1)) }
             result.encodedFiles = try await blocking { [encoder] in try encoder.encode(disc, into: library) }
             events(.encoded(result.encodedFiles, format: encoder.format))
             // The WAV files go only if every track is verified and encoded; the report is in the album folder.

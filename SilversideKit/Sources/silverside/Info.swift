@@ -48,6 +48,7 @@ struct Info: AsyncParsableCommand {
         print(String(format: "Lead  %10d  ", toc.leadOutLBA) + Self.duration(toc.leadOutLBA))
         print()
         print("MCN (barcode)        \(try SubchannelCodes.mcn(in: toc, drive: drive) ?? "-")")
+        print("Media                \(((try? drive.readMediaType()) ?? nil).map { "\($0)" } ?? "-")")
         if let text = (try? drive.readCDText()).flatMap({ $0.flatMap(CDText.init(bytes:)) }) {
             Self.printCDText(text, toc: toc)
         } else {

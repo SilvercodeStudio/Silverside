@@ -23,20 +23,37 @@ final class ProgressLine {
         let text: String
         switch event {
         case .reading(_, let number, let progress):
+            guard
+                let line = readLine(progress, pass: number, name: number == 1 ? "read 1" : "read \(number) to compare")
+            else { return }
+            text = line
+        case .testing(_, let progress):
+            // The test read comes after every other read of the track: pass 0 stands for it.
+            guard let line = readLine(progress, pass: 0, name: "test read, to compare") else { return }
+            text = line
+        case .rereading(_, let round, let maximum, let suspects, let versions):
+            pass = nil
+            text =
+                "re-reading \(suspects.count) suspect sectors  ·  round \(round) of \(maximum)  ·  \(versions) versions"
+                + "  ·  " + Self.minutes(ContinuousClock.now - trackStart)
+        }
+        draw("Track \(label)  " + text)
+    }
+
+    /// The line for a read of the whole track, or nil when the last one was drawn too recently.
+    private func readLine(_ progress: ReadProgress, pass number: Int, name: String) -> String? {
+        do {
             let (read, sectors) = (progress.sectorsRead, progress.sectors)
             let (c2, unreadable) = (progress.flaggedSectors, progress.unreadableSectors)
             if pass?.number != number { pass = (number, []) }
             pass?.points.append((.now, read))
             pass?.points.removeAll { ContinuousClock.now - $0.time > .seconds(5) }
             // At most 10 updates a second, but always the last one.
-            guard read == sectors || ContinuousClock.now - lastDraw >= .milliseconds(100) else { return }
+            guard read == sectors || ContinuousClock.now - lastDraw >= .milliseconds(100) else { return nil }
             let fraction = sectors == 0 ? 0 : Double(read) / Double(sectors)
             let filled = Int(fraction * 25)
             let bar = String(repeating: "█", count: filled) + String(repeating: "░", count: 25 - filled)
-            var parts = [
-                String(format: "[%@] %3d%%", bar, Int(fraction * 100)),
-                number == 1 ? "read 1" : "read \(number) to compare",
-            ]
+            var parts = [String(format: "[%@] %3d%%", bar, Int(fraction * 100)), name]
             if c2 > 0 { parts.append(color("C2: \(c2) sectors", code: 33)) }
             if unreadable > 0 { parts.append(color("cannot read: \(unreadable) sectors", code: 31)) }
             var times = Self.minutes(ContinuousClock.now - trackStart)
@@ -48,14 +65,8 @@ final class ProgressLine {
                 times += ", " + Self.minutes(spent * (Double(sectors - read) / Double(read - first.read))) + " left"
             }
             parts.append(times)
-            text = parts.joined(separator: "  ·  ")
-        case .rereading(_, let round, let maximum, let suspects, let versions):
-            pass = nil
-            text =
-                "re-reading \(suspects.count) suspect sectors  ·  round \(round) of \(maximum)  ·  \(versions) versions"
-                + "  ·  " + Self.minutes(ContinuousClock.now - trackStart)
+            return parts.joined(separator: "  ·  ")
         }
-        draw("Track \(label)  " + text)
     }
 
     /// A time as "1:05".

@@ -168,6 +168,9 @@ public struct TrackMetadata: Equatable, Sendable {
                 comments.append(("ORIGINALDATE", first))
             }
         }
+        if let genre = release.genre { comments.append(("GENRE", genre)) }
+        for composer in track.composers { comments.append(("COMPOSER", text(composer))) }
+        for lyricist in track.lyricists { comments.append(("LYRICIST", text(lyricist))) }
         if let isrc { comments.append(("ISRC", isrc)) }
         if let barcode = release.barcode, !barcode.isEmpty { comments.append(("BARCODE", barcode)) }
         for label in release.labels {
@@ -175,6 +178,10 @@ public struct TrackMetadata: Equatable, Sendable {
             if let number = label.catalogNumber { comments.append(("CATALOGNUMBER", number)) }
         }
         if let country = release.country { comments.append(("RELEASECOUNTRY", country)) }
+        if let sort = MusicBrainzRelease.sortName(track.artistCredit) { comments.append(("ARTISTSORT", text(sort))) }
+        if let sort = MusicBrainzRelease.sortName(release.artistCredit) {
+            comments.append(("ALBUMARTISTSORT", text(sort)))
+        }
         guard !release.isManual else { return comments }
         comments.append(("MUSICBRAINZ_ALBUMID", release.id))
         if let group = release.releaseGroup { comments.append(("MUSICBRAINZ_RELEASEGROUPID", group.id)) }

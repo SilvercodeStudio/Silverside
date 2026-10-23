@@ -33,6 +33,9 @@ public struct DiscRipOptions: Sendable {
     /// Repair the rip with CTDB's repair data. If false, only check it.
     public var repairs = true
     public var readsC2: Bool
+    /// Test and copy: after each track's rip, read it once more and keep that read's CRC-32
+    /// in the report beside the copy's.
+    public var testAndCopy: Bool
     /// Earlier rips of the disc, from any drive, to pool with this one.
     public var pool: [URL] = []
     /// After encoding, keep the rip's WAV files.
@@ -51,6 +54,7 @@ public struct DiscRipOptions: Sendable {
     public init(settings: Settings) {
         artwork = settings.artwork
         readsC2 = settings.readC2
+        testAndCopy = settings.testAndCopy
         keepsRip = settings.keepRipAfterEncoding
     }
 }
@@ -198,6 +202,7 @@ public struct DiscRip {
         let toc = try drive.readTOC()
         guard !toc.audioTracks.isEmpty else { throw DiscRipError.noAudioTracks }
         events(.disc(toc))
+        let media = (try? drive.readMediaType()) ?? nil
         let selected = try selectedTracks(of: toc)
 
         // The drive's profile gives the offset, unless the options do. A drive with no offset
@@ -332,6 +337,15 @@ public struct DiscRip {
                 pool(
                     track, toc: toc, records: records, samples: &samples, audio: &audio, report: &report,
                     summary: &summary)
+                let index = toc.audioTracks.firstIndex(of: track)!
+                report.recordChecksums(
+                    of: samples, isFirstTrack: index == 0, isLastTrack: index == toc.audioTracks.count - 1)
+                if options.testAndCopy {
+                    let test = try testRead(track, toc: toc, reader: reader, cacheFlushSectors: flushSectors)
+                    report.testCRC32 = CRC32.hex(test)
+                    report.testReadMatches = report.testCRC32 == report.crc32
+                    summary += report.testReadMatches == true ? ", test read matches" : ", TEST READ DIFFERS"
+                }
                 // Keep the other versions of suspect samples, so that a later repair can use them.
                 if !audio.alternatives.isEmpty {
                     try audio.writeAlternatives(
@@ -426,6 +440,7 @@ public struct DiscRip {
             offsetSource: source)
         var report = RipReport(drive: driveReport, secure: !options.singlePass, toc: toc, tracks: reports, ctdb: ctdb)
         report.mcn = mcn
+        report.media = media
         report.hiddenTrack = hiddenTrack
         report.cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         report.release = chosen
@@ -546,6 +561,23 @@ public struct DiscRip {
         return (rip.samples, rip.summary, errorFree ? TrackAudio(samples: rip.samples) : TrackAudio(rip), report)
     }
 
+    /// Test and copy: one more read of the whole track, after a cache flush so that it comes
+    /// from the disc, for a CRC-32 to compare with the copy's. The rip's own reads already
+    /// compare sectors; this is the check that EAC's users know.
+    private func testRead(_ track: TOC.Track, toc: TOC, reader: AudioReader, cacheFlushSectors: Int) throws -> UInt32 {
+        let sectors = toc.sectorRange(of: track)
+        try reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
+        let start = sectors.lowerBound * CDDA.samplesPerSector
+        let readOffset = reader.readOffset
+        let events = self.events
+        let read = try reader.read(start..<(start + sectors.count * CDDA.samplesPerSector), withC2: false) {
+            events(
+                .reading(.testing(track: track.number, progress: $0.inTrack(startingAt: start, readOffset: readOffset)))
+            )
+        }
+        return CRC32.checksum(of: read.samples[...])
+    }
+
     /// Earlier rips (the `pool` option): an accurate version replaces this read; otherwise
     /// every version joins the repair.
     private func pool(
@@ -590,6 +622,8 @@ public struct DiscRip {
             let samples = repair.samples(ofTrack: index)
             try WAVFile.write(samples, to: folder.appending(path: reports[index].file))
             reports[index].repairedSamples = repair.changedSamples(inTrack: index)
+            reports[index].recordChecksums(
+                of: samples, isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
             let checksum = AccurateRipAccumulator.checksum(
                 of: samples[...], isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
             let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }

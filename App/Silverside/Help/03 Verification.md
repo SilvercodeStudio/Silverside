@@ -16,6 +16,10 @@ CTDB checks the whole disc at once, so a rip of some tracks only is not checked.
 
 Every drive reads a few samples early or late, by a fixed amount. Silverside corrects it, so rips from different drives come out the same, and AccurateRip checksums match. The offset comes from AccurateRip's list of drives, or from rips that confirm it. It is shown in Settings › Drives, where you can also set it by hand.
 
+## Checksums
+
+The report lists each track's CRC-32, as Exact Audio Copy and XLD print it, with EAC's "skip zero" form (silent samples left out) and the track's own AccurateRip checksums, so a rip can be compared with one from another program or another drive. With **test and copy** on in Settings › Ripping, each track is read once more after its rip, and the report says whether that read gave the same audio; a difference means the drive did not read the track the same way twice. The report also says whether the disc is a pressed CD, a CD-R, or a CD-RW: a CD-R of a show or a mix is in neither database, so nothing can verify it, and the reads alone decide.
+
 ## What the statuses mean
 
 | Status | Meaning |

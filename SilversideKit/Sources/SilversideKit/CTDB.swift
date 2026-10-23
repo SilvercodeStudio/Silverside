@@ -57,6 +57,25 @@ public enum CRC32 {
         }
         return ~crc
     }
+
+    /// The same, leaving out the samples that are 0 in both channels: EAC's "CRC32 (skip
+    /// zero)", which does not change with the silence at a track's edges.
+    public static func checksumSkippingZeros(of samples: ArraySlice<UInt32>) -> UInt32 {
+        var crc: UInt32 = 0xFFFF_FFFF
+        table.withUnsafeBufferPointer { table in
+            for sample in samples where sample != 0 {
+                for byte in 0..<4 {
+                    crc = table[Int((crc ^ (sample >> (8 * byte))) & 0xFF)] ^ (crc >> 8)
+                }
+            }
+        }
+        return ~crc
+    }
+
+    /// A checksum as eight hex digits, as EAC and XLD print them.
+    public static func hex(_ value: UInt32) -> String {
+        String(format: "%08X", value)
+    }
 }
 
 /// Checks and repairs a disc's audio with CUETools DB data.

@@ -21,7 +21,8 @@ struct DiscRipTests {
     /// is audio before track 1. `prepare` can damage the drive.
     func rip(
         trackSectors: [Int] = [800, 900], hidesFirstTrack: Bool = false, tracks: [Int]? = nil, web: FakeWeb? = nil,
-        cover: CoverImage? = nil, prepare: (SimulatedDrive) -> Void = { _ in }
+        cover: CoverImage? = nil, prepare: (SimulatedDrive) -> Void = { _ in },
+        configure: (inout DiscRipOptions) -> Void = { _ in }
     ) async throws -> (DiscRipResult, [DiscRipEvent], samples: [UInt32], root: URL) {
         let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -38,6 +39,7 @@ struct DiscRipTests {
         options.offline = web == nil
         options.tracks = tracks
         options.cover = cover
+        configure(&options)
         let profiles = try DriveProfileStore(url: root.appending(path: "DriveProfiles.json"))
         var rip = DiscRip(
             drive: drive, identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"),
@@ -345,5 +347,39 @@ struct DiscRipTests {
         #expect(try Data(contentsOf: file) == png.data)
         #expect(result.report.files?.contains("cover.png") == true)
         #expect(events.contains { if case .artwork(.saved([file])) = $0 { true } else { false } })
+    }
+
+    /// Every track's report has the CRC-32s that EAC and XLD print, and the disc's media type.
+    /// With test and copy, a second read of each track follows the rip, and its CRC-32 is
+    /// compared with the copy's.
+    @Test func keepsChecksumsAndTestsEachTrack() async throws {
+        let (result, events, samples, root) = try await rip(
+            prepare: { $0.mediaType = .rewritable }, configure: { $0.testAndCopy = true })
+        defer { try? FileManager.default.removeItem(at: root) }
+        let tracks = result.report.tracks
+        let first = Array(samples[0..<(800 * CDDA.samplesPerSector)])
+        #expect(tracks[0].crc32 == CRC32.hex(CRC32.checksum(of: first[...])))
+        #expect(tracks.map(\.testReadMatches) == [true, true])
+        #expect(tracks.map(\.testCRC32) == tracks.map(\.crc32))
+        #expect(result.report.media == .rewritable)
+        let tested = events.compactMap { event -> Int? in
+            if case .reading(.testing(let track, _)) = event { return track }
+            return nil
+        }
+        #expect(Set(tested) == [1, 2])
+        let summaries = events.compactMap { event -> String? in
+            if case .trackFinished(_, let summary, _) = event { return summary }
+            return nil
+        }
+        #expect(summaries.allSatisfy { $0.hasSuffix("test read matches") })
+        #expect(result.report.markdown.contains("| Media | CD-RW |"))
+    }
+
+    /// Without test and copy (the default), there is no test read and no test CRC.
+    @Test func doesNotTestByDefault() async throws {
+        let (result, events, _, root) = try await rip()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(result.report.tracks.allSatisfy { $0.testCRC32 == nil && $0.crc32 != nil })
+        #expect(!events.contains { if case .reading(.testing) = $0 { true } else { false } })
     }
 }

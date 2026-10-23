@@ -28,6 +28,11 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
         public var length: Int?
         public var artistCredit: [Credit]
         public var recordingID: String?
+        /// The composers of the recording's work, from MusicBrainz's relationships, in its order.
+        /// Empty when MusicBrainz lists none, and in releases saved before Silverside kept them.
+        public var composers: [String] = []
+        /// The lyricists, the same way. A "writer" counts as both.
+        public var lyricists: [String] = []
 
         public var artist: String { MusicBrainzRelease.joined(artistCredit) }
     }
@@ -79,6 +84,9 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
     /// The number of images that the Cover Art Archive has for the release: front, back,
     /// booklet pages, and others. Nil in releases saved before Silverside kept it.
     public var artworkCount: Int?
+    /// The genre with the most votes in MusicBrainz, from the release group, else the release:
+    /// "Rock", "Jazz". Nil when there are no votes, and in releases saved before Silverside kept it.
+    public var genre: String?
 
     public var artist: String { Self.joined(artistCredit) }
 
@@ -122,6 +130,28 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
     static func joined(_ credit: [Credit]) -> String {
         credit.map { $0.name + $0.joinPhrase }.joined()
     }
+
+    /// The credit's sort name, "Dead, Grateful", for the ARTISTSORT tags. Nil when MusicBrainz
+    /// gave no sort name for any of its artists (a disc it does not know, or an edited name).
+    public static func sortName(_ credit: [Credit]) -> String? {
+        guard credit.contains(where: { $0.sortName != nil }) else { return nil }
+        return credit.map { ($0.sortName ?? $0.name) + $0.joinPhrase }.joined()
+    }
+}
+
+extension MusicBrainzRelease.Track {
+    // Releases saved before Silverside kept composers and lyricists have none.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        position = try container.decode(Int.self, forKey: .position)
+        number = try container.decode(String.self, forKey: .number)
+        title = try container.decode(String.self, forKey: .title)
+        length = try container.decodeIfPresent(Int.self, forKey: .length)
+        artistCredit = try container.decode([MusicBrainzRelease.Credit].self, forKey: .artistCredit)
+        recordingID = try container.decodeIfPresent(String.self, forKey: .recordingID)
+        composers = try container.decodeIfPresent([String].self, forKey: .composers) ?? []
+        lyricists = try container.decodeIfPresent([String].self, forKey: .lyricists) ?? []
+    }
 }
 
 /// The releases that MusicBrainz has for a disc.
@@ -137,8 +167,10 @@ public struct MusicBrainzLookup: Equatable, Sendable {
 public struct MusicBrainzClient: Sendable {
     public static let baseURL = URL(string: "https://musicbrainz.org/ws/2/")!
 
-    /// What each lookup asks MusicBrainz to include: credits, labels, tracks, and release groups.
-    static let includes = "artist-credits+labels+recordings+release-groups"
+    /// What each lookup asks MusicBrainz to include: credits, labels, tracks, release groups,
+    /// genres, and the relationships that name each recording's work and its composers.
+    static let includes =
+        "artist-credits+labels+recordings+release-groups+genres+artist-rels+work-rels+recording-level-rels+work-level-rels"
 
     public let client: WebClient
 
@@ -235,6 +267,20 @@ private struct RawCredit: Decodable {
     }
 }
 
+/// A relationship of a recording or a work: to a work ("performance") or to an artist ("composer").
+private struct RawRelation: Decodable {
+    struct Artist: Decodable { var name: String }
+    struct Work: Decodable { var relations: [RawRelation]? }
+    var type: String
+    var artist: Artist?
+    var work: Work?
+}
+
+private struct RawGenre: Decodable {
+    var name: String
+    var count: Int?
+}
+
 private struct RawRelease: Decodable {
     struct LabelInfo: Decodable {
         struct Label: Decodable { var name: String? }
@@ -251,8 +297,9 @@ private struct RawRelease: Decodable {
         var primaryType: String?
         var secondaryTypes: [String]?
         var firstReleaseDate: String?
+        var genres: [RawGenre]?
         enum CodingKeys: String, CodingKey {
-            case id, title
+            case id, title, genres
             case primaryType = "primary-type"
             case secondaryTypes = "secondary-types"
             case firstReleaseDate = "first-release-date"
@@ -261,7 +308,10 @@ private struct RawRelease: Decodable {
     struct Medium: Decodable {
         struct Disc: Decodable { var id: String }
         struct Track: Decodable {
-            struct Recording: Decodable { var id: String }
+            struct Recording: Decodable {
+                var id: String
+                var relations: [RawRelation]?
+            }
             var position: Int
             var number: String?
             var title: String
@@ -297,9 +347,10 @@ private struct RawRelease: Decodable {
     var releaseGroup: Group?
     var media: [Medium]?
     var coverArtArchive: CoverArt?
+    var genres: [RawGenre]?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, date, country, status, barcode, disambiguation, media
+        case id, title, date, country, status, barcode, disambiguation, media, genres
         case artistCredit = "artist-credit"
         case labelInfo = "label-info"
         case releaseGroup = "release-group"
@@ -309,10 +360,11 @@ private struct RawRelease: Decodable {
     var release: MusicBrainzRelease {
         let releaseCredit = (artistCredit ?? []).map(\.credit)
         func track(_ track: Medium.Track) -> MusicBrainzRelease.Track {
-            .init(
+            let writers = Self.writers(track.recording?.relations)
+            return .init(
                 position: track.position, number: track.number ?? String(track.position), title: track.title,
                 length: track.length, artistCredit: track.artistCredit.map { $0.map(\.credit) } ?? releaseCredit,
-                recordingID: track.recording?.id)
+                recordingID: track.recording?.id, composers: writers.composers, lyricists: writers.lyricists)
         }
         return MusicBrainzRelease(
             id: id, title: title, artistCredit: releaseCredit, date: date.flatMap { $0.isEmpty ? nil : $0 },
@@ -330,6 +382,36 @@ private struct RawRelease: Decodable {
                     title: medium.title.flatMap { $0.isEmpty ? nil : $0 }, discIDs: (medium.discs ?? []).map(\.id),
                     tracks: (medium.tracks ?? []).map(track), hiddenTrack: medium.pregap.map(track))
             },
-            hasFrontCover: coverArtArchive?.front ?? false, artworkCount: coverArtArchive?.count)
+            hasFrontCover: coverArtArchive?.front ?? false, artworkCount: coverArtArchive?.count,
+            genre: Self.topGenre([releaseGroup?.genres, genres]))
+    }
+
+    /// The composers and lyricists of a recording: from the works it performs (their
+    /// relationships name the writers), and from its own relationships. A "writer" is both.
+    static func writers(_ relations: [RawRelation]?) -> (composers: [String], lyricists: [String]) {
+        var composers = [String]()
+        var lyricists = [String]()
+        func add(_ relation: RawRelation) {
+            guard let name = relation.artist?.name else { return }
+            if ["composer", "writer"].contains(relation.type), !composers.contains(name) { composers.append(name) }
+            if ["lyricist", "writer"].contains(relation.type), !lyricists.contains(name) { lyricists.append(name) }
+        }
+        for relation in relations ?? [] {
+            if let work = relation.work {
+                work.relations?.forEach(add)
+            } else {
+                add(relation)
+            }
+        }
+        return (composers, lyricists)
+    }
+
+    /// The genre with the most votes in the first list that has any, as "Rock" or "Hip Hop".
+    static func topGenre(_ lists: [[RawGenre]?]) -> String? {
+        for list in lists {
+            guard let best = list?.max(by: { ($0.count ?? 0) < ($1.count ?? 0) }) else { continue }
+            return best.name.capitalized
+        }
+        return nil
     }
 }

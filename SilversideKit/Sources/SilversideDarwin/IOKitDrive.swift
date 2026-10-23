@@ -1,4 +1,5 @@
 import Darwin
+import IOKit
 import IOKit.storage
 import SilversideKit
 
@@ -75,6 +76,23 @@ public final class IOKitDrive: CDDrive {
         }
         let length = Int(request.bufferLength)
         return length > 4 ? Array(bytes.prefix(length)) : nil
+    }
+
+    /// What the disc is, from the I/O Registry: macOS asks the drive when a disc goes in, and
+    /// the disc's IOCDMedia object says CD-ROM, CD-R, or CD-RW. Not yet checked with a CD-R.
+    public func readMediaType() throws -> DiscMediaType? {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOBSDNameMatching(kIOMainPortDefault, 0, bsdName))
+        guard service != 0 else { return nil }
+        defer { IOObjectRelease(service) }
+        let type =
+            IORegistryEntryCreateCFProperty(service, kIOCDMediaTypeKey as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue() as? String
+        switch type {
+        case kIOCDMediaTypeROM: return .pressed
+        case kIOCDMediaTypeR: return .recordable
+        case kIOCDMediaTypeRW: return .rewritable
+        default: return nil
+        }
     }
 
     public func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8]) {

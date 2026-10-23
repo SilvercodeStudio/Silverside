@@ -23,6 +23,16 @@ extension RipReport {
         lines.append(result + ".")
         lines.append("")
         lines.append("CTDB: " + ctdbSummary + ".")
+        let tested = tracks.filter { $0.testCRC32 != nil }
+        if !tested.isEmpty {
+            let differing = tested.filter { $0.testReadMatches == false }.map(\.number)
+            lines.append("")
+            lines.append(
+                differing.isEmpty
+                    ? "Test and copy: a second read of every track gave the same audio."
+                    : "**Test and copy: the second read of \(differing.count == 1 ? "track" : "tracks") "
+                        + "\(differing.map(String.init).joined(separator: ", ")) differed from the copy.**")
+        }
         let repaired = tracks.reduce(0) { $0 + $1.repairedSamples }
         if repaired > 0 { lines += ["", "\(repaired) samples were repaired with CTDB's repair data."] }
         lines.append("")
@@ -70,6 +80,26 @@ extension RipReport {
             "Reads: whole reads of the track, then rounds of re-reads of its suspect sectors. Suspect, C2, and"
                 + " unreadable: sectors. Repaired: samples.")
         lines.append("")
+
+        if tracks.contains(where: { $0.crc32 != nil }) {
+            lines.append("## Checksums")
+            lines.append("")
+            lines.append("| Track | CRC32 | Skip zero | Test read | AccurateRip v1 | AccurateRip v2 |")
+            lines.append("|---:|---|---|---|---|---|")
+            for track in tracks {
+                let test = track.testCRC32.map { $0 + (track.testReadMatches == false ? " **differs**" : "") } ?? ""
+                let accurateRip = track.accurateRipChecksums ?? ["", ""]
+                lines.append(
+                    "| \(track.number) | \(track.crc32 ?? "") | \(track.crc32SkipZero ?? "") | \(test)"
+                        + " | \(accurateRip[0]) | \(accurateRip[1]) |")
+            }
+            lines.append("")
+            lines.append(
+                "CRC32: of the track's audio as written, as EAC and XLD print it. Skip zero: the same without the"
+                    + " samples that are silent in both channels. Test read: a second read of the track, compared"
+                    + " with the copy as read; a repair changes the copy after it.")
+            lines.append("")
+        }
 
         let problems = tracks.filter { !$0.unresolvedSectors.isEmpty || $0.shiftedReads?.isEmpty == false }
         if !problems.isEmpty {
@@ -123,6 +153,7 @@ extension RipReport {
         lines.append("")
         lines.append("| | |")
         lines.append("|---|---|")
+        if let media { lines.append("| Media | \(media) |") }
         if let release, !release.isManual {
             lines.append(
                 "| MusicBrainz release | [\(Self.escaped(release.title))](https://musicbrainz.org/release/\(release.id)) |"

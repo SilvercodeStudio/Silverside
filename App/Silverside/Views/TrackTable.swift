@@ -176,6 +176,15 @@ struct StatusCell: View {
                 systemImage: "arrow.clockwise"
             )
             .foregroundStyle(Theme.warning)
+        case .testing(let fraction):
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text("Test read").font(.callout)
+                    Spacer()
+                    Text("\(Int(fraction * 100))%").font(.callout).foregroundStyle(.secondary).monospacedDigit()
+                }
+                SheenProgressBar(fraction: fraction)
+            }
         case .finished(let track):
             FinishedStatus(track: track, ctdb: ctdb, summary: summary)
         }

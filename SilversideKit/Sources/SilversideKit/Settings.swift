@@ -39,6 +39,9 @@ public struct Settings: Codable, Equatable, Sendable {
     public var artwork = ArtworkChoice.front
     /// Ask the drive for C2 error flags.
     public var readC2 = true
+    /// Test and copy: after each track's rip, read the track once more and compare the CRC-32
+    /// of the two, as EAC does. Slower; the rip's own re-reads already compare sectors.
+    public var testAndCopy = false
     /// Encode each disc into the library after `silverside rip`, in `format`.
     public var encodeAfterRip = false
     /// Keep the rip's WAV files after `silverside rip --encode`. If false, a rip whose tracks are
@@ -176,6 +179,7 @@ public struct Settings: Codable, Equatable, Sendable {
         compilationFolder = try value(.compilationFolder, defaults.compilationFolder)
         artwork = try value(.artwork, defaults.artwork)
         readC2 = try value(.readC2, defaults.readC2)
+        testAndCopy = try value(.testAndCopy, defaults.testAndCopy)
         encodeAfterRip = try value(.encodeAfterRip, defaults.encodeAfterRip)
         keepRipAfterEncoding = try value(.keepRipAfterEncoding, defaults.keepRipAfterEncoding)
         ejectAfterRip = try value(.ejectAfterRip, defaults.ejectAfterRip)

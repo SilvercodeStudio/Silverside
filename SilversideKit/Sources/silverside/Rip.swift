@@ -68,6 +68,11 @@ struct Rip: AsyncParsableCommand {
     @Flag(help: "Check the rip against CUETools DB, but do not repair it.")
     var noRepair = false
 
+    @Flag(
+        inversion: .prefixedNo,
+        help: "Test and copy: after each track, read it once more and keep both reads' CRC-32 in the report.")
+    var test: Bool?
+
     @Flag(help: "Do not ask the drive for C2 error flags.")
     var noC2 = false
 
@@ -95,6 +100,7 @@ struct Rip: AsyncParsableCommand {
         options.singlePass = singlePass
         options.repairs = !noRepair
         options.readsC2 = !noC2 && settings.readC2
+        if let test { options.testAndCopy = test }
         options.pool = pool.map { URL(filePath: $0, directoryHint: .isDirectory) }
         if let keepRip { options.keepsRip = keepRip }
 

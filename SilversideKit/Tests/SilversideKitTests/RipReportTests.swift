@@ -81,4 +81,40 @@ struct RipReportTests {
         try JSONSerialization.data(withJSONObject: ["complete": true, "toc": toc.ctdbTOCString]).write(to: file)
         #expect(throws: (any Error).self) { try RipReport.read(from: file) }
     }
+
+    /// The checksums that EAC and XLD print, so rips can be compared across programs, and
+    /// the test read's, kept with the media type and read back.
+    @Test func keepsChecksumsAndTheMediaType() throws {
+        let toc = try TOC(audioTrackStarts: [0, 800], leadOutLBA: 1700)
+        let (_, samples) = try makeDisc(trackSectors: [800, 900])
+        var track = RipReport.Track(
+            number: 1, file: "Track 01.wav", startLBA: 0, sectors: 800, preEmphasis: false, accurateRip: .accurate)
+        let audio = Array(samples[0..<(800 * CDDA.samplesPerSector)])
+        track.recordChecksums(of: audio, isFirstTrack: true, isLastTrack: false)
+        #expect(track.crc32 == CRC32.hex(CRC32.checksum(of: audio[...])))
+        #expect(track.crc32?.count == 8 && track.accurateRipChecksums?.count == 2)
+        // Silent samples do not count in the skip-zero checksum.
+        var padded = audio
+        padded += [UInt32](repeating: 0, count: 588)
+        var paddedTrack = track
+        paddedTrack.recordChecksums(of: padded, isFirstTrack: true, isLastTrack: false)
+        #expect(paddedTrack.crc32SkipZero == track.crc32SkipZero && paddedTrack.crc32 != track.crc32)
+        track.testCRC32 = "DEADBEEF"
+        track.testReadMatches = false
+        var report = RipReport(
+            date: Date(timeIntervalSince1970: 1_800_000_000),
+            drive: .init(vendor: "SIM", product: "DRIVE", revision: "1.0", readOffset: 6, offsetSource: "--offset"),
+            secure: true, toc: toc, tracks: [track], ctdb: .init(status: .notChecked))
+        report.media = .recordable
+        let url = FileManager.default.temporaryDirectory.appending(path: "RipReport-\(UUID()).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try report.write(to: url)
+        #expect(try RipReport.read(from: url) == report)
+        let markdown = report.markdown
+        #expect(markdown.contains("| Media | CD-R |"))
+        #expect(
+            markdown.contains("## Checksums")
+                && markdown.contains("| 1 | \(track.crc32!) | \(track.crc32SkipZero!) | DEADBEEF **differs** |"))
+        #expect(markdown.contains("Test and copy: the second read of track 1 differed from the copy."))
+    }
 }

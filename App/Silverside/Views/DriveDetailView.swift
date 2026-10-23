@@ -457,7 +457,7 @@ struct StatusBar: View {
             }
             switch rip.trackStates[track.number] {
             case .reading(_, let fraction): row.readFraction = fraction
-            case .rereading: row.readFraction = 1
+            case .rereading, .testing: row.readFraction = 1
             case .finished(let report):
                 row.readFraction = 1
                 let verdict = TrackVerdict(report, ctdb: rip.ctdb)

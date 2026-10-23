@@ -11,13 +11,13 @@ public enum MP4Tags {
     /// Vorbis comment keys and their iTunes atoms.
     static let textAtoms: [String: String] = [
         "TITLE": "©nam", "ARTIST": "©ART", "ALBUMARTIST": "aART", "ALBUM": "©alb", "DATE": "©day",
-        "GENRE": "©gen",
+        "GENRE": "©gen", "COMPOSER": "©wrt", "ARTISTSORT": "soar", "ALBUMARTISTSORT": "soaa",
     ]
 
     /// Vorbis comment keys and the names of their freeform atoms, as MusicBrainz Picard writes them.
     static let freeformNames: [String: String] = [
         "DISCSUBTITLE": "DISCSUBTITLE", "ORIGINALDATE": "ORIGINALDATE", "ISRC": "ISRC", "BARCODE": "BARCODE",
-        "COMPILATION": "COMPILATION",
+        "COMPILATION": "COMPILATION", "LYRICIST": "LYRICIST",
         "LABEL": "LABEL", "CATALOGNUMBER": "CATALOGNUMBER", "RELEASECOUNTRY": "MusicBrainz Album Release Country",
         "MUSICBRAINZ_ALBUMID": "MusicBrainz Album Id", "MUSICBRAINZ_RELEASEGROUPID": "MusicBrainz Release Group Id",
         "MUSICBRAINZ_TRACKID": "MusicBrainz Track Id", "MUSICBRAINZ_ALBUMARTISTID": "MusicBrainz Album Artist Id",

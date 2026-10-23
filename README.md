@@ -164,15 +164,22 @@ makes, and the settings.
   to do: reusable style recipes for titles.
 - Ability to play or preview CDs/tracks.
 - Pre-emphasis support as mentioned above.
+- Option for automatic rip on insertion and recognition
 - Localization in other languages. 
 - Recognition of HDCD; possible 24-bit decode.
 - ReplayGain tags.
 - Ripping of data tracks for mixed-mode / Enhanced CDs.
 - Option to slow down drive speed (quieter)
+  - Autodetect and engage this during problem rips
 - Multiple encodings at once (e.g. FLAC + AAC)
 - AcoustID?
 - Rip log checksum
 - Per-track pregap adjustments
+- Option to import rips to Apple Music if compatible
+- CD Burning with verification
+- Filename template enhancements
+- Secondary metadata source (GnuDB)
+- Ability to add image art after encoding
 
 See [docs/internal/Milestones.md](docs/internal/Milestones.md) for the plan.
 

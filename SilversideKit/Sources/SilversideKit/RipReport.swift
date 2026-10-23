@@ -66,6 +66,28 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// The track's pregap (index 00 to index 01) in sectors, from the Q subchannel. For track 1,
         /// the part of the disc before it. The pregap of a later track is at the end of the track before it.
         public var pregapSectors: Int?
+        /// CRC-32 of the track's audio as it was written, as eight hex digits, as EAC and XLD
+        /// print it, so that rips can be compared across programs. Nil in older reports.
+        public var crc32: String?
+        /// The same, leaving out the samples that are silent in both channels: EAC's "skip zero".
+        public var crc32SkipZero: String?
+        /// The CRC-32 of a second, separate read of the track (test and copy). Nil if there was none.
+        public var testCRC32: String?
+        /// The track's own AccurateRip v1 and v2 checksums, as eight hex digits each.
+        public var accurateRipChecksums: [String]?
+
+        /// Whether the test read gave the same audio as the copy, as read: a repair can change
+        /// the copy after the test. Nil without a test read.
+        public var testReadMatches: Bool?
+
+        /// Records the checksums of the track's audio: its CRC-32s, and its AccurateRip checksums.
+        public mutating func recordChecksums(of samples: [UInt32], isFirstTrack: Bool, isLastTrack: Bool) {
+            crc32 = CRC32.hex(CRC32.checksum(of: samples[...]))
+            crc32SkipZero = CRC32.hex(CRC32.checksumSkippingZeros(of: samples[...]))
+            let checksum = AccurateRipAccumulator.checksum(
+                of: samples[...], isFirstTrack: isFirstTrack, isLastTrack: isLastTrack)
+            accurateRipChecksums = [CRC32.hex(checksum.v1), CRC32.hex(checksum.v2)]
+        }
 
         public init(
             number: Int, file: String, startLBA: Int, sectors: Int, preEmphasis: Bool,
@@ -152,6 +174,8 @@ public struct RipReport: Codable, Equatable, Sendable {
     public var ctdb: CTDBResult
     /// The disc's MCN (barcode), from the Q subchannel.
     public var mcn: String?
+    /// What the disc is: pressed, or a CD-R or CD-RW. Nil if the drive could not tell, and in older reports.
+    public var media: DiscMediaType?
     /// The disc's CD-Text, if it has any.
     public var cdText: CDText?
     /// Audio before track 1 (hidden track one audio), if the disc has it.

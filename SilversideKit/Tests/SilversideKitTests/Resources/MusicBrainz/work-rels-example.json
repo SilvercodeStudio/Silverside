@@ -1,0 +1,117 @@
+{
+  "id": "d1",
+  "releases": [
+    {
+      "id": "rel-1",
+      "title": "Kind of Blue",
+      "status": "Official",
+      "date": "1959-08-17",
+      "country": "US",
+      "barcode": "",
+      "artist-credit": [
+        {
+          "name": "Miles Davis",
+          "joinphrase": "",
+          "artist": { "id": "a-miles", "name": "Miles Davis", "sort-name": "Davis, Miles" }
+        }
+      ],
+      "genres": [
+        { "name": "jazz", "count": 3 }
+      ],
+      "release-group": {
+        "id": "rg-1",
+        "title": "Kind of Blue",
+        "primary-type": "Album",
+        "first-release-date": "1959-08-17",
+        "genres": [
+          { "name": "cool jazz", "count": 5 },
+          { "name": "jazz", "count": 12 },
+          { "name": "modal jazz", "count": 12 }
+        ]
+      },
+      "cover-art-archive": { "front": true, "count": 2 },
+      "media": [
+        {
+          "position": 1,
+          "format": "CD",
+          "discs": [ { "id": "d1" } ],
+          "tracks": [
+            {
+              "position": 1,
+              "number": "1",
+              "title": "So What",
+              "length": 562000,
+              "recording": {
+                "id": "rec-1",
+                "relations": [
+                  {
+                    "type": "performance",
+                    "target-type": "work",
+                    "work": {
+                      "id": "w-1",
+                      "title": "So What",
+                      "relations": [
+                        {
+                          "type": "composer",
+                          "target-type": "artist",
+                          "artist": { "id": "a-miles", "name": "Miles Davis", "sort-name": "Davis, Miles" }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "position": 2,
+              "number": "2",
+              "title": "Blue in Green",
+              "length": 337000,
+              "recording": {
+                "id": "rec-2",
+                "relations": [
+                  {
+                    "type": "performance",
+                    "target-type": "work",
+                    "work": {
+                      "id": "w-2",
+                      "title": "Blue in Green",
+                      "relations": [
+                        {
+                          "type": "composer",
+                          "target-type": "artist",
+                          "artist": { "id": "a-miles", "name": "Miles Davis", "sort-name": "Davis, Miles" }
+                        },
+                        {
+                          "type": "writer",
+                          "target-type": "artist",
+                          "artist": { "id": "a-bill", "name": "Bill Evans", "sort-name": "Evans, Bill" }
+                        },
+                        {
+                          "type": "composer",
+                          "target-type": "artist",
+                          "artist": { "id": "a-miles", "name": "Miles Davis", "sort-name": "Davis, Miles" }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "type": "lyricist",
+                    "target-type": "artist",
+                    "artist": { "id": "a-anon", "name": "Someone", "sort-name": "Someone" }
+                  }
+                ]
+              }
+            },
+            {
+              "position": 3,
+              "number": "3",
+              "title": "Untitled",
+              "recording": { "id": "rec-3" }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

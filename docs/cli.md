@@ -108,6 +108,7 @@ silverside config unset aac.mode                     # back to the default
 | `plainPunctuation` | `false` | ASCII quotes and dashes in names and tags |
 | `artwork` | `front` | `front`, `all`, or `none` |
 | `readC2` | `true` | ask the drive for C2 error flags |
+| `testAndCopy` | `false` | after each track, read it once more and keep both CRC-32s in the report (`rip --test`) |
 | `encodeAfterRip` | `false` | `rip` encodes when it finishes |
 | `keepRipAfterEncoding` | `false` | keep the WAV files after `rip --encode` |
 | `ejectAfterRip` | `false` | `rip` ejects the disc when every track is verified |

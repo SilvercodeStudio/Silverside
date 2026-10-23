@@ -8,6 +8,9 @@ public enum RipEvent: Equatable, Sendable {
     case reading(track: Int, pass: Int, progress: ReadProgress)
     /// A round of re-reads of the suspect sectors: which sectors, and how many versions are known.
     case rereading(track: Int, round: Int, maximumRounds: Int, suspectSectors: [Int], versions: Int)
+    /// The test read of test and copy: one more read of the whole track, after the rip, for a
+    /// CRC-32 to compare with the copy's.
+    case testing(track: Int, progress: ReadProgress)
 }
 
 /// How far a read has come, as `AudioReader` reports it after each chunk.

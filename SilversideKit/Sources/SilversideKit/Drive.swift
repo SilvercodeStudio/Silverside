@@ -16,12 +16,34 @@ public protocol CDDrive {
 
     /// Reads the disc's CD-Text, as the drive gives it (see `CDText`). Nil if the disc has none.
     func readCDText() throws -> [UInt8]?
+
+    /// What the disc is: pressed, or written in a drive (CD-R or CD-RW). Nil if the drive cannot tell.
+    func readMediaType() throws -> DiscMediaType?
 }
 
 extension CDDrive {
     /// Reads the Q subchannel of one sector.
     public func readQSubchannel(at lba: Int) throws -> QSubchannel {
         try readQSubchannel(at: lba, count: 1)[0]
+    }
+
+    public func readMediaType() throws -> DiscMediaType? { nil }
+}
+
+/// What a disc is made of: pressed in a factory, or written by a drive. A pressed disc is
+/// what AccurateRip and CTDB know; a CD-R copy of it reads the same, but a CD-R of a show
+/// or a mix is in neither database, which the rip report should explain.
+public enum DiscMediaType: String, Codable, Sendable, CustomStringConvertible {
+    case pressed
+    case recordable
+    case rewritable
+
+    public var description: String {
+        switch self {
+        case .pressed: "pressed CD"
+        case .recordable: "CD-R"
+        case .rewritable: "CD-RW"
+        }
     }
 }
 

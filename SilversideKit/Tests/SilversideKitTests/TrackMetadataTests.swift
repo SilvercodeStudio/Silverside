@@ -119,4 +119,30 @@ struct TrackMetadataTests {
         #expect(named.vorbisComments.first { $0.key == "ALBUMARTIST" }?.value == "Various Artists")
         #expect(!summerMagic().isCompilation)
     }
+
+    /// Composers, lyricists, the genre, and sort names go into the tags when MusicBrainz has them.
+    @Test func tagsWritersGenreAndSortNames() {
+        var release = summerMagic()
+        release.genre = "Rock"
+        release.artistCredit = [.init(name: "Grateful Dead", artistID: "6faa7ca7", sortName: "Grateful Dead")]
+        var track = release.media[17].tracks[2]
+        track.composers = ["Robert Johnson"]
+        track.lyricists = ["Robert Johnson"]
+        track.artistCredit = [
+            .init(name: "Bob Dylan", joinPhrase: " & ", artistID: "b", sortName: "Dylan, Bob"),
+            .init(name: "Grateful Dead", artistID: "6faa7ca7", sortName: "Grateful Dead"),
+        ]
+        let metadata = TrackMetadata(release: release, medium: release.media[17], track: track)
+        let comments = metadata.vorbisComments
+        #expect(comments.contains { $0 == ("GENRE", "Rock") })
+        #expect(comments.contains { $0 == ("COMPOSER", "Robert Johnson") })
+        #expect(comments.contains { $0 == ("LYRICIST", "Robert Johnson") })
+        #expect(comments.contains { $0 == ("ARTISTSORT", "Dylan, Bob & Grateful Dead") })
+        #expect(comments.contains { $0 == ("ALBUMARTISTSORT", "Grateful Dead") })
+        // A release with no sort names (typed in, or edited) gets no sort tags.
+        let plain = summerMagic()
+        let keys = TrackMetadata(release: plain, medium: plain.media[17], track: plain.media[17].tracks[2])
+            .vorbisComments.map(\.key)
+        #expect(!keys.contains("ARTISTSORT") && !keys.contains("GENRE") && !keys.contains("COMPOSER"))
+    }
 }

@@ -7,6 +7,20 @@ command-line tool.
 
 ### Added
 
+- **Checksums in the rip report:** each track's CRC-32 as Exact Audio Copy and
+  XLD print it, EAC's "skip zero" variant, and the track's own AccurateRip v1
+  and v2 checksums, in `disc.json` and in a Checksums table of the Markdown
+  report, so that rips can be compared across programs.
+- **Test and copy**, off by default (Settings › Ripping; `testAndCopy` in the
+  settings, `rip --test`): after each track's rip, one more read of the track,
+  with its CRC-32 beside the copy's in the report, as EAC does.
+- **The media type** in the rip report and in `silverside info`: a pressed CD,
+  a CD-R, or a CD-RW. A CD-R of a show is in neither database, which explains
+  a rip that nothing can verify.
+- **More tags from MusicBrainz:** the composers and lyricists of each track
+  from its work relationships, the genre with the most votes, and sort names
+  for the artist and the album artist (COMPOSER, LYRICIST, GENRE, ARTISTSORT,
+  and ALBUMARTISTSORT, and their AAC and MP3 forms).
 - **The rip report records the encoding:** the format, the encoder and its
   settings (AAC's mode and bit rate, or LAME's options), how the files were
   checked, and each track's file, in `disc.json`, the album folder's report,

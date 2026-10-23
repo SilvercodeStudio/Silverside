@@ -330,6 +330,11 @@ struct RippingSettings: View {
                     "C2 flags mark sectors the drive had trouble with, so they are re-read first. They are a hint only: results on damaged areas can change between reads."
                 )
                 .font(.caption).foregroundStyle(.secondary)
+                Toggle("Test and copy: read each track once more after its rip", isOn: $model.settings.testAndCopy)
+                Text(
+                    "The report keeps the CRC-32 of both reads, as Exact Audio Copy does. The rip already compares reads of every doubtful sector, so this is a check for the record, and it takes as long as another read of the disc."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
             Section("How a rip works") {
                 Text(

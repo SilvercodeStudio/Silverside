@@ -21,6 +21,8 @@ final class RipRun {
         /// A read of the whole track: pass 1 is the first read, later passes compare.
         case reading(pass: Int, fraction: Double)
         case rereading(round: Int, maximumRounds: Int, suspectSectors: Int)
+        /// The test read of test and copy, after the rip's own reads.
+        case testing(fraction: Double)
         case finished(RipReport.Track)
         case skipped
     }
@@ -283,6 +285,7 @@ final class RipRun {
             case .reading(let pass, _) where pass > 1: text += " · read \(pass)"
             case .rereading(let round, let maximum, let suspects):
                 text += " · re-reading \(Format.count(suspects, "sector")), round \(round) of \(maximum)"
+            case .testing: text += " · test read"
             default: break
             }
             return text
@@ -475,6 +478,10 @@ final class RipRun {
         case .rereading(let track, let round, let maximum, let suspects, _):
             trackStates[track] = .rereading(round: round, maximumRounds: maximum, suspectSectors: suspects.count)
             trackErrors[track]?.suspect.formUnion(suspects)
+        case .testing(let track, let progress):
+            let fraction = progress.sectors > 0 ? Double(progress.sectorsRead) / Double(progress.sectors) : 0
+            trackStates[track] = .testing(fraction: fraction)
+            onProgress?()
         }
     }
 }

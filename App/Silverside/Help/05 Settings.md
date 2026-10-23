@@ -13,6 +13,8 @@ Silverside and the `silverside` command line share one settings file, so a chang
 
 C2 error flags are a drive's own report of sectors it had trouble with. Silverside re-reads them first. The flags are a hint only; the reads decide.
 
+**Test and copy** reads each track once more after its rip, and keeps the CRC-32 of both reads in the report, as Exact Audio Copy does. It is off by default: the rip already compares reads of every doubtful sector, and the test read takes as long as another read of the disc. Turn it on for a record that EAC's users will recognize.
+
 ## Encoding
 
 FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit rate mode, bit rate, and VBR quality.

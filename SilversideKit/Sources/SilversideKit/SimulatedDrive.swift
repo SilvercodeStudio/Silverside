@@ -63,6 +63,11 @@ public final class SimulatedDrive: CDDrive {
 
     public func readCDText() throws -> [UInt8]? { cdText }
 
+    /// What the disc is. Nil makes the drive one that cannot tell.
+    public var mediaType: DiscMediaType? = .pressed
+
+    public func readMediaType() throws -> DiscMediaType? { mediaType }
+
     /// If true, C2 reads flag the bytes of corrupt and unstable sectors that read wrong.
     public var reportsC2 = false
 

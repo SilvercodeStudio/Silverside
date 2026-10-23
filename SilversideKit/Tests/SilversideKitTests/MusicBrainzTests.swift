@@ -108,4 +108,38 @@ struct MusicBrainzTests {
         let copy = try JSONDecoder().decode(MusicBrainzRelease.self, from: JSONEncoder().encode(release))
         #expect(copy == release)
     }
+
+    /// Composers and lyricists come from the works a recording performs, and from the
+    /// recording's own relationships; a writer is both; a name is listed once. The genre is
+    /// the release group's top vote, with the first of a tie.
+    @Test func readsWritersAndTheGenreFromRelationships() throws {
+        let lookup = try MusicBrainzClient.lookup(fromJSON: fixture("work-rels-example"))
+        let release = try #require(lookup.releases.first)
+        let tracks = release.media[0].tracks
+        #expect(tracks[0].composers == ["Miles Davis"] && tracks[0].lyricists.isEmpty)
+        #expect(tracks[1].composers == ["Miles Davis", "Bill Evans"])
+        #expect(tracks[1].lyricists == ["Bill Evans", "Someone"])
+        #expect(tracks[2].composers.isEmpty && tracks[2].lyricists.isEmpty)
+        #expect(release.genre == "Jazz")
+        #expect(release.artistCredit[0].sortName == "Davis, Miles")
+    }
+
+    /// A release saved by an older Silverside has no composers, lyricists, or genre.
+    @Test func readsAReleaseSavedWithoutWriters() throws {
+        let json = """
+            {"id":"r","title":"T","artistCredit":[{"name":"A","joinPhrase":""}],"labels":[],"hasFrontCover":false,
+             "media":[{"position":1,"discIDs":[],"tracks":[{"position":1,"number":"1","title":"X",
+             "artistCredit":[{"name":"A","joinPhrase":""}]}]}]}
+            """
+        let release = try JSONDecoder().decode(MusicBrainzRelease.self, from: Data(json.utf8))
+        #expect(release.media[0].tracks[0].composers.isEmpty && release.genre == nil)
+        let again = try JSONDecoder().decode(MusicBrainzRelease.self, from: JSONEncoder().encode(release))
+        #expect(again == release)
+    }
+
+    @Test func asksForTheRelationshipsThatNameTheWriters() throws {
+        let toc = try TOC(musicBrainzOffsets: [150, 20000, 40000], sectors: 60000)
+        let url = MusicBrainzClient.lookupURL(for: toc).absoluteString
+        #expect(url.contains("work-level-rels") && url.contains("recording-level-rels") && url.contains("genres"))
+    }
 }

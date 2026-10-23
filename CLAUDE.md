@@ -37,6 +37,8 @@ swift test --package-path SilversideKit --filter 'DiscIDTests/ctdbTOCString'
 
 Run `make format`, `make lint`, and `make test` before you report work as done.
 
+`CHANGELOG.md` has an entry for each version, for people who use Silverside: Added, Changed, and Fixed, in plain words, no internal names. When you change what a user sees or can do, add a line to the newest entry (start a new one after the version is tagged; the version is in `SilversideVersion` and the app's `MARKETING_VERSION`).
+
 ## Architecture
 
 The engine does the work, and the CLI only parses options and prints. Put new behavior in `SilversideKit`, so that the app gets it too. Engine files (`SilversideKit/Sources/SilversideKit/`), by layer:

@@ -9,7 +9,8 @@ such as FLAC, Apple Lossless, AAC, WAV, or (with a helper app) MP3, as well
 as tag the tracks with appropriate metadata (song and album titles).
 
 It is a Mac app, Silverside, and a command-line tool, `silverside`, which share
-one engine and one settings file.
+one engine and one settings file. [CHANGELOG.md](CHANGELOG.md) says what
+changed in each version.
 
 ## Requirements
 

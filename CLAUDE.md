@@ -139,3 +139,7 @@ The full list is in `docs/internal/Milestones.md`. Keep both up to date.
 10. In progress: the app.
 
 The CLI is finished for daily use, and the app is in daily use. The loose ends (built but not tested on hardware, and deferred work) are in `docs/internal/Milestones.md`.
+
+## Website
+
+The site at https://silverside.app is `docs/site`: static HTML and CSS, no build step, no JavaScript. `.github/workflows/pages.yml` publishes that folder with GitHub Actions on a push to `main`, and `make site` serves it locally. The look comes from the Silverside design system (a Claude Design artifact, kept outside the repo; its tokens are `docs/site/css/tokens.css`, its components the `ss-` classes in `site.css`). Rules: every color, radius, and font is a token; dark is the base and light follows `prefers-color-scheme`; the grooves band and the 2px iris rule appear only in the header and hero and in the closing download panel; `--action` blue is for Download only, and `--verified` green only where something is verified; Bricolage Grotesque only for headlines 28px and up. Write in the app's voice (short, plain, no exclamation marks or superlatives), name AccurateRip, CUETools DB (CTDB), MusicBrainz, and the Cover Art Archive exactly, and keep unknown facts as visible placeholders such as `[PRICE]`. Screenshots ship in both appearances, cropped with `docs/site/tools/shot.swift`, with alt text that says what they show. `docs/site/README.md` has the Pages setup and the DNS records.

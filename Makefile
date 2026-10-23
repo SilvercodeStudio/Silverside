@@ -27,7 +27,7 @@ XCODEBUILD = xcodebuild -workspace $(WORKSPACE) -scheme $(SCHEME) -configuration
 
 SWIFT_SOURCES = $(PACKAGE)/Package.swift $(PACKAGE)/Sources $(PACKAGE)/Tests App/Silverside
 
-.PHONY: help build run app cli test hwtest core format lint release install install-cli-local install-app uninstall
+.PHONY: help build run app cli test hwtest core format lint release install install-cli-local install-app uninstall site
 
 # Where make install puts silverside and its shell completions. /usr/local may need sudo; PREFIX=~/.local does not.
 PREFIX ?= /usr/local
@@ -54,6 +54,7 @@ help:
 	@echo "make install-cli-local  the same, under ~/.local (no sudo)"
 	@echo "make install-app    build the app for release (Apple silicon and Intel) and copy it to APP_DIR ($(APP_DIR))"
 	@echo "make uninstall      remove what make install put under PREFIX"
+	@echo "make site           serve the website (docs/site) at http://localhost:8000"
 	@echo "Set CONFIG=Release for a release build (Apple silicon and Intel)."
 
 build:
@@ -117,3 +118,7 @@ install-app:
 uninstall:
 	rm -f "$(PREFIX)/bin/silverside" "$(PREFIX)/share/zsh/site-functions/_silverside" "$(PREFIX)/etc/bash_completion.d/silverside" \
 		"$(PREFIX)/share/fish/vendor_completions.d/silverside.fish"
+
+# The website, as GitHub Pages serves it.
+site:
+	python3 -m http.server 8000 --bind 127.0.0.1 --directory docs/site

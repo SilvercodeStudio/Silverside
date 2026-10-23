@@ -1,0 +1,104 @@
+/* Silverside design tokens, as CSS custom properties.
+   The source is the Silverside design system (tokens.json); keep the two in step.
+   Dark is the base theme. Light follows prefers-color-scheme, or data-theme on <html>. */
+
+:root {
+  color-scheme: dark;
+
+  --ground: #0b1534;
+  --glow: rgba(72, 112, 255, 0.30);
+  --groove: rgba(150, 175, 255, 0.075);
+  --page: #0a0c12;
+  --surface: #141823;
+  --line: rgba(255, 255, 255, 0.09);
+  --chip: rgba(255, 255, 255, 0.06);
+  --ink: #f3f5f9;
+  --ink-2: #aab1c0;
+  --ink-3: #8a91a3;
+  --action: #1668e3;
+  --action-hover: #2b79f2;
+  --on-action: #ffffff;
+  --verified: #3fd27a;
+  --track-segment: #46536f;
+  --track-flagged: #b07a3e;
+  --track-reread: #f29d38;
+  --track-fixed: #3d8bff;
+  --track-failed: #ff5a4f;
+  --iris-1: #8f7bff;
+  --iris-2: #4aa8ff;
+  --iris-3: #45d6c8;
+  --iris-4: #c9e35f;
+  --iris-5: #ffb257;
+  --iris-6: #ff6fae;
+  --shadow-shot: 0 50px 120px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.10);
+  --shadow-icon: 0 18px 36px rgba(0, 0, 0, 0.45);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 28px;
+  --space-7: 40px;
+  --space-8: 56px;
+  --space-9: 96px;
+  --space-10: 140px;
+
+  --radius-mark: 3px;
+  --radius-chip: 8px;
+  --radius-tile: 12px;
+  --radius-shot: 14px;
+  --radius-card: 18px;
+  --radius-panel: 28px;
+  --radius-pill: 999px;
+
+  --container: 1200px;
+  --container-shot: 1160px;
+  --container-text: 680px;
+
+  --font-display: "Bricolage Grotesque", -apple-system, BlinkMacSystemFont, Inter, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --ground: #dfe6f6;
+    --glow: rgba(100, 140, 255, 0.30);
+    --groove: rgba(30, 60, 150, 0.07);
+    --page: #f6f7fa;
+    --surface: #ffffff;
+    --line: rgba(12, 22, 44, 0.10);
+    --chip: rgba(12, 22, 44, 0.05);
+    --ink: #11141b;
+    --ink-2: #475064;
+    --ink-3: #5b6375;
+    --action: #0a63d8;
+    --action-hover: #0856bd;
+    --verified: #13803d;
+    --track-segment: #c4d2ec;
+    --shadow-shot: 0 40px 100px rgba(20, 32, 70, 0.24), 0 0 0 1px rgba(12, 22, 44, 0.10);
+    --shadow-icon: 0 18px 36px rgba(20, 32, 70, 0.30);
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ground: #dfe6f6;
+  --glow: rgba(100, 140, 255, 0.30);
+  --groove: rgba(30, 60, 150, 0.07);
+  --page: #f6f7fa;
+  --surface: #ffffff;
+  --line: rgba(12, 22, 44, 0.10);
+  --chip: rgba(12, 22, 44, 0.05);
+  --ink: #11141b;
+  --ink-2: #475064;
+  --ink-3: #5b6375;
+  --action: #0a63d8;
+  --action-hover: #0856bd;
+  --verified: #13803d;
+  --track-segment: #c4d2ec;
+  --shadow-shot: 0 40px 100px rgba(20, 32, 70, 0.24), 0 0 0 1px rgba(12, 22, 44, 0.10);
+  --shadow-icon: 0 18px 36px rgba(20, 32, 70, 0.30);
+}

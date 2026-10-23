@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Silverside — Accurate CD ripping for the Mac</title>
+  <meta name="description" content="Silverside rips audio CDs on macOS and checks every track against other people's rips in AccurateRip and the CUETools database, so you know your copy is exact. Then it names, tags, and encodes the album for your library.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0b1534" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#dfe6f6" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://silverside.app/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://silverside.app/">
+  <meta property="og:title" content="Silverside — Accurate CD ripping for the Mac">
+  <meta property="og:description" content="Checks every track against other people's rips, so you know your copy is exact.">
+  <meta property="og:image" content="https://silverside.app/images/rip-in-progress-dark-1200.webp">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" type="image/png" href="images/favicon.png">
+  <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Bricolage+Grotesque:wght@600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- The header and the hero share one grooves band, so the pattern runs unbroken. -->
+  <div class="ss-grooves">
+    <header class="gutter">
+      <nav class="nav wrap" aria-label="Main">
+        <a class="brand" href="/">
+          <img src="images/icon.png" alt="" width="30" height="30">
+          <span>Silverside</span>
+        </a>
+        <div class="nav-links">
+          <a class="nav-more" href="#how">How it works</a>
+          <a class="nav-more" href="#formats">Formats</a>
+          <a class="nav-more" href="#faq">FAQ</a>
+          <a class="ss-btn ss-btn--small" href="#download">Download</a>
+        </div>
+      </nav>
+    </header>
+
+    <section class="hero-band" aria-labelledby="hero-title">
+      <div class="hero-stack">
+        <img class="hero-icon" src="images/icon.png" alt="Silverside app icon: a rainbow disc under a tonearm" width="120" height="120">
+        <h1 id="hero-title" class="ss-display hero-title">Accurate CD ripping<br>for the Mac.</h1>
+        <p class="lead">Silverside checks every track against other people's rips, so you know your copy is exact. Then it names, tags, and encodes the album for your library.</p>
+        <div class="actions">
+          <a class="ss-btn" href="#download">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+            Download for Mac
+          </a>
+          <a class="ss-btn ss-btn--ghost" href="#how">How it works</a>
+        </div>
+        <p class="ss-detail">Version 0.5 · Free and open source · macOS 15 or later · Apple silicon and Intel</p>
+      </div>
+      <div class="ss-iris edge-bottom" aria-hidden="true"></div>
+    </section>
+  </div>
+
+  <main id="main">
+    <div class="hero-shot gutter">
+      <div class="wrap">
+        <picture>
+          <source media="(prefers-color-scheme: light)" srcset="images/rip-finishing-light-1200.webp 1200w, images/rip-finishing-light-2400.webp 2400w" sizes="(min-width: 1224px) 1160px, calc(100vw - 32px)">
+          <img class="ss-shot" src="images/rip-in-progress-dark-2400.webp" srcset="images/rip-in-progress-dark-1200.webp 1200w, images/rip-in-progress-dark-2400.webp 2400w" sizes="(min-width: 1224px) 1160px, calc(100vw - 32px)" width="2400" height="1373" fetchpriority="high" alt="Silverside ripping Phish, The Story of the Ghost: ten tracks verified in AccurateRip, track 11 reading at 94 percent, and the track map filling in along the bottom">
+        </picture>
+      </div>
+    </div>
+
+    <section class="credits gutter" aria-label="Data sources">
+      <div class="wrap">
+        <div class="credit-group"><span class="ss-eyebrow">Verified with</span><a href="http://www.accuraterip.com">AccurateRip</a><a href="http://cue.tools/wiki/CUETools_Database">CUETools DB</a></div>
+        <div class="credit-group"><span class="ss-eyebrow">Named from</span><a href="https://musicbrainz.org">MusicBrainz</a><a href="https://coverartarchive.org">Cover Art Archive</a></div>
+        <div class="credit-group"><span class="ss-eyebrow">Inspired by</span><a href="https://www.exactaudiocopy.de">Exact Audio Copy</a></div>
+      </div>
+    </section>
+
+    <section id="how" class="section gutter" aria-labelledby="how-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="how-title" class="ss-display section-title">Rip once. Know it's right.</h2>
+          <p>A green check in Silverside means something: your audio matched rips made by other people, on other drives, from the same disc.</p>
+        </div>
+        <div class="steps">
+          <article class="ss-card">
+            <div class="ss-card__head">
+              <div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3a9 9 0 0 1 9 9"/></svg></div>
+              <span class="ss-card__num">01</span>
+            </div>
+            <h3 class="ss-card__title">Read</h3>
+            <p class="ss-card__text">Every sector is read with your drive's read offset corrected. Anything that doesn't agree, or that the drive flags, is read again until it does.</p>
+          </article>
+          <article class="ss-card">
+            <div class="ss-card__head">
+              <div class="ss-card__icon ss-card__icon--verified"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/></svg></div>
+              <span class="ss-card__num">02</span>
+            </div>
+            <h3 class="ss-card__title">Verify</h3>
+            <p class="ss-card__text">Each track is checked against AccurateRip and the CUETools database. Where CTDB has repair data, damaged sectors are fixed and checked again.</p>
+          </article>
+          <article class="ss-card">
+            <div class="ss-card__head">
+              <div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg></div>
+              <span class="ss-card__num">03</span>
+            </div>
+            <h3 class="ss-card__title">Encode</h3>
+            <p class="ss-card__text">Tracks are named and tagged from MusicBrainz, given cover art, and encoded. A lossless file must decode to exactly the ripped audio.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section gutter" aria-labelledby="map-title">
+      <div class="wrap spotlight">
+        <div class="spotlight-text">
+          <span class="ss-eyebrow">Track map</span>
+          <h2 id="map-title" class="ss-display spotlight-title">See what happened to every second of audio.</h2>
+          <p>The map fills in as Silverside reads. Clean stretches stay quiet. Anything the drive struggled with is marked, so a bad disc never hides behind a green check.</p>
+        </div>
+        <div class="ss-card result-panel">
+          <div class="result">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M7.8 12.4l2.9 2.9 5.5-5.6"/></svg>
+            <div><strong>All 14 tracks ripped accurately</strong><span class="ss-detail">AccurateRip 14/14 · CTDB verified · Offset +103</span></div>
+          </div>
+          <!-- One segment per track; flex-grow is the track's length in seconds (The Story of the Ghost). The marks are an illustration. -->
+          <div class="ss-trackmap" aria-hidden="true">
+            <div class="ss-trackmap__seg" style="flex-grow:232"></div>
+            <div class="ss-trackmap__seg" style="flex-grow:254"></div>
+            <div class="ss-trackmap__seg" style="flex-grow:159"></div>
+            <div class="ss-trackmap__seg" style="flex-grow:506"><span class="ss-trackmap__mark ss-trackmap__mark--flagged" style="left:36%"></span><span class="ss-trackmap__mark ss-trackmap__mark--reread" style="left:37.5%"></span></div>
+            <div class="ss-trackmap__seg" style="flex-grow:140"></div>
+            <div class="ss-trackmap__seg" style="flex-grow:141"></div>
+            <div class="ss-trackmap__seg" style="flex-grow:211"><span class="ss-trackmap__mark ss-trackmap__mark--fixed" style="left:62%"></span></div>
+            <div class="ss-trackmap__seg" style="flex-grow:186"></div>
+            <div class="ss-trackmap__seg" style="flex-grow:182"></div>
+            <div class="ss-trackmap__seg" style="flex-grow:149"></div>
+            <div class="ss-trackmap__seg" style="flex-grow:179"></div>
+            <div class="ss-trackmap__seg" style="flex-grow:269"></div>
+            <div class="ss-trackmap__seg" style="flex-grow:268"></div>
+            <div class="ss-trackmap__seg" style="flex-grow:113"></div>
+          </div>
+          <ul class="ss-legend">
+            <li><i style="background:var(--track-flagged)"></i>Flagged by the drive</li>
+            <li><i style="background:var(--track-reread)"></i>Re-read, then agreed</li>
+            <li><i style="background:var(--track-fixed)"></i>Fixed by CTDB</li>
+            <li><i style="background:var(--track-failed)"></i>Never agreed, or unreadable</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section gutter" aria-labelledby="report-title">
+      <div class="wrap spotlight">
+        <div class="report-crop">
+          <picture>
+            <source media="(prefers-color-scheme: light)" srcset="images/rip-report-light-1200.webp 1200w, images/rip-report-light-2400.webp 2400w" sizes="(min-width: 920px) 50vw, 100vw">
+            <img src="images/rip-report-dark-2400.webp" srcset="images/rip-report-dark-1200.webp 1200w, images/rip-report-dark-2400.webp 2400w" sizes="(min-width: 920px) 50vw, 100vw" width="2400" height="1336" loading="lazy" alt="The rip report for Antonio Carlos Jobim, Stone Flower, beside its track list: 10 of 10 tracks accurate in AccurateRip, verified by CTDB, encoded to FLAC">
+          </picture>
+        </div>
+        <div class="spotlight-text">
+          <span class="ss-eyebrow">Rip report</span>
+          <h2 id="report-title" class="ss-display spotlight-title">A record of every rip, in plain language.</h2>
+          <p>AccurateRip confidence for each track, the CTDB entry it matched, the disc IDs, your drive and its read offset, the encoder, and every file it wrote. It's Markdown to read and JSON to keep, with a CUE sheet to burn the disc again exactly.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="formats" class="section gutter" aria-labelledby="formats-title">
+      <div class="wrap spotlight">
+        <div class="spotlight-text">
+          <span class="ss-eyebrow">Formats</span>
+          <h2 id="formats-title" class="ss-display spotlight-title">Exact copies, in the format you use.</h2>
+          <p>Apple Lossless for the Music app, FLAC for everything else, AAC or MP3 when space matters, or plain WAV files with the report. Albums land in your library folder, named and tagged, with the cover embedded.</p>
+          <ul class="ss-chips" aria-label="Supported formats">
+            <li class="ss-chip">Apple Lossless</li>
+            <li class="ss-chip">FLAC</li>
+            <li class="ss-chip">AAC</li>
+            <li class="ss-chip">MP3</li>
+            <li class="ss-chip">WAV</li>
+            <li class="ss-chip">AIFF</li>
+          </ul>
+        </div>
+        <div class="sheet">
+          <picture>
+            <source media="(prefers-color-scheme: light)" srcset="images/welcome-light-600.webp 600w, images/welcome-light-1200.webp 1200w" sizes="(min-width: 920px) 440px, min(440px, 100vw)">
+            <img class="ss-shot ss-shot--crop" src="images/welcome-dark-1200.webp" srcset="images/welcome-dark-600.webp 600w, images/welcome-dark-1200.webp 1200w" sizes="(min-width: 920px) 440px, min(440px, 100vw)" width="1200" height="1558" loading="lazy" alt="Silverside's welcome window asking what kind of files a rip should become: Apple Lossless, FLAC, AAC, MP3, or WAV files only">
+          </picture>
+        </div>
+      </div>
+    </section>
+
+    <section class="section gutter" aria-labelledby="more-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="ss-eyebrow">And more</span>
+          <h2 id="more-title" class="ss-display section-title">Built for the discs you actually have.</h2>
+          <p>Scratched discs, box sets, bootlegs with a hidden track, and the drive you happen to own.</p>
+        </div>
+        <div class="features">
+          <article class="ss-card">
+            <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M3.6 9.2l4.2 1.6-2.2 3.2"/></svg></div></div>
+            <h3 class="ss-card__title">Damaged discs</h3>
+            <p class="ss-card__text">Sectors that read differently, that the drive flags, or that cannot be read at all are re-read until they agree. What is still wrong, CTDB repairs. Rip a stubborn disc again in another drive, and Silverside pools both rips.</p>
+          </article>
+          <article class="ss-card">
+            <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 12h7"/><circle cx="17" cy="12" r="1"/></svg></div></div>
+            <h3 class="ss-card__title">Your drive, known</h3>
+            <p class="ss-card__text">The read offset comes from AccurateRip's list of drives and is confirmed by your own rips. Silverside measures the drive's cache too, so a re-read is a real read, not a copy from memory.</p>
+          </article>
+          <article class="ss-card">
+            <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></div></div>
+            <h3 class="ss-card__title">Several drives at once</h3>
+            <p class="ss-card__text">Each drive rips on its own, so several discs can rip at the same time. The discs of a box set share one release choice and one set of edits.</p>
+          </article>
+          <article class="ss-card">
+            <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L18 10l-4-4L4 16v4z"/><path d="M12.5 7.5l4 4"/></svg></div></div>
+            <h3 class="ss-card__title">Names you can change</h3>
+            <p class="ss-card__text">Edit the album, artist, date, and track titles before the rip. The files are named and tagged with your edits, and what MusicBrainz said stays in the report. A disc MusicBrainz does not know is named from its CD-Text, or by you.</p>
+          </article>
+          <article class="ss-card">
+            <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></div></div>
+            <h3 class="ss-card__title">Hidden tracks and pregaps</h3>
+            <p class="ss-card__text">A song hidden before track 1 is ripped and encoded as track 0. Pregaps, ISRCs, the MCN, and CD-Text go into the report and the CUE sheet.</p>
+          </article>
+          <article class="ss-card">
+            <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></svg></div></div>
+            <h3 class="ss-card__title">A command-line tool</h3>
+            <p class="ss-card__text"><code>silverside</code> rips, repairs, encodes, and looks up metadata from a terminal, with the same engine and the same settings as the app.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="section faq gutter" aria-labelledby="faq-title">
+      <div class="wrap">
+        <h2 id="faq-title" class="ss-display section-title">Questions</h2>
+        <div class="ss-faq">
+          <details open>
+            <summary>Why not just import with the Music app?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+            <p>Music never tells you whether your copy matches anyone else's. Silverside checks every track against AccurateRip and CTDB and shows you the result, and it re-reads and repairs what a plain import would copy wrong.</p>
+            <p>The names come from MusicBrainz, where volunteers keep album and track data consistent and accurate, rather than from the Gracenote data Music uses. And Music cannot write FLAC.</p>
+          </details>
+          <details>
+            <summary>What is AccurateRip?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+            <p>A shared database of checksums from other people's rips. When your track matches, the confidence number tells you how many rips agree with yours. The CUETools database does the same for whole discs, and keeps the data that repairs a damaged rip.</p>
+          </details>
+          <details>
+            <summary>Which drives work?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+            <p>Any drive that macOS sees as a CD drive: USB, Thunderbolt, or a SATA drive in an enclosure. No Mac that runs macOS 15 came with a built-in drive, so in practice it is external.</p>
+          </details>
+          <details>
+            <summary>Does it rip damaged discs?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+            <p>Often, yes. A damaged track takes longer: the status line shows each read, the sectors with errors, and the rounds of re-reads. Most damaged discs in testing came out fully accurate from one rip, after the CTDB repair. When too much of a disc is gone, the tracks that verify are marked verified, and the others are not.</p>
+          </details>
+          <details>
+            <summary>What about MP3?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+            <p>Apple's audio frameworks cannot write MP3, so Silverside uses the free LAME encoder for it. Install it with <code>brew install lame</code>, and MP3 appears among the formats. Everything else is built in.</p>
+          </details>
+          <details>
+            <summary>Does it need an account, or send anything about me?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+            <p>No account. To look up a disc, Silverside sends the disc's IDs to AccurateRip, CTDB, MusicBrainz, and the Cover Art Archive, and nothing else. See <a href="privacy.html">Privacy</a>.</p>
+          </details>
+          <details>
+            <summary>What does it need?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+            <p>A Mac with macOS 15 Sequoia or later, Apple silicon or Intel, and a CD drive. And some CDs.</p>
+          </details>
+          <details>
+            <summary>What does it cost?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+            <p>Nothing. Silverside is free, and its code is open source under the <a href="license.html">MIT License</a> on <a href="https://github.com/Silverside-app/Silverside">GitHub</a>. The name and the icon stay with the author.</p>
+            <!-- A tip jar is planned; its form is not decided yet. -->
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" class="download gutter" aria-labelledby="download-title">
+      <div class="wrap download-panel ss-grooves">
+        <div class="ss-iris edge-top" aria-hidden="true"></div>
+        <img class="download-icon" src="images/icon.png" alt="" width="84" height="84" loading="lazy">
+        <h2 id="download-title" class="ss-display download-title">Your CDs, copied exactly.</h2>
+        <p class="lead">A rip you can trust, a report that says why, and an album in your library. Free, and open source.</p>
+        <!-- [DOWNLOAD URL]: point this at the signed build when there is one. -->
+        <a class="ss-btn" href="https://github.com/Silverside-app/Silverside/releases">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+          Download for Mac
+        </a>
+        <p class="ss-detail">Version 0.5 · Free and open source · macOS 15 or later · Apple silicon and Intel</p>
+      </div>
+    </section>
+
+    <section class="acks gutter" aria-labelledby="acks-title">
+      <div class="wrap">
+        <h2 id="acks-title" class="ss-eyebrow">Acknowledgments</h2>
+        <ul>
+          <li><a href="https://www.exactaudiocopy.de">Exact Audio Copy</a> by Andre Wiethoff set the standard for secure ripping that Silverside follows.</li>
+          <li><a href="http://www.accuraterip.com">AccurateRip</a> by Illustrate keeps the checksums of other people's rips, which prove a track is accurate.</li>
+          <li><a href="http://cue.tools/wiki/CUETools_Database">CUETools DB</a> by Grigory Chudov keeps checksums of whole discs, and the data that repairs damaged rips.</li>
+          <li><a href="https://musicbrainz.org">MusicBrainz</a> and the <a href="https://coverartarchive.org">Cover Art Archive</a>, run by the MetaBrainz Foundation, provide album names and cover art, built by their volunteers.</li>
+          <li><a href="https://lame.sourceforge.io">LAME</a> encodes MP3 when it is installed. Silverside runs it as a separate program and does not include it.</li>
+          <li>Apple's AudioToolbox encodes FLAC, Apple Lossless, and AAC.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer gutter">
+    <div class="wrap">
+      <div class="footer-brand">
+        <img src="images/icon.png" alt="" width="22" height="22" loading="lazy">
+        <span>© 2026 Preston Landers</span>
+      </div>
+      <nav class="footer-links" aria-label="Footer">
+        <a href="https://github.com/Silverside-app/Silverside/blob/main/CHANGELOG.md">What's new</a>
+        <a href="https://github.com/Silverside-app/Silverside/issues">Support</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="license.html">License</a>
+        <a href="https://github.com/Silverside-app/Silverside">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

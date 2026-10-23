@@ -1,5 +1,9 @@
 # Silverside
 
+Welcome to Silverside!
+
+<img src="docs/silverside-md.png" width="300" alt="Silverside.app logo">
+
 Silverside is a CD ripping app for macOS intended to produce secure,
 verified rips of audio CDs, inspired by Exact Audio Copy (EAC) for
 Windows but with a modern Mac interface. It extracts the audio from CDs into
@@ -158,6 +162,7 @@ makes, and the settings.
 - **Multi-disc sets.** The discs of a release share the release choice and
   the album's edits, and the app says which discs of a set are ripped. Still
   to do: reusable style recipes for titles.
+- Ability to play or preview CDs/tracks.
 - Pre-emphasis support as mentioned above.
 - Localization in other languages. 
 - Recognition of HDCD; possible 24-bit decode.

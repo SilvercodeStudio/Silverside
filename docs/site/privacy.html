@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy — Silverside</title>
+  <meta name="description" content="What Silverside and silverside.app send, and what they keep. No account, no analytics.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0b1534" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#dfe6f6" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://silverside.app/privacy.html">
+  <link rel="icon" type="image/png" href="images/favicon.png">
+  <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Bricolage+Grotesque:wght@600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <div class="ss-grooves">
+    <header class="gutter">
+      <nav class="nav wrap" aria-label="Main">
+        <a class="brand" href="/">
+          <img src="images/icon.png" alt="" width="30" height="30">
+          <span>Silverside</span>
+        </a>
+        <div class="nav-links">
+          <a class="nav-more" href="/#how">How it works</a>
+          <a class="nav-more" href="/#formats">Formats</a>
+          <a class="nav-more" href="/#faq">FAQ</a>
+          <a class="ss-btn ss-btn--small" href="/#download">Download</a>
+        </div>
+      </nav>
+    </header>
+    <section class="page-band" aria-labelledby="page-title">
+      <div class="wrap">
+        <span class="ss-eyebrow">Privacy</span>
+        <h1 id="page-title" class="ss-display page-title">No account. No analytics. A few lookups.</h1>
+        <p class="lead">Silverside asks four public databases about your discs, and nothing about you.</p>
+      </div>
+      <div class="ss-iris edge-bottom" aria-hidden="true"></div>
+    </section>
+  </div>
+
+  <main id="main" class="gutter">
+    <div class="prose">
+      <h2>The app</h2>
+      <p>Silverside has no account, no sign-in, and no analytics. It does not send reports about how you use it, and it does not check for updates on its own.</p>
+      <p>To look up a disc, it sends the disc's table of contents and the IDs made from it to these services, which is how every ripper that uses them works:</p>
+      <ul>
+        <li><a href="http://www.accuraterip.com">AccurateRip</a> and the <a href="http://cue.tools/wiki/CUETools_Database">CUETools database</a>, to compare your rip with other people's. Silverside reads from them; it does not submit your rips.</li>
+        <li><a href="https://musicbrainz.org">MusicBrainz</a> and the <a href="https://coverartarchive.org">Cover Art Archive</a>, for album names, track names, and cover art.</li>
+      </ul>
+      <p>Each request names Silverside, its version, and this website, as MusicBrainz asks of programs that use it. No request carries your name, your email address, or anything else about you. AccurateRip and CTDB answer over plain HTTP, as their other clients use them; MusicBrainz and the Cover Art Archive are reached over HTTPS.</p>
+      <p>Everything else stays on your Mac: the rips, the reports, the settings, the drive profiles, and a cache of the answers in your Library folder. A drive report (Settings › Drives › Save Report) is a file you choose to share, for a bug report.</p>
+
+      <h2>This website</h2>
+      <p>silverside.app is a static site on GitHub Pages. It sets no cookies and runs no analytics. GitHub serves the pages and may keep its own server logs; see <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>. The fonts come from Google Fonts, so your browser asks Google for them; see <a href="https://developers.google.com/fonts/faq/privacy">Google Fonts' privacy note</a>.</p>
+
+      <h2>Questions</h2>
+      <p>Open an issue on <a href="https://github.com/Silverside-app/Silverside/issues">GitHub</a>.</p>
+    </div>
+  </main>
+
+  <footer class="site-footer gutter">
+    <div class="wrap">
+      <div class="footer-brand">
+        <img src="images/icon.png" alt="" width="22" height="22" loading="lazy">
+        <span>© 2026 Preston Landers</span>
+      </div>
+      <nav class="footer-links" aria-label="Footer">
+        <a href="https://github.com/Silverside-app/Silverside/blob/main/CHANGELOG.md">What's new</a>
+        <a href="https://github.com/Silverside-app/Silverside/issues">Support</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="license.html">License</a>
+        <a href="https://github.com/Silverside-app/Silverside">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

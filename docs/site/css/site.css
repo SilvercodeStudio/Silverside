@@ -1,0 +1,202 @@
+/* Silverside site styles. Colors, spacing, radii and fonts come from tokens.css; never hard-code them here.
+   The ss- classes are the design system's components; the rest is this page's layout. */
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 400 17px/1.55 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+img { display: block; max-width: 100%; height: auto; }
+a { color: var(--ink-2); text-decoration: none; }
+a:hover { color: var(--ink); }
+:focus-visible { outline: 2px solid var(--action); outline-offset: 3px; border-radius: 4px; }
+h1, h2, h3, p, ul { margin: 0; }
+code { font: 400 0.92em/1.4 var(--font-mono); padding: 1px 5px; border-radius: 5px; background: var(--chip); }
+
+.skip-link { position: absolute; left: 16px; top: -64px; z-index: 10; padding: 10px 16px; border-radius: var(--radius-pill); background: var(--action); color: var(--on-action); font-weight: 600; }
+.skip-link:focus { top: 12px; color: var(--on-action); }
+
+.wrap { max-width: var(--container); margin: 0 auto; }
+.gutter { padding-inline: clamp(16px, 4vw, 32px); }
+
+/* ---------- Signature: GroovesHeader ---------- */
+/* The rings are centered on the app icon: --groove-center is the icon's center inside the band. */
+.ss-grooves {
+  --groove-center: 50% 18%;
+  background:
+    radial-gradient(ellipse 60% 70% at 50% 0%, var(--glow), transparent 72%),
+    repeating-radial-gradient(circle at var(--groove-center), transparent 0 27px, var(--groove) 27px 28px),
+    var(--ground);
+}
+.ss-iris {
+  height: 2px;
+  background: linear-gradient(90deg, var(--iris-1) 0%, var(--iris-2) 20%, var(--iris-3) 40%, var(--iris-4) 58%, var(--iris-5) 77%, var(--iris-6) 100%);
+}
+/* Bricolage Grotesque: headlines 28px and up only. */
+.ss-display { font-family: var(--font-display); font-weight: 700; color: var(--ink); text-wrap: balance; }
+.ss-eyebrow { font: 500 12px/1.4 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.ss-detail { font: 400 12.5px/1.5 var(--font-mono); letter-spacing: .02em; color: var(--ink-3); }
+
+/* ---------- Buttons ---------- */
+.ss-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 48px; padding: 0 24px;
+  border: 0; border-radius: var(--radius-pill);
+  background: var(--action); color: var(--on-action);
+  font: 600 17px/1 var(--font-sans); text-decoration: none; cursor: pointer;
+  white-space: nowrap;
+}
+.ss-btn:hover { background: var(--action-hover); color: var(--on-action); }
+.ss-btn svg { width: 18px; height: 18px; flex: none; }
+.ss-btn--ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 500; padding: 0 22px; }
+.ss-btn--ghost:hover { background: var(--chip); color: var(--ink); }
+.ss-btn--small { min-height: 36px; padding: 0 16px; font-size: 14px; font-weight: 500; }
+
+/* ---------- Chips and status ---------- */
+.ss-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; list-style: none; }
+.ss-chip { font: 400 13px/1.4 var(--font-mono); padding: 6px 12px; border-radius: var(--radius-chip); background: var(--chip); border: 1px solid var(--line); color: var(--ink); }
+
+/* ---------- Cards ---------- */
+.ss-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 28px; display: flex; flex-direction: column; gap: 14px; color: var(--ink); }
+.ss-card__head { display: flex; align-items: center; justify-content: space-between; }
+.ss-card__icon { width: 44px; height: 44px; border-radius: var(--radius-tile); background: var(--chip); display: flex; align-items: center; justify-content: center; color: var(--ink); flex: none; }
+.ss-card__icon svg { width: 24px; height: 24px; }
+.ss-card__icon--verified { color: var(--verified); }
+.ss-card__num { font: 400 12px/1 var(--font-mono); color: var(--ink-3); }
+.ss-card__title { font: 650 21px/1.3 var(--font-sans); letter-spacing: -.01em; }
+.ss-card__text { color: var(--ink-2); font-size: 16px; text-wrap: pretty; }
+
+/* ---------- Screenshots ---------- */
+.ss-shot { width: 100%; border-radius: var(--radius-tile); box-shadow: var(--shadow-shot); }
+.ss-shot--crop { border-radius: var(--radius-shot); }
+
+/* ---------- Track map ---------- */
+.ss-trackmap { display: flex; gap: 3px; height: 52px; }
+.ss-trackmap__seg { position: relative; flex: 1 1 0; background: var(--track-segment); border-radius: var(--radius-mark); overflow: hidden; }
+.ss-trackmap__seg--queued { background: var(--chip); }
+.ss-trackmap__mark { position: absolute; top: 0; bottom: 0; width: 3px; }
+.ss-trackmap__mark--flagged { background: var(--track-flagged); }
+.ss-trackmap__mark--reread { background: var(--track-reread); }
+.ss-trackmap__mark--fixed { background: var(--track-fixed); }
+.ss-trackmap__mark--failed { background: var(--track-failed); }
+.ss-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 0; list-style: none; font-size: 13px; line-height: 1.4; color: var(--ink-2); }
+.ss-legend li { display: flex; align-items: center; gap: 7px; }
+.ss-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
+
+/* ---------- FAQ ---------- */
+.ss-faq { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(480px, 100%), 1fr)); column-gap: 48px; border-top: 1px solid var(--line); }
+.ss-faq details { border-bottom: 1px solid var(--line); padding: 22px 0; }
+.ss-faq summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 16px; font-weight: 600; font-size: 18px; line-height: 1.4; color: var(--ink); }
+.ss-faq summary::-webkit-details-marker { display: none; }
+.ss-faq summary svg { width: 16px; height: 16px; flex: none; color: var(--ink-3); transition: transform .2s; }
+.ss-faq details[open] summary svg { transform: rotate(90deg); }
+.ss-faq p { margin-top: 12px; color: var(--ink-2); font-size: 16px; text-wrap: pretty; }
+.ss-faq p + p { margin-top: 8px; }
+
+/* ---------- Page: header and hero ---------- */
+/* The hero's band holds the nav (68px) and the hero; its rings center on the icon below them. */
+.ss-grooves:has(> .hero-band) { --groove-center: 50% calc(68px + clamp(40px, 6vw, 80px) + 60px); }
+.nav { min-height: 68px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 600; font-size: 17px; letter-spacing: -.01em; }
+.brand:hover { color: var(--ink); }
+.brand img { width: 30px; height: 30px; }
+.nav-links { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 28px; font-size: 15px; }
+.nav-links a { color: var(--ink-2); }
+.nav-links a:hover, .nav-links a.ss-btn { color: var(--ink); }
+.nav-links a.ss-btn { color: var(--on-action); }
+/* On a phone the nav keeps only Download; the sections are one scroll away, and the hero has How it works. */
+@media (max-width: 599px) { .nav-links .nav-more { display: none; } }
+
+.hero-band { position: relative; padding: clamp(40px, 6vw, 80px) clamp(16px, 4vw, 32px) clamp(96px, 17vw, 250px); text-align: center; }
+.hero-stack { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 28px; }
+.hero-icon { width: 120px; height: 120px; filter: drop-shadow(var(--shadow-icon)); }
+.hero-title { font-size: clamp(42px, 5.6vw, 78px); line-height: 1.03; letter-spacing: -.024em; }
+.lead { max-width: 620px; font-size: clamp(18px, 1.6vw, 21px); line-height: 1.5; color: var(--ink-2); text-wrap: pretty; }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.edge-bottom { position: absolute; left: 0; right: 0; bottom: 0; }
+.edge-top { position: absolute; left: 0; right: 0; top: 0; }
+/* The hero screenshot overlaps the iris rule: half on the ground band, half on the page. */
+.hero-shot { position: relative; margin-top: calc(-1 * clamp(72px, 14vw, 210px)); }
+.hero-shot .wrap { max-width: var(--container-shot); }
+
+/* A small page (privacy) keeps the band short. */
+.page-band { position: relative; padding: clamp(32px, 5vw, 56px) clamp(16px, 4vw, 32px) clamp(40px, 6vw, 64px); }
+.page-band .wrap { max-width: var(--container-text); display: flex; flex-direction: column; gap: 12px; }
+.page-title { font-size: clamp(32px, 3.6vw, 48px); line-height: 1.08; letter-spacing: -.02em; }
+.prose { max-width: var(--container-text); margin: 0 auto; padding-block: clamp(48px, 6vw, 72px) 0; display: flex; flex-direction: column; gap: 16px; color: var(--ink-2); }
+.prose h2 { margin-top: 24px; font: 650 21px/1.3 var(--font-sans); letter-spacing: -.01em; color: var(--ink); }
+.prose a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.prose a:hover { text-decoration-color: currentColor; }
+.prose ul { padding-left: 22px; display: flex; flex-direction: column; gap: 8px; }
+
+/* ---------- Page: sections ---------- */
+.credits { padding-top: clamp(48px, 6vw, 72px); }
+.credits .wrap { max-width: 1000px; display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 12px 40px; text-align: center; }
+.credit-group { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 6px 14px; }
+.credit-group a { font-size: 18px; font-weight: 600; color: var(--ink-2); }
+.credit-group a:hover { color: var(--ink); }
+@media (max-width: 599px) {
+  .credits .wrap { flex-direction: column; align-items: center; gap: 14px; }
+  .credit-group { gap: 4px 12px; }
+  .credit-group a { font-size: 16px; }
+}
+
+.section { padding-top: clamp(88px, 10vw, 140px); }
+.section-head { max-width: var(--container-text); display: flex; flex-direction: column; gap: 16px; margin-bottom: clamp(32px, 4vw, 56px); }
+.section-head p { color: var(--ink-2); font-size: 19px; text-wrap: pretty; }
+.section-title { font-size: clamp(32px, 3.6vw, 48px); line-height: 1.08; letter-spacing: -.02em; }
+
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 20px; }
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 20px; }
+
+.spotlight { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr)); gap: clamp(32px, 5vw, 56px); align-items: center; }
+.spotlight-text { display: flex; flex-direction: column; gap: 16px; max-width: 480px; }
+.spotlight-text p { color: var(--ink-2); text-wrap: pretty; }
+.spotlight-title { font-size: clamp(28px, 3vw, 38px); line-height: 1.12; letter-spacing: -.016em; }
+.spotlight-text .ss-chips { margin-top: 8px; }
+/* On one column the image goes under its text, whichever side it sits on wide screens. */
+@media (max-width: 919px) { .spotlight-text { order: -1; } }
+
+.result-panel { padding: clamp(20px, 3vw, 32px); gap: 18px; }
+.result { display: flex; align-items: center; gap: 12px; }
+.result svg { width: 26px; height: 26px; flex: none; color: var(--verified); }
+.result strong { display: block; font-weight: 600; font-size: 18px; }
+
+.report-crop { border-radius: var(--radius-shot); overflow: hidden; box-shadow: var(--shadow-shot); aspect-ratio: 1 / 1; }
+.report-crop img { width: 100%; height: 100%; object-fit: cover; object-position: 100% 0; }
+.sheet { display: flex; justify-content: center; }
+.sheet img { width: min(440px, 100%); }
+
+.faq .section-title { margin-bottom: 40px; }
+
+/* ---------- Page: download panel, acknowledgments, footer ---------- */
+.download { padding-top: clamp(96px, 11vw, 160px); }
+.download-panel { --groove-center: 50% calc(clamp(56px, 7vw, 96px) + 42px); position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-panel); padding: clamp(56px, 7vw, 96px) clamp(20px, 4vw, 48px); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 24px; }
+.download-icon { width: 84px; height: 84px; filter: drop-shadow(var(--shadow-icon)); }
+.download-title { font-size: clamp(32px, 3.8vw, 52px); line-height: 1.06; letter-spacing: -.02em; }
+.download-panel .lead { max-width: 520px; font-size: 18px; }
+
+.acks { padding-top: clamp(56px, 7vw, 96px); }
+.acks .wrap { display: flex; flex-direction: column; gap: 20px; }
+.acks ul { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 10px 40px; font-size: 14px; line-height: 1.5; color: var(--ink-3); }
+.acks a { color: var(--ink-2); font-weight: 500; }
+.acks a:hover { color: var(--ink); }
+
+.site-footer { padding-block: clamp(48px, 6vw, 72px) 48px; }
+.site-footer .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px 32px; padding-top: 28px; border-top: 1px solid var(--line); font-size: 14px; color: var(--ink-3); }
+.footer-brand { display: flex; align-items: center; gap: 10px; }
+.footer-brand img { width: 22px; height: 22px; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.footer-links a { color: var(--ink-3); }
+.footer-links a:hover { color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .ss-faq summary svg { transition: none; }
+}

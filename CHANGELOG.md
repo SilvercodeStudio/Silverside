@@ -27,6 +27,8 @@ command-line tool.
   and the Markdown report. After a rip, and for an earlier rip, an "Encoded"
   chip and an Encoding column show it.
 - **An earlier rip shows its cover** beside the result.
+- **Help › Silverside Website** opens silverside.app.
+- Acknowledgments names XLD and cyanrip, two rippers that were inspirations.
 - **A small spinner shows when work is under way:** in the status bar during
   a rip, and while a disc is looked up in MusicBrainz. The status bar also
   says when it looks up the disc, finishes the rip, or waits for your answer.
@@ -36,6 +38,10 @@ command-line tool.
 - Silverside's website is [silverside.app](https://silverside.app): the About
   window's Website button opens it, and Silverside names it to MusicBrainz and
   the other services it asks.
+- The app's bundle identifier is `app.silverside.Silverside`, the last part
+  of the rename from CDRip. macOS treats it as a new app: the welcome shows
+  once more at the next launch, and the choice of Fast mode and the window
+  positions start afresh. Rips, settings, and drive profiles are not affected.
 
 ### Fixed
 

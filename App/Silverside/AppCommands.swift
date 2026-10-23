@@ -15,6 +15,8 @@ struct AppCommands: Commands {
             Button("Silverside Help") { openWindow(id: "help") }
                 .keyboardShortcut("?", modifiers: .command)
             Button("Welcome to Silverside") { openWindow(id: "welcome") }
+            Divider()
+            Button("Silverside Website") { NSWorkspace.shared.open(AboutView.website) }
         }
         CommandGroup(after: .sidebar) {
             Button("Rip History") { model.selection = .history }

@@ -156,6 +156,14 @@ private struct AcknowledgmentsSheet: View {
             "by Andre Wiethoff set the standard for secure ripping that Silverside follows."
         ),
         (
+            "[XLD](https://tmkk.undo.jp/xld/index_e.html)",
+            "by tmkk, the careful CD ripper for the Mac, was an inspiration. Silverside uses no code from it."
+        ),
+        (
+            "[cyanrip](https://github.com/cyanreg/cyanrip)",
+            "by Lynne, a ripper built for today's tools, was an inspiration too. No code from it either."
+        ),
+        (
             "[AccurateRip](http://www.accuraterip.com)",
             "by Illustrate keeps the checksums of other people's rips, which prove a track is accurate."
         ),

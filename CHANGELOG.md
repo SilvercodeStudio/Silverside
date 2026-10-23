@@ -3,6 +3,30 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.5 (not released yet)
+
+### Added
+
+- **The rip report records the encoding:** the format, the encoder and its
+  settings (AAC's mode and bit rate, or LAME's options), how the files were
+  checked, and each track's file, in `disc.json`, the album folder's report,
+  and the Markdown report. After a rip, and for an earlier rip, an "Encoded"
+  chip and an Encoding column show it.
+- **An earlier rip shows its cover** beside the result.
+- **A small spinner shows when work is under way:** in the status bar during
+  a rip, and while a disc is looked up in MusicBrainz. The status bar also
+  says when it looks up the disc, finishes the rip, or waits for your answer.
+
+### Fixed
+
+- While MusicBrainz was being asked about a new disc, the header said
+  "not looked up" until the answer came.
+- The table of an earlier rip was too wide for the window when the rip report
+  was open.
+- The rip report said "1 sectors".
+- During a rip, the Rip Disc button stayed blue with dim text. Stop now takes
+  its place, and the button is gray when there is nothing to rip.
+
 ## 0.4 (2026-10-22)
 
 ### Added

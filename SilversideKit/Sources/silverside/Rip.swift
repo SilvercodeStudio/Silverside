@@ -268,7 +268,7 @@ private final class RipPrinter: @unchecked Sendable {
         case .encodingDeclined(let existing):
             let folder = existing.first?.deletingLastPathComponent().path ?? ""
             Swift.print("Did not encode: kept the files in \(folder). The rip is kept, for silverside encode later.")
-        case .encoded(let files, let format):
+        case .encoded(let files, let format, _):
             Swift.print(
                 "Encoded \(files.count) tracks as \(format.rawValue.uppercased()), each checked against the rip.")
             if let first = files.first { Swift.print("Library: \(first.deletingLastPathComponent().path)") }

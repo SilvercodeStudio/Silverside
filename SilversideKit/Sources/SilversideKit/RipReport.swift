@@ -180,6 +180,91 @@ public struct RipReport: Codable, Equatable, Sendable {
     /// the suspects, the reports, and the artwork. `RippedDisc.deleteRipFiles` deletes
     /// these and nothing else. Nil in reports from before Silverside kept the list.
     public var files: [String]?
+    /// What the latest encoding made of the rip. Nil until the rip is encoded, and in reports
+    /// from before Silverside kept it.
+    public var encoding: Encoding?
+
+    /// An encoding of the rip into the library: the format, its settings, and each track's file.
+    public struct Encoding: Codable, Equatable, Sendable {
+        public struct File: Codable, Equatable, Sendable {
+            public var track: Int
+            /// The file's name in the album folder.
+            public var file: String
+
+            public init(track: Int, file: String) {
+                self.track = track
+                self.file = file
+            }
+        }
+
+        public var date: Date
+        public var format: AudioFormat
+        /// The program that wrote the audio: "Apple AudioToolbox", "LAME 3.100", or Silverside for WAV.
+        public var encoder: String
+        /// The AAC or MP3 settings; nil for the lossless formats, which have none.
+        public var aac: AACOptions?
+        public var mp3: MP3Options?
+        /// The album folder in the library.
+        public var folder: String
+        public var files: [File]
+
+        public init(
+            date: Date = Date(), format: AudioFormat, encoder: String, aac: AACOptions? = nil, mp3: MP3Options? = nil,
+            folder: String, files: [File]
+        ) {
+            self.date = date
+            self.format = format
+            self.encoder = encoder
+            self.aac = aac
+            self.mp3 = mp3
+            self.folder = folder
+            self.files = files
+        }
+
+        /// The AAC or MP3 settings, for people to read: "VBR, quality 127", "lame -V 0". Nil for lossless.
+        public var settingsText: String? {
+            if let aac {
+                switch aac.mode {
+                case .vbr: return "VBR, quality \(aac.vbrQuality) of 127"
+                case .vbrConstrained: return "constrained VBR around \(aac.bitRate) kbit/s"
+                case .abr: return "average \(aac.bitRate) kbit/s"
+                case .cbr: return "constant \(aac.bitRate) kbit/s"
+                }
+            }
+            if let mp3 { return (["lame"] + mp3.lameArguments).joined(separator: " ") }
+            return nil
+        }
+
+        /// How each file was checked after it was written.
+        public var checkText: String {
+            format.isLossless
+                ? "Each file decodes to exactly the ripped audio."
+                : "Each file decodes to the track's length; a lossy file cannot equal the rip."
+        }
+
+        /// The file of a track, if the encoding wrote one.
+        public func file(ofTrack number: Int) -> String? {
+            files.first { $0.track == number }?.file
+        }
+
+        /// Sets "encoding" in a report file (a rip's disc.json, or an archive manifest's
+        /// "ripReport"), and keeps every other key.
+        public func save(inReportAt url: URL) throws {
+            var object = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]) ?? [:]
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            let value = try JSONSerialization.jsonObject(with: encoder.encode(self))
+            if var nested = object["ripReport"] as? [String: Any] {
+                nested["encoding"] = value
+                object["ripReport"] = nested
+            } else {
+                object["encoding"] = value
+            }
+            let data = try JSONSerialization.data(
+                withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+            try data.write(to: url, options: .atomic)
+        }
+    }
 
     public init(date: Date = Date(), drive: Drive, secure: Bool, toc: TOC, tracks: [Track], ctdb: CTDBResult) {
         self.date = date

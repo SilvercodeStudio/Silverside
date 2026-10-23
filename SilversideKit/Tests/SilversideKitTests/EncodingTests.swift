@@ -66,6 +66,43 @@ struct EncodingTests {
         #expect(try again.encode(disc, into: library).count == 2)
     }
 
+    /// The album folder's report says how the files were made: the format, the encoder and
+    /// its settings, and each track's file; the Markdown says it too.
+    @Test func recordsTheEncodingInTheAlbumFoldersReport() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        var encoder = DiscEncoder(format: .aac)
+        encoder.aac.mode = .cbr
+        encoder.aac.bitRate = 192
+        let (files, record) = try encoder.encodeWithRecord(disc, into: library)
+        let album = files[0].deletingLastPathComponent()
+        let saved = try #require(try RipReport.read(from: album.appending(path: "Rip Report (Disc 2).json")).encoding)
+        #expect(saved == record)
+        #expect(saved.format == .aac && saved.encoder == "Apple AudioToolbox" && saved.mp3 == nil)
+        #expect(saved.settingsText == "constant 192 kbit/s" && saved.folder == album.path)
+        #expect(saved.files.map(\.track) == [1, 2] && saved.file(ofTrack: 2) == files[1].lastPathComponent)
+        let markdown = try String(contentsOf: album.appending(path: "Rip Report (Disc 2).md"), encoding: .utf8)
+        #expect(
+            markdown.contains("## Encoding") && markdown.contains("AAC, by Apple AudioToolbox (constant 192 kbit/s)"))
+        // The rip's own disc.json is the encoder's input, and stays as it was.
+        #expect(try RipReport.read(from: folder.appending(path: "disc.json")).encoding == nil)
+    }
+
+    /// An archive manifest keeps its report under "ripReport", so the record goes in there.
+    @Test func savesTheEncodingInsideAManifestsReport() throws {
+        let (folder, _) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let report = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appending(path: "disc.json")))
+        let manifest = folder.appending(path: "manifest.json")
+        try JSONSerialization.data(withJSONObject: ["ripReport": report, "archive": "kept"]).write(to: manifest)
+        let record = RipReport.Encoding(format: .flac, encoder: "Apple AudioToolbox", folder: "/x", files: [])
+        try record.save(inReportAt: manifest)
+        #expect(try RipReport.read(from: manifest).encoding?.format == .flac)
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as? [String: Any]
+        #expect(object?["archive"] as? String == "kept" && object?["encoding"] == nil)
+    }
+
     @Test func putsTheReportInTheAlbumFolderAndDeletesOnlyTheRipsFiles() throws {
         let (folder, library) = try makeRip()
         defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }

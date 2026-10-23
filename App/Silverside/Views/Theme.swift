@@ -44,10 +44,16 @@ struct Chip: View {
     var text: String
     var tone = Tone.neutral
     var systemImage: String?
+    /// A small spinner in place of the image, for work under way.
+    var isWorking = false
 
     var body: some View {
         HStack(spacing: 4) {
-            if let systemImage { Image(systemName: systemImage).font(.caption2.bold()) }
+            if isWorking {
+                ProgressView().controlSize(.mini)
+            } else if let systemImage {
+                Image(systemName: systemImage).font(.caption2.bold())
+            }
             Text(text)
         }
         .font(.callout)

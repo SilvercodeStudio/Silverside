@@ -221,6 +221,14 @@ public struct DiscEncoder {
     /// Encodes the disc's tracks into `library`, and returns the files written.
     @discardableResult
     public func encode(_ disc: RippedDisc, into library: URL) throws -> [URL] {
+        try encodeWithRecord(disc, into: library).files
+    }
+
+    /// Encodes the disc's tracks into `library`, and returns the files written and the record
+    /// of the encoding, which the album folder's report keeps too.
+    public func encodeWithRecord(
+        _ disc: RippedDisc, into library: URL
+    ) throws -> (files: [URL], encoding: RipReport.Encoding?) {
         let (release, medium, jobs) = try plan(disc, into: library)
         let lame = format == .mp3 ? MP3Encoder.lame() : nil
         if format == .mp3 && lame == nil { throw MP3Error.lameNotFound }
@@ -234,6 +242,7 @@ public struct DiscEncoder {
         let audioTracks = disc.toc.audioTracks
 
         var written = [URL]()
+        var encodedFiles = [RipReport.Encoding.File]()
         var albumFolder: URL?
         var cueTracks = [CueSheet.Track]()
         var hiddenTrackFile: String?
@@ -251,6 +260,7 @@ public struct DiscEncoder {
             if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
             try FileManager.default.moveItem(at: partial, to: file)
             written.append(file)
+            encodedFiles.append(.init(track: ripped.number, file: file.lastPathComponent))
             log("\(file.lastPathComponent)")
             trackEncoded(ripped.number, file)
             let tocTrack = audioTracks[index]
@@ -287,22 +297,40 @@ public struct DiscEncoder {
                 try FileManager.default.copyItem(at: artwork, to: destination)
             }
         }
-        if let albumFolder {
+        let encoding = albumFolder.map {
+            // Whole seconds, as the report's JSON keeps dates, so the record returned equals the one saved.
+            RipReport.Encoding(
+                date: Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down)),
+                format: format, encoder: encoderName(lame: lame), aac: format == .aac ? aac : nil,
+                mp3: format == .mp3 ? mp3 : nil, folder: $0.path, files: encodedFiles)
+        }
+        if let albumFolder, let encoding {
             let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
             let destination = albumFolder.appending(path: "Rip Report\(discPart).json")
             if FileManager.default.fileExists(atPath: destination.path) {
                 try FileManager.default.removeItem(at: destination)
             }
             try FileManager.default.copyItem(at: disc.folder.appending(path: "disc.json"), to: destination)
+            try encoding.save(inReportAt: destination)
             if var report = disc.report {
                 report.release = report.release ?? release
+                report.encoding = encoding
                 try Data(report.markdown.utf8).write(to: albumFolder.appending(path: "Rip Report\(discPart).md"))
             }
             try writeCueSheet(
                 cueTracks, hiddenTrackFile: hiddenTrackFile, release: release, medium: medium, disc: disc,
                 to: albumFolder, discPart: discPart)
         }
-        return written
+        return (written, encoding)
+    }
+
+    /// The program that writes the audio, for the report.
+    private func encoderName(lame: URL?) -> String {
+        switch format {
+        case .mp3: lame.flatMap(MP3Encoder.version(of:)) ?? "LAME"
+        case .wav: "Silverside \(SilversideVersion.string)"
+        case .flac, .alac, .aac, .aiff: "Apple AudioToolbox"
+        }
     }
 
     /// The CUE sheet: everything needed to burn the disc again from the files, with the tags' names.

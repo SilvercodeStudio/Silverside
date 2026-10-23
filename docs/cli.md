@@ -50,7 +50,9 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
 
 - `Track 01.wav` and so on: one file for each track, from its index 01 to the
   next track's (a pregap belongs to the track before it)
-- `disc.json`: the rip report, with the TOC and the MusicBrainz release
+- `disc.json`: the rip report, with the TOC and the MusicBrainz release, and
+  after `rip --encode`, the encoding: the format, the encoder and its settings,
+  and each track's file (the album folder's `Rip Report (Disc N).json` has it too)
 - `cover.jpg`, and `Artwork/` with `--artwork all`
 - `Track NN.suspects`, for tracks that are not verified: the other values that
   reads gave for their suspect samples, for a later `silverside repair`

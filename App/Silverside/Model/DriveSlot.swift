@@ -116,6 +116,8 @@ final class DriveSlot: Identifiable {
                 let read = try await DiscInfo.read(makeDrive: make, bsdName: bsdName)
                 guard !Task.isCancelled else { return }
                 var info = DiscInfo(bsdName: bsdName, toc: read.toc, mcn: read.mcn, cdText: read.cdText)
+                // The lookup changes its own copy, so the one on show says it is under way.
+                if !info.toc.audioTracks.isEmpty { info.lookup = .lookingUp }
                 disc = info
                 selectedTracks = Set(info.toc.audioTracks.map(\.number))
                 discState = .ready
@@ -139,6 +141,7 @@ final class DriveSlot: Identifiable {
 
     func lookUpAgain() {
         guard var info = disc else { return }
+        disc?.lookup = .lookingUp
         Task { @MainActor in
             await info.lookUpRelease()
             disc = info

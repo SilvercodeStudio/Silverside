@@ -180,5 +180,5 @@ public actor WebClient {
 
 /// The version that Silverside reports, as in its User-Agent.
 public enum SilversideVersion {
-    public static let string = "0.4"
+    public static let string = "0.5"
 }

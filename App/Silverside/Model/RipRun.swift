@@ -275,7 +275,9 @@ final class RipRun {
         switch phase {
         case .starting: return "Starting…"
         case .ripping:
-            guard let currentTrack else { return "Ripping…" }
+            if overwriteQuestion != nil { return "Waiting for your answer about the library…" }
+            // Between the last read and the encoding: the cover, the lookups' results, and the report.
+            guard let currentTrack else { return fraction >= 1 ? "Finishing the rip…" : "Ripping…" }
             var text = "Ripping track \(currentTrack)" + (count > 1 ? " (\(position) of \(count))" : "")
             switch trackStates[currentTrack] {
             case .reading(let pass, _) where pass > 1: text += " · read \(pass)"
@@ -431,8 +433,9 @@ final class RipRun {
             keptFiles = existing
             for number in tracksToRip { encodeStates[number] = .notEncoded }
             add("Not encoded: the library keeps its files. The rip is in \(folder?.path ?? "the rips folder").")
-        case .encoded(let files, let format):
+        case .encoded(let files, let format, let record):
             encodedFiles = files
+            report?.encoding = record
             add("Encoded \(files.count) tracks as \(format.rawValue.uppercased()), each checked against the rip.")
         case .ripDeleted:
             add("Deleted the rip's WAV files. The rip report is in the album folder.")

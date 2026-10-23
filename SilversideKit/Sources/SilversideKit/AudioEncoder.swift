@@ -18,6 +18,18 @@ public enum AudioFormat: String, CaseIterable, Codable, Sendable {
 
     /// True if the format keeps every sample, so a decoded file must equal the rip.
     public var isLossless: Bool { self != .aac && self != .mp3 }
+
+    /// The format's name, for people to read.
+    public var name: String {
+        switch self {
+        case .flac: "FLAC"
+        case .alac: "Apple Lossless"
+        case .aac: "AAC"
+        case .aiff: "AIFF"
+        case .wav: "WAV"
+        case .mp3: "MP3"
+        }
+    }
 }
 
 public enum AudioEncoderError: Error, Equatable, CustomStringConvertible {

@@ -110,7 +110,8 @@ public enum DiscRipEvent: Sendable {
     /// The library already had these files of the disc, and `confirmOverwrite` kept them:
     /// nothing was encoded, and the rip is kept.
     case encodingDeclined([URL])
-    case encoded([URL], format: AudioFormat)
+    /// The files written, and the record of the encoding that the reports keep (nil if no file was written).
+    case encoded([URL], format: AudioFormat, record: RipReport.Encoding?)
     /// After encoding: the rip's files were deleted, or kept because not every track is verified and encoded.
     case ripDeleted
     case ripKept(URL)
@@ -464,8 +465,11 @@ public struct DiscRip {
             events(.encoding(encoder.format))
             encoder.log = { events(.encodedTrack($0)) }
             encoder.trackEncoded = { events(.trackEncoded(number: $0, file: $1)) }
-            result.encodedFiles = try await blocking { [encoder] in try encoder.encode(disc, into: library) }
-            events(.encoded(result.encodedFiles, format: encoder.format))
+            let (files, record) = try await blocking { [encoder] in try encoder.encodeWithRecord(disc, into: library) }
+            result.encodedFiles = files
+            // The rip's own report says where its tracks went, for as long as the rip is kept.
+            try record?.save(inReportAt: folder.appending(path: "disc.json"))
+            events(.encoded(files, format: encoder.format, record: record))
             // The WAV files go only if every track is verified and encoded; the report is in the album folder.
             if !options.keepsRip {
                 if result.encodedFiles.count == disc.tracks.count && disc.tracks.allSatisfy(\.isVerified) {

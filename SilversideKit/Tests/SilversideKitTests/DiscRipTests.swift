@@ -196,6 +196,9 @@ struct DiscRipTests {
 
         let (first, firstEvents) = try await rip(replaces: false)
         #expect(first.encodedFiles.count == 2 && asked.list.isEmpty)
+        // The kept rip's report says where its tracks went.
+        let kept = try RipReport.read(from: first.folder.appending(path: "disc.json"))
+        #expect(kept.encoding?.format == .wav && kept.encoding?.files.count == 2)
         #expect(firstEvents.filter { if case .trackEncoded = $0 { true } else { false } }.count == 2)
 
         let (declined, declinedEvents) = try await rip(replaces: false)

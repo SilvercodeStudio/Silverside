@@ -9,6 +9,8 @@ struct ResultsView: View {
     /// False for a report kept in the library after the rip's WAV files were deleted.
     var hasAudio = true
     @State private var reportShown = true
+    /// The cover in the rip's folder, or in the album folder for a report kept in the library.
+    @State private var cover: Data?
 
     private var toc: TOC? { try? TOC(ctdbTOCString: report.toc) }
 
@@ -49,6 +51,11 @@ struct ResultsView: View {
             .background(Color.secondary.opacity(0.04))
             .opacity(reportShown ? 1 : 0)
             .frame(width: reportShown ? nil : 0)
+        }
+        .task(id: folder) {
+            cover =
+                ["cover.jpg", "cover.png"].lazy.compactMap { try? Data(contentsOf: folder.appending(path: $0)) }
+                .first
         }
         .navigationTitle(report.release.map { "\($0.title)" } ?? folder.lastPathComponent)
         .navigationSubtitle(
@@ -106,11 +113,17 @@ struct ResultsView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
-            Image(systemName: report.isVerified ? "checkmark.circle" : "exclamationmark.triangle")
-                .font(.system(size: 34))
-                .foregroundStyle(report.isVerified ? Theme.good : Theme.warning)
+            if let cover {
+                CoverView(data: cover, size: 112)
+            }
             VStack(alignment: .leading, spacing: 6) {
-                Text(RipRun.headline(for: report)).font(.title2.weight(.semibold))
+                Label {
+                    Text(RipRun.headline(for: report)).font(.title2.weight(.semibold))
+                } icon: {
+                    Image(systemName: report.isVerified ? "checkmark.circle" : "exclamationmark.triangle")
+                        .foregroundStyle(report.isVerified ? Theme.good : Theme.warning)
+                }
+                .font(.title2)
                 Text(
                     "Ripped \(report.date.formatted(date: .abbreviated, time: .shortened)) on \(report.drive.vendor) \(report.drive.product), read offset \(report.drive.readOffset.signedDescription), \(report.secure ? "secure" : "one read per track")."
                 )
@@ -135,14 +148,14 @@ struct ResultsView: View {
     private var table: some View {
         Table(report.tracks) {
             TableColumn("#") { track in Text(String(track.number)).foregroundStyle(.secondary) }.width(28)
-            TableColumn("Title") { track in Text(titles[track.number] ?? track.file) }.width(min: 160, ideal: 260)
+            TableColumn("Title") { track in Text(titles[track.number] ?? track.file) }.width(min: 120, ideal: 180)
             TableColumn("Time") { track in Text(Format.duration(sectors: track.sectors)).foregroundStyle(.secondary) }
                 .width(52)
             TableColumn("Status") { track in FinishedStatus(track: track, ctdb: report.ctdb) }.width(
-                min: 110, ideal: 130)
-            TableColumn("Re-reads") { track in RereadsCell(track: track, ctdb: report.ctdb) }.width(min: 80, ideal: 100)
-            TableColumn("Repaired") { track in RepairedCell(track: track) }.width(min: 90, ideal: 110)
-            TableColumn("AccurateRip") { track in AccurateRipCell(state: .finished(track)) }.width(min: 100, ideal: 140)
+                min: 100, ideal: 115)
+            TableColumn("Re-reads") { track in RereadsCell(track: track, ctdb: report.ctdb) }.width(min: 60, ideal: 75)
+            TableColumn("Repaired") { track in RepairedCell(track: track) }.width(min: 60, ideal: 80)
+            TableColumn("AccurateRip") { track in AccurateRipCell(state: .finished(track)) }.width(min: 100, ideal: 130)
             TableColumn("CTDB") { track in
                 if let confidence = track.ctdbConfidence, confidence > 0 {
                     Text("Verified · \(confidence)").foregroundStyle(Theme.good)
@@ -155,7 +168,19 @@ struct ResultsView: View {
                     }
                 }
             }
-            .width(min: 80, ideal: 110)
+            .width(min: 80, ideal: 100)
+            if let encoding = report.encoding {
+                TableColumn("Encoding") { track in
+                    if let file = encoding.file(ofTrack: track.number) {
+                        Label(encoding.format.rawValue.uppercased(), systemImage: "checkmark.circle")
+                            .foregroundStyle(Theme.good)
+                            .help(file)
+                    } else {
+                        Text("Not encoded").foregroundStyle(.secondary)
+                    }
+                }
+                .width(min: 60, ideal: 75)
+            }
         }
         .alternatingRowBackgrounds(.disabled)
     }

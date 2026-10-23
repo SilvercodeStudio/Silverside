@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Silverside (called CDRip until 2026-10-22) is a native macOS CD ripper. The goal is ripping quality equal to or better than Exact Audio Copy (EAC), with a modern UI and MusicBrainz-first metadata. It encodes to FLAC, ALAC, AAC, AIFF, and WAV, and to MP3 through an external `lame`.
 
-The work is done in layers: engine library (`SilversideKit`), then a `silverside` CLI, then the SwiftUI app (`App/`: `Silverside.xcodeproj` and its sources in `App/Silverside/`). The CLI is finished for daily use, and the app is in daily use too (version 0.4; see **App** below). User docs: `README.md` (what Silverside is, building from source) and `docs/cli.md` (the command-line tool); the app's help is in `App/Silverside/Help/`.
+The work is done in layers: engine library (`SilversideKit`), then a `silverside` CLI, then the SwiftUI app (`App/`: `Silverside.xcodeproj` and its sources in `App/Silverside/`). The CLI is finished for daily use, and the app is in daily use too (see **App** below). User docs: `README.md` (what Silverside is, building from source) and `docs/cli.md` (the command-line tool); the app's help is in `App/Silverside/Help/`.
 
 Ripping is verification-first: rip fast with offset correction, verify each track against AccurateRip and CUETools DB (CTDB), and do secure re-reads only for tracks that don't match.
 
@@ -52,7 +52,7 @@ The engine does the work, and the CLI only parses options and prints. Put new be
 
 ## App
 
-The app is in `App/` (`Silverside.xcodeproj`, sources in `App/Silverside/`) and links the local package's `SilversideKit` and `SilversideDarwin` products. Its first version was 2026-10-21; it is at 0.4 now: the main window rips a disc end to end through `DiscRip` (with encoding, repair, and the rip history), Settings edits the shared settings file and the drive profiles, and the first launch opens a welcome. The design (a Claude Design artifact, kept outside the repo) is an inspiration, not a spec. What is built, and what is not yet, is in `docs/internal/Milestones.md` under **The app**.
+The app is in `App/` (`Silverside.xcodeproj`, sources in `App/Silverside/`) and links the local package's `SilversideKit` and `SilversideDarwin` products. Its first version was 2026-10-21; now the main window rips a disc end to end through `DiscRip` (with encoding, repair, and the rip history), Settings edits the shared settings file and the drive profiles, and the first launch opens a welcome. The design (a Claude Design artifact, kept outside the repo) is an inspiration, not a spec. What is built, and what is not yet, is in `docs/internal/Milestones.md` under **The app**.
 
 Layout of `App/Silverside/`:
 
@@ -136,6 +136,6 @@ The full list is in `docs/internal/Milestones.md`. Keep both up to date.
 4. Mostly done: encoding (`AudioEncoder`, `FLACTags`, `MP4Tags`, `ID3Tags`, `DiscEncoder`, `silverside encode`, `silverside rip --encode`), checked by decoding each file again.
 8. Mostly done: the Markdown rip report, CUE sheets, pregaps, CD-Text (`silverside cdtext`), hidden track one audio, AIFF and WAV tags; and the drive report (`silverside drives --report`).
 9. In part: multi-disc releases (shared release choice and album edits, sets in the app) and the naming styles; not yet: style recipes, and a set as one unit of work.
-10. In progress: the app (version 0.4).
+10. In progress: the app.
 
 The CLI is finished for daily use, and the app is in daily use. The loose ends (built but not tested on hardware, and deferred work) are in `docs/internal/Milestones.md`.

@@ -19,6 +19,23 @@ public enum MP3Encoder {
             .first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 
+    /// "LAME 3.100", from `lame --version`. Nil if it does not answer as LAME does.
+    public static func version(of lame: URL) -> String? {
+        let process = Process()
+        process.executableURL = lame
+        process.arguments = ["--version"]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return nil }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        // "LAME 64bits version 3.100 (https://lame.sourceforge.io)"
+        let line = String(decoding: data, as: UTF8.self).split(separator: "\n").first ?? ""
+        guard let range = line.range(of: "version ") else { return nil }
+        return line[range.upperBound...].split(separator: " ").first.map { "LAME \($0)" }
+    }
+
     /// Writes `samples` to `url` as MP3, through `lame`.
     public static func encode(
         _ samples: [UInt32], to url: URL, lame: URL, options: MP3Options = MP3Options()

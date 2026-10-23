@@ -104,6 +104,8 @@ struct DriveDetailView: View {
             .disabled(isRipping)
             .padding(.leading, 10)
         }
+        // Stop takes the Rip button's place during a rip: a disabled prominent button keeps its
+        // blue fill with dim text, which reads as broken.
         if isRipping {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -113,19 +115,23 @@ struct DriveDetailView: View {
                 }
                 .help("Stop after the read under way. The tracks ripped so far stay.")
             }
-        }
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                model.startRip(slot)
-            } label: {
-                Label(ripTitle, systemImage: "arrow.down.circle.fill").labelStyle(.titleAndIcon)
-                    .padding(.trailing, 6)
+        } else {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    model.startRip(slot)
+                } label: {
+                    Label(ripTitle, systemImage: "arrow.down.circle.fill").labelStyle(.titleAndIcon)
+                        .padding(.trailing, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(canRip ? Color.accentColor : Color.gray)
+                .keyboardShortcut("r", modifiers: .command)
+                .disabled(!canRip)
             }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut("r", modifiers: .command)
-            .disabled(slot.disc == nil || isRipping || slot.isBusy || slot.selectedTracks.isEmpty)
         }
     }
+
+    private var canRip: Bool { slot.disc != nil && !slot.isBusy && !slot.selectedTracks.isEmpty }
 
     private var ripTitle: String {
         guard let disc = slot.disc else { return "Rip" }
@@ -320,7 +326,7 @@ struct AlbumHeader: View {
         case .notLookedUp:
             Chip(text: "MusicBrainz · not looked up", systemImage: "minus")
         case .lookingUp:
-            Chip(text: "MusicBrainz · looking up…", systemImage: "ellipsis")
+            Chip(text: "MusicBrainz · looking up…", isWorking: true)
         case .found where disc.isAmbiguous:
             Chip(text: "MusicBrainz · several releases match", tone: .warning, systemImage: "questionmark")
         case .found where disc.isFuzzy:
@@ -395,6 +401,10 @@ struct StatusBar: View {
     var body: some View {
         VStack(spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
+                // A spinner while something runs that the progress bar may not show moving.
+                if isWorking {
+                    ProgressView().controlSize(.small).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
+                }
                 Text(statusText).font(.callout.weight(.medium)).lineLimit(1)
                 Spacer()
                 Text(timeText).font(.callout).foregroundStyle(.secondary).monospacedDigit()
@@ -466,9 +476,14 @@ struct StatusBar: View {
         return (track, Int(fraction * Double(errors.sectors)))
     }
 
+    private var isWorking: Bool {
+        slot.rip?.isRunning == true || (slot.rip == nil && slot.disc?.lookup == .lookingUp)
+    }
+
     private var statusText: String {
         if let rip = slot.rip { return rip.statusText }
         guard let disc = slot.disc else { return "" }
+        if disc.lookup == .lookingUp { return "Looking up the disc in MusicBrainz…" }
         let count = slot.selectedTracks.count
         return "Ready to rip \(count) of \(disc.toc.audioTracks.count) tracks"
     }
@@ -701,6 +716,14 @@ enum ResultChips {
             chips.append(Chip(text: "\(unresolved) sectors unresolved", tone: report.isVerified ? .warning : .bad))
         }
         if repaired > 0 { chips.append(Chip(text: "\(repaired.formatted()) samples repaired", tone: .warning)) }
+        if let encoding = report.encoding {
+            let all = encoding.files.count >= report.tracks.count
+            chips.append(
+                Chip(
+                    text: "Encoded · \(encoding.format.rawValue.uppercased())"
+                        + (all ? "" : " · \(encoding.files.count) tracks"),
+                    tone: all ? .good : .warning, systemImage: "music.note"))
+        }
         return chips
     }
 }

@@ -80,7 +80,7 @@ extension RipReport {
                 if !track.unresolvedSectors.isEmpty {
                     let runs = Self.runs(track.unresolvedSectors)
                     var line =
-                        "- Track \(track.number): \(track.unresolvedSectors.count) sectors read differently each time"
+                        "- Track \(track.number): \(track.unresolvedSectors.count) \(track.unresolvedSectors.count == 1 ? "sector" : "sectors") read differently each time"
                         + (runs.count > 1
                             ? ", in \(runs.count) runs (\(runs.first!) to \(runs.last!))" : " (\(runs[0]))")
                     if let unreadable = track.unreadableSectors, !unreadable.isEmpty {
@@ -101,6 +101,21 @@ extension RipReport {
                     )
                 }
             }
+            lines.append("")
+        }
+
+        if let encoding {
+            lines.append("## Encoding")
+            lines.append("")
+            var summary = "\(encoding.format.name), by \(encoding.encoder)"
+            if let settings = encoding.settingsText { summary += " (\(settings))" }
+            lines.append(summary + ", \(ISO8601DateFormatter().string(from: encoding.date)). " + encoding.checkText)
+            lines.append("")
+            lines.append("Folder: `\((encoding.folder as NSString).abbreviatingWithTildeInPath)`")
+            lines.append("")
+            lines.append("| Track | File |")
+            lines.append("|---:|---|")
+            for file in encoding.files { lines.append("| \(file.track) | \(Self.escaped(file.file)) |") }
             lines.append("")
         }
 

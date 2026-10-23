@@ -3,55 +3,46 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
-## 0.5 (not released yet)
+## 0.5 (2026-10-23)
 
 ### Added
 
-- **Checksums in the rip report:** each track's CRC-32 as Exact Audio Copy and
-  XLD print it, EAC's "skip zero" variant, and the track's own AccurateRip v1
-  and v2 checksums, in `disc.json` and in a Checksums table of the Markdown
-  report, so that rips can be compared across programs.
-- **Test and copy**, off by default (Settings › Ripping; `testAndCopy` in the
-  settings, `rip --test`): after each track's rip, one more read of the track,
-  with its CRC-32 beside the copy's in the report, as EAC does.
-- **The media type** in the rip report and in `silverside info`: a pressed CD,
-  a CD-R, or a CD-RW. A CD-R of a show is in neither database, which explains
-  a rip that nothing can verify.
-- **More tags from MusicBrainz:** the composers and lyricists of each track
-  from its work relationships, the genre with the most votes, and sort names
-  for the artist and the album artist (COMPOSER, LYRICIST, GENRE, ARTISTSORT,
-  and ALBUMARTISTSORT, and their AAC and MP3 forms).
-- **The rip report records the encoding:** the format, the encoder and its
-  settings (AAC's mode and bit rate, or LAME's options), how the files were
-  checked, and each track's file, in `disc.json`, the album folder's report,
-  and the Markdown report. After a rip, and for an earlier rip, an "Encoded"
-  chip and an Encoding column show it.
-- **An earlier rip shows its cover** beside the result.
-- **Help › Silverside Website** opens silverside.app.
-- Acknowledgments names XLD and cyanrip, two rippers that were inspirations.
-- **A small spinner shows when work is under way:** in the status bar during
-  a rip, and while a disc is looked up in MusicBrainz. The status bar also
-  says when it looks up the disc, finishes the rip, or waits for your answer.
+- **Checksums in the rip report:** each track's CRC-32 as Exact Audio Copy
+  and XLD print it, the "skip zero" form, and its AccurateRip checksums, so
+  that rips can be compared across programs.
+- **Test and copy**, off by default: one more read of each track after its
+  rip, with its CRC-32 beside the copy's in the report. Settings › Ripping,
+  or `rip --test`.
+- **The media type** in the report and in `silverside info`: a pressed CD, a
+  CD-R, or a CD-RW.
+- **More tags from MusicBrainz:** composers, lyricists, the genre, and sort
+  names for the artist and the album artist.
+- **The report records the encoding:** the format, the encoder and its
+  settings, and each track's file. An "Encoded" chip and an Encoding column
+  show it, for a new rip and an earlier one.
+- An earlier rip shows its cover beside the result.
+- A spinner while a rip or a MusicBrainz lookup is under way, and a status
+  bar that says what the rip waits for.
+- Help › Silverside Website. Acknowledgments names XLD and cyanrip as
+  inspirations.
 
 ### Changed
 
-- Silverside's website is [silverside.app](https://silverside.app): the About
-  window's Website button opens it, and Silverside names it to MusicBrainz and
-  the other services it asks.
-- The app's bundle identifier is `app.silverside.Silverside`, the last part
-  of the rename from CDRip. macOS treats it as a new app: the welcome shows
-  once more at the next launch, and the choice of Fast mode and the window
-  positions start afresh. Rips, settings, and drive profiles are not affected.
+- The website is [silverside.app](https://silverside.app). The About window
+  opens it, and Silverside gives it to the services it asks.
+- The bundle identifier is `app.silverside.Silverside`, the last of the
+  rename from CDRip. macOS sees a new app: the welcome shows once more, and
+  Fast mode and the window positions start afresh. Rips, settings, and drive
+  profiles stay.
 
 ### Fixed
 
-- While MusicBrainz was being asked about a new disc, the header said
-  "not looked up" until the answer came.
-- The table of an earlier rip was too wide for the window when the rip report
-  was open.
+- The header said "not looked up" while MusicBrainz was being asked about a
+  disc.
+- The table of an earlier rip was too wide when the rip report was open.
 - The rip report said "1 sectors".
-- During a rip, the Rip Disc button stayed blue with dim text. Stop now takes
-  its place, and the button is gray when there is nothing to rip.
+- During a rip, the Rip Disc button stayed blue and dim. Stop takes its
+  place, and the button is gray when there is nothing to rip.
 
 ## 0.4 (2026-10-22)
 

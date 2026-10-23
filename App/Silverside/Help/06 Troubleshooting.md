@@ -4,6 +4,20 @@
 
 macOS opens Music for every audio CD, and Music has no setting that leaves the disc alone completely. The closest is “When a CD is inserted: Show CD” in the Music app's settings: Music still opens and comes to the front, but it does not play or import the disc. Then close Music, or leave it open. Do not let Music play or import the disc during a rip: two readers slow each other down.
 
+To keep Music from opening at all, macOS has a hidden setting: the "When you insert a music CD: Ignore" choice of the old CDs & DVDs settings, which macOS still reads although its window is gone. In Terminal:
+
+```
+defaults write com.apple.digihub com.apple.digihub.cd.music.appeared -dict action 1
+killall SystemUIServer
+```
+
+The second line restarts the part of macOS that handles discs (the menu bar flickers once). To undo it:
+
+```
+defaults delete com.apple.digihub com.apple.digihub.cd.music.appeared
+killall SystemUIServer
+```
+
 ## The disc could not be read
 
 A disc takes a moment to mount after it appears. Try Again reads it once more. A disc that macOS cannot mount at all (a data disc in a format the Mac does not know) has no audio to rip.

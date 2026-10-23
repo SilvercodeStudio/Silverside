@@ -12,7 +12,7 @@ Silverside rips audio CDs on the Mac with the care of Exact Audio Copy: every tr
 
 ## A rip, step by step
 
-1. Insert a disc. Apple Music may open too; you can close it, or leave it open. However, you should set “When a CD is inserted” to Show CD in the Music app's settings, so that Music does not play or import the disc while Silverside reads it.
+1. Insert a disc. Apple Music may open too; you can close it, or leave it open. However, you should set “When a CD is inserted” to Show CD in the Music app's settings, so that Music does not play or import the disc while Silverside reads it. Troubleshooting has a hidden macOS setting that keeps Music from opening at all.
 2. Check the album and the tracks. If several releases match, choose one with Other Releases.
 3. Click Rip Disc, or uncheck tracks and click Rip Selected.
 4. Watch the status. A green check means AccurateRip or the CUETools database verifies the track.

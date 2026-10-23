@@ -70,7 +70,7 @@ struct DriveDetailView: View {
             } label: {
                 Label("Eject", systemImage: "eject").padding(.horizontal, 4)
             }
-            .help("Eject the disc")
+            .help("Eject the disc (may take a few seconds)")
             .disabled(slot.device.discBSDName == nil || isRipping)
 
             Button {

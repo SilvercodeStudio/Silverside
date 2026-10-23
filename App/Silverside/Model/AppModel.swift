@@ -106,6 +106,7 @@ final class AppModel {
             if UserDefaults.standard.bool(forKey: "demoOnly") { return }
         #endif
         let devices = OpticalDrive.all()
+        let hadDisc = Set(drives.filter { $0.device.discBSDName != nil }.map(\.id))
         var slots = drives.filter(\.isDemo)
         var seen = [String: Int]()
         for device in devices {
@@ -120,7 +121,18 @@ final class AppModel {
                 slots.append(DriveSlot(id: id, device: device))
             }
         }
-        drives = slots
+        // Drives with a disc first, then the empty ones, each in the registry's order.
+        let hasDisc = { (slot: DriveSlot) in slot.isDemo || slot.device.discBSDName != nil }
+        drives = slots.enumerated()
+            .sorted { hasDisc($0.element) != hasDisc($1.element) ? hasDisc($0.element) : $0.offset < $1.offset }
+            .map(\.element)
+        // A disc that goes in while the window shows an empty drive (or none) brings its drive
+        // into view. A drive with a disc or a rip keeps the view.
+        if let arrived = drives.first(where: { $0.device.discBSDName != nil && !hadDisc.contains($0.id) }),
+            selection == nil || selectedDrive.map({ $0.device.discBSDName == nil && $0.rip?.isRunning != true }) == true
+        {
+            selection = .drive(arrived.id)
+        }
         for slot in drives where slot.needsDisc { slot.readDisc(settings: settings) }
     }
 

@@ -323,7 +323,27 @@ Deferred:
 
 - A multi-disc release is one unit of work, so metadata stays consistent across discs and sessions.
 - Apple Foundation Models for verification and cleanup of metadata from conventional sources only, with a non-AI path.
+- What sets lack (2026-10-22, from the code and the user's 13 multi-disc releases). Done already: the release choice and the album edits carry to the other discs; every disc encodes into one album folder (none of the 13 is split); the app says "Disc 2 of 3" and how many discs are ripped. Not yet, most important first:
+  1. **A change after the first disc does not reach the earlier discs.** An album title changed while ripping disc 2 leaves disc 1's files and tags as they were, and sends disc 2 to a new folder. The user's own cover is worse: it is for the one disc only, not kept by release, so disc 2 embeds the Cover Art Archive's image while the folder's `cover.jpg` is disc 1's. Today only the CLI fixes it (`metadata -i … --set` on each disc, then `encode --overwrite`).
+  2. **The set's status counts ripped discs, not finished ones.** "3 of 3 discs ripped" is green when disc 2 failed verification and never reached the library. It should show, for each disc, ripped, verified, and encoded, and name the disc that needs attention.
+  3. **The app cannot encode earlier rips:** a disc ripped with encoding off, one repaired later, or a set in a second format. ReplayGain's album gain needs this too.
+  4. **A disc whose ID MusicBrainz does not list does not get the set's release.** Choices are kept by the disc IDs on the release's media, so a disc matched by its track lengths ranks the releases afresh. Rank first a release chosen for another disc (a small engine fix).
+  5. **Media that are not audio CDs count as discs** (`RipSet.discCount`, the "Disc N of M" chip): a box set with a DVD would show a disc still to do forever. Count only audio CD media, and count MusicBrainz's "HDCD" format as a CD (three of the user's Grateful Dead releases have it).
+  6. **No view of a whole set:** Recent Rips and History list discs one by one.
+
+  One design covers 1, 2, 3, and 6: a set view with each disc's state, "Encode the set" (the discs missing from the library, or all of them in another format), and "Update the library" (the current album edits and cover applied to every disc's files, renamed if the folder's name changed). The user's cover must then be kept by release ID, as the album edits are.
 - Done (2026-10-21): the style choices in Settings › Naming and `silverside encode`: the live-show style (the `[Venue, date]` suffix and the show's date), segue marks (in tags only by default, as the user's library has them: the TITLE tag keeps `China Cat Sunflower >`, the file is `04-01 China Cat Sunflower`), and compilations (COMPILATION in the tags, the track's artist in the file name, a folder name in place of Various Artists). Kept to named settings, not a recipe language.
+
+## Next, agreed 2026-10-22
+
+In this order; none of them needs a new dependency in the code.
+
+1. **Pre-emphasis**, when the test discs arrive: read the flag from the Q subchannel's control bits as well as the TOC's, and keep both in the report; then de-emphasis at encode time (our own 50/15 µs filter; ffmpeg's `aemphasis` and SoX's `deemph` only as references), after verification, to 24-bit ALAC or FLAC so nothing is lost to requantizing. A "force de-emphasis" option for discs mastered with it but not flagged (as cyanrip's `-E`).
+2. **Drive speed:** `DKIOCCDSETSPEED` (in the SDK, beside the ioctls `IOKitDrive` uses), as a setting, perhaps per drive in its profile, and a check in the drive test. Many drives ignore it or round it; test on each.
+3. **ReplayGain** tags (track and album gain and peak, ReplayGain 2.0, loudness by ITU BS.1770, our own code), for players that read them; Apple's Music app uses Sound Check instead. Album gain per disc first; per release with the set as one unit (milestone 9).
+4. **HDCD:** rip and verify the 16-bit samples as pressed, and at encode time decode a track with HDCD codes through an external `ffmpeg -af hdcd` (installed by the user, like `lame`; ffmpeg is never bundled) to 24-bit ALAC or FLAC. First, detection in the rip report. Check ffmpeg's summary of what it found on the user's HDCD discs. Homebrew's `ffmpeg` depends on `lame` (checked 2026-10-22, ffmpeg 9.0.2, which has the `hdcd` filter), so `brew install ffmpeg` gives both MP3 and HDCD; keep calling `lame` itself for MP3, so its options stay as they are. MusicBrainz lists the format "HDCD" for the discs of three of the user's releases (*Cornell 5/8/77*, *Madison Square Garden 3/9/81*, *Saint of Circumstance*): test discs.
+
+Not planned: Opus and Ogg Vorbis output (too few users; it would need `opusenc`, and Apple's frameworks cannot read Ogg to check the files).
 
 ## Later: DVD-Audio and Blu-ray audio
 

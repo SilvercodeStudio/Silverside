@@ -48,13 +48,12 @@ struct MainWindow: View {
         .sheet(isPresented: $model.logShown) {
             RipLogView(run: model.selectedDrive?.rip)
         }
-        .sheet(isPresented: $model.welcomeShown) {
-            WelcomeView()
-        }
         .sheet(isPresented: $model.repairShown) {
             if let run = model.repair { RepairSheet(run: run) }
         }
         .onAppear {
+            // The first launch opens the welcome. `-welcomeDone 0` opens it again, and `-welcomeDone 1` keeps it shut.
+            if !UserDefaults.standard.bool(forKey: WelcomeView.doneKey) { openWindow(id: "welcome") }
             #if DEBUG
                 DebugScreenshot.scheduleIfRequested()
                 // `-openWindow help` opens a window at launch, for screenshots.

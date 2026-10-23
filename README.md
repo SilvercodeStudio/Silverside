@@ -109,7 +109,9 @@ brew install lame
 ```
 
 Silverside finds `lame` on your `PATH` (or in `/opt/homebrew/bin` or
-`/usr/local/bin`), sends it the audio, and writes the tags itself. By default
+`/usr/local/bin`), sends it the audio, and writes the tags itself. The
+environment variable `SILVERSIDE_LAME` can name another `lame`, or with
+`none` make Silverside act as if it were not installed. By default
 it uses LAME's best variable bit rate (`-V 0`, about 245 kbit/s); see
 `--mp3-mode`, `--mp3-quality`, `--mp3-bitrate`, and `--lame-option`.
 

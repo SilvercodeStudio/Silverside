@@ -14,7 +14,7 @@ struct AppCommands: Commands {
         CommandGroup(replacing: .help) {
             Button("Silverside Help") { openWindow(id: "help") }
                 .keyboardShortcut("?", modifiers: .command)
-            Button("Welcome to Silverside") { model.welcomeShown = true }
+            Button("Welcome to Silverside") { openWindow(id: "welcome") }
         }
         CommandGroup(after: .sidebar) {
             Button("Rip History") { model.selection = .history }

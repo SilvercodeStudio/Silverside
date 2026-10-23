@@ -1,24 +1,27 @@
 import SilversideKit
 import SwiftUI
 
-/// The first launch: a welcome, the drives that macOS has, and the choice of what a rip
-/// becomes. "Get Started" saves the choice in the settings, which the CLI shares.
+/// The first launch's window: a welcome, the drives that macOS has, and the choice of what
+/// a rip becomes. "Get Started" saves the choice in the settings, which the CLI shares.
 struct WelcomeView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openSettings) private var openSettings
     @State private var choice = Choice.flac
+    /// MP3 needs the external `lame`; the window looks for it while it is open.
+    @State private var lame = MP3Encoder.lame()
 
     static let doneKey = "welcomeDone"
 
     enum Choice: CaseIterable {
-        case alac, flac, aac, wav
+        case alac, flac, aac, mp3, wav
 
         var title: String {
             switch self {
             case .alac: "Apple Lossless"
             case .flac: "FLAC"
             case .aac: "AAC"
+            case .mp3: "MP3"
             case .wav: "WAV files only"
             }
         }
@@ -30,7 +33,8 @@ struct WelcomeView: View {
                 "An exact copy of the CD, in a format most other players and systems can use. Apple's Music app does not play it."
             case .aac:
                 "About a fifth of the size, and most people cannot hear a difference. Plays on Apple devices and most other systems."
-            case .wav: "No encoding: each rip stays in the rips folder as WAV files, without tags."
+            case .mp3: "Plays on almost anything, old or new. AAC sounds a little better at the same size."
+            case .wav: "No encoding: each rip stays in the rips folder as uncompressed WAV files, without tags."
             }
         }
 
@@ -39,6 +43,7 @@ struct WelcomeView: View {
             case .alac: .alac
             case .flac: .flac
             case .aac: .aac
+            case .mp3: .mp3
             case .wav: nil
             }
         }
@@ -46,13 +51,13 @@ struct WelcomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Hero(height: 150, iconSize: 120)
+            Hero(height: 124, iconSize: 112)
             Theme.sheen.frame(height: 3)
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 VStack(spacing: 6) {
-                    Text("Welcome to Silverside").font(.system(size: 28, weight: .bold))
+                    Text("Welcome to Silverside").font(.system(size: 26, weight: .bold))
                     Text(
-                        "Thanks for trying Silverside! It checks every track against other people's rips, so you know your copy is exact."
+                        "Thanks for trying Silverside! It checks every track against other people's rips,\nso you know your copy is exact."
                     )
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
@@ -61,12 +66,17 @@ struct WelcomeView: View {
                 .frame(maxWidth: .infinity)
                 driveStatus
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("What should a rip become?").font(.headline)
+                    Text("What kind of files do you want?").font(.headline)
                     ForEach(Choice.allCases, id: \.self) { item in
-                        ChoiceRow(choice: item, isSelected: item == choice) { choice = item }
+                        ChoiceRow(
+                            choice: item, isSelected: item == choice,
+                            unavailable: item == .mp3 && lame == nil
+                                ? "Needs the LAME encoder first. Install it with Homebrew (brew install lame), and this choice turns on by itself."
+                                : nil
+                        ) { choice = item }
                     }
                     Text(
-                        "Encoded albums go in \(Self.abbreviated(model.settings.library)), named and tagged from MusicBrainz. Settings has more options."
+                        "Encoded albums go in \(Self.abbreviated(model.settings.library)), named and tagged from MusicBrainz."
                     )
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -95,11 +105,14 @@ struct WelcomeView: View {
             }
             .padding(24)
         }
-        .frame(width: 540)
+        .frame(width: 600)
+        .watchingForLAME($lame)
+        .onChange(of: lame) { if lame == nil && choice == .mp3 { choice = .flac } }
         .onAppear {
             // The settings' choice; at the first launch, with encoding off, FLAC is suggested.
             if model.settings.encodeAfterRip {
                 choice = Choice.allCases.first { $0.format == model.settings.format } ?? .flac
+                if choice == .mp3 && lame == nil { choice = .flac }
             } else if UserDefaults.standard.bool(forKey: Self.doneKey) {
                 choice = .wav
             }
@@ -114,6 +127,7 @@ struct WelcomeView: View {
                 .foregroundStyle(names.isEmpty ? Color.secondary : Theme.good)
             if names.isEmpty {
                 Text("No CD drive yet. Connect one, and Silverside will find it as soon as macOS does.")
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(names.count == 1 ? "Found a CD drive:" : "Found \(names.count) CD drives:")
@@ -147,30 +161,40 @@ struct WelcomeView: View {
     }
 }
 
-/// One choice: a radio mark, the name, and what it means.
+/// One choice: a radio mark, the name, and what it means; or, when it cannot be chosen yet, why.
 private struct ChoiceRow: View {
     var choice: WelcomeView.Choice
     var isSelected: Bool
+    var unavailable: String?
     var select: () -> Void
 
     var body: some View {
-        Button(action: select) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(choice.title).font(.body.weight(.semibold))
-                    Text(choice.text).font(.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(10)
-            .contentShape(Rectangle())
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(isSelected ? Color.accentColor : Color.secondary.opacity(0.25), lineWidth: 1))
+        // A choice that cannot be made yet is no button, so that its note stays easy to read.
+        if unavailable != nil {
+            row
+        } else {
+            Button(action: select) { row }.buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+    }
+
+    private var row: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                .opacity(unavailable != nil ? 0.4 : 1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(choice.title).font(.body.weight(.semibold))
+                    .foregroundStyle(unavailable != nil ? .secondary : .primary)
+                Text(unavailable ?? choice.text).font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .contentShape(Rectangle())
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(isSelected ? Color.accentColor : Color.secondary.opacity(0.25), lineWidth: 1))
     }
 }

@@ -5,8 +5,15 @@ import Foundation
 /// the ID3 tag itself (`ID3Tags`).
 public enum MP3Encoder {
     /// The `lame` program: on the PATH, or where Homebrew puts it. Nil if it is not installed.
+    /// The environment variable `SILVERSIDE_LAME` can name another one, or with `none` act as
+    /// if there were none, to try what people without it see.
     public static func lame() -> URL? {
-        let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        let environment = ProcessInfo.processInfo.environment
+        if let chosen = environment["SILVERSIDE_LAME"], !chosen.isEmpty {
+            guard chosen != "none", FileManager.default.isExecutableFile(atPath: chosen) else { return nil }
+            return URL(filePath: chosen)
+        }
+        let path = environment["PATH"] ?? ""
         let folders = path.split(separator: ":").map(String.init) + ["/opt/homebrew/bin", "/usr/local/bin"]
         return folders.map { URL(filePath: $0).appending(path: "lame") }
             .first { FileManager.default.isExecutableFile(atPath: $0.path) }

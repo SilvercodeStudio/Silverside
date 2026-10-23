@@ -25,6 +25,12 @@ struct SettingsView: View {
 
 struct GeneralSettings: View {
     @Environment(AppModel.self) private var model
+    @State private var lame = MP3Encoder.lame()
+
+    /// MP3 only with lame, unless the settings already chose it: the menu still shows that choice.
+    private var formats: [AudioFormat] {
+        AudioFormat.allCases.filter { $0 != .mp3 || lame != nil || model.settings.format == .mp3 }
+    }
 
     var body: some View {
         @Bindable var model = model
@@ -42,9 +48,17 @@ struct GeneralSettings: View {
             Section("After a rip") {
                 Toggle("Encode the disc into the library", isOn: $model.settings.encodeAfterRip)
                 Picker("Format", selection: $model.settings.format) {
-                    ForEach(AudioFormat.allCases, id: \.self) { Text(formatName($0)).tag($0) }
+                    ForEach(formats, id: \.self) { Text(formatName($0)).tag($0) }
                 }
                 .disabled(!model.settings.encodeAfterRip)
+                if lame == nil {
+                    Text(
+                        model.settings.format == .mp3
+                            ? "MP3 needs the LAME encoder, which is not installed, so rips are not encoded. Install it with brew install lame, or choose another format."
+                            : "MP3 is a choice once the LAME encoder is installed: brew install lame."
+                    )
+                    .font(.caption).foregroundStyle(Theme.warning)
+                }
                 Toggle("Keep the rip's WAV files after encoding", isOn: $model.settings.keepRipAfterEncoding)
                     .disabled(!model.settings.encodeAfterRip)
                 Text(
@@ -62,6 +76,7 @@ struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+        .watchingForLAME($lame)
     }
 
     private func formatName(_ format: AudioFormat) -> String {
@@ -71,7 +86,7 @@ struct GeneralSettings: View {
         case .aac: "AAC"
         case .aiff: "AIFF"
         case .wav: "WAV"
-        case .mp3: "MP3 (needs lame)"
+        case .mp3: "MP3 (external encoder)"
         }
     }
 }
@@ -327,14 +342,28 @@ struct RippingSettings: View {
     }
 }
 
+/// Looks for `lame` every 2 seconds while a view shows, so that an install in Terminal
+/// turns MP3 on in the welcome and in Settings without reopening either.
+extension View {
+    func watchingForLAME(_ lame: Binding<URL?>) -> some View {
+        task {
+            while !Task.isCancelled {
+                let found = MP3Encoder.lame()
+                if found != lame.wrappedValue { lame.wrappedValue = found }
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+}
+
 struct EncodingSettings: View {
     @Environment(AppModel.self) private var model
-    private let lame = MP3Encoder.lame()
+    @State private var lame = MP3Encoder.lame()
 
     var body: some View {
         @Bindable var model = model
         Form {
-            Section("AAC") {
+            Section {
                 Picker("Mode", selection: $model.settings.aac.mode) {
                     ForEach(AACOptions.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }
                 }
@@ -361,6 +390,14 @@ struct EncodingSettings: View {
                     )
                     .font(.caption).foregroundStyle(.secondary)
                 }
+            } header: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("AAC")
+                    Text(
+                        "Advanced Audio Coding, Apple's preferred format for compressed audio. Most other systems play it too."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Section("MP3") {
                 LabeledContent("lame") {
@@ -370,32 +407,37 @@ struct EncodingSettings: View {
                         Text("Not found. Install it with `brew install lame`.").foregroundStyle(Theme.warning)
                     }
                 }
-                Picker("Mode", selection: $model.settings.mp3.mode) {
-                    ForEach(MP3Options.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }
-                }
-                if model.settings.mp3.mode == .vbr {
-                    Picker("Quality", selection: $model.settings.mp3.vbrQuality) {
-                        ForEach(0...9, id: \.self) { Text(Self.mp3Quality($0)).tag($0) }
+                // The options do nothing until lame is found.
+                Group {
+                    Picker("Mode", selection: $model.settings.mp3.mode) {
+                        ForEach(MP3Options.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }
                     }
-                } else {
-                    Picker("Bit rate", selection: $model.settings.mp3.bitRate) {
-                        ForEach(Self.bitRates, id: \.self) { Text("\($0) kbit/s").tag($0) }
-                        if !Self.bitRates.contains(model.settings.mp3.bitRate) {
-                            Text("\(model.settings.mp3.bitRate) kbit/s").tag(model.settings.mp3.bitRate)
+                    if model.settings.mp3.mode == .vbr {
+                        Picker("Quality", selection: $model.settings.mp3.vbrQuality) {
+                            ForEach(0...9, id: \.self) { Text(Self.mp3Quality($0)).tag($0) }
+                        }
+                    } else {
+                        Picker("Bit rate", selection: $model.settings.mp3.bitRate) {
+                            ForEach(Self.bitRates, id: \.self) { Text("\($0) kbit/s").tag($0) }
+                            if !Self.bitRates.contains(model.settings.mp3.bitRate) {
+                                Text("\(model.settings.mp3.bitRate) kbit/s").tag(model.settings.mp3.bitRate)
+                            }
                         }
                     }
                 }
-                Text("Silverside runs lame as a separate program, which keeps its LGPL code out of the app.")
+                .disabled(lame == nil)
+                Text("Silverside runs the \"lame\" MP3 encoder as an external program.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Lossless") {
                 Text(
-                    "FLAC, Apple Lossless, AIFF, and WAV have no options. Every file is decoded again after encoding and must equal the rip."
+                    "FLAC, Apple Lossless, AIFF, and WAV have no options. Every file is checked after encoding to make sure it's exactly the same as the original rip."
                 )
                 .font(.callout).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .watchingForLAME($lame)
     }
 
     static func name(of mode: AACOptions.Mode) -> String {

@@ -2,7 +2,7 @@
 
 ## Apple Music opens when I insert a disc
 
-macOS opens Music for every audio CD, and Music has no "do nothing" setting. Silverside reads the disc while Music shows it; close Music or leave it. Do not let Music import the disc at the same time as a rip: two readers slow each other down. You can set "When CD inserted: Show" as the default action in AM Settings, to avoid automatically playing or ripping the CD through Apple Music.
+macOS opens Music for every audio CD, and Music has no setting that leaves the disc alone completely. The closest is “When a CD is inserted: Show CD” in the Music app's settings: Music still opens and comes to the front, but it does not play or import the disc. Then close Music, or leave it open. Do not let Music play or import the disc during a rip: two readers slow each other down.
 
 ## The disc could not be read
 
@@ -10,7 +10,21 @@ A disc takes a moment to mount after it appears. Try Again reads it once more. A
 
 ## Not in MusicBrainz
 
-The rip works, and the folder is named after the disc ID. The files cannot be tagged until the release is in MusicBrainz. Add the release there, then look up the disc again.
+The rip works. The names come from the disc's CD-Text, or you type them in the header and the track table, and the files get those names without MusicBrainz IDs. Better for everyone: add the release to MusicBrainz, then use Look Up Metadata before the rip.
+
+## MP3 is not a choice
+
+MP3 needs the LAME encoder (see Encoding under Settings). Install it with `brew install lame` in Terminal; Silverside notices it within a few seconds. Silverside looks for `lame` in `/opt/homebrew/bin`, `/usr/local/bin`, and the folders on its `PATH`. An app opened from the Finder does not get your shell's `PATH`, so a `lame` installed elsewhere is not found.
+
+## The rip was not encoded
+
+The rip stays in the rips folder, and the banner or the status bar says why:
+
+- The library already had the album, and you chose Keep the Files.
+- A track is not verified by AccurateRip or CTDB. Silverside encodes only verified rips; see Verification for what to try.
+- MP3 is the format, but LAME is not installed.
+
+To encode a kept rip later, use the command line: `silverside encode -i "<rip folder>"`, with `--allow-unverified` for tracks that no database verifies.
 
 ## Tracks are not accurate
 

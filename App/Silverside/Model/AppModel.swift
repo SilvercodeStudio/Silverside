@@ -39,9 +39,6 @@ final class AppModel {
     var alert: AppAlert?
     /// True while a sheet or panel shows the rip's log.
     var logShown = false
-    /// The welcome sheet: at the first launch, and from the Help menu. `-welcomeDone 0` shows
-    /// it again at launch, and `-welcomeDone 1` keeps it out of a screenshot.
-    var welcomeShown = !UserDefaults.standard.bool(forKey: WelcomeView.doneKey)
     /// The repair under way, or the last one, shown in a sheet.
     private(set) var repair: RepairRun?
     var repairShown = false

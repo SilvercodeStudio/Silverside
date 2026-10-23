@@ -6,7 +6,7 @@ Silverside and the `silverside` command line share one settings file, so a chang
 
 - **Music library** is where encoded albums go, in folders named by the Naming settings.
 - **Rips** is where each rip's WAV files, report, and cover go. Keep it out of the library: music apps would import the WAV files.
-- **After a rip:** encode the disc into the library in the chosen format; keep or delete the rip's WAV files once the album is encoded and verified; eject the disc when every track is verified.
+- **After a rip:** encode the disc into the library in the chosen format; keep or delete the rip's WAV files once the album is encoded and verified; eject the disc when every track is verified. MP3 is in the list of formats once the LAME encoder is installed (see Encoding).
 - **Artwork:** the front cover only (saved as `cover.jpg` and embedded in the files), every image in the Cover Art Archive, or none.
 
 ## Ripping
@@ -15,7 +15,15 @@ C2 error flags are a drive's own report of sectors it had trouble with. Silversi
 
 ## Encoding
 
-FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit rate mode, bit rate, and VBR quality. MP3 needs the `lame` program on the Mac, which Silverside runs as a separate program; it takes lame's modes and VBR quality.
+FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit rate mode, bit rate, and VBR quality.
+
+MP3 needs LAME, a free encoder that Silverside runs as a separate program, because Apple's frameworks cannot write MP3. Install it with Homebrew (brew.sh), in Terminal:
+
+```
+brew install lame
+```
+
+Until LAME is installed, MP3 is missing from the formats in General and in the welcome, and the MP3 options here are dimmed. Silverside looks for LAME every few seconds while Settings or the welcome is open, so MP3 turns on as soon as the install ends. The options are lame's: a variable bit rate from a quality (0 is the best, about 245 kbit/s), or a constant or average bit rate.
 
 Every encoded file is decoded again and compared with the rip before it goes into the library.
 

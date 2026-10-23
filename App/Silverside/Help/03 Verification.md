@@ -10,7 +10,7 @@ A disc that is not in AccurateRip cannot be proved this way. Then Silverside rea
 
 ## CUETools database (CTDB)
 
-CTDB checks the whole disc at once, and it holds repair data: when a few thousand samples are wrong, CTDB can correct them. Silverside tries a repair when AccurateRip says a track is wrong, then checks the repaired track against AccurateRip again. **Verified** means the disc matches an entry; **repaired** means it matches after the repair.
+CTDB checks the whole disc at once, so a rip of some tracks only is not checked. It also holds repair data: when a few thousand samples are wrong, CTDB can correct them. Silverside tries a repair when a track is not verified, then checks the repaired track against AccurateRip again. **Verified** means the disc matches an entry; **repaired** means it matches after the repair.
 
 ## Read offsets
 
@@ -20,24 +20,24 @@ Every drive reads a few samples early or late, by a fixed amount. Silverside cor
 
 | Status | Meaning |
 |---|---|
-| Copy OK, green | The track is verified by AccurateRip or CTDB. |
-| Copied, grey | The track read the same each time, but no database can check it. |
-| Sectors re-read, orange | Reads disagreed; the re-reads settled them. |
-| Samples repaired, orange | CTDB corrected the track. It is verified now. |
-| Sectors unresolved, red | Reads never agreed on these sectors. The track may have errors. |
-| Not accurate, red | The track does not match AccurateRip, and no repair was possible. |
+| Verified, green | AccurateRip or CTDB verifies the track. |
+| Repaired, orange | CTDB's repair data corrected the track, and the result is verified. |
+| Copied, grey | The reads agree, but no database has this disc to check against. |
+| Not verified, red | No database matches the track, and a repair was not possible. |
+
+The Re-reads column counts the sectors that were read again (in red when some never agreed), and the Repaired column the samples that CTDB corrected.
 
 ## When tracks stay unverified
 
 The result banner says what is most likely to help next. In short:
 
-- Clean the disc and rip again. The new rip pools with the first (see Options under Ripping a Disc): sectors the first rip read right are kept.
+- Clean the disc and rip again. The new rip pools with the first (see Options under Ripping a Disc): a track that either rip got accurate is kept.
 - Rip in another drive. Each drive reads damage differently, so two drives together often get what one cannot.
 - Repair the rip.
 
 ## Repair
 
-Repair, in the toolbar of an earlier rip and in the Disc menu, checks the rip against CTDB again and repairs it with CTDB's data, as `silverside repair` does. Every other rip of the same disc in the rips folder joins the pool, and when the disc is in a drive that is free, the tracks that AccurateRip does not know are read again, so that the reads can disagree where the disc is damaged.
+Repair, in the toolbar of an earlier rip and in the Disc menu, checks the rip against CTDB again and repairs it with CTDB's data, as `silverside repair` does. Every other rip of the same disc in the rips folder joins the pool. When the disc is in a drive that is free, the sectors where the repair still fails are read again, which gives it more versions to try.
 
 A rip that CTDB verifies as it is gets its report brought up to date: a rip made offline becomes a verified rip. A rip that the repair changes stays as it was, and the repaired rip goes in a folder of its own next to it ("… repaired"), with its own report, so it can be encoded like any rip.
 

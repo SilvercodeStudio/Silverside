@@ -28,6 +28,18 @@ import SwiftUI
         .restorationBehavior(.disabled)
         .commandsRemoved()
 
+        // A window, not a sheet, so that it can be moved off the main window.
+        Window("Welcome to Silverside", id: "welcome") {
+            WelcomeView()
+                .environment(model)
+                .windowMinimizeBehavior(.disabled)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .windowBackgroundDragBehavior(.enabled)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
+
         Window("Silverside Help", id: "help") {
             HelpView()
         }

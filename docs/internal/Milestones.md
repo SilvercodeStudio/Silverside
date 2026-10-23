@@ -12,7 +12,7 @@ The first goal is a usable CLI: rip a whole disc to tagged FLAC or ALAC files wi
 | 6 | Secure re-reads | Done |
 | 7 | CTDB verification and repair | Done |
 | 8 | Rip log, CUE sheets, gaps and indexes | Mostly done |
-| 9 | Multi-disc releases and style recipes | Not started |
+| 9 | Multi-disc releases and style recipes | In part |
 | 10 | The app | In progress |
 
 ## 1. Engine basics — done
@@ -286,7 +286,7 @@ The rip and repair workflows are in the engine (`DiscRip`, `RipRepair`), and the
 
 ## Code review of 0.2 — done
 
-Before the app, the whole engine and CLI were reviewed (`docs/Review-0.2.md`: 22 findings, 19 fixed and one in part, each fix with a test; items 21 and 22 belong to the app). The changes that matter most:
+Before the app, the whole engine and CLI were reviewed (22 findings, 19 fixed and one in part, each fix with a test; items 21 and 22 belong to the app; the full review is in git history as `docs/internal/Review-0.2.md`, and its open items are in the loose ends below). The changes that matter most:
 
 - The cache flush reads inside a track when there is no room outside it (a disc with one track), away from the suspect sectors and a read-ahead margin; it stays in the disc's audio areas (`TOC.audioAreas`), so on an enhanced CD it never reads the data session.
 - A sector that could not be read has no version until a read gets it, and a version must come back twice to decide a sector. Two shifted reads agree only when no run of 32 sectors differs. A track that no later read confirms is suspect.
@@ -298,9 +298,7 @@ Before the app, the whole engine and CLI were reviewed (`docs/Review-0.2.md`: 22
 
 Built and tested with the simulator, but not yet on hardware:
 
-- The review's changes to the secure rip (the flush inside a track, the shifted-read agreement test, unreadable sectors as unresolved) and to the threads: one short rip of a clean disc and one of a damaged disc, and one `silverside repair` with the disc in a drive, to check that the output did not change.
-
-- The workflows in the engine (`DiscRip`, `RipRepair`): one short rip and one repair on a drive, to check that the output did not change.
+- A repair with the disc in a drive (`silverside repair -d`, or Repair in the app), so that its re-reads run on hardware; and `--pool` with a folder whose `Track 01.wav` is not a WAV file, to see the message about files that cannot be used. The 0.2 review's other changes passed four hardware checks (2026-10-21) and many rips since.
 - The prompt for a release when the ranking cannot pick one (a disc in several releases with no MCN, barcode, or earlier choice to settle it).
 - Shifted-read detection (`SecureRipper`), made after *One from the Vault* disc 2 on the ASUS.
 - Hidden track one audio: a disc with a real hidden track.
@@ -314,12 +312,12 @@ Discs that are not yet fully verified:
 Deferred:
 
 - CTDB entry order. `DiscRepairer` tries entries by their submissions, and up to three shifts for each. On *Reckoning* (2026-10-21), the 31-submission entry, which is another pressing's, was tried at three shifts first, each a repair that stopped after 200 columns, before the 19-submission entry repaired the disc at shift 0 with no errors in column 0. Ordering every (entry, shift) pair by the errors in column 0 first (an exact match before any with errors), then by submissions, would try the right one first and save a minute or two on such discs.
-- Discs that MusicBrainz does not know: names from CD-Text, or typed in (see the README's TODO).
 - CD-Text in other blocks and character sets (MS-JIS).
 - De-emphasis as an option.
 - The drive report's check of an unreadable sector (it needs a damaged disc).
 - Developer ID signing and notarization.
-- A test of `RipRepair` without the network: it downloads AccurateRip and CTDB data itself. `DiscRepairerTests` covers the repair.
+- The C2 fallback (review item 16b): `TrackRipper` asks for C2 flags with `try?`, so any error from that read, even an ejected disc, becomes a plain read. A C2 probe for each drive, kept in its profile, would be better. It needs a drive that refuses C2 to test against (all four test drives give C2 flags), and `SimulatedDrive` cannot refuse C2 yet.
+- A `DiscRip` test with `--pool`, and its cleanup of the alternatives; only `RipPool` itself is tested.
 
 ## 9. Multi-disc releases and style recipes
 

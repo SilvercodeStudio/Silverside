@@ -25,7 +25,7 @@ public struct URLSessionTransport: HTTPTransport {
 ///   lookups work offline.
 public actor WebClient {
     public static let userAgent =
-        "Silverside/\(SilversideVersion.string) ( https://preston-landers.github.io/Silverside )"
+        "Silverside/\(SilversideVersion.string) ( https://silverside.app )"
 
     /// How Silverside treats one host.
     public struct HostPolicy: Sendable {

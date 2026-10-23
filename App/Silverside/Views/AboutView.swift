@@ -9,7 +9,7 @@ struct AboutView: View {
     @State private var drivesKnown = 0
     @State private var acknowledgmentsShown = false
 
-    static let website = URL(string: "https://preston-landers.github.io/Silverside")!
+    static let website = URL(string: "https://silverside.app")!
 
     var body: some View {
         VStack(spacing: 0) {

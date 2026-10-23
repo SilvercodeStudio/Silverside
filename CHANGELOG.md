@@ -17,6 +17,12 @@ command-line tool.
   a rip, and while a disc is looked up in MusicBrainz. The status bar also
   says when it looks up the disc, finishes the rip, or waits for your answer.
 
+### Changed
+
+- Silverside's website is [silverside.app](https://silverside.app): the About
+  window's Website button opens it, and Silverside names it to MusicBrainz and
+  the other services it asks.
+
 ### Fixed
 
 - While MusicBrainz was being asked about a new disc, the header said

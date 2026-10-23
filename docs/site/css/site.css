@@ -112,6 +112,10 @@ code { font: 400 0.92em/1.4 var(--font-mono); padding: 1px 5px; border-radius: 5
 .nav-links a.ss-btn { color: var(--on-action); }
 /* On a phone the nav keeps only Download; the sections are one scroll away, and the hero has How it works. */
 @media (max-width: 599px) { .nav-links .nav-more { display: none; } }
+/* GitHub's mark alone, in a 44px target that does not make the bar taller. Grey only: GitHub's rule. */
+.nav-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-block: -12px; border-radius: var(--radius-pill); color: var(--ink-2); }
+.nav-icon:hover { color: var(--ink); background: var(--chip); }
+.nav-icon svg { display: block; }
 
 .hero-band { position: relative; padding: clamp(40px, 6vw, 80px) clamp(16px, 4vw, 32px) clamp(96px, 17vw, 250px); text-align: center; }
 .hero-stack { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 28px; }
@@ -205,7 +209,8 @@ code { font: 400 0.92em/1.4 var(--font-mono); padding: 1px 5px; border-radius: 5
 .footer-brand { display: flex; align-items: center; gap: 10px; }
 .footer-brand img { width: 22px; height: 22px; }
 .footer-links { display: flex; flex-wrap: wrap; gap: 8px 24px; }
-.footer-links a { color: var(--ink-3); }
+.footer-links a { color: var(--ink-3); display: inline-flex; align-items: center; gap: 6px; }
+.footer-links svg { width: 16px; height: 16px; }
 .footer-links a:hover { color: var(--ink); }
 
 @media (prefers-reduced-motion: reduce) {

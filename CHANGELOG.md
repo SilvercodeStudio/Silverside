@@ -3,6 +3,14 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.6 (not released yet)
+
+### Added
+
+### Changed
+
+### Fixed
+
 ## 0.5 (2026-10-23)
 
 ### Added

@@ -169,8 +169,8 @@ public struct TrackMetadata: Equatable, Sendable {
             }
         }
         if let genre = release.genre { comments.append(("GENRE", genre)) }
-        for composer in track.composers { comments.append(("COMPOSER", text(composer))) }
-        for lyricist in track.lyricists { comments.append(("LYRICIST", text(lyricist))) }
+        for composer in track.composers { comments.append(("COMPOSER", text(composer.tagName))) }
+        for lyricist in track.lyricists { comments.append(("LYRICIST", text(lyricist.tagName))) }
         if let isrc { comments.append(("ISRC", isrc)) }
         if let barcode = release.barcode, !barcode.isEmpty { comments.append(("BARCODE", barcode)) }
         for label in release.labels {

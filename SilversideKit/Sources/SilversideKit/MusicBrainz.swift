@@ -18,6 +18,40 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
         }
     }
 
+    /// A composer or lyricist, from MusicBrainz's relationships: the artist's name as
+    /// MusicBrainz has it (in its own script), and the name in the user's language when
+    /// MusicBrainz has an alias for it. Tags take the user's language; the report keeps both.
+    public struct Writer: Codable, Equatable, Sendable {
+        public var name: String
+        public var localeName: String?
+        public var sortName: String?
+
+        public init(name: String, localeName: String? = nil, sortName: String? = nil) {
+            self.name = name
+            self.localeName = localeName
+            self.sortName = sortName
+        }
+
+        /// The name for tags: in the user's language when MusicBrainz has it.
+        public var tagName: String { localeName ?? name }
+
+        /// Both names for people, "Aram Khachaturian (Արամ Խաչատրյան)", when they differ.
+        public var shownName: String { localeName.map { "\($0) (\(name))" } ?? name }
+
+        // A release saved on 2026-10-23 has a writer as its name alone.
+        public init(from decoder: any Decoder) throws {
+            if let name = try? decoder.singleValueContainer().decode(String.self) {
+                self.init(name: name)
+                return
+            }
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(
+                name: try container.decode(String.self, forKey: .name),
+                localeName: try container.decodeIfPresent(String.self, forKey: .localeName),
+                sortName: try container.decodeIfPresent(String.self, forKey: .sortName))
+        }
+    }
+
     public struct Track: Codable, Equatable, Sendable {
         /// The track's position on its medium, from 1.
         public var position: Int
@@ -30,9 +64,9 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
         public var recordingID: String?
         /// The composers of the recording's work, from MusicBrainz's relationships, in its order.
         /// Empty when MusicBrainz lists none, and in releases saved before Silverside kept them.
-        public var composers: [String] = []
+        public var composers: [Writer] = []
         /// The lyricists, the same way. A "writer" counts as both.
-        public var lyricists: [String] = []
+        public var lyricists: [Writer] = []
 
         public var artist: String { MusicBrainzRelease.joined(artistCredit) }
     }
@@ -149,8 +183,8 @@ extension MusicBrainzRelease.Track {
         length = try container.decodeIfPresent(Int.self, forKey: .length)
         artistCredit = try container.decode([MusicBrainzRelease.Credit].self, forKey: .artistCredit)
         recordingID = try container.decodeIfPresent(String.self, forKey: .recordingID)
-        composers = try container.decodeIfPresent([String].self, forKey: .composers) ?? []
-        lyricists = try container.decodeIfPresent([String].self, forKey: .lyricists) ?? []
+        composers = try container.decodeIfPresent([MusicBrainzRelease.Writer].self, forKey: .composers) ?? []
+        lyricists = try container.decodeIfPresent([MusicBrainzRelease.Writer].self, forKey: .lyricists) ?? []
     }
 }
 
@@ -167,10 +201,14 @@ public struct MusicBrainzLookup: Equatable, Sendable {
 public struct MusicBrainzClient: Sendable {
     public static let baseURL = URL(string: "https://musicbrainz.org/ws/2/")!
 
-    /// What each lookup asks MusicBrainz to include: credits, labels, tracks, release groups,
-    /// genres, and the relationships that name each recording's work and its composers.
-    static let includes =
-        "artist-credits+labels+recordings+release-groups+genres+artist-rels+work-rels+recording-level-rels+work-level-rels"
+    /// What a disc lookup asks MusicBrainz to include: credits, labels, tracks, release groups,
+    /// and genres. The disc ID resource refuses the recording-level relationships.
+    static let discIncludes = "artist-credits+labels+recordings+release-groups+genres"
+
+    /// What a release lookup includes: the same, the disc IDs, and the relationships that name
+    /// each recording's work and its composers (`work-level-rels` is only for a release lookup).
+    static let releaseIncludes =
+        discIncludes + "+discids+aliases+artist-rels+work-rels+recording-level-rels+work-level-rels"
 
     public let client: WebClient
 
@@ -187,14 +225,23 @@ public struct MusicBrainzClient: Sendable {
         return try Self.lookup(fromJSON: data)
     }
 
-    /// One release, by its MusicBrainz ID.
+    /// One release, by its MusicBrainz ID, with its recordings' relationships: the composers.
     public func release(id: String) async throws -> MusicBrainzRelease? {
+        guard let data = try await client.data(from: Self.releaseURL(id: id)) else { return nil }
+        return try Self.release(fromJSON: data)
+    }
+
+    static func releaseURL(id: String) -> URL {
         var components = URLComponents(
-            url: Self.baseURL.appending(path: "release/\(id)"), resolvingAgainstBaseURL: false)!
+            url: baseURL.appending(path: "release/\(id)"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
-            URLQueryItem(name: "inc", value: Self.includes), URLQueryItem(name: "fmt", value: "json"),
+            URLQueryItem(name: "inc", value: releaseIncludes), URLQueryItem(name: "fmt", value: "json"),
         ]
-        guard let data = try await client.data(from: components.url!) else { return nil }
+        return components.url!
+    }
+
+    /// Parses a release lookup.
+    public static func release(fromJSON data: Data) throws -> MusicBrainzRelease {
         do {
             return try JSONDecoder().decode(RawRelease.self, from: data).release
         } catch {
@@ -208,7 +255,7 @@ public struct MusicBrainzClient: Sendable {
         components.queryItems = [
             URLQueryItem(name: "toc", value: toc.musicBrainzTOCString),
             URLQueryItem(name: "cdstubs", value: "no"),
-            URLQueryItem(name: "inc", value: includes),
+            URLQueryItem(name: "inc", value: discIncludes),
             URLQueryItem(name: "fmt", value: "json"),
         ]
         return components.url!
@@ -249,12 +296,30 @@ private struct RawLookup: Decodable {
     var releases: [RawRelease]
 }
 
+/// An artist's name in a language, from `inc=aliases`.
+private struct RawAlias: Decodable {
+    var name: String
+    var locale: String?
+    var primary: Bool?
+    var type: String?
+
+    /// The alias in the user's language: a primary artist name first.
+    static func localeName(in aliases: [RawAlias]) -> String? {
+        let language = Locale.current.language.languageCode?.identifier ?? "en"
+        let candidates = aliases.filter { $0.locale == language || $0.locale?.hasPrefix(language + "_") == true }
+        return
+            (candidates.first { $0.primary == true && $0.type == "Artist name" }
+            ?? candidates.first { $0.primary == true } ?? candidates.first)?.name
+    }
+}
+
 private struct RawCredit: Decodable {
     struct Artist: Decodable {
         var id: String?
         var sortName: String?
+        var aliases: [RawAlias]?
         enum CodingKeys: String, CodingKey {
-            case id
+            case id, aliases
             case sortName = "sort-name"
         }
     }
@@ -269,7 +334,36 @@ private struct RawCredit: Decodable {
 
 /// A relationship of a recording or a work: to a work ("performance") or to an artist ("composer").
 private struct RawRelation: Decodable {
-    struct Artist: Decodable { var name: String }
+    struct Artist: Decodable {
+        var id: String?
+        var name: String
+        var sortName: String?
+        var aliases: [RawAlias]?
+        enum CodingKeys: String, CodingKey {
+            case id, name, aliases
+            case sortName = "sort-name"
+        }
+
+        /// The artist as a writer: with the alias in the user's language when the name is in
+        /// another script, as MusicBrainz Picard translates names. A Latin name stays as it is.
+        /// MusicBrainz sends no aliases with an artist in a relationship (seen 2026-10-23), so
+        /// `credited` has the aliases of the release's and the tracks' credited artists, by ID.
+        func writer(credited: [String: [RawAlias]]) -> MusicBrainzRelease.Writer {
+            var localeName: String?
+            if !Self.isLatin(name) {
+                let aliases = (self.aliases ?? []) + (id.flatMap { credited[$0] } ?? [])
+                localeName = RawAlias.localeName(in: aliases)
+            }
+            return .init(name: name, localeName: localeName, sortName: sortName)
+        }
+
+        /// True when every letter is Latin: ASCII, Latin-1, the Latin Extended blocks.
+        static func isLatin(_ text: String) -> Bool {
+            text.unicodeScalars.allSatisfy { scalar in
+                !scalar.properties.isAlphabetic || scalar.value < 0x0250 || (0x1E00...0x1EFF).contains(scalar.value)
+            }
+        }
+    }
     struct Work: Decodable { var relations: [RawRelation]? }
     var type: String
     var artist: Artist?
@@ -359,8 +453,17 @@ private struct RawRelease: Decodable {
 
     var release: MusicBrainzRelease {
         let releaseCredit = (artistCredit ?? []).map(\.credit)
+        // The credited artists' aliases, for the writers in relationships, which come without.
+        var credited = [String: [RawAlias]]()
+        let credits =
+            (artistCredit ?? []) + (media ?? []).flatMap { ($0.tracks ?? []).flatMap { $0.artistCredit ?? [] } }
+        for credit in credits {
+            if let id = credit.artist?.id, let aliases = credit.artist?.aliases, !aliases.isEmpty {
+                credited[id] = aliases
+            }
+        }
         func track(_ track: Medium.Track) -> MusicBrainzRelease.Track {
-            let writers = Self.writers(track.recording?.relations)
+            let writers = Self.writers(track.recording?.relations, credited: credited)
             return .init(
                 position: track.position, number: track.number ?? String(track.position), title: track.title,
                 length: track.length, artistCredit: track.artistCredit.map { $0.map(\.credit) } ?? releaseCredit,
@@ -388,13 +491,19 @@ private struct RawRelease: Decodable {
 
     /// The composers and lyricists of a recording: from the works it performs (their
     /// relationships name the writers), and from its own relationships. A "writer" is both.
-    static func writers(_ relations: [RawRelation]?) -> (composers: [String], lyricists: [String]) {
-        var composers = [String]()
-        var lyricists = [String]()
+    static func writers(_ relations: [RawRelation]?, credited: [String: [RawAlias]]) -> (
+        composers: [MusicBrainzRelease.Writer], lyricists: [MusicBrainzRelease.Writer]
+    ) {
+        var composers = [MusicBrainzRelease.Writer]()
+        var lyricists = [MusicBrainzRelease.Writer]()
         func add(_ relation: RawRelation) {
-            guard let name = relation.artist?.name else { return }
-            if ["composer", "writer"].contains(relation.type), !composers.contains(name) { composers.append(name) }
-            if ["lyricist", "writer"].contains(relation.type), !lyricists.contains(name) { lyricists.append(name) }
+            guard let writer = relation.artist?.writer(credited: credited) else { return }
+            if ["composer", "writer"].contains(relation.type), !composers.contains(where: { $0.name == writer.name }) {
+                composers.append(writer)
+            }
+            if ["lyricist", "writer"].contains(relation.type), !lyricists.contains(where: { $0.name == writer.name }) {
+                lyricists.append(writer)
+            }
         }
         for relation in relations ?? [] {
             if let work = relation.work {

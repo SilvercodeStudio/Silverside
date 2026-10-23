@@ -78,8 +78,11 @@ public final class IOKitDrive: CDDrive {
         return length > 4 ? Array(bytes.prefix(length)) : nil
     }
 
-    /// What the disc is, from the I/O Registry: macOS asks the drive when a disc goes in, and
-    /// the disc's IOCDMedia object says CD-ROM, CD-R, or CD-RW. Not yet checked with a CD-R.
+    /// What the disc is. The I/O Registry's IOCDMedia "Type" says CD-R or CD-RW for a disc
+    /// that is still open; a finished CD-R is "CD-ROM" there (a Memorex CD-R in the MATSHITA,
+    /// 2026-10-23). So a "CD-ROM" is then asked for its ATIP, which only a disc written in a
+    /// drive has: the TOC ioctl in its ATIP format, as XLD does it. A pressed disc gives an
+    /// error or no lead-in start time; byte 6's bit 6 tells a CD-RW from a CD-R.
     public func readMediaType() throws -> DiscMediaType? {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOBSDNameMatching(kIOMainPortDefault, 0, bsdName))
         guard service != 0 else { return nil }
@@ -88,11 +91,30 @@ public final class IOKitDrive: CDDrive {
             IORegistryEntryCreateCFProperty(service, kIOCDMediaTypeKey as CFString, kCFAllocatorDefault, 0)?
             .takeRetainedValue() as? String
         switch type {
-        case kIOCDMediaTypeROM: return .pressed
         case kIOCDMediaTypeR: return .recordable
         case kIOCDMediaTypeRW: return .rewritable
+        case kIOCDMediaTypeROM: return readATIP() ?? .pressed
         default: return nil
         }
+    }
+
+    /// The media type from the disc's ATIP, or nil when the disc has none (pressed) or the drive refuses.
+    private func readATIP() -> DiscMediaType? {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        var request = dk_cd_read_toc_t()
+        request.format = UInt8(kCDTOCFormatATIP)
+        do {
+            try bytes.withUnsafeMutableBytes { buffer in
+                request.buffer = buffer.baseAddress
+                request.bufferLength = UInt16(buffer.count)
+                try control(Ioctl.readTOC, &request)
+            }
+        } catch {
+            return nil
+        }
+        // Bytes 8 to 10 are the start time of the lead-in, which every ATIP has.
+        guard request.bufferLength >= 11, bytes[8] != 0 || bytes[9] != 0 || bytes[10] != 0 else { return nil }
+        return bytes[6] & 0x40 != 0 ? .rewritable : .recordable
     }
 
     public func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8]) {

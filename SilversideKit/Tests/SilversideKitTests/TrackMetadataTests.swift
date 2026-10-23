@@ -126,8 +126,8 @@ struct TrackMetadataTests {
         release.genre = "Rock"
         release.artistCredit = [.init(name: "Grateful Dead", artistID: "6faa7ca7", sortName: "Grateful Dead")]
         var track = release.media[17].tracks[2]
-        track.composers = ["Robert Johnson"]
-        track.lyricists = ["Robert Johnson"]
+        track.composers = [.init(name: "Robert Johnson")]
+        track.lyricists = [.init(name: "Արամ Խաչատրյան", localeName: "Aram Khachaturian")]
         track.artistCredit = [
             .init(name: "Bob Dylan", joinPhrase: " & ", artistID: "b", sortName: "Dylan, Bob"),
             .init(name: "Grateful Dead", artistID: "6faa7ca7", sortName: "Grateful Dead"),
@@ -136,7 +136,7 @@ struct TrackMetadataTests {
         let comments = metadata.vorbisComments
         #expect(comments.contains { $0 == ("GENRE", "Rock") })
         #expect(comments.contains { $0 == ("COMPOSER", "Robert Johnson") })
-        #expect(comments.contains { $0 == ("LYRICIST", "Robert Johnson") })
+        #expect(comments.contains { $0 == ("LYRICIST", "Aram Khachaturian") })
         #expect(comments.contains { $0 == ("ARTISTSORT", "Dylan, Bob & Grateful Dead") })
         #expect(comments.contains { $0 == ("ALBUMARTISTSORT", "Grateful Dead") })
         // A release with no sort names (typed in, or edited) gets no sort tags.

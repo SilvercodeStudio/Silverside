@@ -77,7 +77,7 @@ struct Metadata: AsyncParsableCommand {
         }
         print("MusicBrainz disc ID: \(toc.musicBrainzDiscID)" + (mcn.map { ", MCN \($0)" } ?? ""))
 
-        let choice = try await ReleaseLookup.find(toc: toc, mcn: mcn, releaseID: release)
+        let choice = try await ReleaseLookup.find(toc: toc, mcn: mcn, releaseID: release, details: true)
         var chosen = choice.chosen
         if chosen == nil, manual { chosen = MusicBrainzRelease.manual(toc: toc, cdText: cdText) }
         guard let chosen else {
@@ -217,7 +217,9 @@ enum ReleaseChoice {
         for track in medium.tracks {
             let length = track.length.map { String(format: "%2d:%02d", $0 / 60_000, $0 / 1000 % 60) } ?? "     "
             let artist = track.artist == release.artist ? "" : "\(track.artist) - "
-            print(String(format: "  %2d  %@  ", track.position, length) + artist + track.title)
+            let composers =
+                track.composers.isEmpty ? "" : "  (\(track.composers.map(\.tagName).joined(separator: ", ")))"
+            print(String(format: "  %2d  %@  ", track.position, length) + artist + track.title + composers)
         }
     }
 

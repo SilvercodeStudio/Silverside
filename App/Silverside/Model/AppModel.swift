@@ -42,6 +42,8 @@ final class AppModel {
     /// The repair under way, or the last one, shown in a sheet.
     private(set) var repair: RepairRun?
     var repairShown = false
+    /// Plays a track of a disc or of an earlier rip, one at a time.
+    let player = Player()
 
     @ObservationIgnored private var watcher: DiskWatcher?
     @ObservationIgnored private var observers: [any NSObjectProtocol] = []
@@ -134,6 +136,7 @@ final class AppModel {
             selection = .drive(arrived.id)
         }
         for slot in drives where slot.needsDisc { slot.readDisc(settings: settings) }
+        for slot in drives where !slot.isDemo && slot.device.discBSDName == nil { player.stop(drive: slot.id) }
     }
 
     private func discsChanged() {
@@ -146,6 +149,7 @@ final class AppModel {
 
     func eject(_ slot: DriveSlot) {
         guard let bsdName = slot.device.discBSDName else { return }
+        player.stop(drive: slot.id)
         Task { @MainActor in
             do {
                 try await DiscEject.eject(bsdName: bsdName)
@@ -160,6 +164,7 @@ final class AppModel {
 
     func startRip(_ slot: DriveSlot) {
         guard slot.rip?.isRunning != true, !slot.isBusy, let disc = slot.disc else { return }
+        player.stop(drive: slot.id)
         var options = DiscRipOptions(settings: settings)
         options.folder = slot.choices.folder
         options.offline = slot.choices.offline
@@ -235,6 +240,7 @@ final class AppModel {
         let slot = drives.first {
             !$0.isDemo && !$0.isBusy && $0.rip?.isRunning != true && $0.disc?.toc.ctdbTOCString == rip.report.toc
         }
+        if let slot { player.stop(drive: slot.id) }
         let run = RepairRun(rip: rip, pool: pool, drive: slot)
         repair = run
         repairShown = true

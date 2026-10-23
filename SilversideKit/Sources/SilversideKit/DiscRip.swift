@@ -267,7 +267,7 @@ public struct DiscRip {
             do {
                 let choose = chooseRelease.map { choose in { (ranked: [MusicBrainzRelease]) in choose(ranked, toc) } }
                 let lookup = try await ReleaseLookup.find(
-                    toc: toc, mcn: mcn, releaseID: options.releaseID, choose: choose,
+                    toc: toc, mcn: mcn, releaseID: options.releaseID, details: true, choose: choose,
                     client: MusicBrainzClient(client: webClient))
                 chosen = lookup.chosen
                 events(.release(lookup))

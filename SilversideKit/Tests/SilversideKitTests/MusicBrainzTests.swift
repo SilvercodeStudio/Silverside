@@ -116,10 +116,16 @@ struct MusicBrainzTests {
         let lookup = try MusicBrainzClient.lookup(fromJSON: fixture("work-rels-example"))
         let release = try #require(lookup.releases.first)
         let tracks = release.media[0].tracks
-        #expect(tracks[0].composers == ["Miles Davis"] && tracks[0].lyricists.isEmpty)
-        #expect(tracks[1].composers == ["Miles Davis", "Bill Evans"])
-        #expect(tracks[1].lyricists == ["Bill Evans", "Someone"])
+        #expect(tracks[0].composers.map(\.name) == ["Miles Davis"] && tracks[0].lyricists.isEmpty)
+        #expect(tracks[1].composers.map(\.name) == ["Miles Davis", "Bill Evans"])
+        #expect(tracks[1].lyricists.map(\.name) == ["Bill Evans", "Արամ Խաչատրյան"])
         #expect(tracks[2].composers.isEmpty && tracks[2].lyricists.isEmpty)
+        // A name in another script gets the alias in the user's language, from the track's credit
+        // (MusicBrainz sends none with a relationship's artist); a Latin name does not.
+        let armenian = tracks[1].lyricists[1]
+        #expect(armenian.localeName == "Aram Khachaturian" && armenian.tagName == "Aram Khachaturian")
+        #expect(armenian.shownName == "Aram Khachaturian (Արամ Խաչատրյան)" && armenian.sortName == "Khachaturian, Aram")
+        #expect(tracks[1].composers[1].localeName == nil && tracks[1].composers[1].shownName == "Bill Evans")
         #expect(release.genre == "Jazz")
         #expect(release.artistCredit[0].sortName == "Davis, Miles")
     }
@@ -129,17 +135,47 @@ struct MusicBrainzTests {
         let json = """
             {"id":"r","title":"T","artistCredit":[{"name":"A","joinPhrase":""}],"labels":[],"hasFrontCover":false,
              "media":[{"position":1,"discIDs":[],"tracks":[{"position":1,"number":"1","title":"X",
-             "artistCredit":[{"name":"A","joinPhrase":""}]}]}]}
+             "artistCredit":[{"name":"A","joinPhrase":""}]},{"position":2,"number":"2","title":"Y",
+             "artistCredit":[{"name":"A","joinPhrase":""}],"composers":["Old Name"]}]}]}
             """
         let release = try JSONDecoder().decode(MusicBrainzRelease.self, from: Data(json.utf8))
         #expect(release.media[0].tracks[0].composers.isEmpty && release.genre == nil)
+        // A writer saved as a name alone (2026-10-23) still reads.
+        #expect(release.media[0].tracks[1].composers == [.init(name: "Old Name")])
         let again = try JSONDecoder().decode(MusicBrainzRelease.self, from: JSONEncoder().encode(release))
         #expect(again == release)
     }
 
-    @Test func asksForTheRelationshipsThatNameTheWriters() throws {
+    /// The disc ID resource refuses the recording-level relationships (HTTP 400, seen
+    /// 2026-10-23), so only a release lookup asks for them, and for the disc IDs.
+    @Test func asksForTheRelationshipsOnlyInAReleaseLookup() throws {
         let toc = try TOC(musicBrainzOffsets: [150, 20000, 40000], sectors: 60000)
-        let url = MusicBrainzClient.lookupURL(for: toc).absoluteString
-        #expect(url.contains("work-level-rels") && url.contains("recording-level-rels") && url.contains("genres"))
+        let disc = MusicBrainzClient.lookupURL(for: toc).absoluteString
+        #expect(disc.contains("genres") && !disc.contains("level-rels"))
+        let release = MusicBrainzClient.releaseURL(id: "r1").absoluteString
+        #expect(release.hasPrefix("https://musicbrainz.org/ws/2/release/r1?"))
+        for part in [
+            "discids", "aliases", "artist-rels", "work-rels", "recording-level-rels", "work-level-rels", "genres",
+        ] {
+            #expect(release.contains(part))
+        }
+    }
+
+    /// A saved release lookup (2026-10-23) for *Stone Flower*: the disc IDs of four
+    /// pressings, the genre with the most votes, the sort name, and the composers and
+    /// lyricists of each track's works, a name once even when two works name it.
+    @Test func readsARealReleaseLookup() throws {
+        let release = try MusicBrainzClient.release(fromJSON: fixture("stone-flower-release"))
+        #expect(release.title == "Stone Flower" && release.media[0].tracks.count == 10)
+        #expect(
+            release.media[0].discIDs.contains("SM0U32s3tKWHADGGT16ibAm9RJk-") && release.media[0].discIDs.count == 4)
+        #expect(release.genre == "Bossa Nova")
+        #expect(release.artistCredit[0].sortName == "Jobim, Antônio Carlos")
+        let tracks = release.media[0].tracks
+        #expect(tracks[0].composers.isEmpty && tracks[0].lyricists.isEmpty)
+        #expect(
+            tracks[3].composers.map(\.name) == ["Ary Barroso"] && tracks[3].lyricists.map(\.name) == ["Ary Barroso"])
+        #expect(tracks[8].composers.map(\.tagName) == ["Antônio Carlos Jobim"])
+        #expect(tracks[8].lyricists.map(\.tagName) == ["Chico Buarque"])
     }
 }

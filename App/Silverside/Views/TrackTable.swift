@@ -3,6 +3,7 @@ import SwiftUI
 
 /// The tracks of the disc, with their rip status.
 struct TrackTable: View {
+    @Environment(AppModel.self) private var model
     @Bindable var slot: DriveSlot
     @State private var tableSelection: Set<Int> = []
     /// Tracks whose artist field is open although the track has no artist of its own yet.
@@ -68,6 +69,17 @@ struct TrackTable: View {
                 .disabled(slot.rip?.isRunning == true)
         }
         .width(24)
+        TableColumn("") { track in
+            PlayButton(player: model.player, source: .disc(slotID: slot.id, track: track.number), isEnabled: canPlay) {
+                guard let disc = slot.disc,
+                    let tocTrack = disc.toc.audioTracks.first(where: { $0.number == track.number })
+                else { return }
+                model.player.play(
+                    disc: slot, track: tocTrack, title: track.title,
+                    subtitle: track.artist ?? disc.shownRelease?.artist ?? slot.name)
+            }
+        }
+        .width(22)
         TableColumn("#") { track in
             Text(String(track.number)).foregroundStyle(.secondary).monospacedDigit()
         }
@@ -108,7 +120,14 @@ struct TrackTable: View {
             Text(track.duration).monospacedDigit().foregroundStyle(.secondary)
         }
         .width(52)
+        TableColumn("") { track in
+            if let disc = slot.disc { InfoButton(help: "Track info") { InfoSection.track(track, disc: disc) } }
+        }
+        .width(22)
     }
+
+    /// A track plays while the drive is free: not during a rip, a repair, or a drive test.
+    private var canPlay: Bool { slot.disc != nil && slot.rip?.isRunning != true && !slot.isBusy }
 
     /// Titles are editable from the MusicBrainz names (or the typed-in ones), not while a rip runs.
     private var canEdit: Bool {

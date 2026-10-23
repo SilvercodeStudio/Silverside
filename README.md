@@ -162,7 +162,6 @@ makes, and the settings.
 - **Multi-disc sets.** The discs of a release share the release choice and
   the album's edits, and the app says which discs of a set are ripped. Still
   to do: reusable style recipes for titles.
-- Ability to play or preview CDs/tracks.
 - Pre-emphasis support as mentioned above.
 - Option for automatic rip on insertion and recognition
 - Localization in other languages. 
@@ -178,6 +177,9 @@ makes, and the settings.
 - Option to import rips to Apple Music if compatible
 - CD Burning with verification
 - Filename template enhancements
+- Search MusicBrainz by album or artist, for a disc whose TOC it does not know (a
+  burned disc, or a pressing it has not seen), and tag the disc from the chosen
+  release
 - Secondary metadata source (GnuDB)
 - Ability to add image art after encoding
 

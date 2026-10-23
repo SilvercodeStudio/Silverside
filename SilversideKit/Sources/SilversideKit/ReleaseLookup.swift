@@ -31,9 +31,11 @@ public enum ReleaseLookup {
     /// The releases for a disc, and the one to use: the release with `releaseID` if given,
     /// else the first, unless the ranking cannot settle it and `choose` picks another. A
     /// release that the user chose (by ID or with `choose`) is remembered for the other
-    /// discs of the release.
+    /// discs of the release. With `details`, the chosen release is looked up by its ID too,
+    /// for what a disc lookup cannot give: the composers of each track. A rip wants them;
+    /// the app's look at a new disc does not.
     public static func find(
-        toc: TOC, mcn: String?, releaseID: String? = nil,
+        toc: TOC, mcn: String?, releaseID: String? = nil, details: Bool = false,
         choose: (([MusicBrainzRelease]) -> MusicBrainzRelease?)? = nil,
         client: MusicBrainzClient = MusicBrainzClient(), store: ReleaseChoiceStore = ReleaseChoiceStore()
     ) async throws -> ReleaseLookupResult {
@@ -47,10 +49,11 @@ public enum ReleaseLookup {
                 chosen = choose(ranked)
                 if let chosen { try store.remember(chosen) }
             }
+            if details, let summary = chosen { chosen = try await client.release(id: summary.id) ?? summary }
             return ReleaseLookupResult(ranked: ranked, chosen: chosen, isExact: lookup.isExact)
         }
         var chosen = ranked.first { $0.id == releaseID }
-        if chosen == nil { chosen = try await client.release(id: releaseID) }
+        if chosen == nil || details { chosen = try await client.release(id: releaseID) ?? chosen }
         guard let chosen else { throw ReleaseLookupError.noSuchRelease(releaseID) }
         try store.remember(chosen)
         return ReleaseLookupResult(ranked: ranked, chosen: chosen, isExact: lookup.isExact)

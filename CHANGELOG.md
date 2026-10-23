@@ -7,9 +7,35 @@ command-line tool.
 
 ### Added
 
+- **Play a track** to check it: a play button on each track of the disc in a
+  drive, read as a rip reads it, and on each track of an earlier rip, from its
+  WAV file or its encoded file. A bar at the bottom of the window has pause,
+  a position slider, and stop. One track plays at a time, and a rip or a repair
+  on the drive stops it.
+- **Track info and disc info:** an info button at the end of each track's
+  row shows what MusicBrainz knows of the track (artist, composers, lyricists,
+  the album's genre, the recording ID) with the disc's ISRC and, for an
+  earlier rip, its checksums and the tags in its encoded file, as a player
+  reads them. A disc info button in the header, and in an earlier rip's
+  toolbar, shows the release (date, country, status, barcode, labels, release
+  group, discs, cover art) and the disc (its IDs, MCN, CD-Text, media type,
+  pre-emphasis). The genre shows as a chip in the header. The app looks the
+  chosen release up in full when the disc goes in, so all of it is there
+  before the rip, and the rip sends no request of its own.
+- A composer or lyricist whose name MusicBrainz has in another script, such as
+  Արամ Խաչատրյան, is tagged with the name in your language (Aram Khachaturian)
+  and shown with both. The report keeps both.
+- The Markdown report's track table has a Composer column when MusicBrainz
+  names one, and its Disc table the genre.
+
 ### Changed
 
 ### Fixed
+
+- In 0.5, MusicBrainz refused every disc lookup ("lookup failed" for each disc),
+  because the lookup asked for relationships that only a release lookup may
+  have. The disc lookup is as it was, and a rip looks the chosen release up
+  once more for the composers.
 
 ## 0.5 (2026-10-23)
 

@@ -10,6 +10,10 @@ struct DiscInfo {
         var artist: String?
         var sectors: Int
         var isrc: String?
+        /// From MusicBrainz's relationships, when it has them.
+        var composers: [MusicBrainzRelease.Writer] = []
+        var lyricists: [MusicBrainzRelease.Writer] = []
+        var recordingID: String?
         var id: Int { number }
 
         var duration: String { Format.duration(sectors: sectors) }
@@ -20,6 +24,7 @@ struct DiscInfo {
         var toc: TOC
         var mcn: String?
         var cdText: CDText?
+        var media: DiscMediaType?
     }
 
     /// Where the names on show come from.
@@ -40,6 +45,8 @@ struct DiscInfo {
     var toc: TOC
     var mcn: String?
     var cdText: CDText?
+    /// Pressed, CD-R, or CD-RW, if the drive could tell.
+    var media: DiscMediaType?
     var lookup = LookupState.notLookedUp
     /// The releases that have the disc, the most likely first.
     var releases: [MusicBrainzRelease] = []
@@ -164,6 +171,9 @@ struct DiscInfo {
                 let named = medium.tracks[index]
                 row.title = named.title
                 if let shown = shownRelease, named.artist != shown.artist { row.artist = named.artist }
+                row.composers = named.composers
+                row.lyricists = named.lyricists
+                row.recordingID = named.recordingID
             } else if let title = cdText?.titles[track.number] {
                 row.title = title
                 if let performer = cdText?.performers[track.number], performer != cdText?.performers[0] {
@@ -187,7 +197,8 @@ struct DiscInfo {
                     let toc = try drive.readTOC()
                     let mcn = try? SubchannelCodes.mcn(in: toc, drive: drive)
                     let cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
-                    return Read(toc: toc, mcn: mcn, cdText: cdText)
+                    let media = (try? drive.readMediaType()) ?? nil
+                    return Read(toc: toc, mcn: mcn, cdText: cdText, media: media)
                 }.value
             } catch {
                 attempt += 1
@@ -197,13 +208,14 @@ struct DiscInfo {
         }
     }
 
-    /// Asks MusicBrainz for the disc's releases: one request, kept in the web cache.
+    /// Asks MusicBrainz for the disc's releases, and for the chosen one's details (the
+    /// composers, the genre): two requests, kept in the web cache, so the rip sends none.
     mutating func lookUpRelease() async {
         guard !toc.audioTracks.isEmpty else { return }
         lookup = .lookingUp
         let result: ReleaseLookupResult
         do {
-            result = try await ReleaseLookup.find(toc: toc, mcn: mcn)
+            result = try await ReleaseLookup.find(toc: toc, mcn: mcn, details: true)
         } catch {
             lookup = .failed("\(error)")
             if release == nil { useManualRelease() }
@@ -227,7 +239,9 @@ struct DiscInfo {
     mutating func choose(_ chosen: MusicBrainzRelease) async {
         try? ReleaseChoiceStore().remember(chosen)
         isAmbiguous = false
-        await use(chosen)
+        // The picker's releases are the lookup's summaries; the details come by ID.
+        let detailed = (try? await MusicBrainzClient().release(id: chosen.id)) ?? nil
+        await use(detailed ?? chosen)
     }
 
     /// Without a release, the names come from CD-Text or are typed in, and the files get no MusicBrainz IDs.

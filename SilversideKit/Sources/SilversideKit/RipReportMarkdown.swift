@@ -39,16 +39,18 @@ extension RipReport {
 
         lines.append("## Tracks")
         lines.append("")
+        let hasComposers = medium?.tracks.contains { !$0.composers.isEmpty } ?? false
         lines.append(
-            "| Track | Title | Length | Pregap | AccurateRip | CTDB | Reads | Suspect | C2 | Unreadable | Repaired | ISRC |"
-        )
-        lines.append("|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---|")
+            "| Track | Title | " + (hasComposers ? "Composer | " : "")
+                + "Length | Pregap | AccurateRip | CTDB | Reads | Suspect | C2 | Unreadable | Repaired | ISRC |")
+        lines.append("|---:|---|" + (hasComposers ? "---|" : "") + "---:|---:|---|---:|---:|---:|---:|---:|---:|---|")
         for track in tracks {
-            let title = medium.flatMap { medium in
+            let named = medium.flatMap { medium in
                 toc?.audioTracks.firstIndex { $0.number == track.number }.flatMap {
-                    medium.tracks.indices.contains($0) ? medium.tracks[$0].title : nil
+                    medium.tracks.indices.contains($0) ? medium.tracks[$0] : nil
                 }
             }
+            let title = named?.title
             let accurateRip: String =
                 switch track.accurateRip {
                 case .accurate:
@@ -61,6 +63,9 @@ extension RipReport {
             var cells = [String]()
             cells.append(String(track.number))
             cells.append(Self.escaped(title ?? "") + (track.preEmphasis ? " (pre-emphasis)" : ""))
+            if hasComposers {
+                cells.append(Self.escaped(named?.composers.map(\.tagName).joined(separator: ", ") ?? ""))
+            }
             cells.append(Self.time(track.sectors))
             cells.append(track.pregapSectors.map(Self.time) ?? "")
             cells.append(accurateRip)
@@ -154,6 +159,7 @@ extension RipReport {
         lines.append("| | |")
         lines.append("|---|---|")
         if let media { lines.append("| Media | \(media) |") }
+        if let genre = release?.genre { lines.append("| Genre | \(Self.escaped(genre)) |") }
         if let release, !release.isManual {
             lines.append(
                 "| MusicBrainz release | [\(Self.escaped(release.title))](https://musicbrainz.org/release/\(release.id)) |"

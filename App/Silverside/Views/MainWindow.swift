@@ -82,17 +82,20 @@ struct DetailView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if let slot = model.selectedDrive {
-            DriveDetailView(slot: slot)
-        } else if model.selection == .history {
-            HistoryView()
-        } else if let rip = model.selectedRip {
-            ResultsView(folder: rip.folder, report: rip.report, hasAudio: rip.hasAudio)
-        } else if model.drives.isEmpty {
-            NoDriveView()
-        } else {
-            NoDiscView(driveName: nil)
+        Group {
+            if let slot = model.selectedDrive {
+                DriveDetailView(slot: slot)
+            } else if model.selection == .history {
+                HistoryView()
+            } else if let rip = model.selectedRip {
+                ResultsView(folder: rip.folder, report: rip.report, hasAudio: rip.hasAudio)
+            } else if model.drives.isEmpty {
+                NoDriveView()
+            } else {
+                NoDiscView(driveName: nil)
+            }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) { PlayerBar(player: model.player) }
     }
 }
 

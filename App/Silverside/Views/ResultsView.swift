@@ -80,6 +80,9 @@ struct ResultsView: View {
                     Label("Rip Report", systemImage: "sidebar.trailing")
                 }
                 .help("Show or hide the rip report")
+                InfoButton(title: "Disc Info", help: "The release as MusicBrainz has it, and the disc's own codes") {
+                    InfoSection.disc(report: report)
+                }
             }
         }
     }
@@ -145,12 +148,42 @@ struct ResultsView: View {
         return position + set.summary
     }
 
+    /// The track's audio: the rip's WAV file, or the encoded file in the library.
+    private func audioURL(of track: RipReport.Track) -> URL? {
+        if hasAudio { return folder.appending(path: track.file) }
+        guard let encoding = report.encoding, let file = encoding.file(ofTrack: track.number) else { return nil }
+        return URL(filePath: encoding.folder, directoryHint: .isDirectory).appending(path: file)
+    }
+
+    /// The columns of the disc itself. A table takes ten columns at most, and the results need
+    /// eleven, so these count as one.
+    @TableColumnBuilder<RipReport.Track, Never> private var discColumns: some TableColumnContent<RipReport.Track, Never>
+    {
+        TableColumn("#") { track in Text(String(track.number)).foregroundStyle(.secondary) }.width(28)
+        TableColumn("Title") { track in Text(titles[track.number] ?? track.file) }.width(min: 120, ideal: 180)
+        TableColumn("Time") { track in Text(Format.duration(sectors: track.sectors)).foregroundStyle(.secondary) }
+            .width(52)
+        TableColumn("") { track in
+            InfoButton(help: "Track info, and the tags of its encoded file") {
+                InfoSection.track(track, report: report, title: titles[track.number], file: audioURL(of: track))
+            }
+        }
+        .width(22)
+    }
+
     private var table: some View {
         Table(report.tracks) {
-            TableColumn("#") { track in Text(String(track.number)).foregroundStyle(.secondary) }.width(28)
-            TableColumn("Title") { track in Text(titles[track.number] ?? track.file) }.width(min: 120, ideal: 180)
-            TableColumn("Time") { track in Text(Format.duration(sectors: track.sectors)).foregroundStyle(.secondary) }
-                .width(52)
+            TableColumn("") { track in
+                if let url = audioURL(of: track) {
+                    PlayButton(player: model.player, source: .file(url)) {
+                        model.player.play(
+                            file: url, title: titles[track.number] ?? track.file,
+                            subtitle: report.release?.artist ?? folder.lastPathComponent)
+                    }
+                }
+            }
+            .width(22)
+            discColumns
             TableColumn("Status") { track in FinishedStatus(track: track, ctdb: report.ctdb) }.width(
                 min: 100, ideal: 115)
             TableColumn("Re-reads") { track in RereadsCell(track: track, ctdb: report.ctdb) }.width(min: 60, ideal: 75)

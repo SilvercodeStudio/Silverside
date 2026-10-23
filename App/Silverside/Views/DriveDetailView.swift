@@ -255,6 +255,10 @@ struct AlbumHeader: View {
                             )
                     }
                     if let label = disc.labelText { Chip(text: label) }
+                    if let genre = disc.shownRelease?.genre {
+                        Chip(text: genre, systemImage: "music.note.list")
+                            .help("The genre with the most votes in MusicBrainz. It goes into the files' tags.")
+                    }
                     if let discLabel = disc.discLabel { Chip(text: discLabel) }
                     if let set = model.set(for: disc.release) {
                         Chip(
@@ -262,6 +266,9 @@ struct AlbumHeader: View {
                             tone: set.isComplete ? .good : .neutral, systemImage: "square.stack"
                         )
                         .help(set.summary + ". The album's edits and the release choice are shared by the set.")
+                    }
+                    InfoButton(help: "Disc info: the release as MusicBrainz has it, and the disc's own codes") {
+                        InfoSection.disc(disc)
                     }
                     if let mcn = disc.mcn { Chip(text: "MCN \(mcn)") }
                     Spacer()

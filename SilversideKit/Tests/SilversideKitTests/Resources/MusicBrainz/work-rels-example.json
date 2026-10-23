@@ -67,6 +67,20 @@
               "number": "2",
               "title": "Blue in Green",
               "length": 337000,
+              "artist-credit": [
+                {
+                  "name": "Aram Khachaturian",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "a-aram", "name": "Արամ Խաչատրյան", "sort-name": "Khachaturian, Aram",
+                    "aliases": [
+                      { "name": "Aram Chatschaturjan", "locale": "de", "primary": true, "type": "Artist name" },
+                      { "name": "A. Khachaturian", "locale": "en", "primary": null, "type": "Artist name" },
+                      { "name": "Aram Khachaturian", "locale": "en", "primary": true, "type": "Artist name" }
+                    ]
+                  }
+                }
+              ],
               "recording": {
                 "id": "rec-2",
                 "relations": [
@@ -98,7 +112,7 @@
                   {
                     "type": "lyricist",
                     "target-type": "artist",
-                    "artist": { "id": "a-anon", "name": "Someone", "sort-name": "Someone" }
+                    "artist": { "id": "a-aram", "name": "Արամ Խաչատրյան", "sort-name": "Khachaturian, Aram" }
                   }
                 ]
               }

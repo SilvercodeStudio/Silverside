@@ -152,21 +152,63 @@ struct SetView: View {
         }
     }
 
-    private var table: some View {
-        Table(
-            ripSet.positions.map { position in
-                SetRow(
-                    position: position, disc: ripSet.discs[position],
-                    medium: release?.media.first { $0.position == position })
+    /// A row for each disc, with its tracks under it: from the rip's report when the disc is
+    /// ripped, else from MusicBrainz.
+    private var rows: [SetRow] {
+        ripSet.positions.map { position in
+            let disc = ripSet.discs[position]
+            let report = disc.flatMap { _ in rip(at: position)?.report }
+            let medium = report?.medium ?? release?.media.first { $0.position == position }
+            let tracks: [SetRow]
+            if let report {
+                let titles = medium?.tracks.map(\.title) ?? []
+                tracks = report.tracks.enumerated().map { index, track in
+                    SetRow(
+                        position: position, number: track.number,
+                        title: index < titles.count ? titles[index] : track.file,
+                        seconds: track.sectors / CDDA.sectorsPerSecond, track: track, ctdb: report.ctdb)
+                }
+            } else {
+                tracks = (medium?.tracks ?? []).map { track in
+                    SetRow(
+                        position: position, number: track.position, title: track.title,
+                        seconds: track.length.map { $0 / 1000 })
+                }
             }
-        ) {
-            TableColumn("Disc") { row in Text(String(row.position)).foregroundStyle(.secondary) }.width(40)
+            let seconds = tracks.compactMap(\.seconds).reduce(0, +)
+            return SetRow(
+                position: position, title: medium?.title ?? Format.count(tracks.count, "track"),
+                seconds: tracks.isEmpty ? nil : seconds, disc: disc, report: report,
+                children: tracks.isEmpty ? nil : tracks)
+        }
+    }
+
+    @State private var selectedRows = Set<SetRow.ID>()
+
+    private var table: some View {
+        Table(rows, children: \.children, selection: $selectedRows) {
+            TableColumn("Disc") { row in
+                if let number = row.number {
+                    Text(String(number)).foregroundStyle(.tertiary)
+                } else {
+                    Text(String(row.position)).foregroundStyle(.secondary)
+                }
+            }
+            .width(min: 64, ideal: 72)
             TableColumn("Title") { row in
-                Text(row.medium?.title ?? (row.medium.map { Format.count($0.tracks.count, "track") } ?? ""))
+                Text(row.title).foregroundStyle(row.number == nil || row.track != nil ? .primary : .secondary)
             }
             .width(min: 160, ideal: 280)
+            TableColumn("Time") { row in
+                if let seconds = row.seconds { Text(Format.duration(seconds: seconds)).foregroundStyle(.secondary) }
+            }
+            .width(min: 52, ideal: 64)
             TableColumn("State") { row in
-                if let disc = row.disc {
+                if let track = row.track {
+                    FinishedStatus(track: track, ctdb: row.ctdb)
+                } else if row.number != nil {
+                    EmptyView()
+                } else if let disc = row.disc {
                     Label(
                         disc.stateText.prefix(1).uppercased() + disc.stateText.dropFirst(),
                         systemImage: disc.isFinished ? "checkmark.circle" : "circle"
@@ -178,30 +220,57 @@ struct SetView: View {
             }
             .width(min: 160, ideal: 200)
             TableColumn("Ripped") { row in
-                if let disc = row.disc { DateCell(date: disc.date) }
+                if row.number == nil, let disc = row.disc { DateCell(date: disc.date) }
             }
             .width(min: 140, ideal: 170)
             TableColumn("Drive") { row in
-                if let rip = row.disc.flatMap({ _ in rip(at: row.position) }) {
-                    Text(rip.driveName).foregroundStyle(.secondary)
+                if row.number == nil, let report = row.report {
+                    Text("\(report.drive.vendor) \(report.drive.product)").foregroundStyle(.secondary)
                 }
             }
             .width(min: 140, ideal: 220)
             TableColumn("") { row in
-                if let disc = row.disc {
+                if row.number == nil, let disc = row.disc {
                     Button("Show") { model.selection = .rip(disc.file) }.buttonStyle(.link)
                 }
             }
             .width(60)
         }
+        .contextMenu(forSelectionType: SetRow.ID.self) { ids in
+            if let file = file(ofDiscIn: ids) {
+                Button("Show Disc") { model.selection = .rip(file) }
+            }
+        } primaryAction: { ids in
+            if let file = file(ofDiscIn: ids) { model.selection = .rip(file) }
+        }
         .alternatingRowBackgrounds(.disabled)
     }
 
+    /// The report file of the disc that the rows are in or under, when they are all one ripped disc's.
+    private func file(ofDiscIn ids: Set<SetRow.ID>) -> URL? {
+        let positions = Set(ids.map(\.position))
+        guard positions.count == 1, let position = positions.first else { return nil }
+        return ripSet.discs[position]?.file
+    }
+
+    /// A disc of the set, or (with a number) one of its tracks.
     private struct SetRow: Identifiable {
+        struct ID: Hashable {
+            var position: Int
+            var number: Int?
+        }
         var position: Int
+        /// The track's number; nil for a disc.
+        var number: Int?
+        var title: String
+        var seconds: Int?
         var disc: RipSet.Disc?
-        var medium: MusicBrainzRelease.Medium?
-        var id: Int { position }
+        var report: RipReport?
+        /// The track's result, when its disc is ripped.
+        var track: RipReport.Track?
+        var ctdb: RipReport.CTDBResult?
+        var children: [SetRow]?
+        var id: ID { ID(position: position, number: number) }
     }
 
     private func loadFields() {

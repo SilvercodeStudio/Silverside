@@ -21,6 +21,13 @@ struct AppCommands: Commands {
         CommandGroup(after: .sidebar) {
             Button("Rip History") { model.selection = .history }
                 .keyboardShortcut("y", modifiers: .command)
+            Divider()
+            Button("Back", action: model.goBack)
+                .keyboardShortcut("[", modifiers: .command)
+                .disabled(!model.canGoBack)
+            Button("Forward", action: model.goForward)
+                .keyboardShortcut("]", modifiers: .command)
+                .disabled(!model.canGoForward)
         }
         CommandMenu("Disc") {
             Button("Rip") { if let slot = model.selectedDrive { model.startRip(slot) } }

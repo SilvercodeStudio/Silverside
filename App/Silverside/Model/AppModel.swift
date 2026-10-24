@@ -37,7 +37,20 @@ final class AppModel {
     }
     private(set) var drives: [DriveSlot] = []
     private(set) var recentRips: [RecentRip] = []
-    var selection: SidebarItem?
+    var selection: SidebarItem? {
+        didSet {
+            guard selection != oldValue, let oldValue, !isMovingInHistory else { return }
+            backItems.append(oldValue)
+            if backItems.count > Self.historyLimit { backItems.removeFirst() }
+            forwardItems.removeAll()
+        }
+    }
+    /// The places shown before the selection, the newest last, as a browser keeps them.
+    private(set) var backItems: [SidebarItem] = []
+    /// The places that Back left, the nearest last.
+    private(set) var forwardItems: [SidebarItem] = []
+    @ObservationIgnored private var isMovingInHistory = false
+    private static let historyLimit = 50
     var alert: AppAlert?
     /// True while a sheet or panel shows the rip's log.
     var logShown = false
@@ -87,6 +100,39 @@ final class AppModel {
     var selectedDrive: DriveSlot? {
         guard case .drive(let id) = selection else { return nil }
         return drives.first { $0.id == id }
+    }
+
+    var canGoBack: Bool { backItems.contains(where: exists) }
+    var canGoForward: Bool { forwardItems.contains(where: exists) }
+
+    /// Shows the place before this one, as the toolbar's back arrow does. A drive, rip, or set
+    /// that is gone since is skipped.
+    func goBack() {
+        move(from: &backItems, to: &forwardItems)
+    }
+
+    func goForward() {
+        move(from: &forwardItems, to: &backItems)
+    }
+
+    private func move(from source: inout [SidebarItem], to target: inout [SidebarItem]) {
+        while let item = source.popLast() {
+            guard exists(item) else { continue }
+            if let selection { target.append(selection) }
+            isMovingInHistory = true
+            selection = item
+            isMovingInHistory = false
+            return
+        }
+    }
+
+    private func exists(_ item: SidebarItem) -> Bool {
+        switch item {
+        case .drive(let id): drives.contains { $0.id == id }
+        case .rip(let url): recentRips.contains { $0.file == url }
+        case .history: true
+        case .set(let id): sets.contains { $0.releaseID == id }
+        }
     }
 
     var selectedRip: RecentRip? {

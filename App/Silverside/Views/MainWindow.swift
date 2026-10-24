@@ -108,6 +108,58 @@ struct DetailView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { PlayerBar(player: model.player) }
+        .toolbar {
+            ToolbarItemGroup(placement: .navigation) {
+                Button(action: model.goBack) { Label("Back", systemImage: "chevron.backward") }
+                    .disabled(!model.canGoBack)
+                    .help("Show the place you were before (⌘[ or ⌘←)")
+                Button(action: model.goForward) { Label("Forward", systemImage: "chevron.forward") }
+                    .disabled(!model.canGoForward)
+                    .help("Show the place you went back from (⌘] or ⌘→)")
+            }
+        }
+        .background(BackKeys(model: model))
+    }
+}
+
+/// ⌘← and ⌘→ go back and forward in the main window, as in Safari, except in a text field,
+/// where they move the insertion point. The View menu has ⌘[ and ⌘].
+private struct BackKeys: NSViewRepresentable {
+    let model: AppModel
+
+    func makeNSView(context: Context) -> KeyView { KeyView(model: model) }
+    func updateNSView(_ view: KeyView, context: Context) {}
+
+    final class KeyView: NSView {
+        private let model: AppModel
+        private var monitor: Any?
+
+        init(model: AppModel) {
+            self.model = model
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, let window = self.window, event.window === window,
+                    event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.numericPad, .function])
+                        == .command,
+                    !(window.firstResponder is NSText)
+                else { return event }
+                switch event.keyCode {
+                case 123 where model.canGoBack: model.goBack()
+                case 124 where model.canGoForward: model.goForward()
+                default: return event
+                }
+                return nil
+            }
+        }
     }
 }
 

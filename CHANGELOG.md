@@ -57,7 +57,11 @@ command-line tool.
   summary now tells a disc that is ripped but not verified or not encoded
   from one that is done, and a box set's DVD is not counted as a disc to rip.
   A disc that MusicBrainz lists only by its track lengths gets the release
-  chosen for the set's other discs.
+  chosen for the set's other discs. Open a disc's row to see its tracks and
+  their results, with each disc's time; double-click a row to show that disc.
+- **Back and Forward** arrows in the toolbar, as in a browser: after Show
+  takes you from a set to one of its discs, Back takes you to the set again.
+  The keys are ⌘[ and ⌘], or ⌘← and ⌘→ when you are not typing in a field.
 - **Change the cover after a rip.** Drop an image on an earlier rip's cover,
   or choose one from its menu, and it goes into the rip's folder, the album
   folder, and the tags of the encoded files; the audio is not touched. The

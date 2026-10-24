@@ -141,7 +141,7 @@ public struct SecureRipper {
     public var progress: ((RipEvent) -> Void)?
 
     public func rip(_ track: TOC.Track) throws -> SecureTrackRip {
-        let first = try ripper.rip(track, progress: progress)
+        let first = try ripper.rip(track, passes: maximumFullReads, progress: progress)
         var result = SecureTrackRip(
             track: track, samples: first.samples, status: .consistent, suspectSectors: [], unresolvedSectors: [],
             rounds: 0, matchingOffsets: first.matchingOffsets, c2Samples: first.c2Samples,
@@ -199,7 +199,7 @@ public struct SecureRipper {
                         { read in
                             progress(
                                 .reading(
-                                    track: track.number, pass: pass,
+                                    track: track.number, pass: pass, passes: maximumFullReads,
                                     progress: read.inTrack(startingAt: start, readOffset: readOffset)))
                         }
                     })

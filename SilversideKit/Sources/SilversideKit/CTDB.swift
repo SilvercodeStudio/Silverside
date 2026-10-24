@@ -1,4 +1,5 @@
 import Foundation
+import zlib
 
 /// How CUETools DB sees a disc's audio, for its checksums and its repair data.
 ///
@@ -40,36 +41,37 @@ public struct CTDBLayout: Equatable, Sendable {
     public var shifts: ClosedRange<Int> { -prefixSamples...suffixSamples }
 }
 
-/// CRC-32 (the zlib and CUETools DB checksum) of samples as little-endian bytes.
+/// CRC-32 (the zlib and CUETools DB checksum) of samples as little-endian bytes, by the
+/// system's zlib: on Apple silicon it uses the CRC instructions, about 80 times faster than
+/// a table, and a CTDB check of a whole disc is a handful of these.
 public enum CRC32 {
-    static let table: [UInt32] = (0..<256).map { byte in
-        (0..<8).reduce(UInt32(byte)) { crc, _ in crc & 1 != 0 ? 0xEDB8_8320 ^ (crc >> 1) : crc >> 1 }
-    }
-
     public static func checksum(of samples: ArraySlice<UInt32>) -> UInt32 {
-        var crc: UInt32 = 0xFFFF_FFFF
-        table.withUnsafeBufferPointer { table in
-            for sample in samples {
-                for byte in 0..<4 {
-                    crc = table[Int((crc ^ (sample >> (8 * byte))) & 0xFF)] ^ (crc >> 8)
-                }
-            }
+        samples.withUnsafeBytes { bytes in
+            guard let base = bytes.baseAddress, !bytes.isEmpty else { return 0 }
+            return UInt32(crc32(0, base.assumingMemoryBound(to: Bytef.self), uInt(bytes.count)))
         }
-        return ~crc
     }
 
     /// The same, leaving out the samples that are 0 in both channels: EAC's "CRC32 (skip
     /// zero)", which does not change with the silence at a track's edges.
     public static func checksumSkippingZeros(of samples: ArraySlice<UInt32>) -> UInt32 {
-        var crc: UInt32 = 0xFFFF_FFFF
-        table.withUnsafeBufferPointer { table in
-            for sample in samples where sample != 0 {
-                for byte in 0..<4 {
-                    crc = table[Int((crc ^ (sample >> (8 * byte))) & 0xFF)] ^ (crc >> 8)
+        var crc: uLong = 0
+        var kept = [UInt32]()
+        kept.reserveCapacity(1 << 16)
+        func flush() {
+            kept.withUnsafeBytes { bytes in
+                if let base = bytes.baseAddress, !bytes.isEmpty {
+                    crc = crc32(crc, base.assumingMemoryBound(to: Bytef.self), uInt(bytes.count))
                 }
             }
+            kept.removeAll(keepingCapacity: true)
         }
-        return ~crc
+        for sample in samples where sample != 0 {
+            kept.append(sample)
+            if kept.count == 1 << 16 { flush() }
+        }
+        flush()
+        return UInt32(crc)
     }
 
     /// A checksum as eight hex digits, as EAC and XLD print them.
@@ -208,18 +210,19 @@ public enum CTDB {
     ) -> [ShiftMatch] {
         // At a wrong shift, the difference looks random, and its locator has the full degree.
         // So look for few errors first, which skips the costly search at almost every shift.
-        let differences = candidates.mapValues { syndromes in column0.indices.map { syndromes[$0] ^ column0[$0] } }
+        let differences: [(shift: Int, difference: [UInt16])] = candidates.map { shift, syndromes in
+            (shift, column0.indices.map { syndromes[$0] ^ column0[$0] })
+        }
         let limits = [max(1, column0.count / 2 - 2)] + (fullSearch ? [column0.count / 2] : [])
         for limit in limits {
-            var matches = [ShiftMatch]()
-            for (shift, difference) in differences {
-                if difference.allSatisfy({ $0 == 0 }) {
-                    matches.append(ShiftMatch(shift: shift, errors: 0))
-                } else if let corrections = ReedSolomonDecoder.corrections(
-                    syndromes: difference, length: layout.rows, maximumErrors: limit)
-                {
-                    matches.append(ShiftMatch(shift: shift, errors: corrections.count))
-                }
+            // Each shift's decode is independent, so the shifts are spread over the cores.
+            let matches = parallelMap(over: differences) { candidate -> ShiftMatch? in
+                if candidate.difference.allSatisfy({ $0 == 0 }) { return ShiftMatch(shift: candidate.shift, errors: 0) }
+                guard
+                    let corrections = ReedSolomonDecoder.corrections(
+                        syndromes: candidate.difference, length: layout.rows, maximumErrors: limit)
+                else { return nil }
+                return ShiftMatch(shift: candidate.shift, errors: corrections.count)
             }
             if !matches.isEmpty { return matches.sorted { ($0.errors, abs($0.shift)) < ($1.errors, abs($1.shift)) } }
         }
@@ -273,23 +276,32 @@ public enum CTDB {
                 changes.append(Change(sample: sample, mask: UInt32(correction.error) << (16 * (column % 2))))
             }
         }
-        func difference(_ column: Int) -> [UInt16] {
+        @Sendable func difference(_ column: Int) -> [UInt16] {
             (0..<count).map { ours[column * count + $0] ^ reference[column * count + $0] }
         }
-        for column in 0..<CTDBLayout.stride {
-            let difference = difference(column)
-            guard difference.contains(where: { $0 != 0 }) else { continue }
-            columnsWithErrors += 1
-            guard let corrections = decode(difference, length: layout.rows, suspects: erasures[column], count: count)
-            else {
-                uncorrectable.append(column)
-                if columnsWithErrors >= 200 && 2 * uncorrectable.count > columnsWithErrors {
-                    return .uncorrectable(
-                        columns: uncorrectable, columnsWithErrors: columnsWithErrors, checked: column + 1)
-                }
-                continue
+        // The columns decode in parallel, a block at a time: after each block, a shift at which
+        // most columns cannot be corrected (a wrong shift) is given up, as it was column by column.
+        let block = 512
+        for blockStart in stride(from: 0, to: CTDBLayout.stride, by: block) {
+            let columns = Array(blockStart..<min(blockStart + block, CTDBLayout.stride))
+            let decoded = parallelMap(over: columns) {
+                column -> (column: Int, corrections: [ReedSolomonDecoder.Correction]?)? in
+                let difference = difference(column)
+                guard difference.contains(where: { $0 != 0 }) else { return nil }
+                return (column, decode(difference, length: layout.rows, suspects: erasures[column], count: count))
             }
-            record(corrections, column: column)
+            for (column, corrections) in decoded {
+                columnsWithErrors += 1
+                guard let corrections else {
+                    uncorrectable.append(column)
+                    continue
+                }
+                record(corrections, column: column)
+            }
+            if columnsWithErrors >= 200 && 2 * uncorrectable.count > columnsWithErrors {
+                return .uncorrectable(
+                    columns: uncorrectable, columnsWithErrors: columnsWithErrors, checked: columns.last! + 1)
+            }
         }
         // Trying other versions costs many decodes for each column, so it is only worth it
         // when few columns are left, as on a disc that is nearly repaired.
@@ -323,6 +335,31 @@ public enum CTDB {
             return .failedCheck(columnsWithErrors: columnsWithErrors, changes: changes)
         }
         return .repaired(changedSamples: Array(Set(changes.map(\.sample))).sorted())
+    }
+
+    /// `transform` over `items` on every core, keeping the results in the items' order and
+    /// leaving out the nils. For work that is pure and takes a while for each item.
+    static func parallelMap<Item: Sendable, Result: Sendable>(
+        over items: [Item], _ transform: @Sendable (Item) -> Result?
+    ) -> [Result] {
+        let cores = max(1, ProcessInfo.processInfo.activeProcessorCount)
+        guard items.count > 1, cores > 1 else { return items.compactMap(transform) }
+        let parts = min(cores * 4, items.count)
+        let perPart = (items.count + parts - 1) / parts
+        var results = [[Result]](repeating: [], count: parts)
+        results.withUnsafeMutableBufferPointer { results in
+            let address = UInt(bitPattern: results.baseAddress)
+            withoutActuallyEscaping(transform) { transform in
+                DispatchQueue.concurrentPerform(iterations: parts) { part in
+                    // Each part writes only its own element of the results.
+                    let results = UnsafeMutablePointer<[Result]>(bitPattern: address)!
+                    let first = part * perPart
+                    guard first < items.count else { return }
+                    results[part] = items[first..<min(first + perPart, items.count)].compactMap(transform)
+                }
+            }
+        }
+        return results.flatMap { $0 }
     }
 
     /// Syndromes kept spare when decoding with erasures. With e erasures and no other

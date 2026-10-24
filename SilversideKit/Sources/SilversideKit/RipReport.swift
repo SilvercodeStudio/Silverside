@@ -75,6 +75,8 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var testCRC32: String?
         /// The track's own AccurateRip v1 and v2 checksums, as eight hex digits each.
         public var accurateRipChecksums: [String]?
+        /// The time the track's rip took, in seconds: every read and re-read. Nil in older reports.
+        public var seconds: Int?
 
         /// Whether the test read gave the same audio as the copy, as read: a repair can change
         /// the copy after the test. Nil without a test read.
@@ -161,7 +163,12 @@ public struct RipReport: Codable, Equatable, Sendable {
     }
 
     public var program = "Silverside \(SilversideVersion.string)"
+    /// When the rip ended and the report was written.
     public var date: Date
+    /// When the rip started, before the lookups. Nil in older reports.
+    public var started: Date?
+    /// The time the CTDB check and repair took, in seconds. Nil if there was none, and in older reports.
+    public var ctdbSeconds: Int?
     public var drive: Drive
     /// True for a secure rip, with re-reads; false for a single pass.
     public var secure: Bool
@@ -231,10 +238,12 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// The album folder in the library.
         public var folder: String
         public var files: [File]
+        /// The time the encoding took, in seconds, checks included. Nil in older records.
+        public var seconds: Int?
 
         public init(
             date: Date = Date(), format: AudioFormat, encoder: String, aac: AACOptions? = nil, mp3: MP3Options? = nil,
-            folder: String, files: [File]
+            folder: String, files: [File], seconds: Int? = nil
         ) {
             self.date = date
             self.format = format
@@ -243,6 +252,7 @@ public struct RipReport: Codable, Equatable, Sendable {
             self.mp3 = mp3
             self.folder = folder
             self.files = files
+            self.seconds = seconds
         }
 
         /// The AAC or MP3 settings, for people to read: "VBR, quality 127", "lame -V 0". Nil for lossless.

@@ -180,10 +180,10 @@ struct StatusCell: View {
             Text("Queued").foregroundStyle(.secondary)
         case .skipped:
             Text("—").foregroundStyle(.secondary)
-        case .reading(let pass, let fraction):
+        case .reading(let pass, let passes, let fraction):
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
-                    Text(pass == 1 ? "Reading" : "Read \(pass)").font(.callout)
+                    Text(pass == 1 ? "Reading" : "Read \(pass) of up to \(passes)").font(.callout)
                     Spacer()
                     Text("\(Int(fraction * 100))%").font(.callout).foregroundStyle(.secondary).monospacedDigit()
                 }

@@ -261,6 +261,14 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print("CTDB: not checked, because it checks the whole disc, and some tracks were not ripped.")
         case .finished(let report, let discOffsets, let profile):
             printSummary(report, discOffsets: discOffsets, profile: profile)
+            if let started = report.started {
+                let seconds = Int(report.date.timeIntervalSince(started))
+                var text = "Took \(RipReport.minutes(seconds))"
+                if let ctdb = report.ctdbSeconds { text += ", \(RipReport.minutes(ctdb)) of it the CTDB check" }
+                Swift.print(text + ".")
+            }
+        case .savingArtwork:
+            break
         case .artwork(let result):
             ReleaseChoice.printArtwork(result)
         case .artworkFailed(let error):
@@ -274,9 +282,11 @@ private final class RipPrinter: @unchecked Sendable {
         case .encodingDeclined(let existing):
             let folder = existing.first?.deletingLastPathComponent().path ?? ""
             Swift.print("Did not encode: kept the files in \(folder). The rip is kept, for silverside encode later.")
-        case .encoded(let files, let format, _):
+        case .encoded(let files, let format, let record):
+            let took = record?.seconds.map { " in \(RipReport.minutes($0))" } ?? ""
             Swift.print(
-                "Encoded \(files.count) tracks as \(format.rawValue.uppercased()), each checked against the rip.")
+                "Encoded \(files.count) tracks as \(format.rawValue.uppercased())\(took), each checked against the rip."
+            )
             if let first = files.first { Swift.print("Library: \(first.deletingLastPathComponent().path)") }
         case .ripDeleted:
             Swift.print("Deleted the rip's WAV files (--keep-rip keeps them). The rip report is in the album folder.")

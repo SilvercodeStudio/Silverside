@@ -66,6 +66,25 @@ struct EncodingTests {
         #expect(try again.encode(disc, into: library).count == 2)
     }
 
+    /// The lanes give the same files, in the tracks' order, however many there are.
+    @Test func encodesTheSameOnOneLaneAndSeveral() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        var one = DiscEncoder(format: .flac)
+        one.parallelTracks = 1
+        let serial = try one.encode(disc, into: library)
+        let bytes = try serial.map { try Data(contentsOf: $0) }
+        var several = DiscEncoder(format: .flac)
+        several.parallelTracks = 3
+        several.overwrites = true
+        let (files, record) = try several.encodeWithRecord(disc, into: library)
+        #expect(files == serial)
+        #expect(try files.map { try Data(contentsOf: $0) } == bytes)
+        #expect(record?.files.map(\.track) == [1, 2] && (record?.seconds ?? -1) >= 0)
+        #expect(DiscEncoder.defaultParallelTracks >= 2 && DiscEncoder.defaultParallelTracks <= 4)
+    }
+
     /// The album folder's report says how the files were made: the format, the encoder and
     /// its settings, and each track's file; the Markdown says it too.
     @Test func recordsTheEncodingInTheAlbumFoldersReport() throws {

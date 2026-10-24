@@ -70,8 +70,9 @@ public struct TrackRipper {
         return v1 + v2 > 0 ? .accurate(v1Confidence: v1, v2Confidence: v2) : .notAccurate
     }
 
-    /// Rips a track. `progress` hears about the read as it goes.
-    public func rip(_ track: TOC.Track, progress: ((RipEvent) -> Void)? = nil) throws -> TrackRip {
+    /// Rips a track. `progress` hears about the read as it goes; `passes` is how many reads
+    /// of the track there can be in all, for the event.
+    public func rip(_ track: TOC.Track, passes: Int = 1, progress: ((RipEvent) -> Void)? = nil) throws -> TrackRip {
         let toc = reader.toc
         let (isFirst, isLast) = edges(of: track)
         let sectors = toc.sectorRange(of: track)
@@ -87,7 +88,8 @@ public struct TrackRipper {
             { (read: ReadProgress) in
                 progress(
                     .reading(
-                        track: track.number, pass: 1, progress: read.inTrack(startingAt: start, readOffset: readOffset))
+                        track: track.number, pass: 1, passes: passes,
+                        progress: read.inTrack(startingAt: start, readOffset: readOffset))
                 )
             }
         }

@@ -463,7 +463,7 @@ struct StatusBar: View {
                 row.unresolved = errors.unresolved
             }
             switch rip.trackStates[track.number] {
-            case .reading(_, let fraction): row.readFraction = fraction
+            case .reading(_, _, let fraction): row.readFraction = fraction
             case .rereading, .testing: row.readFraction = 1
             case .finished(let report):
                 row.readFraction = 1
@@ -478,7 +478,7 @@ struct StatusBar: View {
 
     private var graphCursor: (track: Int, sector: Int)? {
         guard let rip = slot.rip, rip.isRunning, let track = rip.currentTrack,
-            case .reading(_, let fraction) = rip.trackStates[track], let errors = rip.trackErrors[track]
+            case .reading(_, _, let fraction) = rip.trackStates[track], let errors = rip.trackErrors[track]
         else { return nil }
         return (track, Int(fraction * Double(errors.sectors)))
     }
@@ -507,7 +507,9 @@ struct StatusBar: View {
             Format.duration(sectors: rip.sectorsDone + rip.sectorsInPass) + " of "
             + Format.duration(sectors: rip.sectorsTotal)
         if let speed = rip.speed, speed > 0 { text += String(format: " · %.1f×", speed) }
-        if let left = rip.secondsLeft { text += " · " + Format.timeLeft(seconds: left) }
+        if let left = rip.secondsLeft {
+            text += " · " + Format.timeLeft(seconds: left) + (rip.isRereading ? ", plus re-reads" : "")
+        }
         return text
     }
 }

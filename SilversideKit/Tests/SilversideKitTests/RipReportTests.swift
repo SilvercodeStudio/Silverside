@@ -106,6 +106,9 @@ struct RipReportTests {
             drive: .init(vendor: "SIM", product: "DRIVE", revision: "1.0", readOffset: 6, offsetSource: "--offset"),
             secure: true, toc: toc, tracks: [track], ctdb: .init(status: .notChecked))
         report.media = .recordable
+        report.started = Date(timeIntervalSince1970: 1_799_998_273)
+        report.ctdbSeconds = 130
+        report.tracks[0].seconds = 591
         let url = FileManager.default.temporaryDirectory.appending(path: "RipReport-\(UUID()).json")
         defer { try? FileManager.default.removeItem(at: url) }
         try report.write(to: url)
@@ -116,5 +119,7 @@ struct RipReportTests {
             markdown.contains("## Checksums")
                 && markdown.contains("| 1 | \(track.crc32!) | \(track.crc32SkipZero!) | DEADBEEF **differs** |"))
         #expect(markdown.contains("Test and copy: the second read of track 1 differed from the copy."))
+        #expect(markdown.contains("the tracks took 9:51; the CTDB check 2:10; the rip 28:47 in all."))
+        #expect(RipReport.minutes(3_725) == "1:02:05")
     }
 }

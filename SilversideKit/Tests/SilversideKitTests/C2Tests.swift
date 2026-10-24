@@ -85,7 +85,7 @@ struct RipEventTests {
         secure.progress = { events.list.append($0) }
         let rip = try secure.rip(toc.tracks[1])
         let firstPass = events.list.compactMap { event -> ReadProgress? in
-            if case .reading(2, 1, let progress) = event { return progress }
+            if case .reading(2, 1, _, let progress) = event { return progress }
             return nil
         }
         // The first read covers the track and 5 sectors on each side (481 drive sectors, as the
@@ -98,7 +98,7 @@ struct RipEventTests {
         #expect(firstPass.first?.chunk.lowerBound == -6 && last.chunk.upperBound == 470 + 6)
         let flagged = Set(firstPass.flatMap(\.flaggedInChunk))
         #expect(flagged.contains(140) && flagged.isSubset(of: [138, 139, 140, 141]))
-        #expect(events.list.contains { if case .reading(2, 2, _) = $0 { true } else { false } })
+        #expect(events.list.contains { if case .reading(2, 2, _, _) = $0 { true } else { false } })
         let rounds = events.list.compactMap { event -> [Int]? in
             if case .rereading(2, _, _, let suspects, _) = event { return suspects }
             return nil

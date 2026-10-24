@@ -290,6 +290,12 @@ public struct DiscRepairer {
             for match in found where !matches.contains(where: { $0.shift == match.shift }) {
                 matches.append(match)
             }
+            let shifts = matches.prefix(Self.shiftsPerEntry).map {
+                "\(Self.signed($0.shift))" + ($0.errors > 0 ? " (\($0.errors) errors)" : "")
+            }
+            log(
+                "  Entry \(entry.id) (\(entry.confidence) submissions): "
+                    + (shifts.isEmpty ? "no shift matches." : "shift \(shifts.joined(separator: ", "))."))
             for match in matches.prefix(Self.shiftsPerEntry) {
                 let name = "entry \(entry.id) (\(entry.confidence) submissions) at shift \(Self.signed(match.shift))"
                 if CTDB.discCRC(of: audio, layout: layout, shift: match.shift) == entry.crc32 {

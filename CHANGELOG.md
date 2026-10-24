@@ -30,8 +30,28 @@ command-line tool.
 
 ### Changed
 
+- **The CTDB check is many times faster.** Its checksums use the system's
+  CRC-32, which is the slow part of checking a disc stored at another
+  pressing's alignment, and the search for the alignment and the repair of
+  the columns run on every core. The status bar says what the check is doing,
+  and the log names each entry's shift.
+- **Tracks encode in parallel,** up to four at a time (half the Mac's cores,
+  at least two), each still checked against the rip before it goes into the
+  library.
+- **The log and the report keep the times.** Each line of the rip's log starts
+  with the time, so it says when each track, the CTDB check, and the encoding
+  finished, and the last line says how long the rip took. The report says when
+  the rip started, how long the tracks took (and the longest), the CTDB check,
+  the whole rip, and the encoding.
+- A later read of a track says how many there can be ("read 2 of up to 4"),
+  and the time left says "plus re-reads" while a track is read again.
+
 ### Fixed
 
+- The cover art was downloaded after the last track, while the status bar said
+  only "Finishing the rip", and with "every image" chosen a release's
+  full-size scans could take a minute. The download now runs while the disc
+  is read, and the status bar says when the rip is still waiting for it.
 - In 0.5, MusicBrainz refused every disc lookup ("lookup failed" for each disc),
   because the lookup asked for relationships that only a release lookup may
   have. The disc lookup is as it was, and a rip looks the chosen release up

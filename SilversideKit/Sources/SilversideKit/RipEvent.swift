@@ -2,10 +2,10 @@
 /// Sectors are counted from the track's start, as in `SecureTrackRip`.
 public enum RipEvent: Equatable, Sendable {
     /// A read of a whole track goes on. Pass 1 is the first read; later passes are reads
-    /// again, to compare. The progress counts drive sectors, so far in this pass: with the
-    /// read offset, a read covers one sector more than the track, and one drive sector's
-    /// data can lie in two sectors of the track.
-    case reading(track: Int, pass: Int, progress: ReadProgress)
+    /// again, to compare, up to `passes` in all. The progress counts drive sectors, so far
+    /// in this pass: with the read offset, a read covers one sector more than the track,
+    /// and one drive sector's data can lie in two sectors of the track.
+    case reading(track: Int, pass: Int, passes: Int, progress: ReadProgress)
     /// A round of re-reads of the suspect sectors: which sectors, and how many versions are known.
     case rereading(track: Int, round: Int, maximumRounds: Int, suspectSectors: [Int], versions: Int)
     /// The test read of test and copy: one more read of the whole track, after the rip, for a

@@ -35,6 +35,7 @@ extension RipReport {
         }
         let repaired = tracks.reduce(0) { $0 + $1.repairedSamples }
         if repaired > 0 { lines += ["", "\(repaired) samples were repaired with CTDB's repair data."] }
+        if let timing = timingText { lines += ["", timing] }
         lines.append("")
 
         lines.append("## Tracks")
@@ -185,6 +186,35 @@ extension RipReport {
             "\(drive.vendor) \(drive.product), firmware \(drive.revision). Read offset \(offset) samples"
                 + " (\(drive.offsetSource)).")
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// "Started 2026-10-23T22:15:02Z; the tracks took 24:48 (the longest, track 5, 9:51), the
+    /// CTDB check 2:10, the rip 28:47 in all. Encoding took 0:52." Nil for an older report.
+    var timingText: String? {
+        guard let started else { return nil }
+        var parts = ["Started \(ISO8601DateFormatter().string(from: started))"]
+        let trackSeconds = tracks.compactMap(\.seconds)
+        if !trackSeconds.isEmpty {
+            var text = "the tracks took \(Self.minutes(trackSeconds.reduce(0, +)))"
+            if tracks.count > 1, let longest = tracks.max(by: { ($0.seconds ?? 0) < ($1.seconds ?? 0) }),
+                let seconds = longest.seconds
+            {
+                text += " (the longest, track \(longest.number), \(Self.minutes(seconds)))"
+            }
+            parts.append(text)
+        }
+        if let ctdbSeconds { parts.append("the CTDB check \(Self.minutes(ctdbSeconds))") }
+        parts.append("the rip \(Self.minutes(Int(date.timeIntervalSince(started)))) in all")
+        var text = parts.joined(separator: "; ") + "."
+        if let seconds = encoding?.seconds { text += " Encoding took \(Self.minutes(seconds))." }
+        return text
+    }
+
+    /// Seconds as "M:SS", or "H:MM:SS" from an hour.
+    public static func minutes(_ seconds: Int) -> String {
+        seconds >= 3600
+            ? String(format: "%d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+            : String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
     var ctdbSummary: String {

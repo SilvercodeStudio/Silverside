@@ -128,7 +128,7 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
 
 /// Encodes a ripped disc into a music library: one file for each track, named and tagged
 /// from the release, checked against the rip, with the cover in the album folder.
-public struct DiscEncoder {
+public struct DiscEncoder: Sendable {
     public var format: AudioFormat
     public var folderTemplate = NameTemplate.libraryFolder
     public var trackTemplate = NameTemplate.libraryTrack
@@ -144,6 +144,14 @@ public struct DiscEncoder {
     public var allowsUnverified = false
     /// Replace files that exist.
     public var overwrites = false
+    /// How many tracks encode at once. Each track in flight holds its audio twice (the rip and
+    /// the decoded check), about 300 MB for a long track, so the default stays at four even on
+    /// a Mac with many cores: half the cores, at least two, at most four.
+    public var parallelTracks = DiscEncoder.defaultParallelTracks
+
+    public static var defaultParallelTracks: Int {
+        max(2, min(4, ProcessInfo.processInfo.activeProcessorCount / 2))
+    }
     /// Receives a line for each track, for people to read.
     public var log: @Sendable (String) -> Void = { _ in }
     /// Hears each track when its file is written and checked: the track's number and the file.
@@ -229,6 +237,7 @@ public struct DiscEncoder {
     public func encodeWithRecord(
         _ disc: RippedDisc, into library: URL
     ) throws -> (files: [URL], encoding: RipReport.Encoding?) {
+        let encodingStarted = Date()
         let (release, medium, jobs) = try plan(disc, into: library)
         let lame = format == .mp3 ? MP3Encoder.lame() : nil
         if format == .mp3 && lame == nil { throw MP3Error.lameNotFound }
@@ -241,28 +250,35 @@ public struct DiscEncoder {
         let cover = try disc.coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }
         let audioTracks = disc.toc.audioTracks
 
+        // The tracks encode `parallelTracks` at a time. Each lane takes every n-th job, in
+        // order, so the lanes keep in step and no more than that many tracks are in memory.
+        // A failure stops the lanes after the tracks under way; the files written stay, as
+        // they did when the tracks went one by one.
+        let lanes = max(1, min(parallelTracks, jobs.count))
+        let outcomes = EncodeOutcomes()
+        let encoder = self
+        DispatchQueue.concurrentPerform(iterations: lanes) { lane in
+            for index in stride(from: lane, to: jobs.count, by: lanes) where !outcomes.hasFailed {
+                do {
+                    try encoder.encode(jobs[index], cover: cover, lame: lame)
+                    outcomes.finish(index)
+                } catch {
+                    outcomes.fail(index, error)
+                }
+            }
+        }
+        if let error = outcomes.firstError { throw error }
+
         var written = [URL]()
         var encodedFiles = [RipReport.Encoding.File]()
         var albumFolder: URL?
         var cueTracks = [CueSheet.Track]()
         var hiddenTrackFile: String?
-        for job in jobs {
+        for job in jobs where outcomes.finished(job.index) {
             let (ripped, index, metadata, folder, file) = (job.ripped, job.index, job.metadata, job.folder, job.file)
             albumFolder = folder
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-
-            let samples = try WAVFile.read(ripped.file)
-            // Write to a partial file, and move it into place only when it is checked.
-            let partial = folder.appending(path: ".\(UUID().uuidString).partial.\(format.fileExtension)")
-            defer { try? FileManager.default.removeItem(at: partial) }
-            try write(samples, metadata: metadata, cover: cover, to: partial, lame: lame)
-            try check(partial, against: samples, final: file)
-            if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
-            try FileManager.default.moveItem(at: partial, to: file)
             written.append(file)
             encodedFiles.append(.init(track: ripped.number, file: file.lastPathComponent))
-            log("\(file.lastPathComponent)")
-            trackEncoded(ripped.number, file)
             let tocTrack = audioTracks[index]
             if ripped.number == 0 {
                 hiddenTrackFile = file.lastPathComponent
@@ -302,7 +318,8 @@ public struct DiscEncoder {
             RipReport.Encoding(
                 date: Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down)),
                 format: format, encoder: encoderName(lame: lame), aac: format == .aac ? aac : nil,
-                mp3: format == .mp3 ? mp3 : nil, folder: $0.path, files: encodedFiles)
+                mp3: format == .mp3 ? mp3 : nil, folder: $0.path, files: encodedFiles,
+                seconds: Int(Date().timeIntervalSince(encodingStarted)))
         }
         if let albumFolder, let encoding {
             let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
@@ -381,6 +398,22 @@ public struct DiscEncoder {
         }
     }
 
+    /// Encodes one track: reads its WAV file, writes a partial file, checks it, and moves it
+    /// into place. Runs on one of the encoding lanes.
+    private func encode(_ job: Job, cover: EmbeddedCover?, lame: URL?) throws {
+        try FileManager.default.createDirectory(at: job.folder, withIntermediateDirectories: true)
+        let samples = try WAVFile.read(job.ripped.file)
+        // Write to a partial file, and move it into place only when it is checked.
+        let partial = job.folder.appending(path: ".\(UUID().uuidString).partial.\(format.fileExtension)")
+        defer { try? FileManager.default.removeItem(at: partial) }
+        try write(samples, metadata: job.metadata, cover: cover, to: partial, lame: lame)
+        try check(partial, against: samples, final: job.file)
+        if FileManager.default.fileExists(atPath: job.file.path) { try FileManager.default.removeItem(at: job.file) }
+        try FileManager.default.moveItem(at: partial, to: job.file)
+        log("\(job.file.lastPathComponent)")
+        trackEncoded(job.ripped.number, job.file)
+    }
+
     /// Decodes the file: a lossless file must give the rip's samples; a lossy one, about as many.
     private func check(_ url: URL, against samples: [UInt32], final: URL) throws {
         let decoded = try AudioEncoder.decode(url)
@@ -388,4 +421,18 @@ public struct DiscEncoder {
             format.isLossless ? decoded == samples : abs(decoded.count - samples.count) < 4 * 1152
         guard matches else { throw EncodingError.verificationFailed(final) }
     }
+}
+
+/// Which tracks the encoding lanes finished, and the errors of those that failed.
+private final class EncodeOutcomes: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = Set<Int>()
+    private var errors = [Int: any Error]()
+
+    var hasFailed: Bool { lock.withLock { !errors.isEmpty } }
+    func finish(_ index: Int) { lock.withLock { _ = done.insert(index) } }
+    func finished(_ index: Int) -> Bool { lock.withLock { done.contains(index) } }
+    func fail(_ index: Int, _ error: any Error) { lock.withLock { errors[index] = error } }
+    /// The error of the first job that failed, in the jobs' order.
+    var firstError: (any Error)? { lock.withLock { errors.min { $0.key < $1.key }?.value } }
 }

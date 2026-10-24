@@ -126,13 +126,28 @@ public struct CoverArtClient: Sendable {
             written.append(try image.write(to: folder))
         }
         guard all else { return written }
-        let others = images.filter { !$0.isFront }
-        for (image, name) in zip(others, CoverArtImage.fileNames(for: others)) {
-            if let data = try await download(image) {
-                written.append(try data.write(to: folder.appending(path: "Artwork"), name: name))
+        // The other images, three at a time: full-size scans are many megabytes each, and the
+        // web client still spaces the requests as the archive asks. The files keep the archive's order.
+        let others = Array(
+            zip(images.filter { !$0.isFront }, CoverArtImage.fileNames(for: images.filter { !$0.isFront })))
+        let artwork = folder.appending(path: "Artwork")
+        let saved = try await withThrowingTaskGroup(of: (Int, URL?).self) { group -> [URL?] in
+            var results = [URL?](repeating: nil, count: others.count)
+            var next = 0
+            func add() {
+                guard next < others.count else { return }
+                let (index, (image, name)) = (next, others[next])
+                next += 1
+                group.addTask { (index, try await download(image).map { try $0.write(to: artwork, name: name) }) }
             }
+            for _ in 0..<3 { add() }
+            while let (index, file) = try await group.next() {
+                results[index] = file
+                add()
+            }
+            return results
         }
-        return written
+        return written + saved.compactMap { $0 }
     }
 }
 

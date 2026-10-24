@@ -104,6 +104,8 @@ public enum DiscRipEvent: Sendable {
     case ctdbNotChecked
     /// The rip is done: what it found, and what it learned of the drive.
     case finished(RipReport, discOffsets: Set<Int>, profile: DriveProfile)
+    /// The rip waits for the artwork download, which ran while the disc was read.
+    case savingArtwork
     case artwork(ArtworkResult)
     case artworkFailed(any Error)
     case encoding(AudioFormat)
@@ -199,6 +201,7 @@ public struct DiscRip {
 
     private func ripDisc() async throws -> DiscRipResult {
         var profiles = self.profiles
+        let started = Date()
         let toc = try drive.readTOC()
         guard !toc.audioTracks.isEmpty else { throw DiscRipError.noAudioTracks }
         events(.disc(toc))
@@ -294,6 +297,18 @@ public struct DiscRip {
         events(.folder(folder, insteadOf: folder == wanted ? nil : wanted))
         try stop.check()
 
+        // The artwork downloads while the disc is read: the network is idle then, and every
+        // image of a release can be a hundred megabytes of scans. The rip waits for it at the end.
+        let artworkTask: Task<ArtworkResult, any Error>? =
+            if options.cover == nil, let chosen, !chosen.isManual {
+                Task { [webClient, choice = options.artwork] in
+                    try await CoverArtClient(client: webClient).saveArtwork(choice, of: chosen, in: folder)
+                }
+            } else {
+                nil
+            }
+        defer { artworkTask?.cancel() }
+
         var reader = AudioReader(drive: drive, toc: toc, readOffset: readOffset, canOverread: false)
         // A sector that cannot be read is silence and suspect, so one bad sector does not stop the rip.
         reader.unreadableRetries = 3
@@ -331,7 +346,7 @@ public struct DiscRip {
             events(.trackStarted(track, position: position + 1, count: selected.count))
             let start = ContinuousClock.now
             // The track's rip, with the pooling and the files, on the reading thread.
-            let (audio, report, ripSummary) = try await blocking { [self] in
+            let (audio, ripped, ripSummary) = try await blocking { [self] in
                 var (samples, summary, audio, report) = try ripTrack(
                     track, toc: toc, ripper: ripper, secure: secure, records: records)
                 pool(
@@ -355,6 +370,8 @@ public struct DiscRip {
                 return (audio, report, summary)
             }
             var summary = ripSummary
+            var report = ripped
+            report.seconds = Int((ContinuousClock.now - start).components.seconds)
             discOffsets.formUnion(report.matchingOffsets)
             if checksCTDB { trackAudio.append(audio) }
             if !audio.alternatives.isEmpty { written.insert(TrackAudio.alternativesFileName(track: track.number)) }
@@ -365,14 +382,15 @@ public struct DiscRip {
                 summary += ", \(unreadable.count) sectors could not be read"
             }
             if track.hasPreEmphasis { summary += ", pre-emphasis" }
-            events(
-                .trackFinished(
-                    report, summary: summary, seconds: Int((ContinuousClock.now - start).components.seconds)))
+            events(.trackFinished(report, summary: summary, seconds: report.seconds ?? 0))
         }
 
         var ctdb = RipReport.CTDBResult(status: entries.isEmpty && checkedCTDB ? .notInDatabase : .notChecked)
+        var ctdbSeconds: Int?
         if checksCTDB {
             events(.checkingCTDB)
+            let ctdbStarted = Date()
+            defer { ctdbSeconds = Int(Date().timeIntervalSince(ctdbStarted)) }
             let errorFree = reports.allSatisfy { $0.accurateRip == .accurate || $0.accurateRip == .otherPressings }
             var repairer = DiscRepairer(
                 toc: toc, records: records, entries: entries, reader: options.singlePass ? nil : reader)
@@ -422,10 +440,10 @@ public struct DiscRip {
             } catch {
                 events(.artworkFailed(error))
             }
-        } else if let chosen, !chosen.isManual {
+        } else if let artworkTask {
+            events(.savingArtwork)
             do {
-                let artwork = try await CoverArtClient(client: webClient).saveArtwork(
-                    options.artwork, of: chosen, in: folder)
+                let artwork = try await artworkTask.value
                 if case .saved(let files) = artwork {
                     for file in files { written.insert(Self.relativePath(of: file, in: folder)) }
                 }
@@ -439,6 +457,8 @@ public struct DiscRip {
             vendor: identity.vendor, product: identity.product, revision: identity.revision, readOffset: readOffset,
             offsetSource: source)
         var report = RipReport(drive: driveReport, secure: !options.singlePass, toc: toc, tracks: reports, ctdb: ctdb)
+        report.started = Date(timeIntervalSince1970: started.timeIntervalSince1970.rounded(.down))
+        report.ctdbSeconds = ctdbSeconds
         report.mcn = mcn
         report.media = media
         report.hiddenTrack = hiddenTrack

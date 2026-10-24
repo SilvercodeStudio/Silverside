@@ -18,8 +18,8 @@ final class RipRun {
     /// Where a track is in its rip.
     enum TrackState: Equatable {
         case queued
-        /// A read of the whole track: pass 1 is the first read, later passes compare.
-        case reading(pass: Int, fraction: Double)
+        /// A read of the whole track: pass 1 is the first read, later passes compare, up to `passes`.
+        case reading(pass: Int, passes: Int, fraction: Double)
         case rereading(round: Int, maximumRounds: Int, suspectSectors: Int)
         /// The test read of test and copy, after the rip's own reads.
         case testing(fraction: Double)
@@ -65,6 +65,10 @@ final class RipRun {
     private(set) var position = 0
     private(set) var count = 0
     private(set) var log: [String] = []
+    /// What the CTDB check is doing now, from its log, while it runs.
+    private(set) var ctdbStatus: String?
+    /// True while the rip waits for the artwork download at the end.
+    private(set) var isSavingArtwork = false
     private(set) var folder: URL?
     private(set) var readOffset: Int?
     private(set) var offsetSource: String?
@@ -129,6 +133,17 @@ final class RipRun {
         return min(1, Double(encodedCount) / Double(tracksToRip.count))
     }
 
+    /// True while the current track is being read again, re-read, or test-read: time the
+    /// estimate does not count.
+    var isRereading: Bool {
+        guard let currentTrack else { return false }
+        switch trackStates[currentTrack] {
+        case .reading(let pass, _, _): return pass > 1
+        case .rereading, .testing: return true
+        default: return false
+        }
+    }
+
     var secondsLeft: Int? {
         guard let speed, speed > 0, sectorsTotal > sectorsDone + sectorsInPass else { return nil }
         return Int(Double(sectorsTotal - sectorsDone - sectorsInPass) / (speed * Double(CDDA.sectorsPerSecond)))
@@ -153,6 +168,7 @@ final class RipRun {
         }
         sectorsTotal = before
         startDate = Date()
+        add("Rip started.")
         let run = self
         task = Task.detached {
             do {
@@ -263,14 +279,24 @@ final class RipRun {
         }
         switch phase {
         case .stopped: add("Stopped." + (folder.map { " The tracks ripped so far are in \($0.path)." } ?? ""))
-        case .finished: add("Done.")
+        case .finished: add("Done. The rip took \(Format.duration(seconds: Int(elapsed))).")
         default: break
         }
     }
 
+    /// Each line starts with the time, so the log says when each track, the check, and the
+    /// encoding finished.
     private func add(_ line: String) {
-        log.append(line)
+        log.append(Self.clock.string(from: Date()) + "  " + line)
     }
+
+    private static let clock: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    @ObservationIgnored private var ctdbStarted: Date?
 
     /// The text that the status bar shows.
     var statusText: String {
@@ -279,17 +305,20 @@ final class RipRun {
         case .ripping:
             if overwriteQuestion != nil { return "Waiting for your answer about the library…" }
             // Between the last read and the encoding: the cover, the lookups' results, and the report.
-            guard let currentTrack else { return fraction >= 1 ? "Finishing the rip…" : "Ripping…" }
+            guard let currentTrack else {
+                if isSavingArtwork { return "Saving the cover art…" }
+                return fraction >= 1 ? "Finishing the rip…" : "Ripping…"
+            }
             var text = "Ripping track \(currentTrack)" + (count > 1 ? " (\(position) of \(count))" : "")
             switch trackStates[currentTrack] {
-            case .reading(let pass, _) where pass > 1: text += " · read \(pass)"
+            case .reading(let pass, let passes, _) where pass > 1: text += " · read \(pass) of up to \(passes)"
             case .rereading(let round, let maximum, let suspects):
                 text += " · re-reading \(Format.count(suspects, "sector")), round \(round) of \(maximum)"
             case .testing: text += " · test read"
             default: break
             }
             return text
-        case .checkingCTDB: return "Checking the disc against CUETools DB…"
+        case .checkingCTDB: return ctdbStatus ?? "Checking the disc against CUETools DB…"
         case .encoding:
             let format = encodingFormat?.rawValue.uppercased() ?? ""
             return "Encoding as \(format) · track \(min(encodedCount + 1, tracksToRip.count)) of \(tracksToRip.count)"
@@ -370,7 +399,7 @@ final class RipRun {
             self.count = count
             sectorsDone = sectorsBefore[track.number] ?? sectorsDone
             sectorsInPass = 0
-            trackStates[track.number] = .reading(pass: 1, fraction: 0)
+            trackStates[track.number] = .reading(pass: 1, passes: 1, fraction: 0)
             passStart = (Date(), 0)
         case .reading(let event):
             handle(event)
@@ -388,11 +417,18 @@ final class RipRun {
         case .checkingCTDB:
             phase = .checkingCTDB
             currentTrack = nil
+            ctdbStarted = Date()
             add("Checking the disc against CUETools DB...")
         case .repairLog(let line):
             add(line)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            ctdbStatus = "CUETools DB: " + trimmed.prefix(1).lowercased() + trimmed.dropFirst()
         case .repaired(let repair):
             ctdb = RipReport.CTDBResult(repair)
+            ctdbStatus = nil
+            if let ctdbStarted {
+                add("CTDB: done in \(Format.duration(seconds: Int(Date().timeIntervalSince(ctdbStarted)))).")
+            }
             phase = .ripping
         case .trackRepaired(let number, let samples, let accurateRip):
             repairedTracks[number] = samples
@@ -410,12 +446,16 @@ final class RipRun {
             ctdb = report.ctdb
             for track in report.tracks { trackStates[track.number] = .finished(track) }
             add(RipRun.headline(for: report))
+        case .savingArtwork:
+            isSavingArtwork = true
         case .artwork(let result):
+            isSavingArtwork = false
             switch result {
             case .saved(let files): add("Cover: saved \(files.count == 1 ? "cover.jpg" : "\(files.count) images")")
             default: add("Cover: \(result)")
             }
         case .artworkFailed(let error):
+            isSavingArtwork = false
             add("Cover: the download failed (\(error))")
         case .encoding(let format):
             phase = .encoding
@@ -439,7 +479,10 @@ final class RipRun {
         case .encoded(let files, let format, let record):
             encodedFiles = files
             report?.encoding = record
-            add("Encoded \(files.count) tracks as \(format.rawValue.uppercased()), each checked against the rip.")
+            let took = record?.seconds.map { " in \(Format.duration(seconds: $0))" } ?? ""
+            add(
+                "Encoded \(files.count) tracks as \(format.rawValue.uppercased())\(took), each checked against the rip."
+            )
         case .ripDeleted:
             add("Deleted the rip's WAV files. The rip report is in the album folder.")
         case .ripKept(let folder):
@@ -456,9 +499,9 @@ final class RipRun {
 
     private func handle(_ event: RipEvent) {
         switch event {
-        case .reading(let track, let pass, let progress):
+        case .reading(let track, let pass, let passes, let progress):
             let fraction = progress.sectors > 0 ? Double(progress.sectorsRead) / Double(progress.sectors) : 0
-            trackStates[track] = .reading(pass: pass, fraction: fraction)
+            trackStates[track] = .reading(pass: pass, passes: passes, fraction: fraction)
             if pass == 1 {
                 sectorsInPass = min(progress.sectorsRead, trackErrors[track]?.sectors ?? progress.sectorsRead)
             }

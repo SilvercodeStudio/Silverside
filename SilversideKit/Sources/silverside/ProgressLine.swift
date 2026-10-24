@@ -22,10 +22,9 @@ final class ProgressLine {
         guard isShown else { return }
         let text: String
         switch event {
-        case .reading(_, let number, let progress):
-            guard
-                let line = readLine(progress, pass: number, name: number == 1 ? "read 1" : "read \(number) to compare")
-            else { return }
+        case .reading(_, let number, let passes, let progress):
+            let name = number == 1 ? "read 1" : "read \(number) of up to \(passes), to compare"
+            guard let line = readLine(progress, pass: number, name: name) else { return }
             text = line
         case .testing(_, let progress):
             // The test read comes after every other read of the track: pass 0 stands for it.

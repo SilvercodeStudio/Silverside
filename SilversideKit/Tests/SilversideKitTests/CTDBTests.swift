@@ -246,4 +246,13 @@ struct CTDBTests {
         let candidates = CTDB.column0Syndromes(of: audio, layout: layout, count: 16)
         #expect(CTDB.shifts(matching: column0, in: candidates, layout: layout).first == .init(shift: shift, errors: 0))
     }
+
+    /// The parallel map keeps the items' order and leaves out the nils, however the work is split.
+    @Test func parallelMapKeepsTheOrder() {
+        let items = Array(0..<10_001)
+        let squares = CTDB.parallelMap(over: items) { $0 % 3 == 0 ? nil : $0 * $0 }
+        #expect(squares == items.filter { $0 % 3 != 0 }.map { $0 * $0 })
+        #expect(CTDB.parallelMap(over: [Int]()) { $0 } == [])
+        #expect(CTDB.parallelMap(over: [7]) { $0 + 1 } == [8])
+    }
 }

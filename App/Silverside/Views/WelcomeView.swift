@@ -28,13 +28,11 @@ struct WelcomeView: View {
 
         var text: String {
             switch self {
-            case .alac: "An exact copy of the CD. The best choice for the Music app, iPhone, and other Apple devices."
-            case .flac:
-                "An exact copy of the CD, in a format most other players and systems can use. Apple's Music app does not play it."
-            case .aac:
-                "About a fifth of the size, and most people cannot hear a difference. Plays on Apple devices and most other systems."
+            case .alac: "An exact copy of the CD. Best for the Music app, iPhone, and other Apple devices."
+            case .flac: "An exact copy of the CD, for most other systems and players. Apple's Music app does not play it."
+            case .aac: "A fifth of the size, and most people cannot hear a difference. Plays almost everywhere."
             case .mp3: "Plays on almost anything, old or new. AAC sounds a little better at the same size."
-            case .wav: "No encoding: each rip stays in the rips folder as uncompressed WAV files, without tags."
+            case .wav: "No encoding: rips stay in the rips folder as uncompressed WAV files, with no tags."
             }
         }
 
@@ -51,9 +49,9 @@ struct WelcomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Hero(height: 124, iconSize: 112)
+            Hero(height: 104, iconSize: 96)
             Theme.sheen.frame(height: 3)
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
                 VStack(spacing: 6) {
                     Text("Welcome to Silverside").font(.system(size: 26, weight: .bold))
                     Text(
@@ -71,7 +69,7 @@ struct WelcomeView: View {
                         ChoiceRow(
                             choice: item, isSelected: item == choice,
                             unavailable: item == .mp3 && lame == nil
-                                ? "Needs the LAME encoder first. Install it with Homebrew (brew install lame), and this choice turns on by itself."
+                                ? "Needs the LAME encoder: install it with Homebrew (brew install lame), and this turns on."
                                 : nil
                         ) { choice = item }
                     }
@@ -103,9 +101,11 @@ struct WelcomeView: View {
                 }
                 .controlSize(.large)
             }
-            .padding(24)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
         }
-        .frame(width: 600)
+        // Wide enough that each choice's text is one line, so the window fits a 13-inch screen.
+        .frame(width: 720)
         .watchingForLAME($lame)
         .onChange(of: lame) { if lame == nil && choice == .mp3 { choice = .flac } }
         .onAppear {

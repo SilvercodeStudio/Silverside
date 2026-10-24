@@ -54,8 +54,11 @@
         /// an 8-bit code) ten times a second, scrambled as the decoder expects (see `HDCDTests`).
         /// The last tenth of a second has none, so that the disc's end cuts no packet short:
         /// silence in place of its code would read as a code that asks for a gain.
+        /// `-demoHDCDCode 19` gives another code (type A: 16 is peak extend, 1 to 7 a gain), so
+        /// that the rip asks whether to decode.
         private static func hdcdBits(count: Int) -> [Bool] {
-            let packet = UInt64(0x7e0f_a005) << 8
+            let code = UInt64(UserDefaults.standard.integer(forKey: "demoHDCDCode") & 0x37)
+            let packet = UInt64(0x7e0f_a005) << 8 | code
             let block = (0..<4410).map { $0 >= 4370 && packet >> (4409 - $0) & 1 == 1 }
             var plain = [Bool]()
             while plain.count + 2 * block.count <= count { plain += block }

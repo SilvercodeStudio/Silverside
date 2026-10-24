@@ -781,6 +781,7 @@ enum ResultChips {
             chips.append(
                 Chip(
                     text: "Encoded · \(encoding.format.rawValue.uppercased())"
+                        + (encoding.hdcdDecoded == true ? " · HDCD decoded" : "")
                         + (all ? "" : " · \(encoding.files.count) tracks"),
                     tone: all ? .good : .warning, systemImage: "music.note"))
         }

@@ -60,8 +60,20 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
 - `Rip Report.md`, and `Track 00.wav` if the disc has hidden track one audio
 
 The report also says whether the tracks have HDCD codes, and what they ask of
-a decoder (peak extend, a gain adjustment, or nothing). The files hold the
-audio as it is on the disc: Silverside does not decode HDCD yet.
+a decoder (peak extend, a gain adjustment, or nothing), and the encoded files
+of such a disc are tagged `MEDIA=HDCD`. For a disc whose codes
+ask for something, `--hdcd decode` (or the `hdcd` setting) decodes them into
+20-bit FLAC or Apple Lossless files (24-bit AIFF and WAV) tagged `HDCD=decoded`,
+with ReplayGain measured on the decode;
+`--hdcd keep` encodes the audio as pressed. With `ask`, the default, `rip` asks
+at a terminal (yes for AAC and MP3, no for the lossless formats), and `encode`
+keeps the audio as pressed.
+
+`encode -i` also takes an album folder in the library: the album is encoded
+again from its lossless files, each checked against the rip's CRC-32 first.
+`--hdcd-copy` writes the decode as an album of its own beside it,
+`<Album> (HDCD)` (`--hdcd-copy-suffix "(HDCD AAC)"` names it otherwise); `--hdcd decode --overwrite` decodes in place, in the album's
+format.
 
 `silverside encode` (or `rip --encode`) puts the files in the library as
 `Artist/Album/18-03 Title.flac` (disc 18, track 3), with every disc of a
@@ -124,6 +136,7 @@ silverside config unset aac.mode                     # back to the default
 | `replayGain` | `true` | ReplayGain tags: each track's gain and peak and the album's, as EBU R 128 measures them, for players that level albums; the audio is not changed (`encode --no-replay-gain`) |
 | `addToMusic` | `false` | add the encoded files to the Music app, except FLAC (`--add-to-music`) |
 | `ripOnInsert` | `false` | the app rips a disc when it goes in, if its release is certain and it is not ripped yet |
+| `hdcd` | `ask` | for a disc whose HDCD codes ask for peak extend or a gain: `decode` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--hdcd`) |
 | `aac.mode`, `aac.bitRate`, `aac.vbrQuality` | `vbr-constrained`, `256`, `127` | Apple's AAC encoder |
 | `mp3.mode`, `mp3.vbrQuality`, `mp3.bitRate`, `mp3.extraArguments` | `vbr`, `0`, `320`, `[]` | LAME |
 

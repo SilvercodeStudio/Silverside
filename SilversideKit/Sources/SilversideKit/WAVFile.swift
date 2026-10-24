@@ -1,6 +1,6 @@
 import Foundation
 
-/// Writes CD audio as a WAV file: 44.1 kHz, 16-bit, stereo PCM.
+/// Writes CD audio as a WAV file: 44.1 kHz, 16-bit, stereo PCM (or 24-bit, for an HDCD decode).
 public enum WAVFile {
     public static func data(for samples: [UInt32]) -> Data {
         let dataSize = UInt32(samples.count * CDDA.bytesPerSample)
@@ -30,6 +30,46 @@ public enum WAVFile {
 
     public static func write(_ samples: [UInt32], to url: URL) throws {
         try data(for: samples).write(to: url, options: .atomic)
+    }
+
+    /// A 24-bit WAV file of `values` (`TrackPCM.wide`: each value's high 24 bits).
+    public static func data(forWide values: [Int32]) -> Data {
+        let dataSize = UInt32(values.count * 3)
+        var data = Data(capacity: 44 + Int(dataSize))
+        func append(_ text: String) { data.append(contentsOf: Array(text.utf8)) }
+        func append32(_ value: UInt32) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+        func append16(_ value: UInt16) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+
+        append("RIFF")
+        append32(36 + dataSize)
+        append("WAVE")
+        append("fmt ")
+        append32(16)
+        append16(1)  // PCM
+        append16(2)  // channels
+        append32(44100)
+        append32(44100 * 6)  // bytes per second
+        append16(6)  // bytes per frame
+        append16(24)  // bits per sample
+        append("data")
+        append32(dataSize)
+        var bytes = [UInt8](repeating: 0, count: Int(dataSize))
+        for (index, value) in values.enumerated() {
+            let bits = UInt32(bitPattern: value)
+            bytes[3 * index] = UInt8(truncatingIfNeeded: bits >> 8)
+            bytes[3 * index + 1] = UInt8(truncatingIfNeeded: bits >> 16)
+            bytes[3 * index + 2] = UInt8(truncatingIfNeeded: bits >> 24)
+        }
+        data.append(contentsOf: bytes)
+        return data
+    }
+
+    /// Writes 16-bit or 24-bit audio as a WAV file.
+    public static func write(_ pcm: TrackPCM, to url: URL) throws {
+        switch pcm {
+        case .cd(let samples): try write(samples, to: url)
+        case .wide(let values): try data(forWide: values).write(to: url, options: .atomic)
+        }
     }
 
     /// Reads CD audio from a WAV file that holds 44.1 kHz, 16-bit, stereo PCM, in the plain

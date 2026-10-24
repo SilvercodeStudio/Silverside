@@ -57,6 +57,8 @@ public struct Settings: Codable, Equatable, Sendable {
     public var addToMusic = false
     /// The app rips a disc when it goes in, if MusicBrainz names its release for certain.
     public var ripOnInsert = false
+    /// What to do with a disc whose HDCD codes ask for peak extend or a gain adjustment.
+    public var hdcd = HDCDChoice.ask
 
     public init() {}
 
@@ -194,6 +196,7 @@ public struct Settings: Codable, Equatable, Sendable {
         replayGain = try value(.replayGain, defaults.replayGain)
         addToMusic = try value(.addToMusic, defaults.addToMusic)
         ripOnInsert = try value(.ripOnInsert, defaults.ripOnInsert)
+        hdcd = try value(.hdcd, defaults.hdcd)
     }
 }
 

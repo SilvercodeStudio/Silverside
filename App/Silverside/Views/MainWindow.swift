@@ -10,6 +10,8 @@ struct MainWindow: View {
 
     /// A rip that waits to hear whether to replace files in the library.
     private var questionRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.overwriteQuestion != nil } }
+    /// A rip that waits to hear whether to decode its HDCD codes.
+    private var hdcdRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.hdcdQuestion != nil } }
 
     private static func message(for question: RipRun.OverwriteQuestion) -> String {
         let files = question.existing.count == 1 ? "1 file" : "\(question.existing.count) files"
@@ -51,6 +53,9 @@ struct MainWindow: View {
         .sheet(isPresented: $model.repairShown) {
             if let run = model.repair { RepairSheet(run: run) }
         }
+        .sheet(isPresented: Binding(get: { hdcdRip != nil }, set: { _ in })) {
+            if let rip = hdcdRip, let question = rip.hdcdQuestion { HDCDQuestionSheet(rip: rip, question: question) }
+        }
         .sheet(isPresented: $model.libraryShown) {
             if let run = model.library { LibrarySheet(run: run) }
         }
@@ -72,7 +77,7 @@ struct MainWindow: View {
                     }
                 }
                 // `-selectRecent 1` shows the newest earlier rip, for screenshots of the results;
-                // with `-repair 1` too, its repair starts.
+                // with `-repair 1` too, its repair starts, and with `-hdcdDecode 1`, Decode HDCD opens.
                 if UserDefaults.standard.bool(forKey: "selectRecent") {
                     Task { @MainActor in
                         try? await Task.sleep(for: .seconds(1))

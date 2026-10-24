@@ -45,6 +45,17 @@ final class RipRun {
         var folder: URL? { existing.first?.deletingLastPathComponent() }
     }
 
+    /// The rip found HDCD codes that change the audio: it waits for `answerHDCD(decodes:)`.
+    struct HDCDQuestion: Identifiable {
+        let id = UUID()
+        var album: String
+        /// What the codes ask for, from the report.
+        var text: String?
+        var format: AudioFormat
+        /// Decoding is the advice for a lossy format, where it costs no space.
+        var recommendsDecoding: Bool { !format.isLossless }
+    }
+
     /// The sectors of a track that the drive flagged, could not read, or that reads disagree on,
     /// counted from the track's start, for the error strip.
     struct TrackErrors: Equatable {
@@ -92,6 +103,7 @@ final class RipRun {
     /// True if the encoded files go into Music.
     private(set) var addsToMusic = false
     private(set) var overwriteQuestion: OverwriteQuestion?
+    private(set) var hdcdQuestion: HDCDQuestion?
     private(set) var startDate = Date()
     private(set) var endDate: Date?
     /// Sectors read so far, over every track to rip, for the whole-rip progress.
@@ -109,6 +121,7 @@ final class RipRun {
     @ObservationIgnored private var tracksToRip: [Int] = []
     @ObservationIgnored private var sectorsBefore: [Int: Int] = [:]
     @ObservationIgnored private var overwriteAnswer: CheckedContinuation<Bool, Never>?
+    @ObservationIgnored private var hdcdAnswer: CheckedContinuation<Bool, Never>?
     /// Hears the question about files in the library, so the app can show the drive and ask for attention.
     @ObservationIgnored var onQuestion: (@MainActor () -> Void)?
 
@@ -197,6 +210,13 @@ final class RipRun {
                         }
                     }
                 }
+                rip.chooseHDCD = { report, format in
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated { run.askHDCD(report, format: format, answer: continuation) }
+                        }
+                    }
+                }
                 let result = try await rip.run()
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
@@ -248,6 +268,25 @@ final class RipRun {
         task?.cancel()
         // A rip that waits for the question stops when it hears the answer.
         if overwriteQuestion != nil { answer(replaces: false) }
+        if hdcdQuestion != nil { answerHDCD(decodes: false) }
+    }
+
+    private func askHDCD(_ report: RipReport, format: AudioFormat, answer: CheckedContinuation<Bool, Never>) {
+        hdcdAnswer = answer
+        hdcdQuestion = HDCDQuestion(album: disc.title, text: report.hdcdText, format: format)
+        add("HDCD codes that change the audio. Waiting for an answer: decode them, or keep the audio as pressed...")
+        onQuestion?()
+    }
+
+    /// Answers the HDCD question: true decodes the codes.
+    func answerHDCD(decodes: Bool) {
+        guard let hdcdAnswer else { return }
+        self.hdcdAnswer = nil
+        hdcdQuestion = nil
+        add(
+            decodes
+                ? "Decoding the HDCD codes." : "Keeping the audio as pressed, with its HDCD codes.")
+        hdcdAnswer.resume(returning: decodes)
     }
 
     private func ask(_ existing: [URL], answer: CheckedContinuation<Bool, Never>) {
@@ -309,6 +348,7 @@ final class RipRun {
         case .starting: return "Starting…"
         case .ripping:
             if overwriteQuestion != nil { return "Waiting for your answer about the library…" }
+            if hdcdQuestion != nil { return "Waiting for your answer about HDCD…" }
             // Between the last read and the encoding: the cover, the lookups' results, and the report.
             guard let currentTrack else {
                 if isSavingArtwork { return "Saving the cover art…" }

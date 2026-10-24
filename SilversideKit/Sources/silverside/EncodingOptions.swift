@@ -63,6 +63,19 @@ struct EncodingOptions: ParsableArguments {
     )
     var addToMusic: Bool?
 
+    @Option(
+        help: """
+            For a disc whose HDCD codes ask for peak extend or a gain adjustment: decode them into 20-bit files \
+            (24-bit for AIFF and WAV) tagged HDCD=decoded, or keep the audio as it is on the disc. ask (the setting's default) asks in rip at \
+            a terminal, and keeps it otherwise.
+            """)
+    var hdcd: HDCDChoice?
+
+    /// The HDCD choice: the option, else the setting.
+    func hdcdChoice(_ settings: Settings) -> HDCDChoice {
+        hdcd ?? settings.hdcd
+    }
+
     /// Add the files to Music: the option, else the setting; never for a format Music cannot read.
     func addsToMusic(_ settings: Settings) -> Bool {
         addToMusic ?? settings.addToMusic
@@ -86,6 +99,7 @@ struct EncodingOptions: ParsableArguments {
         if !lameOption.isEmpty { encoder.mp3.extraArguments = lameOption }
         encoder.overwrites = overwrite
         if let replayGain { encoder.replayGain = replayGain }
+        encoder.decodesHDCD = hdcdChoice(settings) == .decode
         return (encoder, library.map(Settings.expand) ?? settings.libraryURL)
     }
 }
@@ -95,3 +109,4 @@ extension AACOptions.Mode: ExpressibleByArgument {}
 extension MP3Options.Mode: ExpressibleByArgument {}
 extension ArtworkChoice: ExpressibleByArgument {}
 extension SegueMarks: ExpressibleByArgument {}
+extension HDCDChoice: ExpressibleByArgument {}

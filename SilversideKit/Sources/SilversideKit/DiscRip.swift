@@ -52,6 +52,9 @@ public struct DiscRipOptions: Sendable {
     public var cover: CoverImage?
     /// After encoding, add the files to Apple's Music app, if it reads the format.
     public var addsToMusic: Bool
+    /// For a disc whose HDCD codes ask for peak extend or a gain adjustment: decode, keep, or
+    /// ask `DiscRip.chooseHDCD`.
+    public var hdcd: HDCDChoice
 
     public init(settings: Settings) {
         artwork = settings.artwork
@@ -59,6 +62,7 @@ public struct DiscRipOptions: Sendable {
         testAndCopy = settings.testAndCopy
         keepsRip = settings.keepRipAfterEncoding
         addsToMusic = settings.addToMusic
+        hdcd = settings.hdcd
     }
 }
 
@@ -179,6 +183,10 @@ public struct DiscRip {
     /// the rip and before the encoder writes any. False keeps them, and the rip is not encoded.
     /// Nil asks nothing: the encoding stops with `EncodingError.exists` unless the encoder overwrites.
     public var confirmOverwrite: (@Sendable (_ existing: [URL]) async -> Bool)?
+    /// With `options.hdcd` at `.ask`, for a disc whose HDCD codes ask for peak extend or a gain
+    /// adjustment: called after the rip, before encoding. True decodes the codes into 20-bit
+    /// files. Nil asks nothing, and the disc is encoded as it is.
+    public var chooseHDCD: (@Sendable (_ report: RipReport, _ format: AudioFormat) async -> Bool)?
     public var profiles: DriveProfileStore
     /// The client for every lookup and download. Tests give one with a fake transport.
     public var webClient = WebClient.shared
@@ -513,6 +521,15 @@ public struct DiscRip {
                         return result
                     }
                     encoder.overwrites = true
+                }
+            }
+            switch options.hdcd {
+            case .decode: encoder.decodesHDCD = true
+            case .keep: encoder.decodesHDCD = false
+            case .ask:
+                if report.hdcd == .featuresUsed, let chooseHDCD {
+                    encoder.decodesHDCD = await chooseHDCD(report, encoder.format)
+                    try stop.check()
                 }
             }
             events(.encoding(encoder.format))

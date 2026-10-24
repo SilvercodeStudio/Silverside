@@ -78,7 +78,7 @@ extension DiscEncoder {
 
         // The names: the rip's edits, with the release's kept album names on top.
         let edits = MetadataEdits.current(forReportAt: file, release: original, store: editsStore)
-        let release = edits.applied(to: original, toc: toc)
+        var release = edits.applied(to: original, toc: toc)
         guard let medium = release.medium(for: toc) else { throw EncodingError.unknownMedium(folder) }
         let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
 
@@ -100,6 +100,8 @@ extension DiscEncoder {
             }
         }
         var albumFolder = report.encoding.map { URL(filePath: $0.folder, directoryHint: .isDirectory) }
+        // A decoded copy beside the album keeps its title's suffix, and so its own folder.
+        if let suffix = report.encoding?.albumSuffix { release.title += suffix }
 
         // The cover: the new one into every folder the album has, else the one there already.
         var coverFile: URL?
@@ -203,7 +205,7 @@ extension DiscEncoder {
             }
             let gain = encoding.replayGain
             let comments =
-                meta.vorbisComments
+                meta.vorbisComments + HDCDStatus.tags(report.hdcd, decoded: encoding.hdcdDecoded == true)
                 + ReplayGain.tags(
                     track: gain?.tracks.first { $0.track == entry.track }?.values, album: gain?.albumInTags)
             // A file whose tags are already these is left alone (a library on a network
@@ -319,7 +321,11 @@ extension DiscEncoder {
         let files = encoding.files.map { album.appending(path: $0.file) }
         let measured = CTDB.parallelMap(over: files, lanes: defaultParallelTracks) {
             file -> Result<ReplayGain.Analysis, any Error>? in
-            Result { ReplayGain.analyze(try AudioEncoder.decode(file)) }
+            Result {
+                encoding.hdcdDecoded == true
+                    ? ReplayGain.analyze(.wide(try AudioEncoder.decodeWide(file)))
+                    : ReplayGain.analyze(try AudioEncoder.decode(file))
+            }
         }
         return ReplayGain.Histogram(try measured.map { try $0.get() })
     }

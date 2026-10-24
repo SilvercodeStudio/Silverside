@@ -247,6 +247,12 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var seconds: Int?
         /// The ReplayGain values written into the tags. Nil when they were not, and in older records.
         public var replayGain: ReplayGainRecord?
+        /// True if the files hold the HDCD decode of the rip (at the format's `hdcdBits`), tagged HDCD=decoded.
+        /// Nil (or false) when they hold the audio as it is on the disc.
+        public var hdcdDecoded: Bool?
+        /// Added to the album's title in the names and tags, as " (HDCD)" for a decoded copy
+        /// beside the album as it is on the disc. Nil for the album itself.
+        public var albumSuffix: String?
 
         /// The loudness of the album and its tracks, as the ReplayGain tags have them.
         public struct ReplayGainRecord: Codable, Equatable, Sendable {
@@ -318,7 +324,13 @@ public struct RipReport: Codable, Equatable, Sendable {
 
         /// How each file was checked after it was written.
         public var checkText: String {
-            format.isLossless
+            if hdcdDecoded == true {
+                return format.isLossless
+                    ? "HDCD decoded, at \(format.hdcdBits) bits: each file decodes to exactly the HDCD decode of the"
+                        + " ripped audio."
+                    : "HDCD decoded: each file decodes to the track's length; a lossy file cannot equal the rip."
+            }
+            return format.isLossless
                 ? "Each file decodes to exactly the ripped audio."
                 : "Each file decodes to the track's length; a lossy file cannot equal the rip."
         }

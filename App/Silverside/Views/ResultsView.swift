@@ -12,6 +12,7 @@ struct ResultsView: View {
     /// The report file, for a report kept in the library; nil means the folder's disc.json.
     var reportFile: URL?
     @State private var reportShown = true
+    @State private var hdcdDecodeShown = false
     /// The cover in the rip's folder, or in the album folder for a report kept in the library.
     @State private var cover: Data?
     @State private var coverTargeted = false
@@ -93,6 +94,10 @@ struct ResultsView: View {
             saveNames()
         }
         .onDisappear { saveNames() }
+        .sheet(isPresented: $hdcdDecodeShown) { HDCDDecodeSheet(rip: recentRip) }
+        #if DEBUG
+            .onAppear { hdcdDecodeShown = canDecodeHDCD && UserDefaults.standard.bool(forKey: "hdcdDecode") }
+        #endif
         .navigationTitle(shownRelease.map { "\($0.title)" } ?? folder.lastPathComponent)
         .navigationSubtitle(
             [shownRelease?.artist, report.drive.vendor + " " + report.drive.product].compactMap { $0 }.joined(
@@ -108,6 +113,17 @@ struct ResultsView: View {
                     }
                     .help(encodeHelp)
                     .disabled(!report.isVerified || model.library?.isRunning == true)
+                }
+                if canDecodeHDCD {
+                    Button {
+                        hdcdDecodeShown = true
+                    } label: {
+                        Label("Decode HDCD…", systemImage: "waveform.badge.plus")
+                    }
+                    .help(
+                        "Decode the HDCD codes: a copy beside the album, or in place of its files"
+                    )
+                    .disabled(model.library?.isRunning == true)
                 }
                 Button {
                     model.startRepair(RecentRip(folder: folder, report: report))
@@ -130,6 +146,13 @@ struct ResultsView: View {
                 }
             }
         }
+    }
+
+    /// A rip whose HDCD codes change the audio, not decoded yet, with lossless audio to decode:
+    /// its WAV files, or the album's files.
+    private var canDecodeHDCD: Bool {
+        guard report.hdcd == .featuresUsed, report.encoding?.hdcdDecoded != true else { return false }
+        return hasAudio || report.encoding?.format.isLossless == true
     }
 
     private var encodeHelp: String {

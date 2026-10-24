@@ -104,6 +104,7 @@ struct Rip: AsyncParsableCommand {
         options.pool = pool.map { URL(filePath: $0, directoryHint: .isDirectory) }
         if let keepRip { options.keepsRip = keepRip }
         options.addsToMusic = encoding.addsToMusic(settings)
+        options.hdcd = encoding.hdcdChoice(settings)
 
         var rip = DiscRip(
             drive: drive,
@@ -118,6 +119,10 @@ struct Rip: AsyncParsableCommand {
             rip.confirmOverwrite = { [printer] existing in
                 printer.progress.clear()
                 return Self.askToOverwrite(existing)
+            }
+            rip.chooseHDCD = { [printer] report, format in
+                printer.progress.clear()
+                return Self.askToDecodeHDCD(report, format: format)
             }
         }
         // Ctrl-C stops the rip after the read under way; the tracks done so far stay.
@@ -157,6 +162,24 @@ struct Rip: AsyncParsableCommand {
         fflush(stdout)
         let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
         return answer == "y" || answer == "yes"
+    }
+
+    /// Asks at the terminal whether to decode a disc's HDCD codes. The default is the
+    /// recommendation: decode for AAC and MP3, where it costs no space; keep for the lossless
+    /// formats, whose files then stay bit for bit as the disc has them.
+    static func askToDecodeHDCD(_ report: RipReport, format: AudioFormat) -> Bool {
+        print()
+        if let text = report.hdcdText { print(text) }
+        let recommended = !format.isLossless
+        print(
+            recommended
+                ? "Decoding gives the \(format.name) encoder the decoded audio, at no cost in size."
+                : "Decoding makes \(format.hdcdBits)-bit \(format.name) files, which are larger and no longer bit for"
+                    + " bit the disc; kept, the codes stay in the files, so they can be decoded later.")
+        print("Decode the HDCD codes? [\(recommended ? "Y/n" : "y/N")] ", terminator: "")
+        fflush(stdout)
+        let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        return answer.isEmpty ? recommended : answer == "y" || answer == "yes"
     }
 
     static func trackNumbers(_ list: String) throws -> [Int] {

@@ -21,6 +21,8 @@ public struct RippedDisc: Sendable {
     public var tracks: [Track]
     /// The rip's report, if the folder has one (rips before reports, in the archive, do not).
     public var report: RipReport?
+    /// The file the report is in: the rip's disc.json, or an album folder's "Rip Report (Disc N).json".
+    public var reportFile: URL
 
     /// Deletes the files that the rip wrote in its folder, as its report lists them (the WAV
     /// files, the suspects, the reports, and the artwork), and nothing else. Then the Artwork
@@ -55,6 +57,7 @@ public struct RippedDisc: Sendable {
 
     public init(folder: URL) throws {
         self.folder = folder
+        reportFile = folder.appending(path: "disc.json")
         let data = try Data(contentsOf: folder.appending(path: "disc.json"))
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             let tocString = object["toc"] as? String
@@ -104,6 +107,55 @@ public struct RippedDisc: Sendable {
     }
 }
 
+extension RippedDisc {
+    /// An album in the library as the source of an encoding, after its rip's WAV files are
+    /// gone: the album folder's report, and the files it lists, which must be lossless. Each
+    /// file must decode to the audio the rip verified (its CRC-32), or reading it throws.
+    public init(albumReportAt file: URL, editsStore: ReleaseEditsStore = ReleaseEditsStore()) throws {
+        let folder = file.deletingLastPathComponent()
+        let report = try RipReport.read(from: file)
+        guard let encoding = report.encoding else { throw EncodingError.noDiscJSON(folder) }
+        guard encoding.format.isLossless else { throw EncodingError.lossySource(folder) }
+        guard encoding.hdcdDecoded != true else { throw EncodingError.alreadyDecoded(folder) }
+        self.folder = folder
+        reportFile = file
+        self.report = report
+        let toc = try TOC(ctdbTOCString: report.toc)
+        self.toc = toc
+        let edits = report.release.map { MetadataEdits.current(forReportAt: file, release: $0, store: editsStore) }
+        self.edits = edits
+        release = report.release.map { edits?.applied(to: $0, toc: toc) ?? $0 }
+        let tracks: [Track] = report.tracks.compactMap { track in
+            encoding.file(ofTrack: track.number).map {
+                Track(
+                    number: track.number, file: folder.appending(path: $0),
+                    isVerified: report.isVerified || track.accurateRip == .accurate
+                        || track.accurateRip == .otherPressings || (track.ctdbConfidence ?? 0) > 0,
+                    isrc: track.isrc)
+            }
+        }
+        let hidden = report.hiddenTrack.flatMap { hidden in
+            encoding.file(ofTrack: 0).map {
+                Track(number: 0, file: folder.appending(path: $0), isVerified: hidden.readsAgree, isrc: nil)
+            }
+        }
+        self.tracks = (hidden.map { [$0] } ?? []) + tracks
+    }
+
+    /// A track's ripped audio: its WAV file, or a lossless encoded file, which must decode to
+    /// the CRC-32 the report has for the track.
+    func audio(of track: Track) throws -> [UInt32] {
+        if track.file.pathExtension.lowercased() == "wav" { return try WAVFile.read(track.file) }
+        let samples = try AudioEncoder.decode(track.file)
+        if let expected = report?.tracks.first(where: { $0.number == track.number })?.crc32,
+            CRC32.hex(CRC32.checksum(of: samples[...])) != expected
+        {
+            throw EncodingError.sourceChanged(track.file)
+        }
+        return samples
+    }
+}
+
 public enum EncodingError: Error, Equatable, CustomStringConvertible {
     case noDiscJSON(URL)
     case noRelease(URL)
@@ -111,6 +163,9 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
     case notVerified(track: Int)
     case exists(URL)
     case verificationFailed(URL)
+    case lossySource(URL)
+    case alreadyDecoded(URL)
+    case sourceChanged(URL)
 
     public var description: String {
         switch self {
@@ -122,6 +177,11 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
             "Track \(track) is not verified by AccurateRip or CTDB. Use --allow-unverified to encode it anyway."
         case .exists(let file): "\(file.path) exists. Use --overwrite to replace it."
         case .verificationFailed(let file): "\(file.path) does not decode to the ripped audio."
+        case .lossySource(let folder):
+            "\(folder.path) holds lossy files, which no longer have the ripped audio to encode from."
+        case .alreadyDecoded(let folder):
+            "\(folder.path) holds an HDCD decode, which is no longer the ripped audio to encode from."
+        case .sourceChanged(let file): "\(file.path) no longer decodes to the audio that was ripped and verified."
         }
     }
 }
@@ -146,6 +206,12 @@ public struct DiscEncoder: Sendable {
     public var overwrites = false
     /// Write ReplayGain tags: each track's gain and peak, and the album's, measured as EBU R 128 does.
     public var replayGain = true
+    /// Decode a disc whose HDCD codes ask for peak extend or a gain adjustment into 20-bit (24-bit for AIFF and WAV)
+    /// files, tagged HDCD=decoded. A disc whose codes ask for nothing is encoded as it is.
+    public var decodesHDCD = false
+    /// Added to the album's title in names and tags, as " (HDCD)" for a decoded copy beside
+    /// the album: the copy gets a folder of its own, and players list it apart.
+    public var albumSuffix: String?
     /// How many tracks encode at once. Each track in flight holds its audio twice (the rip and
     /// the decoded check), about 300 MB for a long track, so the default stays at four even on
     /// a Mac with many cores: half the cores, at least two, at most four.
@@ -176,6 +242,7 @@ public struct DiscEncoder: Sendable {
         aac = settings.aac
         mp3 = settings.mp3
         replayGain = settings.replayGain
+        decodesHDCD = settings.hdcd == .decode
     }
 
     /// The files that `encode` would write, one for each track, in order. It throws as `encode`
@@ -199,7 +266,8 @@ public struct DiscEncoder: Sendable {
     private func plan(_ disc: RippedDisc, into library: URL) throws -> (
         release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium, jobs: [Job]
     ) {
-        guard let release = disc.release else { throw EncodingError.noRelease(disc.folder) }
+        guard var release = disc.release else { throw EncodingError.noRelease(disc.folder) }
+        if let albumSuffix { release.title += albumSuffix }
         guard let medium = release.medium(for: disc.toc) else { throw EncodingError.unknownMedium(disc.folder) }
         if !allowsUnverified, let track = disc.tracks.first(where: { !$0.isVerified }) {
             throw EncodingError.notVerified(track: track.number)
@@ -254,6 +322,14 @@ public struct DiscEncoder: Sendable {
 
         let cover = try disc.coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }
         let audioTracks = disc.toc.audioTracks
+        let hdcd = try decodesHDCD ? hdcdStatus(of: disc) : disc.report?.hdcd
+        let decodes = decodesHDCD && hdcd == .featuresUsed
+        if decodes {
+            log(
+                "HDCD: decoding the codes"
+                    + (format.isLossless ? " into \(format.hdcdBits)-bit files" : "") + ", tagged HDCD=decoded.")
+        }
+        for index in jobs.indices { jobs[index].extraComments = HDCDStatus.tags(hdcd, decoded: decodes) }
 
         // ReplayGain needs every track's loudness before the first tag is written: the album's
         // gain is one gating over all of them. The tracks are measured from their WAV files,
@@ -263,7 +339,7 @@ public struct DiscEncoder: Sendable {
         if replayGain {
             let measured = CTDB.parallelMap(over: jobs, lanes: parallelTracks) {
                 job -> Result<ReplayGain.Analysis, any Error>? in
-                Result { ReplayGain.analyze(try WAVFile.read(job.ripped.file)) }
+                Result { ReplayGain.analyze(try audio(of: job.ripped, in: disc, decodes: decodes)) }
             }
             let analyses = try measured.map { try $0.get() }
             let album = ReplayGain.album(of: analyses)
@@ -274,7 +350,7 @@ public struct DiscEncoder: Sendable {
             var tracks = [RipReport.Encoding.ReplayGainRecord.Track]()
             for (index, analysis) in analyses.enumerated() {
                 let track = analysis.loudness.map { ReplayGain.Values(loudness: $0, peak: analysis.peak) }
-                jobs[index].extraComments = ReplayGain.tags(track: track, album: whole?.values ?? album)
+                jobs[index].extraComments += ReplayGain.tags(track: track, album: whole?.values ?? album)
                 if let track { tracks.append(.init(track: jobs[index].ripped.number, values: track)) }
             }
             replayGainRecord = .init(
@@ -292,7 +368,7 @@ public struct DiscEncoder: Sendable {
         DispatchQueue.concurrentPerform(iterations: lanes) { lane in
             for index in stride(from: lane, to: laneJobs.count, by: lanes) where !outcomes.hasFailed {
                 do {
-                    try encoder.encode(laneJobs[index], cover: cover, lame: lame)
+                    try encoder.encode(laneJobs[index], of: disc, decodes: decodes, cover: cover, lame: lame)
                     outcomes.finish(index)
                 } catch {
                     outcomes.fail(index, error)
@@ -352,17 +428,25 @@ public struct DiscEncoder: Sendable {
                 format: format, encoder: encoderName(lame: lame), aac: format == .aac ? aac : nil,
                 mp3: format == .mp3 ? mp3 : nil, folder: $0.path, files: encodedFiles,
                 seconds: Int(Date().timeIntervalSince(encodingStarted)), replayGain: replayGainRecord)
+        }.map {
+            var encoding = $0
+            encoding.hdcdDecoded = decodes ? true : nil
+            encoding.albumSuffix = albumSuffix
+            return encoding
         }
         if let albumFolder, let encoding {
             let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
             let destination = albumFolder.appending(path: "Rip Report\(discPart).json")
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
+            // An album encoded again from its own files keeps its report, with the new encoding.
+            if destination.standardizedFileURL != disc.reportFile.standardizedFileURL {
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.removeItem(at: destination)
+                }
+                try FileManager.default.copyItem(at: disc.reportFile, to: destination)
             }
-            try FileManager.default.copyItem(at: disc.folder.appending(path: "disc.json"), to: destination)
             try encoding.save(inReportAt: destination)
             if var report = disc.report {
-                report.release = report.release ?? release
+                report.release = release
                 report.encoding = encoding
                 try Data(report.markdown.utf8).write(to: albumFolder.appending(path: "Rip Report\(discPart).md"))
             }
@@ -410,34 +494,52 @@ public struct DiscEncoder: Sendable {
     }
 
     private func write(
-        _ samples: [UInt32], metadata: TrackMetadata, extra: [(key: String, value: String)], cover: EmbeddedCover?,
+        _ pcm: TrackPCM, metadata: TrackMetadata, extra: [(key: String, value: String)], cover: EmbeddedCover?,
         to url: URL, lame: URL?
     ) throws {
         let comments = metadata.vorbisComments + extra
         switch format {
         case .flac:
-            try AudioEncoder.encode(samples, format: .flac, to: url)
+            try AudioEncoder.encode(pcm, format: .flac, to: url)
             try FLACTags.write(comments, cover: cover, to: url)
         case .alac, .aac:
-            try AudioEncoder.encode(samples, format: format, to: url, aac: aac)
+            try AudioEncoder.encode(pcm, format: format, to: url, aac: aac)
             try MP4Tags.write(comments, cover: cover, to: url)
         case .aiff:
-            try AudioEncoder.encode(samples, format: .aiff, to: url)
+            try AudioEncoder.encode(pcm, format: .aiff, to: url)
             try ChunkTags.writeAIFF(comments, cover: cover, to: url)
         case .wav:
-            try WAVFile.write(samples, to: url)
+            try WAVFile.write(pcm, to: url)
             try ChunkTags.writeWAV(comments, cover: cover, to: url)
         case .mp3:
-            try MP3Encoder.encode(samples, to: url, lame: lame!, options: mp3)
+            try MP3Encoder.encode(pcm, to: url, lame: lame!, options: mp3)
             try ID3Tags.write(comments, cover: cover, to: url)
         }
     }
 
-    /// Encodes one track: reads its WAV file, writes a partial file, checks it, and moves it
+    /// A track's audio to encode: as ripped, or its HDCD decode, at the format's bits.
+    func audio(of track: RippedDisc.Track, in disc: RippedDisc, decodes: Bool) throws -> TrackPCM {
+        let samples = try disc.audio(of: track)
+        return decodes ? .wide(HDCDCodes.decode(samples, bits: format.hdcdBits)) : .cd(samples)
+    }
+
+    /// Whether the disc's HDCD codes ask for anything: from its report, or for a rip from
+    /// before Silverside looked for them, from its audio.
+    func hdcdStatus(of disc: RippedDisc) throws -> HDCDStatus {
+        if let known = disc.report?.hdcd { return known }
+        let found = CTDB.parallelMap(over: disc.tracks, lanes: parallelTracks) {
+            track -> Result<HDCDCodes?, any Error>? in
+            Result { HDCDCodes.scan(try disc.audio(of: track)) }
+        }
+        let codes = try found.compactMap { try $0.get() }
+        return codes.isEmpty ? .noCodes : codes.contains(where: \.changesAudio) ? .featuresUsed : .codesOnly
+    }
+
+    /// Encodes one track: reads its audio, writes a partial file, checks it, and moves it
     /// into place. Runs on one of the encoding lanes.
-    private func encode(_ job: Job, cover: EmbeddedCover?, lame: URL?) throws {
+    private func encode(_ job: Job, of disc: RippedDisc, decodes: Bool, cover: EmbeddedCover?, lame: URL?) throws {
         try FileManager.default.createDirectory(at: job.folder, withIntermediateDirectories: true)
-        let samples = try WAVFile.read(job.ripped.file)
+        let samples = try audio(of: job.ripped, in: disc, decodes: decodes)
         // Write to a partial file, and move it into place only when it is checked.
         let partial = job.folder.appending(path: ".\(UUID().uuidString).partial.\(format.fileExtension)")
         defer { try? FileManager.default.removeItem(at: partial) }
@@ -449,11 +551,17 @@ public struct DiscEncoder: Sendable {
         trackEncoded(job.ripped.number, job.file)
     }
 
-    /// Decodes the file: a lossless file must give the rip's samples; a lossy one, about as many.
-    private func check(_ url: URL, against samples: [UInt32], final: URL) throws {
-        let decoded = try AudioEncoder.decode(url)
-        let matches =
-            format.isLossless ? decoded == samples : abs(decoded.count - samples.count) < 4 * 1152
+    /// Decodes the file: a lossless file must give the samples it was made from; a lossy one, about as many.
+    private func check(_ url: URL, against pcm: TrackPCM, final: URL) throws {
+        let matches: Bool
+        switch pcm {
+        case .cd(let samples):
+            let decoded = try AudioEncoder.decode(url)
+            matches = format.isLossless ? decoded == samples : abs(decoded.count - samples.count) < 4 * 1152
+        case .wide(let values):
+            let decoded = try AudioEncoder.decodeWide(url)
+            matches = format.isLossless ? decoded == values : abs(decoded.count - values.count) < 8 * 1152
+        }
         guard matches else { throw EncodingError.verificationFailed(final) }
     }
 }

@@ -47,22 +47,25 @@ struct HDCDTests {
         }
 
         /// A quiet 440 Hz tone, the same in both channels, with the bits in its lowest bit.
-        var samples: [UInt32] {
+        var samples: [UInt32] { samples(amplitude: 3000) }
+
+        /// The tone at `amplitude`: above 22913 (-3.1 dBFS), peak extend changes it.
+        func samples(amplitude: Double) -> [UInt32] {
             lsb.enumerated().map { index, bit in
-                let tone = Int16(3000 * sin(2 * .pi * 440 * Double(index) / 44100)) & ~1 | (bit ? 1 : 0)
+                let tone = Int16(amplitude * sin(2 * .pi * 440 * Double(index) / 44100)) & ~1 | (bit ? 1 : 0)
                 return UInt32(UInt16(bitPattern: tone)) * 0x1_0001
             }
         }
     }
 
     /// Ten seconds of `packet`, ten times a second, which is how often HDCD masters send them.
-    func track(_ packet: Encoder.Packet) -> [UInt32] {
+    func track(_ packet: Encoder.Packet, seconds: Int = 10, amplitude: Double = 3000) -> [UInt32] {
         var encoder = Encoder()
-        for _ in 0..<100 {
+        for _ in 0..<(10 * seconds) {
             encoder.pause(4410 - 40)
             encoder.add(packet)
         }
-        return encoder.samples
+        return encoder.samples(amplitude: amplitude)
     }
 
     @Test func findsCodesThatAskForNothing() throws {
@@ -129,6 +132,205 @@ struct HDCDTests {
         report.hdcd = HDCDStatus(report.tracks)
         #expect(report.hdcd == .featuresUsed)
         #expect(report.hdcdText?.contains("2 of 3 tracks have HDCD codes") == true)
-        #expect(report.hdcdText?.contains("track 2: peak extend in places") == true)
+        #expect(report.hdcdText?.contains("(peak extend in places in track 2)") == true)
+        report.tracks[0].hdcd = HDCDCodes(packets: 9, peakExtend: .always, maxGainAdjustment: -4)
+        report.tracks[1].hdcd?.maxGainAdjustment = -0.5
+        report.tracks[2].hdcd = HDCDCodes(packets: 9, peakExtend: .always, maxGainAdjustment: -4)
+        #expect(
+            report.hdcdText?.contains(
+                "(peak extend in tracks 1 and 3; peak extend in places in track 2; gain down to -4.0 dB in tracks 1"
+                    + " and 3, -0.5 dB in track 2)") == true)
+    }
+
+    // MARK: Decoding
+
+    /// Without peak extend or a gain adjustment, the decode is the audio 15 bits up: the same
+    /// audio, 6.02 dB lower. Peak extend raises the samples above -3.1 dBFS.
+    @Test func decodesOnlyWhatTheCodesChange() {
+        /// The samples 15 bits up, interleaved.
+        func shifted(_ samples: [UInt32]) -> [Int32] {
+            samples.flatMap {
+                [Int32(Int16(truncatingIfNeeded: $0)) << 15, Int32(Int16(truncatingIfNeeded: $0 >> 16)) << 15]
+            }
+        }
+        let plain = track(.a(0), seconds: 2, amplitude: 30000)
+        #expect(HDCDCodes.decode(plain) == shifted(plain))
+
+        let extended = track(.a(0x10), seconds: 2, amplitude: 30000)
+        let decoded = HDCDCodes.decode(extended)
+        let expected = shifted(extended)
+        let lifted = zip(decoded, expected).filter { $0 != $1 }
+        #expect(!lifted.isEmpty)
+        // Only samples at or above the peak-extend level (22913 of 32768) change, and they grow.
+        #expect(lifted.allSatisfy { abs(Int($1)) >= 22913 << 15 && abs(Int($0)) > abs(Int($1)) })
+        #expect(decoded.allSatisfy { $0 & 0xFF == 0 })
+        // Below the peak-extend level, the audio is as it was.
+        let quiet = track(.a(0x10), seconds: 2, amplitude: 3000)
+        #expect(HDCDCodes.decode(quiet) == shifted(quiet))
+    }
+
+    /// FLAC and Apple Lossless keep 20 bits of a decode, AIFF and WAV 24.
+    @Test func writesAndReadsWideFiles() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let samples = track(.a(0x13), seconds: 2, amplitude: 30000)
+        let values = HDCDCodes.decode(samples)
+        #expect(values.contains { $0 & 0xF00 != 0 })
+        for format in [AudioFormat.flac, .alac, .aiff] {
+            let file = folder.appending(path: "t.\(format.rawValue)")
+            let decoded = HDCDCodes.decode(samples, bits: format.hdcdBits)
+            #expect(decoded.allSatisfy { $0 & ((1 << (32 - format.hdcdBits)) - 1) == 0 })
+            try AudioEncoder.encode(.wide(decoded), format: format, to: file)
+            #expect(try AudioEncoder.decodeWide(file) == decoded, "\(format)")
+        }
+        // A 20-bit format cuts the bits below 20, so 24-bit values would not survive.
+        let cut = folder.appending(path: "cut.flac")
+        try AudioEncoder.encode(.wide(values), format: .flac, to: cut)
+        #expect(try AudioEncoder.decodeWide(cut) == values.map { $0 & ~0xFFF })
+        let wav = folder.appending(path: "t.wav")
+        try WAVFile.write(.wide(values), to: wav)
+        #expect(try AudioEncoder.decodeWide(wav) == values)
+        let aac = folder.appending(path: "t.m4a")
+        try AudioEncoder.encode(.wide(values), format: .aac, to: aac)
+        #expect(abs(try AudioEncoder.decodeWide(aac).count - values.count) < 8 * 1152)
+        // ReplayGain reads both widths alike: the 16-bit audio 16 bits up is the same audio.
+        let cd = Array(AudioEncoderTests.samples.prefix(88_200))
+        let wide = cd.flatMap {
+            [Int32(Int16(truncatingIfNeeded: $0)) << 16, Int32(Int16(truncatingIfNeeded: $0 >> 16)) << 16]
+        }
+        let a = ReplayGain.analyze(cd)
+        let b = ReplayGain.analyze(.wide(wide))
+        #expect(a.peak == b.peak && abs((a.loudness ?? 0) - (b.loudness ?? 1)) < 1e-9)
+    }
+
+    /// A rip of two tracks with HDCD codes, as `DiscRip` writes it: the codes and the CRC-32s in its report.
+    func makeRip(_ packet: Encoder.Packet) throws -> (folder: URL, library: URL) {
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        let folder = root.appending(path: "rip")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let samples = track(packet, seconds: 2, amplitude: 30000)
+        let sectors = samples.count / 588
+        let toc = try TOC(audioTrackStarts: [0, sectors], leadOutLBA: 2 * sectors)
+        var tracks = [RipReport.Track]()
+        for number in 1...2 {
+            let audio = Array(samples.prefix(sectors * 588))
+            try WAVFile.write(audio, to: folder.appending(path: "Track 0\(number).wav"))
+            var track = RipReport.Track(
+                number: number, file: "Track 0\(number).wav", startLBA: (number - 1) * sectors, sectors: sectors,
+                preEmphasis: false, accurateRip: .accurate)
+            track.recordChecksums(of: audio, isFirstTrack: number == 1, isLastTrack: number == 2)
+            track.hdcd = HDCDCodes.scan(audio)
+            tracks.append(track)
+        }
+        func named(_ position: Int, _ title: String) -> MusicBrainzRelease.Track {
+            .init(
+                position: position, number: String(position), title: title, length: 2000,
+                artistCredit: [.init(name: "Grateful Dead")], recordingID: "rec\(position)")
+        }
+        var report = RipReport(
+            drive: .init(vendor: "V", product: "P", revision: "1", readOffset: 103, offsetSource: "test"),
+            secure: true, toc: toc, tracks: tracks, ctdb: .init(status: .verified))
+        report.hdcd = HDCDStatus(tracks)
+        report.release = MusicBrainzRelease(
+            id: "knick", title: "Dozin' at the Knick", artistCredit: [.init(name: "Grateful Dead")],
+            date: "1996-10-29", country: "US", status: "Official", barcode: nil, disambiguation: nil, labels: [],
+            releaseGroup: nil,
+            media: [
+                .init(
+                    position: 1, format: "HDCD", title: nil, discIDs: [],
+                    tracks: [named(1, "Hell in a Bucket"), named(2, "Dupree's Diamond Blues")])
+            ], hasFrontCover: false)
+        try report.write(to: folder.appending(path: "disc.json"))
+        return (folder, root.appending(path: "library"))
+    }
+
+    @Test func encodesTheDecodeAtTwentyBitsInFLAC() throws {
+        let (folder, library) = try makeRip(.a(0x13))
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        #expect(disc.report?.hdcd == .featuresUsed)
+        var encoder = DiscEncoder(format: .flac)
+        encoder.decodesHDCD = true
+        let (files, record) = try encoder.encodeWithRecord(disc, into: library)
+        #expect(record?.hdcdDecoded == true && record?.checkText.contains("HDCD decoded, at 20 bits") == true)
+        #expect(
+            try AudioEncoder.decodeWide(files[0]) == HDCDCodes.decode(try WAVFile.read(disc.tracks[0].file), bits: 20))
+        let tags = try FLACTags.read(files[0])
+        #expect(tags.contains { $0.key == "HDCD" && $0.value == "decoded" })
+        #expect(tags.contains { $0.key == "MEDIA" && $0.value == "HDCD" })
+        // The gain is measured on the decode: 6.02 dB lower than the disc, and 3 dB more for the
+        // codes' gain adjustment, less what peak extend gives back to this loud tone.
+        let gain = try #require(record?.replayGain?.tracks.first?.values.gain)
+        let kept = try DiscEncoder(format: .flac).encodeWithRecord(
+            disc, into: library.deletingLastPathComponent().appending(path: "kept"))
+        let keptGain = try #require(kept.encoding?.replayGain?.tracks.first?.values.gain)
+        #expect(gain - keptGain > 6 && gain - keptGain < 9.1)
+        #expect(kept.encoding?.hdcdDecoded == nil)
+        // Kept as pressed, the files say the disc is HDCD, and nothing more.
+        let keptTags = try FLACTags.read(kept.files[0])
+        #expect(
+            !keptTags.contains { $0.key == "HDCD" } && keptTags.contains { $0.key == "MEDIA" && $0.value == "HDCD" })
+    }
+
+    @Test func leavesADiscWhoseCodesAskForNothing() throws {
+        let (folder, library) = try makeRip(.a(0))
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        var encoder = DiscEncoder(format: .flac)
+        encoder.decodesHDCD = true
+        let disc = try RippedDisc(folder: folder)
+        let (files, record) = try encoder.encodeWithRecord(disc, into: library)
+        #expect(record?.hdcdDecoded == nil)
+        #expect(try AudioEncoder.decode(files[0]) == WAVFile.read(disc.tracks[0].file))
+        #expect(try FLACTags.read(files[0]).contains { $0.key == "MEDIA" && $0.value == "HDCD" })
+    }
+
+    /// The album as pressed, then a decoded copy beside it made from the album's own files.
+    @Test func decodesACopyBesideTheAlbumFromItsFiles() throws {
+        let (folder, library) = try makeRip(.a(0x10))
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let (files, _) = try DiscEncoder(format: .flac).encodeWithRecord(try RippedDisc(folder: folder), into: library)
+        let album = files[0].deletingLastPathComponent()
+        let source = try RippedDisc(albumReportAt: album.appending(path: "Rip Report.json"))
+        #expect(source.tracks.map(\.file) == files)
+
+        var encoder = DiscEncoder(format: .alac)
+        encoder.decodesHDCD = true
+        encoder.albumSuffix = " (HDCD)"
+        let (copies, record) = try encoder.encodeWithRecord(source, into: library)
+        let copyFolder = copies[0].deletingLastPathComponent()
+        #expect(copyFolder.lastPathComponent == "Dozin' at the Knick (HDCD)")
+        #expect(record?.albumSuffix == " (HDCD)" && record?.hdcdDecoded == true)
+        let tags = try MP4Tags.read(copies[0]).comments
+        #expect(tags.contains { $0.key == "ALBUM" && $0.value == "Dozin' at the Knick (HDCD)" })
+        #expect(tags.contains { $0.key == "HDCD" && $0.value == "decoded" })
+        #expect(try AudioEncoder.decodeWide(copies[0]) == HDCDCodes.decode(try AudioEncoder.decode(files[0]), bits: 20))
+        // The album as pressed is untouched, and its report still names its own files.
+        #expect(try RipReport.read(from: album.appending(path: "Rip Report.json")).encoding?.hdcdDecoded == nil)
+
+        // A library update keeps the copy's title, folder, and tag.
+        let update = try DiscEncoder(format: .alac).updateLibrary(
+            reportAt: copyFolder.appending(path: "Rip Report.json"), library: library)
+        #expect(update.albumFolder?.lastPathComponent == "Dozin' at the Knick (HDCD)" && update.renamed == 0)
+        #expect(try MP4Tags.read(copies[0]).comments.contains { $0.key == "HDCD" })
+
+        // A decode is not a source for another, and a file that changed is refused.
+        #expect(throws: EncodingError.alreadyDecoded(copyFolder)) {
+            try RippedDisc(albumReportAt: copyFolder.appending(path: "Rip Report.json"))
+        }
+        try AudioEncoder.encode(Array(AudioEncoderTests.samples.prefix(88_200)), format: .flac, to: files[1])
+        #expect(throws: EncodingError.sourceChanged(files[1])) {
+            try encoder.encodeWithRecord(source, into: library.appending(path: "again"))
+        }
+    }
+
+    @Test func readsTheChoiceFromTheSettings() throws {
+        #expect(try JSONDecoder().decode(Settings.self, from: Data("{}".utf8)).hdcd == .ask)
+        #expect(try JSONDecoder().decode(Settings.self, from: Data(#"{"hdcd":"decode"}"#.utf8)).hdcd == .decode)
+        var settings = Settings()
+        settings.hdcd = .decode
+        #expect(DiscEncoder(settings: settings).decodesHDCD)
+        settings.hdcd = .ask
+        #expect(!DiscEncoder(settings: settings).decodesHDCD)
     }
 }

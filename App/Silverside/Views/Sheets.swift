@@ -237,3 +237,171 @@ struct LibrarySheet: View {
         .frame(width: 720, height: 420)
     }
 }
+
+/// After a rip whose HDCD codes change the audio, before encoding: decode them, or keep the
+/// audio as pressed. The advice follows the format: decoding costs a lossy file nothing.
+struct HDCDQuestionSheet: View {
+    @Environment(AppModel.self) private var model
+    var rip: RipRun
+    var question: RipRun.HDCDQuestion
+    @State private var remembers = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image("HDCD").resizable().scaledToFit().frame(height: 22)
+                Text("“\(question.album)” uses HDCD").font(.title3.bold())
+            }
+            if let text = question.text { Text(text).fixedSize(horizontal: false, vertical: true) }
+            Text(
+                "Few players decode HDCD, so the files play as the disc does without a decoder unless Silverside decodes them now."
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(
+                    "**Keep as pressed:** the files are bit for bit the disc, with the codes still in them. Decode HDCD… on the rip can make a decoded copy later."
+                )
+                Text(
+                    .init(
+                        "**Decode:** "
+                            + (question.format.isLossless ? "\(question.format.hdcdBits)-bit files" : "files")
+                            + " tagged HDCD=decoded, 6 dB quieter (ReplayGain makes up the level)"
+                            + (HDCDSizeWarning.text(for: question.format).map { ". \($0)" } ?? ", and no larger.")))
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Text(
+                question.recommendsDecoding
+                    ? "For \(question.format.name), decoding is the better choice: it costs no space."
+                    : "For \(question.format.name), keeping the audio as pressed is the usual choice: the files stay exact, and decoding can wait."
+            )
+            .font(.callout).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Toggle("Use this answer for every HDCD disc (Settings › Encoding)", isOn: $remembers)
+            HStack {
+                Spacer()
+                if question.recommendsDecoding {
+                    Button("Keep as Pressed") { answer(decodes: false) }
+                    Button("Decode") { answer(decodes: true) }.keyboardShortcut(.defaultAction)
+                } else {
+                    Button("Decode") { answer(decodes: true) }
+                    Button("Keep as Pressed") { answer(decodes: false) }.keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
+    }
+
+    private func answer(decodes: Bool) {
+        if remembers { model.settings.hdcd = decodes ? .decode : .keep }
+        rip.answerHDCD(decodes: decodes)
+    }
+}
+
+/// Decode HDCD… for an earlier rip: a decoded album beside the album, or in place of its files.
+struct HDCDDecodeSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    var rip: RecentRip
+    @State private var beside = true
+    @State private var format = AudioFormat.flac
+    /// What the copy's album title ends with, after a space: "(HDCD)", or "(HDCD AAC)".
+    @State private var suffix = "(HDCD)"
+
+    private var album: String { rip.report.release?.title ?? rip.title }
+    private var trimmedSuffix: String { suffix.trimmingCharacters(in: .whitespaces) }
+
+    /// The album's files can be replaced only when it is encoded.
+    private var encoding: RipReport.Encoding? { rip.report.encoding }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image("HDCD").resizable().scaledToFit().frame(height: 22)
+                Text("Decode HDCD").font(.title3.bold())
+            }
+            if let text = rip.report.hdcdText { Text(text).fixedSize(horizontal: false, vertical: true) }
+            Picker("Write", selection: $beside) {
+                Text("A copy beside the album, as “\(album) \(trimmedSuffix)”").tag(true)
+                Text("In place of the album's files").tag(false)
+                    .disabled(encoding == nil)
+            }
+            .pickerStyle(.radioGroup)
+            if beside {
+                HStack(spacing: 6) {
+                    Text("Title").frame(width: 50, alignment: .leading)
+                    Text(album).lineLimit(1).foregroundStyle(.secondary)
+                    TextField("(HDCD)", text: $suffix).frame(width: 140)
+                }
+                .help(
+                    "The copy's album title is the album's with this added, and so is its folder's name. It must not be empty: the copy needs a name of its own."
+                )
+                Picker("Format", selection: $format) {
+                    ForEach(AudioFormat.allCases.filter { $0 != .mp3 || MP3Encoder.lame() != nil }, id: \.self) {
+                        Text($0.name).tag($0)
+                    }
+                }
+                .fixedSize()
+                HDCDSizeWarning(format: format)
+                Text(
+                    "The copy has its own folder and album title, tagged HDCD=decoded, so players list it next to the album as it is. "
+                        + (rip.hasAudio
+                            ? "It is made from the rip's WAV files."
+                            : "It is made from the album's files, each checked first against the rip.")
+                )
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            } else if let encoding {
+                HDCDSizeWarning(format: encoding.format)
+                Text(
+                    "The album's \(encoding.format.name) files become \(encoding.format.isLossless ? "\(encoding.format.hdcdBits)-bit, " : "")tagged HDCD=decoded, with ReplayGain measured again. The audio as pressed is gone from the library"
+                        + (rip.hasAudio
+                            ? ", but stays in the rip's WAV files." : "; only a new rip of the disc gets it back.")
+                )
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                Button("Decode") {
+                    dismiss()
+                    model.startHDCDDecode(
+                        rip, beside: beside, format: beside ? format : encoding?.format ?? format,
+                        suffix: " " + trimmedSuffix)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(beside && trimmedSuffix.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+        .onAppear { format = encoding?.format ?? model.settings.format }
+    }
+}
+
+/// How much larger decoded files are than the 16-bit ones, as a warning; nothing for AAC and
+/// MP3, whose size the decode does not change.
+struct HDCDSizeWarning: View {
+    var format: AudioFormat
+
+    /// Measured on *Dozin' at the Knick*, disc 1, with Apple's encoders: 20-bit FLAC grew 5% (it
+    /// stores the bits a block does not use for almost nothing), 20-bit Apple Lossless 29% (it does not).
+    static func text(for format: AudioFormat) -> String? {
+        switch format {
+        case .flac: "20-bit FLAC files are a little larger than 16-bit ones: about 5%."
+        case .alac: "20-bit Apple Lossless files are larger than 16-bit ones: about a third."
+        case .aiff, .wav: "24-bit \(format.name) files are half again as large as 16-bit ones."
+        case .aac, .mp3: nil
+        }
+    }
+
+    var body: some View {
+        if let text = Self.text(for: format) {
+            Label(text, systemImage: "exclamationmark.triangle.fill")
+                .font(.callout)
+                .foregroundStyle(Theme.warning)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}

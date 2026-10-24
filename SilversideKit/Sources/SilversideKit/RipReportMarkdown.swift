@@ -125,7 +125,8 @@ extension RipReport {
             lines.append("")
             lines.append(
                 "Codes: HDCD control codes found in the lowest bit of the audio, in both channels. Peak extend and"
-                    + " the gain adjustment are what they ask of an HDCD decoder; the files are not decoded.")
+                    + " the gain adjustment are what they ask of an HDCD decoder; "
+                    + (encoding?.hdcdDecoded == true ? "the files hold the decode." : "the files are not decoded."))
             lines.append("")
         }
 

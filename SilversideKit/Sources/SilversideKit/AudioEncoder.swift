@@ -19,6 +19,17 @@ public enum AudioFormat: String, CaseIterable, Codable, Sendable {
     /// True if the format keeps every sample, so a decoded file must equal the rip.
     public var isLossless: Bool { self != .aac && self != .mp3 }
 
+    /// The bits of an HDCD decode in this format: 20 for FLAC and Apple Lossless, HDCD's own
+    /// resolution (the bits below it hold nothing that 16-bit audio had, and cost a third more
+    /// space in Apple Lossless); 24 for AIFF and WAV, which store 20 bits in three bytes anyway,
+    /// and for the lossy encoders' input.
+    public var hdcdBits: Int {
+        switch self {
+        case .flac, .alac: 20
+        case .aiff, .wav, .aac, .mp3: 24
+        }
+    }
+
     /// The format's name, for people to read.
     public var name: String {
         switch self {
@@ -49,8 +60,34 @@ public enum AudioEncoderError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-/// Encodes ripped audio (16-bit stereo, 44.1 kHz) with AudioToolbox, and decodes files
-/// again, so an encoded file can be checked against the rip.
+/// A track's audio, ready to encode: the rip's 16-bit samples, or the wider samples of an
+/// HDCD decode.
+public enum TrackPCM: Equatable, Sendable {
+    /// Silverside samples: one stereo frame each, the left value in the low half.
+    case cd([UInt32])
+    /// Interleaved values (left, right, ...), each a sample in the high 24 bits of an `Int32`,
+    /// its low 8 bits zero: 32-bit PCM, as AudioToolbox and lame take it. FLAC and Apple
+    /// Lossless keep the high 20 bits (`AudioFormat.hdcdBits`), so for those the low 12 must be zero.
+    case wide([Int32])
+
+    public var frameCount: Int {
+        switch self {
+        case .cd(let samples): samples.count
+        case .wide(let values): values.count / 2
+        }
+    }
+
+    /// The bits of each sample: 16, or 24 (20 of them in FLAC and Apple Lossless).
+    public var bitsPerSample: Int {
+        switch self {
+        case .cd: 16
+        case .wide: 24
+        }
+    }
+}
+
+/// Encodes ripped audio (stereo, 44.1 kHz, 16, 20, or 24 bits) with AudioToolbox, and decodes
+/// files again, so an encoded file can be checked against the rip.
 public enum AudioEncoder {
     /// The rip's PCM, as AudioToolbox takes it: interleaved, signed, 16-bit, little-endian.
     static let clientFormat = AudioStreamBasicDescription(
@@ -58,11 +95,28 @@ public enum AudioEncoder {
         mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked, mBytesPerPacket: 4,
         mFramesPerPacket: 1, mBytesPerFrame: 4, mChannelsPerFrame: 2, mBitsPerChannel: 16, mReserved: 0)
 
+    /// Wide audio as AudioToolbox takes it: 32-bit values (`TrackPCM.wide`).
+    static let wideClientFormat = AudioStreamBasicDescription(
+        mSampleRate: 44_100, mFormatID: kAudioFormatLinearPCM,
+        mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked, mBytesPerPacket: 8,
+        mFramesPerPacket: 1, mBytesPerFrame: 8, mChannelsPerFrame: 2, mBitsPerChannel: 32, mReserved: 0)
+
     /// Writes `samples` (Silverside samples: one stereo frame each) to `url` in `format`. WAV
     /// and MP3 have their own writers.
     public static func encode(
         _ samples: [UInt32], format: AudioFormat, to url: URL, aac: AACOptions = AACOptions()
     ) throws {
+        try encode(.cd(samples), format: format, to: url, aac: aac)
+    }
+
+    /// Writes `pcm` to `url` in `format`: a lossless format keeps its 16 bits, or for wide
+    /// audio the format's `hdcdBits`. WAV and MP3 have their own writers.
+    public static func encode(
+        _ pcm: TrackPCM, format: AudioFormat, to url: URL, aac: AACOptions = AACOptions()
+    ) throws {
+        let wide = pcm.bitsPerSample == 24
+        let wideFlag =
+            format.hdcdBits == 20 ? kAppleLosslessFormatFlag_20BitSourceData : kAppleLosslessFormatFlag_24BitSourceData
         var destination = AudioStreamBasicDescription()
         let fileType: AudioFileTypeID
         destination.mSampleRate = 44_100
@@ -70,11 +124,11 @@ public enum AudioEncoder {
         switch format {
         case .flac:
             destination.mFormatID = kAudioFormatFLAC
-            destination.mFormatFlags = kAppleLosslessFormatFlag_16BitSourceData
+            destination.mFormatFlags = wide ? wideFlag : kAppleLosslessFormatFlag_16BitSourceData
             fileType = kAudioFileFLACType
         case .alac:
             destination.mFormatID = kAudioFormatAppleLossless
-            destination.mFormatFlags = kAppleLosslessFormatFlag_16BitSourceData
+            destination.mFormatFlags = wide ? wideFlag : kAppleLosslessFormatFlag_16BitSourceData
             fileType = kAudioFileM4AType
         case .aac:
             destination.mFormatID = kAudioFormatMPEG4AAC
@@ -84,6 +138,11 @@ public enum AudioEncoder {
             destination.mFormatFlags =
                 kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked
                 | kAudioFormatFlagIsBigEndian
+            if wide {
+                destination.mBitsPerChannel = 24
+                destination.mBytesPerFrame = 6
+                destination.mBytesPerPacket = 6
+            }
             fileType = kAudioFileAIFFType
         case .wav, .mp3:
             throw AudioEncoderError.notThroughAudioToolbox(format)
@@ -105,7 +164,7 @@ public enum AudioEncoder {
         var closed = false
         defer { if !closed { ExtAudioFileDispose(file) } }
 
-        var client = clientFormat
+        var client = wide ? wideClientFormat : clientFormat
         try check(
             "ExtAudioFileSetProperty(ClientDataFormat)",
             ExtAudioFileSetProperty(
@@ -116,19 +175,23 @@ public enum AudioEncoder {
         }
 
         // Write in parts of 1 second.
-        let chunk = 44_100
-        try samples.withUnsafeBufferPointer { buffer in
+        func write(_ bytes: UnsafeRawBufferPointer, bytesPerFrame: Int) throws {
+            let frames = bytes.count / bytesPerFrame
             var start = 0
-            while start < buffer.count {
-                let count = min(chunk, buffer.count - start)
+            while start < frames {
+                let count = min(44_100, frames - start)
                 var list = AudioBufferList(
                     mNumberBuffers: 1,
                     mBuffers: AudioBuffer(
-                        mNumberChannels: 2, mDataByteSize: UInt32(count * 4),
-                        mData: UnsafeMutableRawPointer(mutating: buffer.baseAddress! + start)))
+                        mNumberChannels: 2, mDataByteSize: UInt32(count * bytesPerFrame),
+                        mData: UnsafeMutableRawPointer(mutating: bytes.baseAddress! + start * bytesPerFrame)))
                 try check("ExtAudioFileWrite", ExtAudioFileWrite(file, UInt32(count), &list))
                 start += count
             }
+        }
+        switch pcm {
+        case .cd(let samples): try samples.withUnsafeBytes { try write($0, bytesPerFrame: 4) }
+        case .wide(let values): try values.withUnsafeBytes { try write($0, bytesPerFrame: 8) }
         }
         closed = true
         try check("ExtAudioFileDispose", ExtAudioFileDispose(file))
@@ -136,20 +199,33 @@ public enum AudioEncoder {
 
     /// Reads a file that AudioToolbox can decode (FLAC, ALAC, AAC, AIFF, WAV, MP3) as Silverside samples.
     public static func decode(_ url: URL) throws -> [UInt32] {
+        try read(url, client: clientFormat, as: UInt32.self)
+    }
+
+    /// Reads a file as 32-bit values (`TrackPCM.wide`), so a 20-bit or 24-bit file keeps its bits.
+    public static func decodeWide(_ url: URL) throws -> [Int32] {
+        try read(url, client: wideClientFormat, as: Int32.self)
+    }
+
+    /// The file's audio in the client format: one `T` a frame (16-bit) or one a channel (32-bit).
+    private static func read<T: FixedWidthInteger>(
+        _ url: URL, client format: AudioStreamBasicDescription, as: T.Type
+    ) throws -> [T] {
         var file: ExtAudioFileRef?
         try check("ExtAudioFileOpenURL", ExtAudioFileOpenURL(url as CFURL, &file))
         guard let file else { throw AudioEncoderError.audioToolbox(operation: "ExtAudioFileOpenURL", status: -1) }
         defer { ExtAudioFileDispose(file) }
-        var client = clientFormat
+        var client = format
         try check(
             "ExtAudioFileSetProperty(ClientDataFormat)",
             ExtAudioFileSetProperty(
                 file, kExtAudioFileProperty_ClientDataFormat, UInt32(MemoryLayout<AudioStreamBasicDescription>.size),
                 &client))
-        var samples = [UInt32]()
-        var part = [UInt32](repeating: 0, count: 44_100)
+        let perFrame = Int(format.mBytesPerFrame) / MemoryLayout<T>.size
+        var samples = [T]()
+        var part = [T](repeating: 0, count: 44_100 * perFrame)
         while true {
-            var frames = UInt32(part.count)
+            var frames = UInt32(44_100)
             let status = part.withUnsafeMutableBytes { bytes -> OSStatus in
                 var list = AudioBufferList(
                     mNumberBuffers: 1,
@@ -159,7 +235,7 @@ public enum AudioEncoder {
             }
             try check("ExtAudioFileRead", status)
             if frames == 0 { break }
-            samples += part[0..<Int(frames)]
+            samples += part[0..<(Int(frames) * perFrame)]
         }
         return samples
     }

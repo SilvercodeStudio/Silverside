@@ -390,6 +390,17 @@ struct EncodingSettings: View {
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
+            Section("HDCD") {
+                Picker("Discs whose HDCD codes change the audio", selection: $model.settings.hdcd) {
+                    Text("Ask each time").tag(HDCDChoice.ask)
+                    Text("Decode").tag(HDCDChoice.decode)
+                    Text("Keep as pressed").tag(HDCDChoice.keep)
+                }
+                Text(
+                    "Some HDCD discs have codes that ask a decoder to restore the loudest peaks or change the level. Few players decode HDCD. Decoding makes files tagged HDCD=decoded, 20-bit for FLAC and Apple Lossless (24-bit for AIFF and WAV), 6 dB quieter (ReplayGain makes up the level), and larger: about 5% for FLAC, a third for Apple Lossless. Kept as pressed, the files are bit for bit the disc and can be decoded later. Decoding is best for AAC and MP3, where it costs no space. Discs whose codes ask for nothing are never decoded: the audio would be the same."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+            }
             Section {
                 Picker("Mode", selection: $model.settings.aac.mode) {
                     ForEach(AACOptions.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }

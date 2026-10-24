@@ -40,10 +40,18 @@ public enum MP3Encoder {
     public static func encode(
         _ samples: [UInt32], to url: URL, lame: URL, options: MP3Options = MP3Options()
     ) throws {
+        try encode(.cd(samples), to: url, lame: lame, options: options)
+    }
+
+    /// Writes 16-bit or 24-bit audio to `url` as MP3, through `lame` (24-bit as 32-bit PCM).
+    public static func encode(
+        _ pcm: TrackPCM, to url: URL, lame: URL, options: MP3Options = MP3Options()
+    ) throws {
+        let bitWidth = pcm.bitsPerSample == 24 ? "32" : "16"
         let process = Process()
         process.executableURL = lame
         process.arguments =
-            ["--quiet", "-r", "-s", "44.1", "--bitwidth", "16", "--signed", "--little-endian", "-m", "j"]
+            ["--quiet", "-r", "-s", "44.1", "--bitwidth", bitWidth, "--signed", "--little-endian", "-m", "j"]
             + options.lameArguments + ["-", url.path]
         let input = Pipe()
         let errors = Pipe()
@@ -62,9 +70,17 @@ public enum MP3Encoder {
         // Write the PCM in parts of 1 second, as little-endian bytes.
         let writer = input.fileHandleForWriting
         do {
-            for start in stride(from: 0, to: samples.count, by: 44_100) {
-                let part = samples[start..<min(start + 44_100, samples.count)]
-                try writer.write(contentsOf: part.withUnsafeBytes { Data($0) })
+            switch pcm {
+            case .cd(let samples):
+                for start in stride(from: 0, to: samples.count, by: 44_100) {
+                    let part = samples[start..<min(start + 44_100, samples.count)]
+                    try writer.write(contentsOf: part.withUnsafeBytes { Data($0) })
+                }
+            case .wide(let values):
+                for start in stride(from: 0, to: values.count, by: 88_200) {
+                    let part = values[start..<min(start + 88_200, values.count)]
+                    try writer.write(contentsOf: part.withUnsafeBytes { Data($0) })
+                }
             }
             try writer.close()
         } catch {
@@ -112,7 +128,8 @@ public enum ID3Tags {
     /// Vorbis comment keys and their ID3v2.4 text frames.
     static let textFrames: [String: String] = [
         "TITLE": "TIT2", "ARTIST": "TPE1", "ALBUMARTIST": "TPE2", "ALBUM": "TALB", "DATE": "TDRC",
-        "ORIGINALDATE": "TDOR", "DISCSUBTITLE": "TSST", "ISRC": "TSRC", "LABEL": "TPUB", "GENRE": "TCON",
+        "ORIGINALDATE": "TDOR", "DISCSUBTITLE": "TSST", "MEDIA": "TMED", "ISRC": "TSRC", "LABEL": "TPUB",
+        "GENRE": "TCON",
         "COMPILATION": "TCMP", "COMPOSER": "TCOM", "LYRICIST": "TEXT", "ARTISTSORT": "TSOP", "ALBUMARTISTSORT": "TSO2",
     ]
 
@@ -123,7 +140,7 @@ public enum ID3Tags {
         "MUSICBRAINZ_ALBUMARTISTID": "MusicBrainz Album Artist Id", "MUSICBRAINZ_ARTISTID": "MusicBrainz Artist Id",
         "REPLAYGAIN_TRACK_GAIN": "REPLAYGAIN_TRACK_GAIN", "REPLAYGAIN_TRACK_PEAK": "REPLAYGAIN_TRACK_PEAK",
         "REPLAYGAIN_ALBUM_GAIN": "REPLAYGAIN_ALBUM_GAIN", "REPLAYGAIN_ALBUM_PEAK": "REPLAYGAIN_ALBUM_PEAK",
-        "REPLAYGAIN_REFERENCE_LOUDNESS": "REPLAYGAIN_REFERENCE_LOUDNESS",
+        "REPLAYGAIN_REFERENCE_LOUDNESS": "REPLAYGAIN_REFERENCE_LOUDNESS", "HDCD": "HDCD",
     ]
 
     /// Space after the frames, for later edits.

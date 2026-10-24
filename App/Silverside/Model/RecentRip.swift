@@ -119,7 +119,9 @@ nonisolated struct RecentRip: Identifiable, Sendable {
                 continue
             }
             let name = entry.lastPathComponent
-            guard name.hasPrefix("Rip Report"), name.hasSuffix(".json"), let report = try? RipReport.read(from: entry)
+            // A decoded copy beside an album ("… (HDCD)") is not a rip of its own.
+            guard name.hasPrefix("Rip Report"), name.hasSuffix(".json"), let report = try? RipReport.read(from: entry),
+                report.encoding?.albumSuffix == nil
             else { continue }
             found.append(RecentRip(libraryReport: entry, report: report))
         }

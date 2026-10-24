@@ -60,24 +60,54 @@ public struct HDCDCodes: Codable, Equatable, Sendable {
     public static func scan(_ samples: [UInt32], sampleRate: Int = 44100) -> HDCDCodes? {
         guard let decoder = hdcd_decoder_new(Int32(sampleRate)) else { return nil }
         defer { hdcd_decoder_free(decoder) }
-        // Blocks of 4096 frames, as FFmpeg decodes a FLAC file: the decoder decides at the
-        // end of each block whether both channels have codes.
-        let block = 4096
-        var buffer = [Int32](repeating: 0, count: block * 2)
+        run(decoder, over: samples) { _, _ in }
+        return codes(found: hdcd_decoder_summary(decoder))
+    }
+
+    /// Decodes the track as an HDCD decoder plays it: audio of `bits` bits (`TrackPCM.wide`),
+    /// 20 for FLAC and Apple Lossless, 24 otherwise (`AudioFormat.hdcdBits`). The decoder
+    /// leaves room for the peaks that peak extend restores, so audio that the codes do not
+    /// change comes out as it went in, 6.02 dB lower; audio without codes too.
+    public static func decode(_ samples: [UInt32], bits: Int = 24, sampleRate: Int = 44100) -> [Int32] {
+        guard let decoder = hdcd_decoder_new(Int32(sampleRate)) else { return [] }
+        defer { hdcd_decoder_free(decoder) }
+        var decoded = [Int32]()
+        decoded.reserveCapacity(samples.count * 2)
+        // The decoder's 32-bit values, cut to `bits` (truncated, as Apple's encoders cut them).
+        let mask = ~Int32((1 << (32 - bits)) - 1)
+        run(decoder, over: samples) { buffer, count in
+            for index in 0..<(2 * count) { decoded.append(buffer[index] & mask) }
+        }
+        return decoded
+    }
+
+    /// Feeds the samples to the decoder in blocks of 4096 frames, as FFmpeg decodes a FLAC
+    /// file: the decoder decides at the end of each block whether both channels have codes.
+    /// `block` gets each block's decoded values.
+    private static func run(
+        _ decoder: OpaquePointer, over samples: [UInt32], block: (UnsafeMutableBufferPointer<Int32>, Int) -> Void
+    ) {
+        let size = 4096
+        var buffer = [Int32](repeating: 0, count: size * 2)
         samples.withUnsafeBufferPointer { samples in
-            var start = 0
-            while start < samples.count {
-                let count = min(block, samples.count - start)
-                for index in 0..<count {
-                    let sample = samples[start + index]
-                    buffer[2 * index] = Int32(Int16(truncatingIfNeeded: sample))
-                    buffer[2 * index + 1] = Int32(Int16(truncatingIfNeeded: sample >> 16))
+            buffer.withUnsafeMutableBufferPointer { buffer in
+                var start = 0
+                while start < samples.count {
+                    let count = min(size, samples.count - start)
+                    for index in 0..<count {
+                        let sample = samples[start + index]
+                        buffer[2 * index] = Int32(Int16(truncatingIfNeeded: sample))
+                        buffer[2 * index + 1] = Int32(Int16(truncatingIfNeeded: sample >> 16))
+                    }
+                    hdcd_decoder_process(decoder, buffer.baseAddress, Int32(count))
+                    block(buffer, count)
+                    start += count
                 }
-                hdcd_decoder_process(decoder, &buffer, Int32(count))
-                start += count
             }
         }
-        let summary = hdcd_decoder_summary(decoder)
+    }
+
+    private static func codes(found summary: hdcd_summary) -> HDCDCodes? {
         guard summary.detected != 0 else { return nil }
         let peakExtend: PeakExtend =
             switch summary.peak_extend {
@@ -98,6 +128,17 @@ public struct HDCDCodes: Codable, Equatable, Sendable {
     }
 }
 
+/// What encoding does with a disc whose HDCD codes ask for peak extend or a gain adjustment.
+/// A disc whose codes ask for nothing is encoded as it is: a decoder would give the same audio.
+public enum HDCDChoice: String, Codable, CaseIterable, Sendable {
+    /// The app asks when such a disc is about to be encoded; the command line keeps it as pressed.
+    case ask
+    /// Decode it into 20-bit files (24-bit for AIFF and WAV), tagged HDCD=decoded.
+    case decode
+    /// Encode the audio as it is on the disc, with the codes in it.
+    case keep
+}
+
 /// What the HDCD codes of a rip's tracks ask for.
 public enum HDCDStatus: String, Codable, Sendable {
     /// No track has HDCD codes.
@@ -111,27 +152,65 @@ public enum HDCDStatus: String, Codable, Sendable {
         let codes = tracks.compactMap(\.hdcd)
         self = codes.isEmpty ? .noCodes : codes.contains(where: \.changesAudio) ? .featuresUsed : .codesOnly
     }
+
+    /// The tags for a disc's files: MEDIA=HDCD for a disc with HDCD codes, as MusicBrainz names
+    /// the medium (and as cyanrip tags it), and HDCD=decoded for files that hold the decode.
+    public static func tags(_ status: HDCDStatus?, decoded: Bool) -> [(key: String, value: String)] {
+        let media: [(key: String, value: String)] =
+            status == .codesOnly || status == .featuresUsed ? [("MEDIA", "HDCD")] : []
+        return media + (decoded ? [("HDCD", "decoded")] : [])
+    }
 }
 
 extension HDCDStatus {
     /// What the HDCD codes of these tracks mean, for people. Nil if none has codes.
-    public static func text(for tracks: [RipReport.Track]) -> String? {
+    /// `decodedFormat`: the encoded files hold the HDCD decode, in that format.
+    public static func text(for tracks: [RipReport.Track], decodedFormat: AudioFormat? = nil) -> String? {
         let coded = tracks.filter { $0.hdcd != nil }
         guard !coded.isEmpty else { return nil }
         let which =
             coded.count == tracks.count
             ? "every track has" : "\(coded.count) of \(tracks.count) tracks \(coded.count == 1 ? "has" : "have")"
-        let features = coded.filter(\.hdcd!.changesAudio).map { "track \($0.number): \($0.hdcd!.featuresText)" }
-        if features.isEmpty {
+        guard coded.contains(where: \.hdcd!.changesAudio) else {
             return "HDCD: \(which) HDCD codes, but they ask for no peak extend or gain adjustment,"
                 + " so an HDCD decoder would play the same audio."
         }
+        // "in every track", "in track 8", "in tracks 1 and 9"
+        func inTracks(_ numbers: [Int]) -> String {
+            if numbers.count == tracks.count { return "in every track" }
+            if numbers.count == 1 { return "in track \(numbers[0])" }
+            return "in tracks " + numbers.dropLast().map(String.init).joined(separator: ", ")
+                + " and \(numbers.last!)"
+        }
+        var features = [String]()
+        let always = coded.filter { $0.hdcd!.peakExtend == .always }.map(\.number)
+        let sometimes = coded.filter { $0.hdcd!.peakExtend == .sometimes }.map(\.number)
+        if !always.isEmpty { features.append("peak extend \(inTracks(always))") }
+        if !sometimes.isEmpty { features.append("peak extend in places \(inTracks(sometimes))") }
+        // The gains, the largest first: "gain down to -4.0 dB in tracks 1 and 9, -1.0 dB in track 8".
+        let gains = Dictionary(grouping: coded.filter { $0.hdcd!.maxGainAdjustment < 0 }) {
+            $0.hdcd!.maxGainAdjustment
+        }
+        if !gains.isEmpty {
+            features.append(
+                "gain down to "
+                    + gains.keys.sorted().map {
+                        String(format: "%.1f dB ", $0) + inTracks(gains[$0]!.map(\.number))
+                    }.joined(separator: ", "))
+        }
         return "HDCD: \(which) HDCD codes, and an HDCD decoder would change the audio ("
-            + features.joined(separator: "; ") + "). The files hold the audio as it is on the disc."
+            + features.joined(separator: "; ") + ")."
+            + (decodedFormat.map {
+                $0.isLossless
+                    ? " The files hold the HDCD decode, at \($0.hdcdBits) bits." : " The files hold the HDCD decode."
+            } ?? " The files hold the audio as it is on the disc.")
     }
 }
 
 extension RipReport {
     /// What the HDCD codes mean for this rip, for people. Nil without codes, and in older reports.
-    public var hdcdText: String? { hdcd == nil ? nil : HDCDStatus.text(for: tracks) }
+    public var hdcdText: String? {
+        hdcd == nil
+            ? nil : HDCDStatus.text(for: tracks, decodedFormat: encoding?.hdcdDecoded == true ? encoding?.format : nil)
+    }
 }

@@ -12,10 +12,24 @@ command-line tool.
   ask for nothing (a decoder would play the same audio, as on most discs with
   the logo), or "peak extend" or "gain" when an HDCD decoder would change the
   audio. Before the rip, the logo shows when MusicBrainz lists the disc as
-  HDCD. The report has an HDCD table for each track. The files are not
-  decoded yet.
+  HDCD. The report has an HDCD table for each track, and the encoded files
+  of a disc with HDCD codes are tagged `MEDIA=HDCD`, as MusicBrainz names
+  the medium.
 - `silverside hdcd` looks for HDCD codes in audio files and folders, such as
   rips and albums from before.
+- **HDCD decoding**, as an option: a disc whose codes ask for peak extend or a
+  gain adjustment can be decoded into 20-bit FLAC or Apple Lossless files
+  (HDCD's own resolution; 24-bit for AIFF and WAV) tagged `HDCD=decoded`, with
+  ReplayGain measured on the decode. The app asks before it encodes such a
+  disc, and advises keeping lossless files as pressed and decoding for AAC and
+  MP3; Settings › Encoding can answer for every disc (`hdcd`: ask, decode,
+  keep; `--hdcd` on the command line). **Decode HDCD…** on an earlier rip
+  makes a decoded copy beside the album, as "<Album> (HDCD)" or another name
+  you give, or decodes in
+  place of its files, even after the rip's WAV files are gone.
+- `silverside encode` takes an album folder in the library as its input,
+  encoding it again from its lossless files, each checked against the rip's
+  CRC-32; `--hdcd-copy` writes the decoded copy beside it.
 
 ## 0.6 (2026-10-23)
 

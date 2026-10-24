@@ -38,40 +38,76 @@ public enum ReplayGain {
 
     /// Analyzes 16-bit stereo samples (left in the low half, right in the high half).
     public static func analyze(_ samples: [UInt32], sampleRate: Double = 44100) -> Analysis {
-        let step = Int((sampleRate / 10).rounded())
-        var stepPowers = [Double]()
-        stepPowers.reserveCapacity(samples.count / step + 1)
-        var peak = 0
-        var left = KWeighting(sampleRate: sampleRate)
-        var right = KWeighting(sampleRate: sampleRate)
-        var sum = 0.0
-        var inStep = 0
+        var meter = Meter(sampleRate: sampleRate, frames: samples.count)
         samples.withUnsafeBufferPointer { samples in
             for sample in samples {
-                let l = Int(Int16(truncatingIfNeeded: sample & 0xFFFF))
-                let r = Int(Int16(truncatingIfNeeded: sample >> 16))
-                peak = max(peak, abs(l), abs(r))
-                let zl = left.filter(Double(l) / 32768)
-                let zr = right.filter(Double(r) / 32768)
-                sum += zl * zl + zr * zr
-                inStep += 1
-                if inStep == step {
-                    stepPowers.append(sum)
-                    sum = 0
-                    inStep = 0
+                meter.add(
+                    Double(Int16(truncatingIfNeeded: sample & 0xFFFF)) / 32768,
+                    Double(Int16(truncatingIfNeeded: sample >> 16)) / 32768)
+            }
+        }
+        return meter.analysis
+    }
+
+    /// Analyzes 16-bit audio, or the wider audio of an HDCD decode.
+    public static func analyze(_ pcm: TrackPCM, sampleRate: Double = 44100) -> Analysis {
+        switch pcm {
+        case .cd(let samples):
+            return analyze(samples, sampleRate: sampleRate)
+        case .wide(let values):
+            var meter = Meter(sampleRate: sampleRate, frames: values.count / 2)
+            values.withUnsafeBufferPointer { values in
+                for index in stride(from: 0, to: values.count - 1, by: 2) {
+                    meter.add(Double(values[index]) / 2_147_483_648, Double(values[index + 1]) / 2_147_483_648)
                 }
             }
+            return meter.analysis
         }
-        // A block is four steps (400 ms); its power is the mean square over them.
-        var blocks = [Double]()
-        if stepPowers.count >= 4 {
-            blocks.reserveCapacity(stepPowers.count - 3)
-            for i in 0..<(stepPowers.count - 3) {
-                blocks.append(
-                    (stepPowers[i] + stepPowers[i + 1] + stepPowers[i + 2] + stepPowers[i + 3]) / Double(4 * step))
+    }
+
+    /// The measurement as the samples go by: each 100 ms step's K-weighted power, and the peak.
+    private struct Meter {
+        let step: Int
+        var stepPowers = [Double]()
+        var peak = 0.0
+        var left: KWeighting
+        var right: KWeighting
+        var sum = 0.0
+        var inStep = 0
+
+        init(sampleRate: Double, frames: Int) {
+            step = Int((sampleRate / 10).rounded())
+            stepPowers.reserveCapacity(frames / step + 1)
+            left = KWeighting(sampleRate: sampleRate)
+            right = KWeighting(sampleRate: sampleRate)
+        }
+
+        /// One frame, each channel as a fraction of full scale.
+        @inline(__always) mutating func add(_ l: Double, _ r: Double) {
+            peak = max(peak, abs(l), abs(r))
+            let zl = left.filter(l)
+            let zr = right.filter(r)
+            sum += zl * zl + zr * zr
+            inStep += 1
+            if inStep == step {
+                stepPowers.append(sum)
+                sum = 0
+                inStep = 0
             }
         }
-        return Analysis(blockPowers: blocks, peak: Double(peak) / 32768)
+
+        var analysis: Analysis {
+            // A block is four steps (400 ms); its power is the mean square over them.
+            var blocks = [Double]()
+            if stepPowers.count >= 4 {
+                blocks.reserveCapacity(stepPowers.count - 3)
+                for i in 0..<(stepPowers.count - 3) {
+                    blocks.append(
+                        (stepPowers[i] + stepPowers[i + 1] + stepPowers[i + 2] + stepPowers[i + 3]) / Double(4 * step))
+                }
+            }
+            return Analysis(blockPowers: blocks, peak: peak)
+        }
     }
 
     /// The integrated loudness of blocks, gated as BS.1770 says: blocks under -70 LUFS are

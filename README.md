@@ -75,9 +75,11 @@ to be installed. All other supported formats are handled natively.
   names from CD-Text or from you, and its files carry no MusicBrainz IDs.
 - **Play a track** from the disc, read as a rip reads it, or from an earlier
   rip, to check it.
-- **HDCD recognition.** Each track is checked for HDCD codes, and the app
-  shows the HDCD logo with what they ask for. Most discs with the logo have
-  codes that ask for nothing, so a decoder would play the same audio.
+- **HDCD.** Each track is checked for HDCD codes, and the app shows the HDCD
+  logo with what they ask for. Most discs with the logo have codes that ask
+  for nothing, so a decoder would play the same audio. A disc whose codes ask
+  for peak extend or a gain adjustment can be decoded into 20-bit files, at
+  the rip or later, as a copy beside the album.
 - **Rip on insertion**, if you want it: a disc whose release is certain, and
   that is not ripped yet, rips a few seconds after it goes in.
 
@@ -89,11 +91,6 @@ to be installed. All other supported formats are handled natively.
   change the audio: the files sound too bright in a player that does not read
   the flag. De-emphasis is planned for 0.7. This is not yet confirmed on a real
   pre-emphasis disc, because none has turned up in testing.
-
-- **HDCD.** Silverside finds HDCD codes and says what they ask for, but does
-  not decode them yet: a disc that uses peak extend or a gain adjustment is
-  ripped and encoded as it is pressed, as a player without a decoder plays
-  it. Decoding to 24-bit files is planned for 0.7, as an option.
 
 AccurateRip and CTDB answer over plain HTTP, as their other clients use them.
 Their checksums are public, so there is nothing to keep secret, but a network
@@ -184,7 +181,6 @@ makes, and the settings.
 ## TODO or future ideas
 
 - Pre-emphasis support as mentioned above (planned for 0.7).
-- HDCD decoding to 24-bit files, as an option (planned for 0.7).
 - Ripping of data tracks for mixed-mode / Enhanced CDs.
 - Option to slow down drive speed (quieter)
   - Autodetect and engage this during problem rips

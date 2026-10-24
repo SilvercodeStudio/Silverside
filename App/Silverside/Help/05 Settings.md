@@ -44,6 +44,10 @@ What the tags do depends on the player:
 
 The setting is on by default because the tags cost nothing until a player uses them, and adding them to a library later means measuring every file again with another program. Turn it off if you would rather have no such tags in your files.
 
+### HDCD
+
+What to do with a disc whose HDCD codes ask for peak extend or a gain adjustment: ask each time (the default), decode into files tagged `HDCD=decoded` (20-bit FLAC and Apple Lossless, 24-bit AIFF and WAV), or keep the audio as pressed. See HDCD under Ripping a Disc.
+
 ## Naming
 
 Templates name the album folder and the track files in the library, and the rip's folder. The fields:

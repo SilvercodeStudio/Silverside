@@ -63,9 +63,18 @@ Stop ends the rip after the read under way. The tracks ripped so far stay in the
 HDCD discs carry a logo, and hide control codes in the lowest bit of the audio. A player without an HDCD decoder plays the audio as it is, so the rip is an exact copy either way. Silverside looks for the codes in every track it rips, and the header and the result show the HDCD logo with what it found:
 
 - **codes only:** the codes ask for nothing, and a decoder would play the same audio. Most discs with the logo are like this.
-- **peak extend** or **gain:** the codes ask a decoder to expand the loudest peaks, or to lower the level so that quiet passages come out as mastered. Silverside does not decode them yet; the files hold the audio as it is on the disc.
+- **peak extend** or **gain:** the codes ask a decoder to expand the loudest peaks, or to lower the level so that quiet passages come out as mastered.
 
 Before the rip, the logo with "per MusicBrainz" means that MusicBrainz lists the disc as HDCD. The rip decides: some discs with the logo have no codes, and some without it have them. The report lists the codes of each track. For rips from before, `silverside hdcd` looks for the codes in WAV, FLAC, AIFF, and Apple Lossless files.
+
+Few players decode HDCD, so when a disc's codes ask for peak extend or gain, Silverside asks before it encodes (Settings › Encoding can answer once for every disc):
+
+- **Keep as pressed** encodes the audio as it is on the disc, with the codes in it: the files stay bit for bit the disc. This is the usual choice for FLAC, Apple Lossless, AIFF, and WAV.
+- **Decode** writes files tagged `HDCD=decoded`, made by the same decoder as `ffmpeg -af hdcd`: 20-bit FLAC and Apple Lossless, HDCD's own resolution (24-bit AIFF and WAV). They are 6 dB quieter than the disc, since the decoder leaves room for the restored peaks; ReplayGain, measured on the decode, makes up the level in players that read it. Lossless files are larger, about 5% for FLAC and a third for Apple Lossless; for AAC and MP3 decoding costs no space, so it is the better choice there.
+
+A disc whose codes ask for nothing is never decoded: the audio would be the same. Every file of a disc with HDCD codes is tagged `MEDIA=HDCD`, decoded or not; `HDCD=decoded` marks the files that hold the decode.
+
+**Decode HDCD…** in an earlier rip's toolbar decodes later: as a copy beside the album, in a folder and under an album title of its own ("Dozin' at the Knick (HDCD)"; the part after the title can be changed, as "(HDCD AAC)" for a second copy), in any format, so that players list both; or in place of the album's files. It works from the rip's WAV files, or after they are gone, from the album's lossless files, each checked first against the CRC-32 of the verified rip.
 
 ## Where the files go
 

@@ -29,7 +29,8 @@ struct WelcomeView: View {
         var text: String {
             switch self {
             case .alac: "An exact copy of the CD. Best for the Music app, iPhone, and other Apple devices."
-            case .flac: "An exact copy of the CD, for most other systems and players. Apple's Music app does not play it."
+            case .flac:
+                "An exact copy of the CD, for most other systems and players. Apple's Music app does not play it."
             case .aac: "A fifth of the size, and most people cannot hear a difference. Plays almost everywhere."
             case .mp3: "Plays on almost anything, old or new. AAC sounds a little better at the same size."
             case .wav: "No encoding: rips stay in the rips folder as uncompressed WAV files, with no tags."

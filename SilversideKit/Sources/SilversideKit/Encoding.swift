@@ -256,11 +256,13 @@ public struct DiscEncoder: Sendable {
         let audioTracks = disc.toc.audioTracks
 
         // ReplayGain needs every track's loudness before the first tag is written: the album's
-        // gain is one gating over all of them. The tracks are measured in parallel from their WAV files.
+        // gain is one gating over all of them. The tracks are measured from their WAV files,
+        // `parallelTracks` at a time as they encode, since each holds its track's audio.
         // For the last disc of a multi-disc release into the album folder, the album is the whole release.
         var replayGainRecord: RipReport.Encoding.ReplayGainRecord?
         if replayGain {
-            let measured = CTDB.parallelMap(over: jobs) { job -> Result<ReplayGain.Analysis, any Error>? in
+            let measured = CTDB.parallelMap(over: jobs, lanes: parallelTracks) {
+                job -> Result<ReplayGain.Analysis, any Error>? in
                 Result { ReplayGain.analyze(try WAVFile.read(job.ripped.file)) }
             }
             let analyses = try measured.map { try $0.get() }

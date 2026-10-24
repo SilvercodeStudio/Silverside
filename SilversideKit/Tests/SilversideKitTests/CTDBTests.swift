@@ -254,5 +254,10 @@ struct CTDBTests {
         #expect(squares == items.filter { $0 % 3 != 0 }.map { $0 * $0 })
         #expect(CTDB.parallelMap(over: [Int]()) { $0 } == [])
         #expect(CTDB.parallelMap(over: [7]) { $0 + 1 } == [8])
+        for lanes in [1, 3, 4, 50] {
+            let squares = CTDB.parallelMap(over: items, lanes: lanes) { $0 % 3 == 0 ? nil : $0 * $0 }
+            #expect(squares == items.filter { $0 % 3 != 0 }.map { $0 * $0 })
+        }
+        #expect(CTDB.parallelMap(over: [Int](), lanes: 4) { $0 } == [])
     }
 }

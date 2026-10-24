@@ -317,7 +317,8 @@ extension DiscEncoder {
     /// A disc's blocks, measured from its encoded files.
     static func measuredHistogram(of encoding: RipReport.Encoding, in album: URL) throws -> ReplayGain.Histogram {
         let files = encoding.files.map { album.appending(path: $0.file) }
-        let measured = CTDB.parallelMap(over: files) { file -> Result<ReplayGain.Analysis, any Error>? in
+        let measured = CTDB.parallelMap(over: files, lanes: defaultParallelTracks) {
+            file -> Result<ReplayGain.Analysis, any Error>? in
             Result { ReplayGain.analyze(try AudioEncoder.decode(file)) }
         }
         return ReplayGain.Histogram(try measured.map { try $0.get() })

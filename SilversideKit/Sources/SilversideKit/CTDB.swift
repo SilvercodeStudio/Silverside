@@ -338,10 +338,13 @@ public enum CTDB {
     }
 
     /// `transform` over `items` on every core, keeping the results in the items' order and
-    /// leaving out the nils. For work that is pure and takes a while for each item.
+    /// leaving out the nils. For work that is pure and takes a while for each item. With
+    /// `lanes`, at most that many items are under way at once, each lane taking every n-th
+    /// item: for work that holds much memory for each item, such as a track's audio.
     static func parallelMap<Item: Sendable, Result: Sendable>(
-        over items: [Item], _ transform: @Sendable (Item) -> Result?
+        over items: [Item], lanes: Int? = nil, _ transform: @Sendable (Item) -> Result?
     ) -> [Result] {
+        if let lanes { return laneMap(over: items, lanes: lanes, transform) }
         let cores = max(1, ProcessInfo.processInfo.activeProcessorCount)
         guard items.count > 1, cores > 1 else { return items.compactMap(transform) }
         let parts = min(cores * 4, items.count)
@@ -360,6 +363,27 @@ public enum CTDB {
             }
         }
         return results.flatMap { $0 }
+    }
+
+    private static func laneMap<Item: Sendable, Result: Sendable>(
+        over items: [Item], lanes: Int, _ transform: @Sendable (Item) -> Result?
+    ) -> [Result] {
+        let lanes = max(1, min(lanes, items.count))
+        guard lanes > 1 else { return items.compactMap(transform) }
+        var results = [Result?](repeating: nil, count: items.count)
+        results.withUnsafeMutableBufferPointer { results in
+            let address = UInt(bitPattern: results.baseAddress)
+            withoutActuallyEscaping(transform) { transform in
+                DispatchQueue.concurrentPerform(iterations: lanes) { lane in
+                    // Each lane writes only the elements of its own items.
+                    let results = UnsafeMutablePointer<Result?>(bitPattern: address)!
+                    for index in stride(from: lane, to: items.count, by: lanes) {
+                        results[index] = transform(items[index])
+                    }
+                }
+            }
+        }
+        return results.compactMap { $0 }
     }
 
     /// Syndromes kept spare when decoding with erasures. With e erasures and no other

@@ -159,9 +159,7 @@ makes, and the settings.
 
 ## TODO or future ideas
 
-- **Multi-disc sets.** The discs of a release share the release choice and
-  the album's edits, and the app says which discs of a set are ripped. Still
-  to do: reusable style recipes for titles.
+- **Multi-disc sets:** reusable style recipes for titles.
 - Ability to add image art after encoding
 - Pre-emphasis support as mentioned above.
 - Option for automatic rip on insertion and recognition

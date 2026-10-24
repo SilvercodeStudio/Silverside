@@ -49,6 +49,9 @@ struct Metadata: AsyncParsableCommand {
     @Flag(help: "Remove every edit of the disc, and of its release's album names.")
     var clearEdits = false
 
+    @Flag(help: "Write the names and the cover into the album's encoded files again, if the rip was encoded (with -i).")
+    var retag = false
+
     @Flag(
         help: """
             When MusicBrainz has no release for the disc, make one from the disc's CD-Text (or "Unknown Artist" and \
@@ -130,13 +133,21 @@ struct Metadata: AsyncParsableCommand {
         print(
             "Saved the release" + (edits.isEmpty ? "" : " and the edits")
                 + " in \(folder.appending(path: "disc.json").path).")
-        guard !chosen.isManual else { return }
-        if let cover {
-            let image = CoverImage(data: try Data(contentsOf: URL(filePath: cover)))
+        let image = try cover.map { CoverImage(data: try Data(contentsOf: URL(filePath: $0))) }
+        if let image {
             print("Cover: \(try image.write(to: folder).path)")
-        } else {
+        } else if !chosen.isManual {
             ReleaseChoice.printArtwork(
                 try await CoverArtClient().saveArtwork(artwork ?? Settings.load().artwork, of: chosen, in: folder))
+        }
+        if retag {
+            let settings = try Settings.load()
+            let written = try DiscEncoder(settings: settings).retag(
+                reportAt: folder.appending(path: "disc.json"), cover: image, library: settings.libraryURL)
+            print(
+                written.isEmpty
+                    ? "Not encoded yet: the names and the cover go into the files when it is."
+                    : "Wrote the tags of \(written.count) encoded files.")
         }
     }
 }

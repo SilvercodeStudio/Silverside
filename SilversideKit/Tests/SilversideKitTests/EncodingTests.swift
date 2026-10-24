@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -192,5 +193,91 @@ struct EncodingTests {
         var encoder = DiscEncoder(format: .alac)
         encoder.allowsUnverified = true
         #expect(try encoder.encode(disc, into: library).count == 2)
+    }
+}
+
+extension EncodingTests {
+    /// A solid-colour PNG of the given size, a real image that the cover scaler can decode.
+    static func png(width: Int, height: Int, gray: CGFloat) -> CoverImage {
+        let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
+            NSColor(white: gray, alpha: 1).setFill()
+            rect.fill()
+            return true
+        }
+        let tiff = image.tiffRepresentation!
+        return CoverImage(data: NSBitmapImageRep(data: tiff)!.representation(using: .png, properties: [:])!)
+    }
+
+    /// A new cover after the rip goes into the rip's folder, the album's, the tags of every
+    /// encoded file (the other tags kept), and the store for the release; the archive's
+    /// cover put back is not kept for the release.
+    @Test func retagsAnEncodedAlbumWithANewCover() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        let files = try DiscEncoder(format: .flac).encode(disc, into: library)
+        let album = files[0].deletingLastPathComponent()
+        let before = try FLACTags.read(files[0])
+        let store = ReleaseCoverStore(folder: folder.deletingLastPathComponent().appending(path: "covers"))
+        let cover = Self.png(width: 300, height: 300, gray: 0.5)
+        var encoder = DiscEncoder(format: .flac)
+        encoder.replayGain = true
+        // The store under test is not the default one, so the kept cover is checked by hand.
+        // The rip's disc.json has no encoding record (the encoder was called directly), so the
+        // album folder is found through the library, as for a rip encoded from the terminal.
+        let written = try encoder.retag(
+            reportAt: folder.appending(path: "disc.json"), cover: cover, remember: false, library: library)
+        #expect(written == files)
+        #expect(try Data(contentsOf: folder.appending(path: "cover.png")) == cover.data)
+        #expect(try Data(contentsOf: album.appending(path: "cover.png")) == cover.data)
+        #expect(!FileManager.default.fileExists(atPath: album.appending(path: "cover.jpg").path))
+        let embedded = try #require(try FLACTags.readFrontCover(files[0]))
+        #expect(CoverImage(data: embedded).fileExtension == "png")
+        // Every tag is as it was: the names, the credits, and the ReplayGain values.
+        let after = try FLACTags.read(files[0])
+        #expect(after.map { "\($0.key)=\($0.value)" } == before.map { "\($0.key)=\($0.value)" })
+        try store.remember(cover, forReleaseID: "rel-1")
+        #expect(store.cover(forReleaseID: "rel-1") == cover)
+        try store.remember(Self.png(width: 10, height: 10, gray: 0.2), forReleaseID: "rel-1")
+        #expect(store.cover(forReleaseID: "rel-1")?.data.count ?? 0 < cover.data.count)
+        try store.forget(releaseID: "rel-1")
+        #expect(store.cover(forReleaseID: "rel-1") == nil)
+    }
+
+    /// A library update after the album was renamed: the folder moves, the tags and the CUE
+    /// sheet say the new name, the album report follows with its record, and the rip's
+    /// disc.json keeps the merged edits.
+    @Test func updatesTheLibraryAfterTheAlbumIsRenamed() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        let files = try DiscEncoder(format: .flac).encode(disc, into: library)
+        let oldAlbum = files[0].deletingLastPathComponent()
+        let releaseID = try #require(disc.release?.id)
+        let edits = ReleaseEditsStore(url: folder.deletingLastPathComponent().appending(path: "edits.json"))
+        try edits.remember(MetadataEdits(album: "Giants Stadium 1991"), forReleaseID: releaseID)
+        let update = try DiscEncoder(format: .flac).updateLibrary(
+            reportAt: folder.appending(path: "disc.json"), library: library, editsStore: edits,
+            coverStore: ReleaseCoverStore(folder: folder.deletingLastPathComponent().appending(path: "covers")))
+        let newAlbum = library.appending(path: "Grateful Dead/Giants Stadium 1991")
+        #expect(update.albumFolder?.standardizedFileURL == newAlbum.standardizedFileURL && update.renamed == 1)
+        #expect(!FileManager.default.fileExists(atPath: oldAlbum.path))
+        #expect(update.files.map(\.lastPathComponent) == files.map(\.lastPathComponent))
+        let tags = Dictionary(
+            try FLACTags.read(update.files[0]).map { ($0.key, $0.value) }, uniquingKeysWith: { a, _ in a })
+        #expect(tags["ALBUM"] == "Giants Stadium 1991" && tags["TITLE"] == "Help on the Way >")
+        #expect(tags["REPLAYGAIN_TRACK_GAIN"] != nil)
+        let contents = try FileManager.default.contentsOfDirectory(atPath: newAlbum.path)
+        #expect(
+            contents.contains("Giants Stadium 1991 (Disc 2).cue")
+                && !contents.contains { $0.hasPrefix("Saint") && $0.hasSuffix(".cue") })
+        let saved = try RipReport.read(from: newAlbum.appending(path: "Rip Report (Disc 2).json"))
+        #expect(saved.encoding?.folder == newAlbum.path)
+        #expect(MetadataEdits.read(fromDiscJSONOf: folder)?.album == "Giants Stadium 1991")
+        // A second update changes nothing.
+        let again = try DiscEncoder(format: .flac).updateLibrary(
+            reportAt: folder.appending(path: "disc.json"), library: library, editsStore: edits,
+            coverStore: ReleaseCoverStore(folder: folder.deletingLastPathComponent().appending(path: "covers")))
+        #expect(again.renamed == 0 && again.files == update.files)
     }
 }

@@ -64,7 +64,7 @@ struct HistoryView: View {
 
 }
 
-private struct DateCell: View {
+struct DateCell: View {
     var date: Date
 
     var body: some View {

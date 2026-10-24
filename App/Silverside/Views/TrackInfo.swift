@@ -172,6 +172,11 @@ extension InfoSection {
             media: disc.media)
     }
 
+    /// A release alone, for a set.
+    static func disc(release: MusicBrainzRelease) -> [InfoSection] {
+        disc(release: release, medium: nil, toc: nil, mcn: nil, cdText: nil, media: nil)
+    }
+
     /// An earlier rip's disc, from its report.
     static func disc(report: RipReport) -> [InfoSection] {
         let toc = try? TOC(ctdbTOCString: report.toc)

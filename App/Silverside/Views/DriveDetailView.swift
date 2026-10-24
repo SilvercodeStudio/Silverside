@@ -202,6 +202,7 @@ struct AlbumHeader: View {
                     if disc.userCover != nil {
                         Button(disc.cover == nil ? "Remove Cover" : "Use the Cover Art Archive's") {
                             slot.disc?.userCover = nil
+                            if let release = disc.release { try? ReleaseCoverStore().forget(releaseID: release.id) }
                         }
                         .disabled(slot.rip?.isRunning == true)
                     }
@@ -261,11 +262,15 @@ struct AlbumHeader: View {
                     }
                     if let discLabel = disc.discLabel { Chip(text: discLabel) }
                     if let set = model.set(for: disc.release) {
-                        Chip(
-                            text: "\(set.discs.count) of \(set.discCount) discs ripped",
-                            tone: set.isComplete ? .good : .neutral, systemImage: "square.stack"
-                        )
-                        .help(set.summary + ". The album's edits and the release choice are shared by the set.")
+                        Button {
+                            model.selection = .set(set.releaseID)
+                        } label: {
+                            Chip(
+                                text: "\(set.discs.count) of \(set.discCount) discs ripped",
+                                tone: set.isComplete ? .good : .neutral, systemImage: "square.stack")
+                        }
+                        .buttonStyle(.plain)
+                        .help(set.summary + ". The album's names and cover are the set's. Click for the set.")
                     }
                     InfoButton(help: "Disc info: the release as MusicBrainz has it, and the disc's own codes") {
                         InfoSection.disc(disc)

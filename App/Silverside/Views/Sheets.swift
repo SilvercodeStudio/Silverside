@@ -204,3 +204,36 @@ struct DriveTestSheet: View {
         .frame(width: 680, height: run.report == nil ? 320 : 540)
     }
 }
+
+/// The library work under way: encoding a set's discs, or bringing them up to date.
+struct LibrarySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    var run: LibraryRun
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                if run.isRunning {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: run.problems == 0 ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.title2)
+                        .foregroundStyle(run.problems == 0 ? Theme.good : Theme.warning)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(run.title).font(.headline)
+                    Text(run.headline).font(.callout).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if run.isRunning {
+                    Button("Stop") { run.stop() }.help("Stop after the disc under way")
+                } else {
+                    Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                }
+            }
+            LogText(lines: run.log)
+        }
+        .padding(16)
+        .frame(width: 720, height: 420)
+    }
+}

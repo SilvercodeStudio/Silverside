@@ -10,6 +10,8 @@ enum SidebarItem: Hashable {
     case rip(URL)
     /// Every earlier rip, in a table.
     case history
+    /// A multi-disc release among the earlier rips, by its MusicBrainz ID.
+    case set(String)
 }
 
 struct AppAlert: Identifiable {
@@ -44,6 +46,11 @@ final class AppModel {
     var repairShown = false
     /// Plays a track of a disc or of an earlier rip, one at a time.
     let player = Player()
+    /// Goes up when an earlier rip's cover changes, so its view loads the cover again.
+    private(set) var coverVersion = 0
+    /// Work on the library under way, or the last, shown in a sheet.
+    private(set) var library: LibraryRun?
+    var libraryShown = false
 
     @ObservationIgnored private var watcher: DiskWatcher?
     @ObservationIgnored private var observers: [any NSObjectProtocol] = []
@@ -91,11 +98,52 @@ final class AppModel {
     }
 
     /// The multi-disc releases among the earlier rips, with the discs ripped so far.
-    var sets: [RipSet] { RipSet.sets(in: recentRips.map { ($0.folder, $0.report) }) }
+    var sets: [RipSet] {
+        RipSet.sets(
+            in: recentRips.map { .init(folder: $0.folder, file: $0.file, report: $0.report, hasAudio: $0.hasAudio) })
+    }
 
     func set(for release: MusicBrainzRelease?) -> RipSet? {
         guard let release, release.media.count > 1 else { return nil }
         return sets.first { $0.releaseID == release.id }
+    }
+
+    /// The set that the sidebar selects, if any.
+    var selectedSet: RipSet? {
+        guard case .set(let id) = selection else { return nil }
+        return sets.first { $0.releaseID == id }
+    }
+
+    /// Encodes rips into the library, and brings encoded ones up to date, in a sheet.
+    func startLibraryRun(title: String, encode: [RecentRip], update: [RecentRip], cover: CoverImage? = nil) {
+        guard library?.isRunning != true else {
+            libraryShown = true
+            return
+        }
+        let run = LibraryRun(title: title, encode: encode, update: update)
+        library = run
+        libraryShown = true
+        run.start(settings: settings, cover: cover) { [weak self] in
+            self?.coverVersion += 1
+            self?.refreshRecentRips()
+        }
+    }
+
+    /// A cover for every disc of a set. Nil takes the Cover Art Archive's front cover.
+    func changeCover(ofSet set: RipSet, rips: [RecentRip], to image: CoverImage?) {
+        Task { @MainActor in
+            var cover = image
+            if cover == nil {
+                try? ReleaseCoverStore().forget(releaseID: set.releaseID)
+                cover = try? await CoverArtClient().frontCover(releaseID: set.releaseID)
+                guard cover != nil else {
+                    alert = AppAlert(
+                        title: "No cover", message: "The Cover Art Archive has no front cover for this release.")
+                    return
+                }
+            }
+            startLibraryRun(title: set.title, encode: [], update: rips, cover: cover)
+        }
     }
 
     // MARK: Drives
@@ -263,6 +311,36 @@ final class AppModel {
             await MainActor.run {
                 self.recentRips = rips
                 completion?()
+            }
+        }
+    }
+
+    /// Changes an earlier rip's cover: the cover file in the rip's folder and the album's, the
+    /// tags of the encoded files, and the cover kept for the release. Nil puts the Cover Art
+    /// Archive's front cover back.
+    func changeCover(of rip: RecentRip, to image: CoverImage?) {
+        let settings = settings
+        Task { @MainActor in
+            do {
+                var cover = image
+                if cover == nil, let release = rip.report.release, !release.isManual {
+                    try? ReleaseCoverStore().forget(releaseID: release.id)
+                    cover = try await CoverArtClient().frontCover(releaseID: release.id)
+                }
+                guard let cover else {
+                    alert = AppAlert(
+                        title: "No cover", message: "The Cover Art Archive has no front cover for this release.")
+                    return
+                }
+                let (file, remember) = (rip.file, image != nil)
+                _ = try await Task.detached {
+                    try DiscEncoder(settings: settings).retag(
+                        reportAt: file, cover: cover, remember: remember, library: settings.libraryURL)
+                }.value
+                coverVersion += 1
+                refreshRecentRips()
+            } catch {
+                alert = AppAlert(title: "The cover could not be changed", message: "\(error)")
             }
         }
     }

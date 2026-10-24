@@ -1,37 +1,96 @@
 import Foundation
 
 /// The discs of one multi-disc release among earlier rips, so that the app can say which
-/// discs of a set are ripped and which are still to do. A release of one disc is not a set.
+/// discs of a set are ripped, which are verified and encoded, and which are still to do. A
+/// release of one disc is not a set. Only the release's CDs count: a box set's DVD is not a
+/// disc to rip.
 public struct RipSet: Equatable, Sendable {
+    /// One ripped disc of the set: the newest rip of it.
+    public struct Disc: Equatable, Sendable {
+        public var position: Int
+        /// The rip's folder, or the album folder for a report kept in the library.
+        public var folder: URL
+        /// The report file: `disc.json`, or the album folder's copy.
+        public var file: URL
+        public var date: Date
+        /// True while the rip's WAV files are there (in the rips folder).
+        public var hasAudio: Bool
+        /// AccurateRip or CTDB proves every track.
+        public var isVerified: Bool
+        /// The rip went into the library.
+        public var isEncoded: Bool
+
+        public init(
+            position: Int, folder: URL, file: URL, date: Date, hasAudio: Bool, isVerified: Bool, isEncoded: Bool
+        ) {
+            self.position = position
+            self.folder = folder
+            self.file = file
+            self.date = date
+            self.hasAudio = hasAudio
+            self.isVerified = isVerified
+            self.isEncoded = isEncoded
+        }
+
+        public var isFinished: Bool { isVerified && isEncoded }
+
+        /// "verified and encoded", "verified, not encoded", "encoded, not verified", "not verified".
+        public var stateText: String {
+            switch (isVerified, isEncoded) {
+            case (true, true): "verified and encoded"
+            case (true, false): "verified, not encoded"
+            case (false, true): "encoded, not verified"
+            case (false, false): "ripped, not verified"
+            }
+        }
+    }
+
     public var releaseID: String
     public var title: String
     public var artist: String
-    public var discCount: Int
-    /// The rip folder of each ripped disc, by the disc's position in the release.
-    public var discs: [Int: URL]
+    /// The positions of the release's CDs, in order.
+    public var positions: [Int]
+    /// The ripped discs, by position.
+    public var discs: [Int: Disc]
 
-    public init(releaseID: String, title: String, artist: String, discCount: Int, discs: [Int: URL]) {
+    public init(releaseID: String, title: String, artist: String, positions: [Int], discs: [Int: Disc] = [:]) {
         self.releaseID = releaseID
         self.title = title
         self.artist = artist
-        self.discCount = discCount
+        self.positions = positions
         self.discs = discs
     }
 
+    /// How many CDs the release has.
+    public var discCount: Int { positions.count }
+
     /// The positions of the discs that are not ripped yet.
-    public var missing: [Int] { (1...max(discCount, 1)).filter { discs[$0] == nil } }
+    public var missing: [Int] { positions.filter { discs[$0] == nil } }
 
-    public var isComplete: Bool { missing.isEmpty }
+    /// Ripped discs that are not yet verified and encoded.
+    public var unfinished: [Int] { discs.values.filter { !$0.isFinished }.map(\.position).sorted() }
 
-    /// "Discs 1 and 3 of 3 ripped; disc 2 is still to do", for people to read.
+    /// Every disc ripped, verified, and encoded.
+    public var isComplete: Bool { missing.isEmpty && unfinished.isEmpty }
+
+    /// "Discs 1 and 3 of 3 ripped; disc 2 still to do; disc 1 not verified", for people to read.
     public var summary: String {
         let ripped = discs.keys.sorted()
-        if isComplete { return "All \(discCount) discs ripped" }
-        let rippedText =
+        if isComplete { return "All \(discCount) discs verified and encoded" }
+        var text =
             ripped.isEmpty
             ? "No disc of \(discCount) ripped yet"
             : "\(ripped.count == 1 ? "Disc" : "Discs") \(Self.list(ripped)) of \(discCount) ripped"
-        return rippedText + "; \(missing.count == 1 ? "disc" : "discs") \(Self.list(missing)) still to do"
+        if !missing.isEmpty { text += "; \(missing.count == 1 ? "disc" : "discs") \(Self.list(missing)) still to do" }
+        let notVerified = discs.values.filter { !$0.isVerified }.map(\.position).sorted()
+        let notEncoded = discs.values.filter { $0.isVerified && !$0.isEncoded }.map(\.position).sorted()
+        if !notVerified.isEmpty {
+            text += "; \(notVerified.count == 1 ? "disc" : "discs") \(Self.list(notVerified)) not verified"
+        }
+        if !notEncoded.isEmpty {
+            text += "; \(notEncoded.count == 1 ? "disc" : "discs") \(Self.list(notEncoded)) not encoded"
+        }
+        return text
     }
 
     /// "1", "1 and 3", "1, 2, and 4".
@@ -45,27 +104,62 @@ public struct RipSet: Equatable, Sendable {
         }
     }
 
-    /// The sets among earlier rips: one for each multi-disc release, with the newest rip of
-    /// each disc. Rips with no release, or of a one-disc release, are left out.
-    public static func sets(in rips: [(folder: URL, report: RipReport)]) -> [RipSet] {
+    /// An earlier rip, as the sets are found from it.
+    public struct Rip: Sendable {
+        public var folder: URL
+        public var file: URL
+        public var report: RipReport
+        public var hasAudio: Bool
+
+        public init(folder: URL, file: URL, report: RipReport, hasAudio: Bool) {
+            self.folder = folder
+            self.file = file
+            self.report = report
+            self.hasAudio = hasAudio
+        }
+    }
+
+    /// The sets among earlier rips: one for each release with more than one CD, with the
+    /// newest rip of each disc. Rips with no release, or of a one-CD release, are left out.
+    public static func sets(in rips: [Rip]) -> [RipSet] {
         var sets = [String: RipSet]()
-        var dates = [String: [Int: Date]]()
         for rip in rips.sorted(by: { $0.report.date > $1.report.date }) {
-            guard let release = rip.report.release, release.media.count > 1, !release.isManual,
+            guard let release = rip.report.release, !release.isManual, release.cdPositions.count > 1,
                 let position = rip.report.discPosition
             else { continue }
             var set =
                 sets[release.id]
                 ?? RipSet(
                     releaseID: release.id, title: release.title, artist: release.artist,
-                    discCount: release.media.count, discs: [:])
-            if let known = dates[release.id]?[position], known >= rip.report.date { continue }
-            set.discs[position] = rip.folder
-            dates[release.id, default: [:]][position] = rip.report.date
+                    positions: release.cdPositions)
+            if let known = set.discs[position], known.date >= rip.report.date { continue }
+            set.discs[position] = Disc(
+                position: position, folder: rip.folder, file: rip.file, date: rip.report.date, hasAudio: rip.hasAudio,
+                isVerified: rip.report.isVerified, isEncoded: rip.report.encoding != nil || !rip.hasAudio)
             sets[release.id] = set
         }
         return sets.values.sorted { ($0.artist, $0.title) < ($1.artist, $1.title) }
     }
+}
+
+extension MusicBrainzRelease.Medium {
+    /// True for a medium that a CD drive reads as an audio CD: a CD, HDCD, Enhanced CD, CD-R,
+    /// hybrid SACD, or DualDisc, and a medium whose format MusicBrainz does not say. Not a
+    /// DVD, Blu-ray, vinyl, cassette, download, or SACD-only disc.
+    public var isCompactDisc: Bool {
+        guard let format = format?.lowercased() else { return true }
+        if format.contains("hybrid") || format.contains("dualdisc") { return true }
+        for other in ["dvd", "blu-ray", "bluray", "vinyl", "cassette", "digital", "sacd", "minidisc", "file"]
+        where format.contains(other) {
+            return false
+        }
+        return true
+    }
+}
+
+extension MusicBrainzRelease {
+    /// The positions of the release's CDs: the discs there are to rip.
+    public var cdPositions: [Int] { media.filter(\.isCompactDisc).map(\.position) }
 }
 
 extension RipReport {

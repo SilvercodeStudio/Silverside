@@ -84,4 +84,15 @@ struct ReleaseChoiceTests {
         #expect(store.choices(forDiscID: "d1") == ["box"] && store.choices(forDiscID: "d3") == ["standalone"])
         #expect(store.choices(forDiscID: "none").isEmpty)
     }
+
+    /// A release chosen for another disc comes first for a disc MusicBrainz lists by its
+    /// lengths only, and the choice is not put to the user again.
+    @Test func prefersTheReleaseChosenForAnotherDiscOfTheSet() {
+        let box = release("box", discIDs: [["a"], ["b"], ["c"]])
+        let single = release("single", discIDs: [["x"]])
+        let ranked = ReleaseRanking.ranked([single, box], discID: "unknown", chosenForOtherDiscs: ["box"])
+        #expect(ranked.map(\.id) == ["box", "single"])
+        #expect(!ReleaseRanking.isAmbiguous(ranked, chosenForOtherDiscs: ["box"]))
+        #expect(ReleaseRanking.ranked([single, box], discID: "unknown").map(\.id) == ["single", "box"])
+    }
 }

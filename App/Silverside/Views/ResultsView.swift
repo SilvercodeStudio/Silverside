@@ -1,5 +1,6 @@
 import SilversideKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// An earlier rip: the headline, each track's result, and the report as text.
 struct ResultsView: View {
@@ -8,9 +9,12 @@ struct ResultsView: View {
     var report: RipReport
     /// False for a report kept in the library after the rip's WAV files were deleted.
     var hasAudio = true
+    /// The report file, for a report kept in the library; nil means the folder's disc.json.
+    var reportFile: URL?
     @State private var reportShown = true
     /// The cover in the rip's folder, or in the album folder for a report kept in the library.
     @State private var cover: Data?
+    @State private var coverTargeted = false
 
     private var toc: TOC? { try? TOC(ctdbTOCString: report.toc) }
 
@@ -52,7 +56,7 @@ struct ResultsView: View {
             .opacity(reportShown ? 1 : 0)
             .frame(width: reportShown ? nil : 0)
         }
-        .task(id: folder) {
+        .task(id: "\(folder.path) \(model.coverVersion)") {
             cover =
                 ["cover.jpg", "cover.png"].lazy.compactMap { try? Data(contentsOf: folder.appending(path: $0)) }
                 .first
@@ -116,9 +120,32 @@ struct ResultsView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
-            if let cover {
-                CoverView(data: cover, size: 112)
-            }
+            CoverView(data: cover, size: 112)
+                .overlay {
+                    if coverTargeted {
+                        RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 3)
+                    }
+                }
+                .onDrop(of: [.fileURL, .image], isTargeted: $coverTargeted) { providers in
+                    guard let provider = providers.first else { return false }
+                    CoverDrop.load(provider) { data in
+                        if let data { model.changeCover(of: recentRip, to: CoverImage(data: data)) }
+                    }
+                    return true
+                }
+                .onTapGesture { chooseCover() }
+                .onDrag { CoverDrop.provider(for: cover, name: coverFileName) ?? NSItemProvider() }
+                .contextMenu {
+                    Button("Choose Cover…") { chooseCover() }
+                    if let release = report.release, !release.isManual, release.hasFrontCover {
+                        Button("Use the Cover Art Archive's") { model.changeCover(of: recentRip, to: nil) }
+                    }
+                    Divider()
+                    Button("Export Cover…") { CoverDrop.export(cover, name: coverFileName) }.disabled(cover == nil)
+                }
+                .help(
+                    "Drop an image here, or click, to change the cover: in the rip, in the album folder, and in the encoded files' tags. Drag the cover out to save a copy."
+                )
             VStack(alignment: .leading, spacing: 6) {
                 Label {
                     Text(RipRun.headline(for: report)).font(.title2.weight(.semibold))
@@ -136,10 +163,34 @@ struct ResultsView: View {
                     Text(advice).font(.callout).foregroundStyle(.secondary)
                 }
                 if let set = model.set(for: report.release) {
-                    Text(setText(set)).font(.callout).foregroundStyle(.secondary)
+                    Button(setText(set)) { model.selection = .set(set.releaseID) }
+                        .buttonStyle(.link).font(.callout)
+                        .help("The whole set: each disc's state, the album's names, and the work left")
                 }
             }
         }
+    }
+
+    /// This rip, as the model's actions take it.
+    private var recentRip: RecentRip {
+        hasAudio
+            ? RecentRip(folder: folder, report: report)
+            : RecentRip(libraryReport: reportFile ?? folder.appending(path: "Rip Report.json"), report: report)
+    }
+
+    /// "Grateful Dead - Reckoning cover", for a cover dragged out or exported.
+    private var coverFileName: String {
+        NameTemplate.safeComponent(
+            [report.release?.artist, report.release?.title].compactMap { $0 }.joined(separator: " - ") + " cover")
+    }
+
+    private func chooseCover() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.image]
+        panel.message = "Choose an image for the cover. JPEG and PNG are kept as they are; other formats become JPEG."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if let data = CoverDrop.imageData(from: url) { model.changeCover(of: recentRip, to: CoverImage(data: data)) }
     }
 
     /// "Disc 2 of 3 · Discs 1 and 2 of 3 ripped; disc 3 still to do".

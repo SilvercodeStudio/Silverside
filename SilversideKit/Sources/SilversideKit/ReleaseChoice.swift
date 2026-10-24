@@ -13,12 +13,17 @@ import Foundation
 /// 5. fewer media, so a release comes before a box set that holds it
 /// 6. MusicBrainz's own order
 public enum ReleaseRanking {
+    /// `chosen` are the releases the user chose for this disc before; `chosenForOtherDiscs`,
+    /// for any disc, so that a disc of a set that MusicBrainz lists by its lengths only gets
+    /// the set's release.
     public static func ranked(
-        _ releases: [MusicBrainzRelease], discID: String, mcn: String? = nil, chosen: Set<String> = []
+        _ releases: [MusicBrainzRelease], discID: String, mcn: String? = nil, chosen: Set<String> = [],
+        chosenForOtherDiscs: Set<String> = []
     ) -> [MusicBrainzRelease] {
         func keys(_ release: MusicBrainzRelease) -> [Int] {
             [
                 chosen.contains(release.id) ? 0 : 1,
+                chosenForOtherDiscs.contains(release.id) ? 0 : 1,
                 mcn.map { matches(barcode: release.barcode, mcn: $0) } == true ? 0 : 1,
                 release.medium(withDiscID: discID) != nil ? 0 : 1,
                 release.status == "Official" ? 0 : 1,
@@ -36,11 +41,12 @@ public enum ReleaseRanking {
     /// matches the MCN, and not when both are editions of the same thing (same title and
     /// number of media, such as the US and European pressings of a release).
     public static func isAmbiguous(
-        _ ranked: [MusicBrainzRelease], mcn: String? = nil, chosen: Set<String> = []
+        _ ranked: [MusicBrainzRelease], mcn: String? = nil, chosen: Set<String> = [],
+        chosenForOtherDiscs: Set<String> = []
     ) -> Bool {
         guard ranked.count > 1 else { return false }
         let (first, second) = (ranked[0], ranked[1])
-        if chosen.contains(first.id) { return false }
+        if chosen.contains(first.id) || chosenForOtherDiscs.contains(first.id) { return false }
         if let mcn, matches(barcode: first.barcode, mcn: mcn), !matches(barcode: second.barcode, mcn: mcn) {
             return false
         }
@@ -69,6 +75,11 @@ public struct ReleaseChoiceStore: Sendable {
     }
 
     /// The release IDs chosen for a disc ID.
+    /// Every release the user chose, for any disc.
+    public func allChoices() -> Set<String> {
+        Set(load().values.flatMap { $0 })
+    }
+
     public func choices(forDiscID discID: String) -> Set<String> {
         Set(load()[discID] ?? [])
     }

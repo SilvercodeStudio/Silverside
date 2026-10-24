@@ -230,7 +230,8 @@ struct DiscInfo {
             return
         }
         let remembered = ReleaseChoiceStore().choices(forDiscID: toc.musicBrainzDiscID)
-        isAmbiguous = ReleaseRanking.isAmbiguous(result.ranked, mcn: mcn, chosen: remembered)
+        isAmbiguous = ReleaseRanking.isAmbiguous(
+            result.ranked, mcn: mcn, chosen: remembered, chosenForOtherDiscs: ReleaseChoiceStore().allChoices())
         lookup = .found
         await use(chosen)
     }
@@ -257,6 +258,8 @@ struct DiscInfo {
         manual = nil
         medium = chosen.medium(for: toc) ?? (chosen.media.count == 1 ? chosen.media.first : nil)
         edits = ReleaseEditsStore().edits(forReleaseID: chosen.id) ?? MetadataEdits()
+        // A cover chosen for this release before, on another disc or rip.
+        userCover = chosen.isManual ? nil : ReleaseCoverStore().cover(forReleaseID: chosen.id)
         cover = nil
         guard chosen.hasFrontCover else { return }
         cover = try? await CoverArtClient().frontCover(releaseID: chosen.id)?.data

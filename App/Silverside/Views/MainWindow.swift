@@ -51,6 +51,9 @@ struct MainWindow: View {
         .sheet(isPresented: $model.repairShown) {
             if let run = model.repair { RepairSheet(run: run) }
         }
+        .sheet(isPresented: $model.libraryShown) {
+            if let run = model.library { LibrarySheet(run: run) }
+        }
         .onAppear {
             // The first launch opens the welcome. `-welcomeDone 0` opens it again, and `-welcomeDone 1` keeps it shut.
             if !UserDefaults.standard.bool(forKey: WelcomeView.doneKey) { openWindow(id: "welcome") }
@@ -60,8 +63,14 @@ struct MainWindow: View {
                 if let id = UserDefaults.standard.string(forKey: "openWindow"), !id.isEmpty {
                     if id == "settings" { openSettings() } else { openWindow(id: id) }
                 }
-                // `-selectHistory 1` shows the rip history.
+                // `-selectHistory 1` shows the rip history; `-selectSet 1` the first multi-disc set.
                 if UserDefaults.standard.bool(forKey: "selectHistory") { model.selection = .history }
+                if UserDefaults.standard.bool(forKey: "selectSet") {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(1))
+                        if let set = model.sets.first { model.selection = .set(set.releaseID) }
+                    }
+                }
                 // `-selectRecent 1` shows the newest earlier rip, for screenshots of the results;
                 // with `-repair 1` too, its repair starts.
                 if UserDefaults.standard.bool(forKey: "selectRecent") {
@@ -87,8 +96,10 @@ struct DetailView: View {
                 DriveDetailView(slot: slot)
             } else if model.selection == .history {
                 HistoryView()
+            } else if let set = model.selectedSet {
+                SetView(ripSet: set)
             } else if let rip = model.selectedRip {
-                ResultsView(folder: rip.folder, report: rip.report, hasAudio: rip.hasAudio)
+                ResultsView(folder: rip.folder, report: rip.report, hasAudio: rip.hasAudio, reportFile: rip.file)
             } else if model.drives.isEmpty {
                 NoDriveView()
             } else {
@@ -136,6 +147,20 @@ struct SidebarView: View {
                     Label("All Rips (\(model.recentRips.count))", systemImage: "clock")
                         .tag(SidebarItem.history)
                         .help("Every rip Silverside knows, in a table you can search and sort")
+                }
+            }
+            if !model.sets.isEmpty {
+                Section("Sets") {
+                    ForEach(model.sets, id: \.releaseID) { set in
+                        SidebarRow(
+                            title: set.title,
+                            subtitle: set.isComplete
+                                ? "\(set.discCount) discs" : "\(set.discs.count) of \(set.discCount) discs",
+                            systemImage: "square.stack", tone: set.isComplete ? .good : .neutral
+                        )
+                        .tag(SidebarItem.set(set.releaseID))
+                        .help(set.summary)
+                    }
                 }
             }
         }

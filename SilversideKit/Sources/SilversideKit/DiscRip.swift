@@ -285,6 +285,11 @@ public struct DiscRip {
             edits = kept.merged(with: edits)
         }
         let named = chosen.map { edits.applied(to: $0, toc: toc) }
+        // The user's cover: this rip's, else the one kept for the release by an earlier disc or rip.
+        var userCover = options.cover
+        if userCover == nil, let chosen, !chosen.isManual {
+            userCover = ReleaseCoverStore().cover(forReleaseID: chosen.id)
+        }
         let name =
             named.map {
                 NameTemplate(settings.ripFolderTemplate).name(
@@ -300,7 +305,7 @@ public struct DiscRip {
         // The artwork downloads while the disc is read: the network is idle then, and every
         // image of a release can be a hundred megabytes of scans. The rip waits for it at the end.
         let artworkTask: Task<ArtworkResult, any Error>? =
-            if options.cover == nil, let chosen, !chosen.isManual {
+            if userCover == nil, let chosen, !chosen.isManual {
                 Task { [webClient, choice = options.artwork] in
                     try await CoverArtClient(client: webClient).saveArtwork(choice, of: chosen, in: folder)
                 }
@@ -432,10 +437,11 @@ public struct DiscRip {
         }
 
         // The artwork comes before the report, which lists its files.
-        if let cover = options.cover {
+        if let cover = userCover {
             do {
                 let file = try cover.write(to: folder)
                 written.insert(Self.relativePath(of: file, in: folder))
+                if let chosen, !chosen.isManual { try? ReleaseCoverStore().remember(cover, forReleaseID: chosen.id) }
                 events(.artwork(.saved([file])))
             } catch {
                 events(.artworkFailed(error))

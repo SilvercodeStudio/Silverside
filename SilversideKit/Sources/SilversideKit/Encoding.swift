@@ -359,8 +359,8 @@ public struct DiscEncoder: Sendable {
                 try Data(report.markdown.utf8).write(to: albumFolder.appending(path: "Rip Report\(discPart).md"))
             }
             try writeCueSheet(
-                cueTracks, hiddenTrackFile: hiddenTrackFile, release: release, medium: medium, disc: disc,
-                to: albumFolder, discPart: discPart)
+                cueTracks, hiddenTrackFile: hiddenTrackFile, release: release, medium: medium, toc: disc.toc,
+                mcn: disc.report?.mcn, to: albumFolder, discPart: discPart)
         }
         return (written, encoding)
     }
@@ -375,10 +375,9 @@ public struct DiscEncoder: Sendable {
     }
 
     /// The CUE sheet: everything needed to burn the disc again from the files, with the tags' names.
-    private func writeCueSheet(
+    func writeCueSheet(
         _ tracks: [CueSheet.Track], hiddenTrackFile: String?, release: MusicBrainzRelease,
-        medium: MusicBrainzRelease.Medium,
-        disc: RippedDisc, to folder: URL, discPart: String
+        medium: MusicBrainzRelease.Medium, toc: TOC, mcn: String?, to folder: URL, discPart: String
     ) throws {
         let sample = TrackMetadata(
             release: release, medium: medium, track: medium.tracks[0], plainPunctuation: plainPunctuation,
@@ -387,10 +386,10 @@ public struct DiscEncoder: Sendable {
         var sheet = CueSheet(
             title: comments.first { $0.key == "ALBUM" }?.value,
             performer: comments.first { $0.key == "ALBUMARTIST" }?.value,
-            catalog: disc.report?.mcn ?? release.barcode.map { $0.count == 12 ? "0" + $0 : $0 }, tracks: tracks)
+            catalog: mcn ?? release.barcode.map { $0.count == 12 ? "0" + $0 : $0 }, tracks: tracks)
         sheet.hiddenTrackFile = hiddenTrackFile
         sheet.remarks = release.date.map { ["DATE \($0)"] } ?? []
-        sheet.remarks.append("DISCID " + String(format: "%08X", disc.toc.freedbDiscID))
+        sheet.remarks.append("DISCID " + String(format: "%08X", toc.freedbDiscID))
         sheet.remarks.append("COMMENT \"\(FLACTags.vendor)\"")
         if release.media.count > 1 {
             sheet.remarks += ["DISCNUMBER \(medium.position)", "TOTALDISCS \(release.media.count)"]

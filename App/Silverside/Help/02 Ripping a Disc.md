@@ -21,6 +21,14 @@ The info button at the end of a track's row shows everything known about the tra
 
 The play button at the start of a track's row plays it from the disc, read the way a rip reads it, so a track that plays is one the drive can read. A bar at the bottom of the window shows the track, with pause, a slider to move within it, and stop. An earlier rip's tracks play the same way, from the rip's WAV files or the encoded files in the library. One track plays at a time; starting a rip, a repair, or a drive test on the drive stops it.
 
+## Sets
+
+A release with several CDs is a set. Its discs share the album's names, the release choice, and the cover: a change on one disc reaches the others. The sidebar's Sets section, or the "discs ripped" chip on a disc, opens the set: each disc's state (still to do, ripped but not verified, verified but not in the library, done), when and on which drive it was ripped, the album's names to edit (press Return to keep a change), and the cover. **Encode Discs** encodes the verified discs that are not in the library yet, as Settings say. **Update the Library** writes the set's names and cover into every encoded disc's files, renames the files and the album folder as the naming templates say, and writes the CUE sheets again; the audio is not touched. A box set's DVD or Blu-ray is not counted as a disc to rip.
+
+## Changing the cover
+
+Before a rip, drop an image on the cover, or click it, to use your own in place of the Cover Art Archive's; the cover's menu puts the archive's back. After a rip, the same works on the rip in Recent Rips: the new cover goes into the rip's folder, into the album folder in the library, and into the tags of the encoded files, and the audio is not touched. A cover you choose is kept for the release, so the other discs of a box set get it, and so does a later rip of the same release.
+
 ## Read modes
 
 - **Secure** reads each track once and checks it against AccurateRip. A track that does not match is read again, and the sectors that read differently are re-read until two reads agree. Then the whole disc is checked against the CUETools database and, if it still has errors, repaired with that database's repair data. Use Secure unless you have a reason not to.

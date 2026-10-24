@@ -35,6 +35,24 @@ command-line tool.
   pressing's alignment, and the search for the alignment and the repair of
   the columns run on every core. The status bar says what the check is doing,
   and the log names each entry's shift.
+- **Sets.** A multi-disc release among the earlier rips has a view of its own,
+  from the sidebar's Sets section or the set chip on a disc: each disc's state
+  (still to do, ripped, verified, encoded), the album's names, which every
+  disc shares, and its cover. Encode Discs puts the verified discs that are
+  not in the library yet there, and Update the Library writes the names and
+  the cover into every encoded disc's files, renames the files and the album
+  folder as the templates say, and writes the CUE sheets again. The set's
+  summary now tells a disc that is ripped but not verified or not encoded
+  from one that is done, and a box set's DVD is not counted as a disc to rip.
+  A disc that MusicBrainz lists only by its track lengths gets the release
+  chosen for the set's other discs.
+- **Change the cover after a rip.** Drop an image on an earlier rip's cover,
+  or choose one from its menu, and it goes into the rip's folder, the album
+  folder, and the tags of the encoded files; the audio is not touched. The
+  menu can also put the Cover Art Archive's cover back. A cover you choose is
+  kept for the release, so the other discs of a set, and a later rip of the
+  same release, get it. `silverside metadata --cover x.jpg --retag` does the
+  same from the terminal.
 - **ReplayGain tags,** on by default: each track's gain and peak, and the
   album's, measured as EBU R 128 does, written into every format, and listed
   in the rip report. Settings › Encoding, or `encode --no-replay-gain`.

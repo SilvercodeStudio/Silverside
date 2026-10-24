@@ -37,7 +37,7 @@ silverside encode -i "<rip folder>"       # encode a rip later
 | `cdtext` | Shows every field of a disc's CD-Text, or its raw packs (`--packs`). |
 | `rip` | Rips a disc to WAV files: verifies, re-reads, repairs, looks up the release, saves the cover, and can encode. |
 | `repair` | Repairs rips again with CTDB: pools rips from several drives, and re-reads with the disc in a drive. |
-| `metadata` | Shows the MusicBrainz releases for a disc, and keeps the chosen one in a rip's `disc.json`. |
+| `metadata` | Shows the MusicBrainz releases for a disc, and keeps the chosen one in a rip's `disc.json`; `--set` edits names, `--cover` gives a cover, and `--retag` writes both into the album's encoded files. |
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
 | `config` | Shows and changes the settings. |
 | `eject` | Ejects the disc from a drive (`-d diskN`), or from every drive (`--all`). |

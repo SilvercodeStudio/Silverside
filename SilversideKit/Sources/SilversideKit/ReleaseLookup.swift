@@ -42,10 +42,14 @@ public enum ReleaseLookup {
         let lookup = try await client.lookup(toc)
         let discID = toc.musicBrainzDiscID
         let remembered = store.choices(forDiscID: discID)
-        let ranked = ReleaseRanking.ranked(lookup.releases, discID: discID, mcn: mcn, chosen: remembered)
+        let others = store.allChoices()
+        let ranked = ReleaseRanking.ranked(
+            lookup.releases, discID: discID, mcn: mcn, chosen: remembered, chosenForOtherDiscs: others)
         guard let releaseID else {
             var chosen = ranked.first
-            if let choose, ReleaseRanking.isAmbiguous(ranked, mcn: mcn, chosen: remembered) {
+            if let choose,
+                ReleaseRanking.isAmbiguous(ranked, mcn: mcn, chosen: remembered, chosenForOtherDiscs: others)
+            {
                 chosen = choose(ranked)
                 if let chosen { try store.remember(chosen) }
             }

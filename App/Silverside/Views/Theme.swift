@@ -46,11 +46,17 @@ struct Chip: View {
     var systemImage: String?
     /// A small spinner in place of the image, for work under way.
     var isWorking = false
+    /// A logo from the asset catalog before the text, such as "HDCD", drawn in the text's color.
+    var logo: String?
+    /// The tooltip, for a chip in a `ChipRow`.
+    var help: String?
 
     var body: some View {
         HStack(spacing: 4) {
             if isWorking {
                 ProgressView().controlSize(.mini)
+            } else if let logo {
+                Image(logo).resizable().scaledToFit().frame(height: 13)
             } else if let systemImage {
                 Image(systemName: systemImage).font(.caption2.bold())
             }
@@ -63,6 +69,7 @@ struct Chip: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 3)
         .background(background, in: Capsule())
+        .help(help ?? "")
     }
 
     private var foreground: Color {

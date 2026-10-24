@@ -36,6 +36,7 @@ extension RipReport {
         let repaired = tracks.reduce(0) { $0 + $1.repairedSamples }
         if repaired > 0 { lines += ["", "\(repaired) samples were repaired with CTDB's repair data."] }
         if let timing = timingText { lines += ["", timing] }
+        if let hdcd = hdcdText { lines += ["", hdcd] }
         lines.append("")
 
         lines.append("## Tracks")
@@ -104,6 +105,27 @@ extension RipReport {
                 "CRC32: of the track's audio as written, as EAC and XLD print it. Skip zero: the same without the"
                     + " samples that are silent in both channels. Test read: a second read of the track, compared"
                     + " with the copy as read; a repair changes the copy after it.")
+            lines.append("")
+        }
+
+        let coded = tracks.filter { $0.hdcd != nil }
+        if !coded.isEmpty {
+            lines.append("## HDCD")
+            lines.append("")
+            lines.append("| Track | Codes | Peak extend | Gain adjustment | Transient filter | Damaged codes |")
+            lines.append("|---:|---:|---|---:|---|---:|")
+            for track in coded {
+                let codes = track.hdcd!
+                lines.append(
+                    "| \(track.number) | \(codes.packets) | \(codes.peakExtend.rawValue)"
+                        + " | \(String(format: "%.1f dB", codes.maxGainAdjustment))"
+                        + " | \(codes.transientFilter ? "yes" : "no") | \(codes.errors > 0 ? String(codes.errors) : "") |"
+                )
+            }
+            lines.append("")
+            lines.append(
+                "Codes: HDCD control codes found in the lowest bit of the audio, in both channels. Peak extend and"
+                    + " the gain adjustment are what they ask of an HDCD decoder; the files are not decoded.")
             lines.append("")
         }
 

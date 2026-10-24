@@ -351,6 +351,7 @@ private final class RipPrinter: @unchecked Sendable {
         } else {
             Swift.print("This drive's offset is not yet confirmed by rips of two or more discs.")
         }
+        if let hdcd = report.hdcdText { Swift.print(hdcd) }
         if let advice = report.advice {
             Swift.print()
             Swift.print(advice)

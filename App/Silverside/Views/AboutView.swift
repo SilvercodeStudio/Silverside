@@ -184,6 +184,10 @@ private struct AcknowledgmentsSheet: View {
             "encodes FLAC, ALAC, and AAC."
         ),
         (
+            "[FFmpeg](https://ffmpeg.org)'s HDCD decoder",
+            "by Chris Moeller, Gumboot, and Burt P., from Christopher Key's, finds the HDCD codes in a rip. Silverside includes it under its own BSD license (see License)."
+        ),
+        (
             "[Claude Code](https://claude.com/claude-code)",
             "by Anthropic was the coding agent that helped write Silverside."
         ),
@@ -211,13 +215,17 @@ private struct AcknowledgmentsSheet: View {
     }
 }
 
-/// The license, from the copy of LICENSE in the app's bundle.
+/// The license, from the copy of LICENSE in the app's bundle, and the HDCD decoder's.
 private struct LicenseSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private var text: String {
-        Bundle.main.url(forResource: "LICENSE", withExtension: nil)
+        let own =
+            Bundle.main.url(forResource: "LICENSE", withExtension: nil)
             .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? SilversideLicense.text
+        return own.trimmingCharacters(in: .newlines)
+            + "\n\nThe HDCD decoder from FFmpeg (libavfilter/af_hdcd.c), which Silverside includes:\n\n"
+            + SilversideLicense.hdcdDecoder
     }
 
     var body: some View {

@@ -367,6 +367,7 @@ public struct DiscRip {
                 let index = toc.audioTracks.firstIndex(of: track)!
                 report.recordChecksums(
                     of: samples, isFirstTrack: index == 0, isLastTrack: index == toc.audioTracks.count - 1)
+                report.hdcd = HDCDCodes.scan(samples)
                 if options.testAndCopy {
                     let test = try testRead(track, toc: toc, reader: reader, cacheFlushSectors: flushSectors)
                     report.testCRC32 = CRC32.hex(test)
@@ -394,6 +395,9 @@ public struct DiscRip {
                 summary += ", \(unreadable.count) sectors could not be read"
             }
             if track.hasPreEmphasis { summary += ", pre-emphasis" }
+            if let hdcd = report.hdcd {
+                summary += hdcd.changesAudio ? ", HDCD codes (\(hdcd.featuresText))" : ", HDCD codes"
+            }
             events(.trackFinished(report, summary: summary, seconds: report.seconds ?? 0))
         }
 
@@ -475,6 +479,7 @@ public struct DiscRip {
         report.mcn = mcn
         report.media = media
         report.hiddenTrack = hiddenTrack
+        report.hdcd = HDCDStatus(reports)
         report.cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         report.release = chosen
         written.formUnion(["disc.json", "Rip Report.md"])
@@ -664,6 +669,7 @@ public struct DiscRip {
             reports[index].repairedSamples = repair.changedSamples(inTrack: index)
             reports[index].recordChecksums(
                 of: samples, isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
+            reports[index].hdcd = HDCDCodes.scan(samples)
             let checksum = AccurateRipAccumulator.checksum(
                 of: samples[...], isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
             let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }

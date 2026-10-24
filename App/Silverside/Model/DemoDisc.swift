@@ -17,10 +17,12 @@
             let starts = offsets.map { ($0 - CDDA.leadInSectors) / scale }
             guard let toc = try? TOC(audioTrackStarts: starts, leadOutLBA: leadOut / scale) else { return nil }
             var samples = [UInt32](repeating: 0, count: toc.leadOutLBA * CDDA.samplesPerSector)
+            let hdcd = hdcdBits(count: samples.count)
             for index in samples.indices {
-                // Two tones, with a slow beat between the channels.
-                let left = Int16(truncatingIfNeeded: Int(12000 * sin(Double(index) * 0.031)))
-                let right = Int16(truncatingIfNeeded: Int(9000 * sin(Double(index) * 0.047)))
+                // Two tones, with a slow beat between the channels, and HDCD codes in the lowest bit.
+                let bit: Int16 = hdcd[index] ? 1 : 0
+                let left = Int16(truncatingIfNeeded: Int(12000 * sin(Double(index) * 0.031))) & ~1 | bit
+                let right = Int16(truncatingIfNeeded: Int(9000 * sin(Double(index) * 0.047))) & ~1 | bit
                 samples[index] = UInt32(UInt16(bitPattern: left)) | UInt32(UInt16(bitPattern: right)) << 16
             }
             let image = samples
@@ -46,6 +48,26 @@
                 vendor: "Silverside", product: "Simulated Drive", revision: "demo", interconnect: "None",
                 location: "Internal")
             return DriveSlot(id: "demo", device: device, disc: disc, makeDrive: makeDrive)
+        }
+
+        /// HDCD codes that ask for nothing, as the real disc has them: a packet (a sync word and
+        /// an 8-bit code) ten times a second, scrambled as the decoder expects (see `HDCDTests`).
+        /// The last tenth of a second has none, so that the disc's end cuts no packet short:
+        /// silence in place of its code would read as a code that asks for a gain.
+        private static func hdcdBits(count: Int) -> [Bool] {
+            let packet = UInt64(0x7e0f_a005) << 8
+            let block = (0..<4410).map { $0 >= 4370 && packet >> (4409 - $0) & 1 == 1 }
+            var plain = [Bool]()
+            while plain.count + 2 * block.count <= count { plain += block }
+            plain += [Bool](repeating: false, count: count - plain.count)
+            var bits = [Bool]()
+            bits.reserveCapacity(count)
+            for bit in plain {
+                let n = bits.count
+                let earlier = (n >= 5 && bits[n - 5]) != (n >= 23 && bits[n - 23])
+                bits.append(bit != earlier)
+            }
+            return bits
         }
 
         private static func fixtureRelease() -> MusicBrainzRelease? {

@@ -58,6 +58,15 @@ Behind another app, the Dock icon shows a progress bar, and when the rip is done
 
 Stop ends the rip after the read under way. The tracks ripped so far stay in the folder, and a later rip of the same disc can use them.
 
+## HDCD
+
+HDCD discs carry a logo, and hide control codes in the lowest bit of the audio. A player without an HDCD decoder plays the audio as it is, so the rip is an exact copy either way. Silverside looks for the codes in every track it rips, and the header and the result show the HDCD logo with what it found:
+
+- **codes only:** the codes ask for nothing, and a decoder would play the same audio. Most discs with the logo are like this.
+- **peak extend** or **gain:** the codes ask a decoder to expand the loudest peaks, or to lower the level so that quiet passages come out as mastered. Silverside does not decode them yet; the files hold the audio as it is on the disc.
+
+Before the rip, the logo with "per MusicBrainz" means that MusicBrainz lists the disc as HDCD. The rip decides: some discs with the logo have no codes, and some without it have them. The report lists the codes of each track. For rips from before, `silverside hdcd` looks for the codes in WAV, FLAC, AIFF, and Apple Lossless files.
+
 ## Where the files go
 
 Each rip gets a folder in the rips folder (Settings › General), named from the release: the WAV files, `disc.json` and `Rip Report.md` with every detail, and the cover. With "Encode the disc into the library" on, the album is encoded into the library after the rip, with the cover, the report, and a CUE sheet in its folder; the files carry the names and credits from MusicBrainz, and ReplayGain loudness tags unless Settings › Encoding turns them off. Then a rip whose tracks are all verified and encoded is deleted, unless you keep it.

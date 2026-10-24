@@ -39,6 +39,7 @@ silverside encode -i "<rip folder>"       # encode a rip later
 | `repair` | Repairs rips again with CTDB: pools rips from several drives, and re-reads with the disc in a drive. |
 | `metadata` | Shows the MusicBrainz releases for a disc, and keeps the chosen one in a rip's `disc.json`; `--set` edits names, `--cover` gives a cover, and `--retag` writes both into the album's encoded files. |
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
+| `hdcd` | Looks for HDCD codes in audio files and folders (WAV, AIFF, FLAC, Apple Lossless), such as rips and albums from before. |
 | `config` | Shows and changes the settings. |
 | `eject` | Ejects the disc from a drive (`-d diskN`), or from every drive (`--all`). |
 | `license` | Shows the license, and the code from others that the CLI includes. |
@@ -57,6 +58,10 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
 - `Track NN.suspects`, for tracks that are not verified: the other values that
   reads gave for their suspect samples, for a later `silverside repair`
 - `Rip Report.md`, and `Track 00.wav` if the disc has hidden track one audio
+
+The report also says whether the tracks have HDCD codes, and what they ask of
+a decoder (peak extend, a gain adjustment, or nothing). The files hold the
+audio as it is on the disc: Silverside does not decode HDCD yet.
 
 `silverside encode` (or `rip --encode`) puts the files in the library as
 `Artist/Album/18-03 Title.flac` (disc 18, track 3), with every disc of a

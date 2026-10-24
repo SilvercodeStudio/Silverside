@@ -77,6 +77,8 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var accurateRipChecksums: [String]?
         /// The time the track's rip took, in seconds: every read and re-read. Nil in older reports.
         public var seconds: Int?
+        /// The track's HDCD codes. Nil if it has none, and in older reports (see `RipReport.hdcd`).
+        public var hdcd: HDCDCodes?
 
         /// Whether the test read gave the same audio as the copy, as read: a repair can change
         /// the copy after the test. Nil without a test read.
@@ -187,6 +189,9 @@ public struct RipReport: Codable, Equatable, Sendable {
     public var cdText: CDText?
     /// Audio before track 1 (hidden track one audio), if the disc has it.
     public var hiddenTrack: HiddenTrack?
+    /// Whether the tracks have HDCD codes, from each track's `hdcd`. Nil in reports from
+    /// before Silverside looked for them.
+    public var hdcd: HDCDStatus?
 
     public struct HiddenTrack: Codable, Equatable, Sendable {
         public var file: String

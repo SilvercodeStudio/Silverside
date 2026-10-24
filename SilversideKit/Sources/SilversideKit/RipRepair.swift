@@ -227,6 +227,7 @@ public struct RipRepair {
             report.tracks[position].repairedSamples += result.changedSamples(inTrack: index)
             // Every track is checked against AccurateRip again: a rip made offline has no result yet.
             let samples = result.samples(ofTrack: index)
+            report.tracks[position].hdcd = HDCDCodes.scan(samples)
             let checksum = AccurateRipAccumulator.checksum(
                 of: samples[...], isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
             let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
@@ -240,6 +241,7 @@ public struct RipRepair {
                 break
             }
         }
+        report.hdcd = HDCDStatus(report.tracks)
         report.program = "Silverside \(SilversideVersion.string)"
         if folder.standardizedFileURL != firstFolder {
             var files = Set(report.tracks.map(\.file))

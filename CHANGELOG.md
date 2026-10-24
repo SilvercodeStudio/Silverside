@@ -3,6 +3,20 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.7 (not released yet)
+
+### Added
+
+- **HDCD recognition:** each track of a rip is checked for HDCD codes. The
+  header and the result show the HDCD logo, with "codes only" when the codes
+  ask for nothing (a decoder would play the same audio, as on most discs with
+  the logo), or "peak extend" or "gain" when an HDCD decoder would change the
+  audio. Before the rip, the logo shows when MusicBrainz lists the disc as
+  HDCD. The report has an HDCD table for each track. The files are not
+  decoded yet.
+- `silverside hdcd` looks for HDCD codes in audio files and folders, such as
+  rips and albums from before.
+
 ## 0.6 (2026-10-23)
 
 ### Added

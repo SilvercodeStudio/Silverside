@@ -13,6 +13,11 @@ struct License: ParsableCommand {
             silverside includes Swift Argument Parser (https://github.com/apple/swift-argument-parser),
             Copyright Apple Inc. and the Swift project authors, under the Apache License 2.0 with
             the Runtime Library Exception.
+
+            silverside includes the HDCD decoder from FFmpeg (https://ffmpeg.org), libavfilter/af_hdcd.c,
+            under this license:
+
             """)
+        print(SilversideLicense.hdcdDecoder)
     }
 }

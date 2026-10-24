@@ -245,6 +245,7 @@ struct AlbumHeader: View {
                 }
                 HStack(spacing: 8) {
                     lookupChip
+                    hdcdChip
                     if disc.userCover != nil {
                         Chip(text: "Your cover", tone: .warning, systemImage: "photo")
                             .help("The cover you gave is saved with the rip and embedded in the files.")
@@ -331,6 +332,22 @@ struct AlbumHeader: View {
                 let trimmed = text.trimmingCharacters(in: .whitespaces)
                 slot.disc?.edits[keyPath: key] = trimmed.isEmpty || trimmed == original ? nil : trimmed
             })
+    }
+
+    /// HDCD, from the codes in the tracks ripped so far; before that, from MusicBrainz's format for the disc.
+    @ViewBuilder private var hdcdChip: some View {
+        let ripped = (slot.rip?.trackStates.values ?? [:].values).compactMap { state -> RipReport.Track? in
+            if case .finished(let track) = state { track } else { nil }
+        }
+        if let chip = ResultChips.hdcd(ripped.sorted { $0.number < $1.number }) {
+            chip
+        } else if ripped.isEmpty, disc.shownMedium?.format?.uppercased() == "HDCD" {
+            Chip(
+                text: "per MusicBrainz", logo: "HDCD",
+                help:
+                    "MusicBrainz lists this disc as HDCD. The rip looks for HDCD codes in the audio, which is the real test: some discs with the logo have none, and some without it have them."
+            )
+        }
     }
 
     @ViewBuilder private var lookupChip: some View {
@@ -712,8 +729,20 @@ struct ChipRow: View {
     }
 }
 
-/// The chips that sum up a report: AccurateRip, CTDB, re-reads, repairs.
+/// The chips that sum up a report: AccurateRip, CTDB, re-reads, repairs, HDCD.
 enum ResultChips {
+    /// The HDCD logo, and what the codes of these tracks ask for. Nil if none has codes.
+    static func hdcd(_ tracks: [RipReport.Track]) -> Chip? {
+        let codes = tracks.compactMap(\.hdcd)
+        guard !codes.isEmpty else { return nil }
+        var features = [String]()
+        if codes.contains(where: { $0.peakExtend != .never }) { features.append("peak extend") }
+        if codes.contains(where: { $0.maxGainAdjustment < 0 }) { features.append("gain") }
+        return Chip(
+            text: features.isEmpty ? "codes only" : features.joined(separator: ", "), logo: "HDCD",
+            help: HDCDStatus.text(for: tracks))
+    }
+
     static func chips(for report: RipReport) -> [Chip] {
         var chips = [Chip]()
         let accurate = report.tracks.filter { $0.accurateRip == .accurate }.count
@@ -746,6 +775,7 @@ enum ResultChips {
             chips.append(Chip(text: "\(unresolved) sectors unresolved", tone: report.isVerified ? .warning : .bad))
         }
         if repaired > 0 { chips.append(Chip(text: "\(repaired.formatted()) samples repaired", tone: .warning)) }
+        if report.hdcd != nil, let chip = hdcd(report.tracks) { chips.append(chip) }
         if let encoding = report.encoding {
             let all = encoding.files.count >= report.tracks.count
             chips.append(

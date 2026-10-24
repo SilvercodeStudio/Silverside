@@ -240,10 +240,34 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var files: [File]
         /// The time the encoding took, in seconds, checks included. Nil in older records.
         public var seconds: Int?
+        /// The ReplayGain values written into the tags. Nil when they were not, and in older records.
+        public var replayGain: ReplayGainRecord?
+
+        /// The loudness of the album and its tracks, as the ReplayGain tags have them.
+        public struct ReplayGainRecord: Codable, Equatable, Sendable {
+            public struct Track: Codable, Equatable, Sendable {
+                public var track: Int
+                public var values: ReplayGain.Values
+
+                public init(track: Int, values: ReplayGain.Values) {
+                    self.track = track
+                    self.values = values
+                }
+            }
+
+            /// Nil when every track is silent.
+            public var album: ReplayGain.Values?
+            public var tracks: [Track]
+
+            public init(album: ReplayGain.Values?, tracks: [Track]) {
+                self.album = album
+                self.tracks = tracks
+            }
+        }
 
         public init(
             date: Date = Date(), format: AudioFormat, encoder: String, aac: AACOptions? = nil, mp3: MP3Options? = nil,
-            folder: String, files: [File], seconds: Int? = nil
+            folder: String, files: [File], seconds: Int? = nil, replayGain: ReplayGainRecord? = nil
         ) {
             self.date = date
             self.format = format
@@ -253,6 +277,7 @@ public struct RipReport: Codable, Equatable, Sendable {
             self.folder = folder
             self.files = files
             self.seconds = seconds
+            self.replayGain = replayGain
         }
 
         /// The AAC or MP3 settings, for people to read: "VBR, quality 127", "lame -V 0". Nil for lossless.

@@ -112,6 +112,7 @@ silverside config unset aac.mode                     # back to the default
 | `encodeAfterRip` | `false` | `rip` encodes when it finishes |
 | `keepRipAfterEncoding` | `false` | keep the WAV files after `rip --encode` |
 | `ejectAfterRip` | `false` | `rip` ejects the disc when every track is verified |
+| `replayGain` | `true` | ReplayGain tags: each track's gain and peak and the album's, as EBU R 128 measures them, for players that level albums; the audio is not changed (`encode --no-replay-gain`) |
 | `aac.mode`, `aac.bitRate`, `aac.vbrQuality` | `vbr-constrained`, `256`, `127` | Apple's AAC encoder |
 | `mp3.mode`, `mp3.vbrQuality`, `mp3.bitRate`, `mp3.extraArguments` | `vbr`, `0`, `320`, `[]` | LAME |
 

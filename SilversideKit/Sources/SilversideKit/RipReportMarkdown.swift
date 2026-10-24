@@ -153,6 +153,23 @@ extension RipReport {
             lines.append("|---:|---|")
             for file in encoding.files { lines.append("| \(file.track) | \(Self.escaped(file.file)) |") }
             lines.append("")
+            if let gain = encoding.replayGain {
+                var summary = "ReplayGain, to \(ReplayGain.referenceLoudness.formatted()) LUFS as EBU R 128 measures it"
+                if let album = gain.album {
+                    summary +=
+                        ": the album is \(album.loudnessText), so its gain is \(album.gainText), peak \(album.peakText)"
+                }
+                lines.append(summary + ".")
+                lines.append("")
+                lines.append("| Track | Loudness | Gain | Peak |")
+                lines.append("|---:|---:|---:|---:|")
+                for track in gain.tracks {
+                    lines.append(
+                        "| \(track.track) | \(track.values.loudnessText) | \(track.values.gainText) | \(track.values.peakText) |"
+                    )
+                }
+                lines.append("")
+            }
         }
 
         lines.append("## Disc")

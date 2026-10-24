@@ -29,6 +29,17 @@ Until LAME is installed, MP3 is missing from the formats in General and in the w
 
 Every encoded file is decoded again and compared with the rip before it goes into the library.
 
+### ReplayGain
+
+Albums are mastered at different levels, so one is quiet and the next is loud. ReplayGain tags tell a player how much to turn each one up or down to play them at the same level. Silverside measures each track and the whole album as the broadcast standard EBU R 128 does, and writes the result into the files as five tags: the track's gain and peak, the album's gain and peak, and the reference level (−18 LUFS). The audio itself is not changed, in any format, and the tags can be removed with any tag editor. The rip report lists the values.
+
+What the tags do depends on the player:
+
+- The Music app and iTunes ignore them. They have their own leveling, Sound Check, which they measure themselves.
+- Most other players read them (foobar2000, VLC, mpv, Plexamp, the Navidrome and Jellyfin apps, most Android players), but most keep the leveling off until you turn it on in their settings. Then they offer two modes: **album** gain keeps an album's own dynamics, so a quiet intro stays quiet next to the loud song after it, and only levels one album against another; **track** gain levels every track, which suits shuffle. Silverside writes both, so the choice is the player's.
+
+The setting is on by default because the tags cost nothing until a player uses them, and adding them to a library later means measuring every file again with another program. Turn it off if you would rather have no such tags in your files.
+
 ## Naming
 
 Templates name the album folder and the track files in the library, and the rip's folder. The fields:

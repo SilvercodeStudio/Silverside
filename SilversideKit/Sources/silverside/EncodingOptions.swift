@@ -55,6 +55,9 @@ struct EncodingOptions: ParsableArguments {
     @Flag(help: "Replace files that exist in the library.")
     var overwrite = false
 
+    @Flag(inversion: .prefixedNo, help: "Write ReplayGain tags: each track's gain and peak, and the album's.")
+    var replayGain: Bool?
+
     /// The encoder, and the library, from these options over the settings.
     func encoder(_ settings: Settings) -> (encoder: DiscEncoder, library: URL) {
         var encoder = DiscEncoder(settings: settings, format: format)
@@ -72,6 +75,7 @@ struct EncodingOptions: ParsableArguments {
         if let mp3Quality { encoder.mp3.vbrQuality = mp3Quality }
         if !lameOption.isEmpty { encoder.mp3.extraArguments = lameOption }
         encoder.overwrites = overwrite
+        if let replayGain { encoder.replayGain = replayGain }
         return (encoder, library.map(Settings.expand) ?? settings.libraryURL)
     }
 }

@@ -162,26 +162,27 @@ makes, and the settings.
 - **Multi-disc sets.** The discs of a release share the release choice and
   the album's edits, and the app says which discs of a set are ripped. Still
   to do: reusable style recipes for titles.
+- Ability to add image art after encoding
 - Pre-emphasis support as mentioned above.
 - Option for automatic rip on insertion and recognition
-- Localization in other languages. 
+- Option to import rips to Apple Music if compatible
 - Recognition of HDCD; possible 24-bit decode.
-- ReplayGain tags.
 - Ripping of data tracks for mixed-mode / Enhanced CDs.
 - Option to slow down drive speed (quieter)
   - Autodetect and engage this during problem rips
-- Multiple encodings at once (e.g. FLAC + AAC)
-- AcoustID?
-- Rip log checksum
-- Per-track pregap adjustments
-- Option to import rips to Apple Music if compatible
-- CD Burning with verification
-- Filename template enhancements
 - Search MusicBrainz by album or artist, for a disc whose TOC it does not know (a
   burned disc, or a pressing it has not seen), and tag the disc from the chosen
   release
 - Secondary metadata source (GnuDB)
-- Ability to add image art after encoding
+- Multiple encodings at once (e.g. FLAC + AAC)
+- Filename template enhancements
+- Localization in other languages. 
+- A warning before a lossy encode of a DTS-CD, and a note in the report when a
+  disc looks copy-controlled.
+- CD+G graphics as a `.cdg` file beside the audio.
+- Per-track pregap adjustments
+- CD Burning with verification
+- AcoustID?
 
 See [docs/internal/Milestones.md](docs/internal/Milestones.md) for the plan.
 

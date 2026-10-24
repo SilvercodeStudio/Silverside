@@ -368,6 +368,13 @@ struct EncodingSettings: View {
     var body: some View {
         @Bindable var model = model
         Form {
+            Section("Tags") {
+                Toggle("ReplayGain: each track's loudness, and the album's", isOn: $model.settings.replayGain)
+                Text(
+                    "Measured as EBU R 128 does, so a player that reads the tags plays albums at one level. The audio is not changed. The Music app uses its own Sound Check instead."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+            }
             Section {
                 Picker("Mode", selection: $model.settings.aac.mode) {
                     ForEach(AACOptions.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }

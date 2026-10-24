@@ -35,6 +35,9 @@ command-line tool.
   pressing's alignment, and the search for the alignment and the repair of
   the columns run on every core. The status bar says what the check is doing,
   and the log names each entry's shift.
+- **ReplayGain tags,** on by default: each track's gain and peak, and the
+  album's, measured as EBU R 128 does, written into every format, and listed
+  in the rip report. Settings › Encoding, or `encode --no-replay-gain`.
 - **Tracks encode in parallel,** up to four at a time (half the Mac's cores,
   at least two), each still checked against the rip before it goes into the
   library.

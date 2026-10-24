@@ -144,6 +144,8 @@ public struct DiscEncoder: Sendable {
     public var allowsUnverified = false
     /// Replace files that exist.
     public var overwrites = false
+    /// Write ReplayGain tags: each track's gain and peak, and the album's, measured as EBU R 128 does.
+    public var replayGain = true
     /// How many tracks encode at once. Each track in flight holds its audio twice (the rip and
     /// the decoded check), about 300 MB for a long track, so the default stays at four even on
     /// a Mac with many cores: half the cores, at least two, at most four.
@@ -173,6 +175,7 @@ public struct DiscEncoder: Sendable {
         compilationFolder = settings.compilationFolder
         aac = settings.aac
         mp3 = settings.mp3
+        replayGain = settings.replayGain
     }
 
     /// The files that `encode` would write, one for each track, in order. It throws as `encode`
@@ -182,12 +185,14 @@ public struct DiscEncoder: Sendable {
         try plan(disc, into: library).jobs.map(\.file)
     }
 
-    private struct Job {
+    private struct Job: Sendable {
         var ripped: RippedDisc.Track
         var index: Int
         var metadata: TrackMetadata
         var folder: URL
         var file: URL
+        /// Tags beyond the metadata's: the ReplayGain values, once every track is measured.
+        var extraComments: [(key: String, value: String)] = []
     }
 
     /// Every track's names, before any file is written.
@@ -238,7 +243,7 @@ public struct DiscEncoder: Sendable {
         _ disc: RippedDisc, into library: URL
     ) throws -> (files: [URL], encoding: RipReport.Encoding?) {
         let encodingStarted = Date()
-        let (release, medium, jobs) = try plan(disc, into: library)
+        var (release, medium, jobs) = try plan(disc, into: library)
         let lame = format == .mp3 ? MP3Encoder.lame() : nil
         if format == .mp3 && lame == nil { throw MP3Error.lameNotFound }
         // A file that exists stops the encoding before any file is written, so a half-done
@@ -250,6 +255,24 @@ public struct DiscEncoder: Sendable {
         let cover = try disc.coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }
         let audioTracks = disc.toc.audioTracks
 
+        // ReplayGain needs every track's loudness before the first tag is written: the album's
+        // gain is one gating over all of them. The tracks are measured in parallel from their WAV files.
+        var replayGainRecord: RipReport.Encoding.ReplayGainRecord?
+        if replayGain {
+            let measured = CTDB.parallelMap(over: jobs) { job -> Result<ReplayGain.Analysis, any Error>? in
+                Result { ReplayGain.analyze(try WAVFile.read(job.ripped.file)) }
+            }
+            let analyses = try measured.map { try $0.get() }
+            let album = ReplayGain.album(of: analyses)
+            var tracks = [RipReport.Encoding.ReplayGainRecord.Track]()
+            for (index, analysis) in analyses.enumerated() {
+                let track = analysis.loudness.map { ReplayGain.Values(loudness: $0, peak: analysis.peak) }
+                jobs[index].extraComments = ReplayGain.tags(track: track, album: album)
+                if let track { tracks.append(.init(track: jobs[index].ripped.number, values: track)) }
+            }
+            replayGainRecord = .init(album: album, tracks: tracks)
+        }
+
         // The tracks encode `parallelTracks` at a time. Each lane takes every n-th job, in
         // order, so the lanes keep in step and no more than that many tracks are in memory.
         // A failure stops the lanes after the tracks under way; the files written stay, as
@@ -257,10 +280,11 @@ public struct DiscEncoder: Sendable {
         let lanes = max(1, min(parallelTracks, jobs.count))
         let outcomes = EncodeOutcomes()
         let encoder = self
+        let laneJobs = jobs
         DispatchQueue.concurrentPerform(iterations: lanes) { lane in
-            for index in stride(from: lane, to: jobs.count, by: lanes) where !outcomes.hasFailed {
+            for index in stride(from: lane, to: laneJobs.count, by: lanes) where !outcomes.hasFailed {
                 do {
-                    try encoder.encode(jobs[index], cover: cover, lame: lame)
+                    try encoder.encode(laneJobs[index], cover: cover, lame: lame)
                     outcomes.finish(index)
                 } catch {
                     outcomes.fail(index, error)
@@ -319,7 +343,7 @@ public struct DiscEncoder: Sendable {
                 date: Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down)),
                 format: format, encoder: encoderName(lame: lame), aac: format == .aac ? aac : nil,
                 mp3: format == .mp3 ? mp3 : nil, folder: $0.path, files: encodedFiles,
-                seconds: Int(Date().timeIntervalSince(encodingStarted)))
+                seconds: Int(Date().timeIntervalSince(encodingStarted)), replayGain: replayGainRecord)
         }
         if let albumFolder, let encoding {
             let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
@@ -376,9 +400,10 @@ public struct DiscEncoder: Sendable {
     }
 
     private func write(
-        _ samples: [UInt32], metadata: TrackMetadata, cover: EmbeddedCover?, to url: URL, lame: URL?
+        _ samples: [UInt32], metadata: TrackMetadata, extra: [(key: String, value: String)], cover: EmbeddedCover?,
+        to url: URL, lame: URL?
     ) throws {
-        let comments = metadata.vorbisComments
+        let comments = metadata.vorbisComments + extra
         switch format {
         case .flac:
             try AudioEncoder.encode(samples, format: .flac, to: url)
@@ -406,7 +431,7 @@ public struct DiscEncoder: Sendable {
         // Write to a partial file, and move it into place only when it is checked.
         let partial = job.folder.appending(path: ".\(UUID().uuidString).partial.\(format.fileExtension)")
         defer { try? FileManager.default.removeItem(at: partial) }
-        try write(samples, metadata: job.metadata, cover: cover, to: partial, lame: lame)
+        try write(samples, metadata: job.metadata, extra: job.extraComments, cover: cover, to: partial, lame: lame)
         try check(partial, against: samples, final: job.file)
         if FileManager.default.fileExists(atPath: job.file.path) { try FileManager.default.removeItem(at: job.file) }
         try FileManager.default.moveItem(at: partial, to: job.file)

@@ -51,6 +51,8 @@ public struct Settings: Codable, Equatable, Sendable {
     public var ejectAfterRip = false
     public var aac = AACOptions()
     public var mp3 = MP3Options()
+    /// Write ReplayGain tags (track and album gain and peak, EBU R 128 loudness) into the encoded files.
+    public var replayGain = true
 
     public init() {}
 
@@ -185,6 +187,7 @@ public struct Settings: Codable, Equatable, Sendable {
         ejectAfterRip = try value(.ejectAfterRip, defaults.ejectAfterRip)
         aac = try value(.aac, defaults.aac)
         mp3 = try value(.mp3, defaults.mp3)
+        replayGain = try value(.replayGain, defaults.replayGain)
     }
 }
 

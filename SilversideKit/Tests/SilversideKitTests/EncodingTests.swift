@@ -58,6 +58,9 @@ struct EncodingTests {
         // The segue mark stays in the tag and leaves the file name, as the user's library has it.
         let tags = Dictionary(try FLACTags.read(files[0]).map { ($0.key, $0.value) }, uniquingKeysWith: { a, _ in a })
         #expect(tags["TITLE"] == "Help on the Way >" && tags["DISCNUMBER"] == "2" && tags["ISRC"] == "USRH11900001")
+        // ReplayGain: the test rip's audio is noise, so it has a loudness; the album's covers both tracks.
+        #expect(tags["REPLAYGAIN_TRACK_GAIN"]?.hasSuffix(" dB") == true && tags["REPLAYGAIN_ALBUM_PEAK"] != nil)
+        #expect(tags["REPLAYGAIN_REFERENCE_LOUDNESS"] == "-18.00 LUFS")
         #expect(try FLACTags.readFrontCover(files[0]).map { try EmbeddedCover(CoverImage(data: $0)).width } == 1000)
         #expect(FileManager.default.fileExists(atPath: library.appending(path: "\(album)/cover.jpg").path))
         #expect(throws: EncodingError.self) { try DiscEncoder(format: .flac).encode(disc, into: library) }
@@ -101,6 +104,8 @@ struct EncodingTests {
         #expect(saved.format == .aac && saved.encoder == "Apple AudioToolbox" && saved.mp3 == nil)
         #expect(saved.settingsText == "constant 192 kbit/s" && saved.folder == album.path)
         #expect(saved.files.map(\.track) == [1, 2] && saved.file(ofTrack: 2) == files[1].lastPathComponent)
+        #expect(saved.replayGain?.tracks.map(\.track) == [1, 2] && saved.replayGain?.album != nil)
+        #expect(try MP4Tags.read(files[0]).comments.contains { $0.key == "REPLAYGAIN_ALBUM_GAIN" })
         let markdown = try String(contentsOf: album.appending(path: "Rip Report (Disc 2).md"), encoding: .utf8)
         #expect(
             markdown.contains("## Encoding") && markdown.contains("AAC, by Apple AudioToolbox (constant 192 kbit/s)"))

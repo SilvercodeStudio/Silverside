@@ -45,22 +45,38 @@ to be installed. All other supported formats are handled natively.
   repaired tracks are checked against AccurateRip again.
 - **Metadata from [MusicBrainz](https://musicbrainz.org)**, and cover art from
   the [Cover Art Archive](https://coverartarchive.org): front covers, and
-  back covers and booklets if you want them.
+  back covers and booklets if you want them. The tags carry the composers,
+  lyricists, genre, and sort names that MusicBrainz has, and your own cover
+  can replace the archive's, before or after the rip.
 - **Encoding** to FLAC, Apple Lossless (ALAC), AAC, AIFF, WAV, or MP3, with
   tags and the cover embedded. Each file is checked after encoding: a
-  lossless file must decode to exactly the ripped audio.
+  lossless file must decode to exactly the ripped audio. Optionally, the
+  files go into the Music app (every format but FLAC).
+- **ReplayGain tags**, measured as EBU R 128 does, so players that read them
+  play albums at one level. The audio is not changed.
+- **Multi-disc sets.** The discs of a release share the release choice, the
+  album's names, the cover, one album folder, and one album gain. A set has
+  a view of its own: each disc's state, the work left, and buttons that
+  encode the discs not in the library yet and bring the encoded ones up to
+  date with the set's names and cover.
 - **A rip report**, as Markdown to read and as JSON (`disc.json`), with every
-  track's result, the TOC, pregaps, the disc IDs, the ISRCs, MCN, and CD-Text,
-  the drive and its offset, and the release; and a **CUE sheet**, from which
-  the disc can be burned again exactly.
+  track's result, its CRC-32 as EAC and XLD print it, the TOC, pregaps, the
+  disc IDs, the ISRCs, MCN, and CD-Text, the media (pressed CD or CD-R), the
+  drive and its offset, the release, and the encoding; and a **CUE sheet**,
+  from which the disc can be burned again exactly.
 - **Hidden track one audio** (a song before track 1) is ripped and encoded as
   track 0.
 - **Names you can change.** The album's title, artist, and date, and each
   track's title and artist, can be edited in the app or with
   `silverside metadata --set`, and the files are named and tagged with the edits.
-  The album's edits are kept for the release, so the other discs of a set get
-  them. A disc that MusicBrainz does not know gets its names from CD-Text or
-  from you, and its files carry no MusicBrainz IDs.
+  After the rip too: the encoded files are tagged and renamed again, and the
+  audio is not touched. The album's edits are kept for the release, so the
+  other discs of a set get them. A disc that MusicBrainz does not know gets its
+  names from CD-Text or from you, and its files carry no MusicBrainz IDs.
+- **Play a track** from the disc, read as a rip reads it, or from an earlier
+  rip, to check it.
+- **Rip on insertion**, if you want it: a disc whose release is certain, and
+  that is not ripped yet, rips a few seconds after it goes in.
 
 ## Known limits
 
@@ -68,7 +84,7 @@ to be installed. All other supported formats are handled natively.
   boost that the player undoes. Silverside marks such tracks in the rip report and
   the CUE sheet (`FLAGS PRE`), and warns when it encodes them, but it does not
   change the audio: the files sound too bright in a player that does not read
-  the flag. De-emphasis is planned. This is not yet confirmed on a real
+  the flag. De-emphasis is planned for 0.7. This is not yet confirmed on a real
   pre-emphasis disc, because none has turned up in testing.
 
 AccurateRip and CTDB answer over plain HTTP, as their other clients use them.
@@ -159,11 +175,8 @@ makes, and the settings.
 
 ## TODO or future ideas
 
-- **Multi-disc sets:** reusable style recipes for titles.
-- Pre-emphasis support as mentioned above.
-- Option for automatic rip on insertion and recognition
-- Option to import rips to Apple Music if compatible
-- Recognition of HDCD; possible 24-bit decode.
+- Pre-emphasis support as mentioned above (planned for 0.7).
+- Recognition of HDCD; possible 24-bit decode (planned for 0.7).
 - Ripping of data tracks for mixed-mode / Enhanced CDs.
 - Option to slow down drive speed (quieter)
   - Autodetect and engage this during problem rips

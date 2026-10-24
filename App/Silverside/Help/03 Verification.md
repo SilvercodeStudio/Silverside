@@ -47,4 +47,4 @@ A rip that CTDB verifies as it is gets its report brought up to date: a rip made
 
 ## Multi-disc sets
 
-The discs of one release share their release choice and the album's edits, and the chips say how far the set is: "Disc 2 of 3" for the disc in the drive, and how many discs of the set are ripped. The sidebar names each disc of a set.
+A set is done when every disc is verified and in the library. The chips on a disc say how far the set is ("Disc 2 of 3", and how many discs are ripped), and the set's view, under Sets in the sidebar, names each disc that still needs attention: one still to rip, one ripped but not verified, one verified but not encoded. See Sets under Ripping a Disc.

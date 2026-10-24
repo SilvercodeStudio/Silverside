@@ -38,7 +38,15 @@ The rip stays in the rips folder, and the banner or the status bar says why:
 - A track is not verified by AccurateRip or CTDB. Silverside encodes only verified rips; see Verification for what to try.
 - MP3 is the format, but LAME is not installed.
 
-To encode a kept rip later, use the command line: `silverside encode -i "<rip folder>"`, with `--allow-unverified` for tracks that no database verifies.
+To encode a kept rip later, select it in Recent Rips and click **Encode**, or for a set, use **Encode Discs** in the set's view. A rip with tracks that no database verifies can be encoded only from the command line: `silverside encode -i "<rip folder>" --allow-unverified`.
+
+## A disc was not ripped when it went in
+
+With "Rip it at once" on (Settings › General), a disc rips by itself only when MusicBrainz names its release for certain and the disc has no earlier rip. The status bar says which of these held it back. A disc that is in a drive when Silverside starts waits for you too. Choose a release, or click Rip Disc.
+
+## Music did not get the files
+
+"Add the files to the Music app" does nothing for FLAC, which Music cannot read; choose Apple Lossless. If the banner says Silverside may not control Music, you said no when macOS asked, or the question did not show: allow Silverside under System Settings › Privacy & Security › Automation, so the next album goes in. For the album that did not, drag its folder from the library onto Music's window.
 
 ## Tracks are not accurate
 

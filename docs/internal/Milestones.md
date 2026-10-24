@@ -341,7 +341,7 @@ Decided 2026-10-23:
 
 ## Next, agreed 2026-10-22
 
-In this order; none of them needs a new dependency in the code.
+In this order; none of them needs a new dependency in the code. Version 0.6 is the feature set of 2026-10-23 (ReplayGain is in it); 0.7 is for pre-emphasis and HDCD (items 1 and 4).
 
 1. **Pre-emphasis**, when the test discs arrive: read the flag from the Q subchannel's control bits as well as the TOC's, and keep both in the report; then de-emphasis at encode time (our own 50/15 µs filter; ffmpeg's `aemphasis` and SoX's `deemph` only as references), after verification, to 24-bit ALAC or FLAC so nothing is lost to requantizing. ReplayGain must then measure the de-emphasized samples, not the WAV file, or a pre-emphasized track's gain is about 1 dB off. A "force de-emphasis" option for discs mastered with it but not flagged (as cyanrip's `-E`).
 2. **Drive speed:** `DKIOCCDSETSPEED` (in the SDK, beside the ioctls `IOKitDrive` uses), as a setting, perhaps per drive in its profile, and a check in the drive test. Many drives ignore it or round it; test on each.

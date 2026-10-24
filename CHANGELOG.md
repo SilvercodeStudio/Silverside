@@ -3,7 +3,7 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
-## 0.6 (not released yet)
+## 0.6 (2026-10-23)
 
 ### Added
 
@@ -85,9 +85,14 @@ command-line tool.
   the whole rip, and the encoding.
 - A later read of a track says how many there can be ("read 2 of up to 4"),
   and the time left says "plus re-reads" while a track is read again.
+- Update the Library, and a name changed after a rip, write only the FLAC and
+  Apple Lossless or AAC files whose tags change, which matters for a library
+  on a network volume.
 
 ### Fixed
 
+- An earlier rip's track table showed the names from MusicBrainz, not the
+  ones you had edited before the rip.
 - The cover art was downloaded after the last track, while the status bar said
   only "Finishing the rip", and with "every image" chosen a release's
   full-size scans could take a minute. The download now runs while the disc

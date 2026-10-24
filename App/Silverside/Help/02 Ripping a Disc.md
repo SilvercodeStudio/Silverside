@@ -27,9 +27,13 @@ A release with several CDs is a set. Its discs share the album's names, the rele
 
 ## Changing the cover
 
-An earlier rip's track titles and artists can be edited in its track table, as before a rip; a track's menu adds an artist or clears its edits. A moment after a change, the encoded files take the new names and are renamed as the naming templates say; files whose names did not change are not touched. A rip that is not encoded yet keeps the names for its encoding, and its **Encode** button encodes it into the library as Settings say.
-
 Before a rip, drop an image on the cover, or click it, to use your own in place of the Cover Art Archive's; the cover's menu puts the archive's back. After a rip, the same works on the rip in Recent Rips: the new cover goes into the rip's folder, into the album folder in the library, and into the tags of the encoded files, and the audio is not touched. A cover you choose is kept for the release, so the other discs of a box set get it, and so does a later rip of the same release.
+
+## Changing an earlier rip
+
+An earlier rip's track titles and artists can be edited in its track table, as before a rip; a track's menu adds an artist or clears its edits. A moment after a change, the encoded files take the new names and are renamed as the naming templates say; files whose names did not change are not touched. A rip that is not encoded yet keeps the names for its encoding. The album's names of a set are edited in the set's view.
+
+A rip that is not encoded has an **Encode** button, which encodes it into the library as Settings say. Only a verified rip is encoded; see Verification for what to try with one that is not.
 
 ## Read modes
 

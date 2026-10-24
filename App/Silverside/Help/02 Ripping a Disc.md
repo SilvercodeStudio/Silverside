@@ -13,7 +13,7 @@ When a disc appears, Silverside reads its table of contents and asks MusicBrainz
 
 Other Releases shows every release that matches. A disc with CD-Text gets a switch between the MusicBrainz names and the names on the disc. The rip's tags always come from MusicBrainz.
 
-The cover comes from the Cover Art Archive. For a disc that has none there, or a better scan of your own, drop an image file on the cover, or click it to choose one. It is saved with the rip and embedded in the files. JPEG and PNG are kept as they are; other formats become JPEG. To keep a copy of any cover, drag it out to the Finder, or right-click it and choose Export Cover.
+The cover comes from the Cover Art Archive. For a disc that has none there, or a better scan of your own, drop an image file on the cover, or right-click it and choose Choose Cover. It is saved with the rip and embedded in the files. JPEG and PNG are kept as they are; other formats become JPEG. Click a cover to see it at full size in Quick Look (with no cover yet, a click chooses one). To keep a copy of any cover, drag it out to the Finder, or right-click it and choose Export Cover.
 
 The info button at the end of a track's row shows everything known about the track: the artist, the composers and lyricists when MusicBrainz names them (with the name in your language beside one in another script), the album's genre, the length, the ISRC from the disc, and the MusicBrainz recording ID. All of it goes into the files' tags, and for an earlier rip that was encoded, the button also shows the tags in the file itself. The info button beside the header's chips shows the release (date, country, status, barcode, labels, release group, discs) and the disc's own codes (the disc IDs, MCN, CD-Text, media type). The album, the artist, and each track's title and artist can be edited; the rest comes from MusicBrainz as it is.
 
@@ -27,7 +27,7 @@ A release with several CDs is a set. Its discs share the album's names, the rele
 
 ## Changing the cover
 
-Before a rip, drop an image on the cover, or click it, to use your own in place of the Cover Art Archive's; the cover's menu puts the archive's back. After a rip, the same works on the rip in Recent Rips: the new cover goes into the rip's folder, into the album folder in the library, and into the tags of the encoded files, and the audio is not touched. A cover you choose is kept for the release, so the other discs of a box set get it, and so does a later rip of the same release.
+Before a rip, drop an image on the cover, or choose one from its menu, to use your own in place of the Cover Art Archive's; the cover's menu puts the archive's back. After a rip, the same works on the rip in Recent Rips: the new cover goes into the rip's folder, into the album folder in the library, and into the tags of the encoded files, and the audio is not touched. A cover you choose is kept for the release, so the other discs of a box set get it, and so does a later rip of the same release.
 
 ## Changing an earlier rip
 

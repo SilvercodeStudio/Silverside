@@ -1,3 +1,4 @@
+import QuickLook
 import SilversideKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -16,6 +17,8 @@ struct ResultsView: View {
     /// The cover in the rip's folder, or in the album folder for a report kept in the library.
     @State private var cover: Data?
     @State private var coverTargeted = false
+    /// The cover's file while Quick Look shows it.
+    @State private var coverPreview: URL?
     /// The rip's own edits (track titles and artists), as typed; saved a moment after the last change.
     @State private var edits = MetadataEdits()
     @State private var savedEdits = MetadataEdits()
@@ -209,9 +212,18 @@ struct ResultsView: View {
                     }
                     return true
                 }
-                .onTapGesture { chooseCover() }
+                .onTapGesture {
+                    if cover != nil {
+                        coverPreview = CoverDrop.file(for: cover, name: coverFileName)
+                    } else {
+                        chooseCover()
+                    }
+                }
                 .onDrag { CoverDrop.provider(for: cover, name: coverFileName) ?? NSItemProvider() }
+                .quickLookPreview($coverPreview)
                 .contextMenu {
+                    Button("Quick Look") { coverPreview = CoverDrop.file(for: cover, name: coverFileName) }
+                        .disabled(cover == nil)
                     Button("Choose Cover…") { chooseCover() }
                     if let release = report.release, !release.isManual, release.hasFrontCover {
                         Button("Use the Cover Art Archive's") { model.changeCover(of: recentRip, to: nil) }
@@ -220,7 +232,7 @@ struct ResultsView: View {
                     Button("Export Cover…") { CoverDrop.export(cover, name: coverFileName) }.disabled(cover == nil)
                 }
                 .help(
-                    "Drop an image here, or click, to change the cover: in the rip, in the album folder, and in the encoded files' tags. Drag the cover out to save a copy."
+                    "Click to see the cover at full size. Drop an image here, or choose one from the menu, to change the cover: in the rip, in the album folder, and in the encoded files' tags. Drag the cover out to save a copy."
                 )
             VStack(alignment: .leading, spacing: 6) {
                 Label {

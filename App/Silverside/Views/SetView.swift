@@ -1,3 +1,4 @@
+import QuickLook
 import SilversideKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -9,6 +10,8 @@ struct SetView: View {
     let ripSet: RipSet
     @State private var cover: Data?
     @State private var coverTargeted = false
+    /// The cover's file while Quick Look shows it.
+    @State private var coverPreview: URL?
     @State private var album = ""
     @State private var albumArtist = ""
     @State private var date = ""
@@ -103,20 +106,29 @@ struct SetView: View {
                     }
                     return true
                 }
-                .onTapGesture(perform: chooseCover)
+                .onTapGesture {
+                    if cover != nil {
+                        coverPreview = CoverDrop.file(for: cover, name: coverFileName)
+                    } else {
+                        chooseCover()
+                    }
+                }
+                .quickLookPreview($coverPreview)
                 .contextMenu {
+                    Button("Quick Look") { coverPreview = CoverDrop.file(for: cover, name: coverFileName) }
+                        .disabled(cover == nil)
                     Button("Choose Cover…", action: chooseCover)
                     if release?.hasFrontCover == true {
                         Button("Use the Cover Art Archive's") { changeCover(to: nil) }
                     }
                     Divider()
                     Button("Export Cover…") {
-                        CoverDrop.export(cover, name: "\(ripSet.artist) - \(ripSet.title) cover")
+                        CoverDrop.export(cover, name: coverFileName)
                     }
                     .disabled(cover == nil)
                 }
                 .help(
-                    "Drop an image here, or click, to give every disc of the set this cover: in the rips, the album folder, and the files' tags."
+                    "Click to see the cover at full size. Drop an image here, or choose one from the menu, to give every disc of the set this cover: in the rips, the album folder, and the files' tags."
                 )
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top, spacing: 16) {
@@ -296,6 +308,8 @@ struct SetView: View {
             model.alert = AppAlert(title: "The names could not be saved", message: "\(error)")
         }
     }
+
+    private var coverFileName: String { "\(ripSet.artist) - \(ripSet.title) cover" }
 
     private func chooseCover() {
         let panel = NSOpenPanel()

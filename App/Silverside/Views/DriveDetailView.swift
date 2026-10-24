@@ -1,3 +1,4 @@
+import QuickLook
 import SilversideDarwin
 import SilversideKit
 import SwiftUI
@@ -179,6 +180,8 @@ struct AlbumHeader: View {
 
     private var editable: Bool { slot.rip?.isRunning != true && disc.baseRelease != nil && source == .musicBrainz }
     @State private var coverTargeted = false
+    /// The cover's file while Quick Look shows it.
+    @State private var coverPreview: URL?
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
@@ -195,9 +198,18 @@ struct AlbumHeader: View {
                     }
                     return true
                 }
-                .onTapGesture { if slot.rip?.isRunning != true { chooseCover() } }
+                .onTapGesture {
+                    if disc.shownCover != nil {
+                        coverPreview = CoverDrop.file(for: disc.shownCover, name: coverFileName)
+                    } else if slot.rip?.isRunning != true {
+                        chooseCover()
+                    }
+                }
                 .onDrag { CoverDrop.provider(for: disc.shownCover, name: coverFileName) ?? NSItemProvider() }
+                .quickLookPreview($coverPreview)
                 .contextMenu {
+                    Button("Quick Look") { coverPreview = CoverDrop.file(for: disc.shownCover, name: coverFileName) }
+                        .disabled(disc.shownCover == nil)
                     Button("Choose Cover…") { chooseCover() }.disabled(slot.rip?.isRunning == true)
                     if disc.userCover != nil {
                         Button(disc.cover == nil ? "Remove Cover" : "Use the Cover Art Archive's") {
@@ -211,7 +223,7 @@ struct AlbumHeader: View {
                         .disabled(disc.shownCover == nil)
                 }
                 .help(
-                    "Drop an image here, or click, to use your own cover. It goes in the rip and the tags. Drag the cover out to save a copy."
+                    "Click to see the cover at full size. Drop an image here, or choose one from the menu, to use your own cover: it goes in the rip and the tags. Drag the cover out to save a copy."
                 )
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 16) {
@@ -620,6 +632,11 @@ enum CoverDrop {
     /// The cover as a file to drag out: a copy in a temporary folder, named for the album,
     /// which the Finder copies where it is dropped.
     static func provider(for data: Data?, name: String) -> NSItemProvider? {
+        file(for: data, name: name).flatMap { NSItemProvider(contentsOf: $0) }
+    }
+
+    /// The cover in a temporary folder, named for the album: to drag out, or for Quick Look.
+    static func file(for data: Data?, name: String) -> URL? {
         guard let data, let fileExtension = CoverImage(data: data).fileExtension else { return nil }
         let folder = URL.temporaryDirectory.appending(path: "Silverside Covers", directoryHint: .isDirectory)
         let file = folder.appending(path: "\(name).\(fileExtension)")
@@ -629,7 +646,7 @@ enum CoverDrop {
         } catch {
             return nil
         }
-        return NSItemProvider(contentsOf: file)
+        return file
     }
 
     /// Saves the cover where the user says.

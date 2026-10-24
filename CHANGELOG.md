@@ -33,6 +33,12 @@ command-line tool.
   encoding it again from its lossless files, each checked against the rip's
   CRC-32; `--hdcd-copy` writes the decoded copy beside it.
 
+### Changed
+
+- A click on a cover shows it at full size in Quick Look, and the cover's
+  menu has Quick Look too. Choose Cover… is in the menu; a click still
+  chooses one where there is no cover yet.
+
 ## 0.6 (2026-10-23)
 
 ### Added

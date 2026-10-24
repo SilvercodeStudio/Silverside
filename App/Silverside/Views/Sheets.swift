@@ -239,7 +239,7 @@ struct LibrarySheet: View {
 }
 
 /// After a rip whose HDCD codes change the audio, before encoding: decode them, or keep the
-/// audio as pressed. The advice follows the format: decoding costs a lossy file nothing.
+/// audio as pressed. The advice follows the format (`AudioFormat.recommendsHDCDDecode`).
 struct HDCDQuestionSheet: View {
     @Environment(AppModel.self) private var model
     var rip: RipRun
@@ -247,35 +247,35 @@ struct HDCDQuestionSheet: View {
     @State private var remembers = false
 
     var body: some View {
+        let format = question.format
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image("HDCD").resizable().scaledToFit().frame(height: 22)
                 Text("“\(question.album)” uses HDCD").font(.title3.bold())
             }
-            if let text = question.text { Text(text).fixedSize(horizontal: false, vertical: true) }
             Text(
-                "Few players decode HDCD, so the files play as the disc does without a decoder unless Silverside decodes them now."
+                (question.features.map { "Its codes ask for \($0). " } ?? "")
+                    + "Few players decode HDCD, so Silverside can decode it now."
             )
             .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 6) {
                 Text(
-                    "**Keep as pressed:** the files are bit for bit the disc, with the codes still in them. Decode HDCD… on the rip can make a decoded copy later."
-                )
+                    .init(
+                        "**Decode:** the audio as an HDCD player plays it, in "
+                            + (format.isLossless
+                                ? "\(format.hdcdBits)-bit \(format.name) files" : "\(format.name) files")
+                            + (HDCDSizeWarning.growth(for: format).map { ", \($0)" } ?? " of the same size")
+                            + ". They are 6 dB quieter; ReplayGain makes up the level."))
                 Text(
                     .init(
-                        "**Decode:** "
-                            + (question.format.isLossless ? "\(question.format.hdcdBits)-bit files" : "files")
-                            + " tagged HDCD=decoded, 6 dB quieter (ReplayGain makes up the level)"
-                            + (HDCDSizeWarning.text(for: question.format).map { ". \($0)" } ?? ", and no larger.")))
+                        format.isLossless
+                            ? "**Keep as pressed:** files bit for bit the disc, with the codes in them. Decode HDCD… can make a decoded copy later."
+                            : "**Keep as pressed:** the audio as a player without a decoder plays it."))
             }
             .fixedSize(horizontal: false, vertical: true)
-            Text(
-                question.recommendsDecoding
-                    ? "For \(question.format.name), decoding is the better choice: it costs no space."
-                    : "For \(question.format.name), keeping the audio as pressed is the usual choice: the files stay exact, and decoding can wait."
-            )
-            .font(.callout).foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+            if let note = Self.note(for: format) {
+                Text(note).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             Toggle("Use this answer for every HDCD disc (Settings › Encoding)", isOn: $remembers)
             HStack {
                 Spacer()
@@ -290,6 +290,15 @@ struct HDCDQuestionSheet: View {
         }
         .padding(20)
         .frame(width: 480)
+    }
+
+    /// Why the default button is the advice, where that is not plain.
+    static func note(for format: AudioFormat) -> String? {
+        switch format {
+        case .aac, .mp3: "\(format.name) files lose the codes, so they cannot be decoded later."
+        case .aiff, .wav: "For \(format.name), keeping the audio as pressed is the usual choice."
+        case .flac, .alac: nil
+        }
     }
 
     private func answer(decodes: Bool) {
@@ -392,6 +401,16 @@ struct HDCDSizeWarning: View {
         case .flac: "20-bit FLAC files are a little larger than 16-bit ones: about 5%."
         case .alac: "20-bit Apple Lossless files are larger than 16-bit ones: about a third."
         case .aiff, .wav: "24-bit \(format.name) files are half again as large as 16-bit ones."
+        case .aac, .mp3: nil
+        }
+    }
+
+    /// How much larger decoded files are: "about 5% larger". Nil for AAC and MP3.
+    static func growth(for format: AudioFormat) -> String? {
+        switch format {
+        case .flac: "about 5% larger"
+        case .alac: "about a third larger"
+        case .aiff, .wav: "half again as large"
         case .aac, .mp3: nil
         }
     }

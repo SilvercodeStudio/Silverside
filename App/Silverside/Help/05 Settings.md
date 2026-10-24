@@ -46,7 +46,7 @@ The setting is on by default because the tags cost nothing until a player uses t
 
 ### HDCD
 
-What to do with a disc whose HDCD codes ask for peak extend or a gain adjustment: ask each time (the default), decode into files tagged `HDCD=decoded` (20-bit FLAC and Apple Lossless, 24-bit AIFF and WAV), or keep the audio as pressed. See HDCD under Ripping a Disc.
+What to do with a disc whose HDCD codes ask for peak extend or gain: **Ask each time** (the default), **Decode** (20-bit FLAC and Apple Lossless, 24-bit AIFF and WAV), or **Keep as pressed** (files bit for bit the disc). A disc whose codes ask for nothing is always kept as pressed. See HDCD under Ripping a Disc.
 
 ## Naming
 

@@ -30,6 +30,16 @@ public enum AudioFormat: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// True if decoding HDCD is the advice for this format: the lossy formats lose the codes,
+    /// so their files can never be decoded later, and 20-bit FLAC and Apple Lossless are not
+    /// much larger. 24-bit AIFF and WAV files are half again as large, so they keep the disc as pressed.
+    public var recommendsHDCDDecode: Bool {
+        switch self {
+        case .flac, .alac, .aac, .mp3: true
+        case .aiff, .wav: false
+        }
+    }
+
     /// The format's name, for people to read.
     public var name: String {
         switch self {

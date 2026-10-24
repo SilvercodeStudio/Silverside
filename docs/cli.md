@@ -66,7 +66,7 @@ ask for something, `--hdcd decode` (or the `hdcd` setting) decodes them into
 20-bit FLAC or Apple Lossless files (24-bit AIFF and WAV) tagged `HDCD=decoded`,
 with ReplayGain measured on the decode;
 `--hdcd keep` encodes the audio as pressed. With `ask`, the default, `rip` asks
-at a terminal (yes for AAC and MP3, no for the lossless formats), and `encode`
+at a terminal (yes, except for AIFF and WAV), and `encode`
 keeps the audio as pressed.
 
 `encode -i` also takes an album folder in the library: the album is encoded

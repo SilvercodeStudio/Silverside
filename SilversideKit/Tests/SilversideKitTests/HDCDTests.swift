@@ -205,21 +205,26 @@ struct HDCDTests {
     }
 
     /// A rip of two tracks with HDCD codes, as `DiscRip` writes it: the codes and the CRC-32s in its report.
-    func makeRip(_ packet: Encoder.Packet) throws -> (folder: URL, library: URL) {
-        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
-        let folder = root.appending(path: "rip")
+    /// A verified rip of a disc with HDCD codes in every track, and the library beside it. With
+    /// `sets`, the release has two discs: disc 1 of two tracks and disc 2 of three, ripped in `root`.
+    func makeRip(
+        _ packet: Encoder.Packet, position: Int = 1, set: Bool = false, root: URL? = nil
+    ) throws -> (folder: URL, library: URL) {
+        let root = root ?? FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        let folder = root.appending(path: "rip\(position)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let samples = track(packet, seconds: 2, amplitude: 30000)
         let sectors = samples.count / 588
-        let toc = try TOC(audioTrackStarts: [0, sectors], leadOutLBA: 2 * sectors)
+        let count = position == 1 ? 2 : 3
+        let toc = try TOC(audioTrackStarts: (0..<count).map { $0 * sectors }, leadOutLBA: count * sectors)
         var tracks = [RipReport.Track]()
-        for number in 1...2 {
+        for number in 1...count {
             let audio = Array(samples.prefix(sectors * 588))
             try WAVFile.write(audio, to: folder.appending(path: "Track 0\(number).wav"))
             var track = RipReport.Track(
                 number: number, file: "Track 0\(number).wav", startLBA: (number - 1) * sectors, sectors: sectors,
                 preEmphasis: false, accurateRip: .accurate)
-            track.recordChecksums(of: audio, isFirstTrack: number == 1, isLastTrack: number == 2)
+            track.recordChecksums(of: audio, isFirstTrack: number == 1, isLastTrack: number == count)
             track.hdcd = HDCDCodes.scan(audio)
             tracks.append(track)
         }
@@ -232,15 +237,16 @@ struct HDCDTests {
             drive: .init(vendor: "V", product: "P", revision: "1", readOffset: 103, offsetSource: "test"),
             secure: true, toc: toc, tracks: tracks, ctdb: .init(status: .verified))
         report.hdcd = HDCDStatus(tracks)
+        let disc1 = MusicBrainzRelease.Medium(
+            position: 1, format: "HDCD", title: nil, discIDs: [],
+            tracks: [named(1, "Hell in a Bucket"), named(2, "Dupree's Diamond Blues")])
+        let disc2 = MusicBrainzRelease.Medium(
+            position: 2, format: "HDCD", title: nil, discIDs: [],
+            tracks: [named(1, "Bird Song"), named(2, "Space"), named(3, "Wharf Rat")])
         report.release = MusicBrainzRelease(
             id: "knick", title: "Dozin' at the Knick", artistCredit: [.init(name: "Grateful Dead")],
             date: "1996-10-29", country: "US", status: "Official", barcode: nil, disambiguation: nil, labels: [],
-            releaseGroup: nil,
-            media: [
-                .init(
-                    position: 1, format: "HDCD", title: nil, discIDs: [],
-                    tracks: [named(1, "Hell in a Bucket"), named(2, "Dupree's Diamond Blues")])
-            ], hasFrontCover: false)
+            releaseGroup: nil, media: set ? [disc1, disc2] : [disc1], hasFrontCover: false)
         try report.write(to: folder.appending(path: "disc.json"))
         return (folder, root.appending(path: "library"))
     }
@@ -322,6 +328,55 @@ struct HDCDTests {
         #expect(throws: EncodingError.sourceChanged(files[1])) {
             try encoder.encodeWithRecord(source, into: library.appending(path: "again"))
         }
+    }
+
+    @Test func decodesInPlaceOnlyWhenEveryTrackIsChecked() throws {
+        let (folder, library) = try makeRip(.a(0x10))
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let (files, _) = try DiscEncoder(format: .flac).encodeWithRecord(try RippedDisc(folder: folder), into: library)
+        let album = files[0].deletingLastPathComponent()
+        let report = album.appending(path: "Rip Report.json")
+        let original = try Data(contentsOf: files[0])
+        let pressed = try Data(contentsOf: files[1])
+        var encoder = DiscEncoder(format: .flac)
+        encoder.decodesHDCD = true
+        encoder.overwrites = true
+        encoder.replayGain = false  // which would read track 2 before any track is encoded
+
+        // Track 2 changed since the rip: track 1, though decoded and checked, stays as pressed.
+        try AudioEncoder.encode(Array(AudioEncoderTests.samples.prefix(88_200)), format: .flac, to: files[1])
+        #expect(throws: EncodingError.sourceChanged(files[1])) {
+            try encoder.encodeWithRecord(try RippedDisc(albumReportAt: report), into: library)
+        }
+        #expect(try Data(contentsOf: files[0]) == original)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: album.path).allSatisfy { !$0.hasPrefix(".") })
+        #expect(try RipReport.read(from: report).encoding?.hdcdDecoded == nil)
+
+        try pressed.write(to: files[1])
+        let (decoded, record) = try encoder.encodeWithRecord(try RippedDisc(albumReportAt: report), into: library)
+        #expect(decoded == files && record?.hdcdDecoded == true)
+        #expect(try RipReport.read(from: report).encoding?.hdcdDecoded == true)
+        let ripped = try WAVFile.read(folder.appending(path: "Track 01.wav"))
+        #expect(try AudioEncoder.decodeWide(files[0]) == HDCDCodes.decode(ripped, bits: 20))
+    }
+
+    @Test func decodesADiscWhoseCodesAskForNothingWhenTheOtherDiscsAreDecoded() throws {
+        let (first, library) = try makeRip(.a(0x13), set: true)
+        let root = first.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (second, _) = try makeRip(.a(0), position: 2, set: true, root: root)
+        var encoder = DiscEncoder(format: .flac)
+        encoder.decodesHDCD = true
+        #expect(
+            try encoder.encodeWithRecord(try RippedDisc(folder: first), into: library).encoding?.hdcdDecoded == true)
+        // Disc 2's codes ask for nothing, and the setting keeps it as pressed, but disc 1 holds the decode.
+        let (files, record) = try DiscEncoder(format: .flac).encodeWithRecord(
+            try RippedDisc(folder: second), into: library)
+        #expect(record?.hdcdDecoded == true)
+        #expect(try FLACTags.read(files[0]).contains { $0.key == "HDCD" && $0.value == "decoded" })
+        // A decode of audio the codes do not change is the audio 6.02 dB lower, exactly.
+        let ripped = try WAVFile.read(second.appending(path: "Track 01.wav"))
+        #expect(try AudioEncoder.decodeWide(files[0]) == HDCDCodes.decode(ripped, bits: 20))
     }
 
     @Test func readsTheChoiceFromTheSettings() throws {

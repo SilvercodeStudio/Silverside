@@ -60,21 +60,49 @@ Stop ends the rip after the read under way. The tracks ripped so far stay in the
 
 ## HDCD
 
-HDCD discs carry a logo, and hide control codes in the lowest bit of the audio. A player without an HDCD decoder plays the audio as it is, so the rip is an exact copy either way. Silverside looks for the codes in every track it rips, and the header and the result show the HDCD logo with what it found:
+HDCD (High Definition Compatible Digital) discs were mastered to hold more than a 16-bit CD can, and still play in every CD player. The mastering hides control codes in the lowest bit of the audio. Only a player with an HDCD decoder reads them, and they can ask it for two changes:
 
-- **codes only:** the codes ask for nothing, and a decoder would play the same audio. Most discs with the logo are like this.
-- **peak extend** or **gain:** the codes ask a decoder to expand the loudest peaks, or to lower the level so that quiet passages come out as mastered.
+- **Peak extend:** the loudest peaks were compressed by up to 9 dB to fit on the disc. The decoder expands them again.
+- **Gain:** passages were raised by up to 7.5 dB to fit on the disc. The decoder lowers them again, and their finest detail goes below the 16 bits that a CD holds.
+
+Without a decoder, you hear the disc as pressed: the peaks stay compressed, and the raised passages stay raised. Few players have a decoder.
+
+### What Silverside finds
+
+The HDCD logo on a disc, or HDCD codes in its audio, does not mean that the disc uses peak extend or gain. Many discs were mastered with HDCD equipment, which puts the codes in the audio, but on most of them the codes ask for nothing. A decoder then plays the disc exactly as a player without one does. So Silverside offers to decode only a disc whose codes ask for peak extend or gain, and never one with the logo alone.
+
+Silverside looks for the codes in every track it rips, and the header and the result show the HDCD logo with what it found:
+
+- **codes only:** the codes ask for nothing, so a decoder plays the same audio, and there is nothing to decode. Most discs with the logo are like this.
+- **peak extend** or **gain:** a decoder changes the audio. These discs are worth decoding.
 
 Before the rip, the logo with "per MusicBrainz" means that MusicBrainz lists the disc as HDCD. The rip decides: some discs with the logo have no codes, and some without it have them. The report lists the codes of each track. For rips from before, `silverside hdcd` looks for the codes in WAV, FLAC, AIFF, and Apple Lossless files.
 
-Few players decode HDCD, so when a disc's codes ask for peak extend or gain, Silverside asks before it encodes (Settings › Encoding can answer once for every disc):
+### Decode, or keep as pressed
 
-- **Keep as pressed** encodes the audio as it is on the disc, with the codes in it: the files stay bit for bit the disc. This is the usual choice for FLAC, Apple Lossless, AIFF, and WAV.
-- **Decode** writes files tagged `HDCD=decoded`, made by the same decoder as `ffmpeg -af hdcd`: 20-bit FLAC and Apple Lossless, HDCD's own resolution (24-bit AIFF and WAV). They are 6 dB quieter than the disc, since the decoder leaves room for the restored peaks; ReplayGain, measured on the decode, makes up the level in players that read it. Lossless files are larger, about 5% for FLAC and a third for Apple Lossless; for AAC and MP3 decoding costs no space, so it is the better choice there.
+When a disc's codes ask for peak extend or gain, Silverside asks before it encodes, and recommends Decode for every format but AIFF and WAV. Settings › Encoding can give one answer for every disc.
 
-A disc whose codes ask for nothing is never decoded: the audio would be the same. Every file of a disc with HDCD codes is tagged `MEDIA=HDCD`, decoded or not; `HDCD=decoded` marks the files that hold the decode.
+- **Decode** gives the audio as an HDCD player plays it. FLAC and Apple Lossless files are 20-bit, so they keep the detail that the decoder puts below 16 bits; AIFF and WAV files are 24-bit. For AAC and MP3, decode now or never: a lossy encode removes the codes, so a lossy file of the disc as pressed can never be decoded.
+- **Keep as pressed** makes files that are bit for bit the disc, with the codes still in them. Nothing is lost: Decode HDCD… can make a decoded copy at any time, and a few players decode such files as they play them. This is the usual choice for AIFF and WAV.
 
-**Decode HDCD…** in an earlier rip's toolbar decodes later: as a copy beside the album, in a folder and under an album title of its own ("Dozin' at the Knick (HDCD)"; the part after the title can be changed, as "(HDCD AAC)" for a second copy), in any format, so that players list both; or in place of the album's files. It works from the rip's WAV files, or after they are gone, from the album's lossless files, each checked first against the CRC-32 of the verified rip.
+Decoded files:
+
+- **are about 6 dB quieter** than the disc, because the decoder leaves room for the peaks that it expands. ReplayGain, measured on the decoded audio, sets the level again in players that read it.
+- **are larger** in lossless formats: about 5% for FLAC, a third for Apple Lossless, and half again for AIFF and WAV. AAC and MP3 files are no larger.
+- **are tagged** `HDCD=decoded`. Every file of a disc with HDCD codes, decoded or not, is tagged `MEDIA=HDCD`.
+
+In a set, a disc whose codes ask for nothing is decoded too when another disc of the set is, so that every disc plays at one level. Its decode is the same audio, 6 dB quieter.
+
+HDCD was made to carry 20 bits. In tests, 24-bit files held almost nothing more, far below what you can hear, and were larger: 8% for FLAC, 30% for Apple Lossless. The decoder is the one in FFmpeg (`ffmpeg -af hdcd`).
+
+### Decode an earlier rip
+
+**Decode HDCD…** in an earlier rip's toolbar decodes it later, into any format:
+
+- **Beside the album:** a copy with its own folder and album title, such as "Dozin' at the Knick (HDCD)", so that players list both. You can change the part after the title, such as "(HDCD AAC)" for a second copy.
+- **In place:** the album's files become the decoded files.
+
+Silverside decodes from the rip's WAV files. If they are gone, it uses the album's lossless files, and first checks each one against the CRC-32 of the verified rip.
 
 ## Where the files go
 

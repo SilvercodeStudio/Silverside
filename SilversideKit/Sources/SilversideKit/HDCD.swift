@@ -58,7 +58,7 @@ public struct HDCDCodes: Codable, Equatable, Sendable {
 
     /// Finds the codes in 16-bit stereo samples (left in the low half). Nil if the track has none.
     public static func scan(_ samples: [UInt32], sampleRate: Int = 44100) -> HDCDCodes? {
-        guard let decoder = hdcd_decoder_new(Int32(sampleRate)) else { return nil }
+        let decoder = newDecoder(sampleRate)
         defer { hdcd_decoder_free(decoder) }
         run(decoder, over: samples) { _, _ in }
         return codes(found: hdcd_decoder_summary(decoder))
@@ -69,7 +69,7 @@ public struct HDCDCodes: Codable, Equatable, Sendable {
     /// leaves room for the peaks that peak extend restores, so audio that the codes do not
     /// change comes out as it went in, 6.02 dB lower; audio without codes too.
     public static func decode(_ samples: [UInt32], bits: Int = 24, sampleRate: Int = 44100) -> [Int32] {
-        guard let decoder = hdcd_decoder_new(Int32(sampleRate)) else { return [] }
+        let decoder = newDecoder(sampleRate)
         defer { hdcd_decoder_free(decoder) }
         var decoded = [Int32]()
         decoded.reserveCapacity(samples.count * 2)
@@ -79,6 +79,15 @@ public struct HDCDCodes: Codable, Equatable, Sendable {
             for index in 0..<(2 * count) { decoded.append(buffer[index] & mask) }
         }
         return decoded
+    }
+
+    /// A decoder. It fails only when its memory cannot be had, and then nothing it returned
+    /// could be trusted: an empty decode would pass the lossless check and replace a track.
+    private static func newDecoder(_ sampleRate: Int) -> OpaquePointer {
+        guard let decoder = hdcd_decoder_new(Int32(sampleRate)) else {
+            fatalError("No memory for the HDCD decoder.")
+        }
+        return decoder
     }
 
     /// Feeds the samples to the decoder in blocks of 4096 frames, as FFmpeg decodes a FLAC
@@ -171,16 +180,29 @@ extension HDCDStatus {
         let which =
             coded.count == tracks.count
             ? "every track has" : "\(coded.count) of \(tracks.count) tracks \(coded.count == 1 ? "has" : "have")"
-        guard coded.contains(where: \.hdcd!.changesAudio) else {
+        guard let features = features(of: tracks) else {
             return "HDCD: \(which) HDCD codes, but they ask for no peak extend or gain adjustment,"
                 + " so an HDCD decoder would play the same audio."
         }
-        // "in every track", "in track 8", "in tracks 1 and 9"
+        return "HDCD: \(which) HDCD codes, and an HDCD decoder would change the audio (\(features))."
+            + (decodedFormat.map {
+                $0.isLossless
+                    ? " The files hold the HDCD decode, at \($0.hdcdBits) bits." : " The files hold the HDCD decode."
+            } ?? " The files hold the audio as it is on the disc.")
+    }
+
+    /// What the codes of these tracks ask for, for people: "peak extend in every track; gain down
+    /// to -4.0 dB in tracks 1 and 9, -1.0 dB in track 8". Nil if they ask for nothing.
+    public static func features(of tracks: [RipReport.Track]) -> String? {
+        let coded = tracks.filter { $0.hdcd != nil }
+        guard coded.contains(where: \.hdcd!.changesAudio) else { return nil }
+        // "in every track", "in track 8", "in tracks 1 and 9", "in tracks 1, 4, and 9"
         func inTracks(_ numbers: [Int]) -> String {
             if numbers.count == tracks.count { return "in every track" }
             if numbers.count == 1 { return "in track \(numbers[0])" }
+            if numbers.count == 2 { return "in tracks \(numbers[0]) and \(numbers[1])" }
             return "in tracks " + numbers.dropLast().map(String.init).joined(separator: ", ")
-                + " and \(numbers.last!)"
+                + ", and \(numbers.last!)"
         }
         var features = [String]()
         let always = coded.filter { $0.hdcd!.peakExtend == .always }.map(\.number)
@@ -198,12 +220,7 @@ extension HDCDStatus {
                         String(format: "%.1f dB ", $0) + inTracks(gains[$0]!.map(\.number))
                     }.joined(separator: ", "))
         }
-        return "HDCD: \(which) HDCD codes, and an HDCD decoder would change the audio ("
-            + features.joined(separator: "; ") + ")."
-            + (decodedFormat.map {
-                $0.isLossless
-                    ? " The files hold the HDCD decode, at \($0.hdcdBits) bits." : " The files hold the HDCD decode."
-            } ?? " The files hold the audio as it is on the disc.")
+        return features.joined(separator: "; ")
     }
 }
 

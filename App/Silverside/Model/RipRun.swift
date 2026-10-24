@@ -49,11 +49,10 @@ final class RipRun {
     struct HDCDQuestion: Identifiable {
         let id = UUID()
         var album: String
-        /// What the codes ask for, from the report.
-        var text: String?
+        /// What the codes ask for: "peak extend in every track; gain down to -3.0 dB in track 8".
+        var features: String?
         var format: AudioFormat
-        /// Decoding is the advice for a lossy format, where it costs no space.
-        var recommendsDecoding: Bool { !format.isLossless }
+        var recommendsDecoding: Bool { format.recommendsHDCDDecode }
     }
 
     /// The sectors of a track that the drive flagged, could not read, or that reads disagree on,
@@ -273,7 +272,7 @@ final class RipRun {
 
     private func askHDCD(_ report: RipReport, format: AudioFormat, answer: CheckedContinuation<Bool, Never>) {
         hdcdAnswer = answer
-        hdcdQuestion = HDCDQuestion(album: disc.title, text: report.hdcdText, format: format)
+        hdcdQuestion = HDCDQuestion(album: disc.title, features: HDCDStatus.features(of: report.tracks), format: format)
         add("HDCD codes that change the audio. Waiting for an answer: decode them, or keep the audio as pressed...")
         onQuestion?()
     }

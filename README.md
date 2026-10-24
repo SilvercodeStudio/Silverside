@@ -78,8 +78,9 @@ to be installed. All other supported formats are handled natively.
 - **HDCD.** Each track is checked for HDCD codes, and the app shows the HDCD
   logo with what they ask for. Most discs with the logo have codes that ask
   for nothing, so a decoder would play the same audio. A disc whose codes ask
-  for peak extend or a gain adjustment can be decoded into 20-bit files, at
-  the rip or later, as a copy beside the album.
+  for peak extend or gain can be decoded, at the rip or later, into 20-bit
+  FLAC or Apple Lossless files that keep what the decoder restores, or into
+  AAC or MP3 before a lossy encode removes the codes.
 - **Rip on insertion**, if you want it: a disc whose release is certain, and
   that is not ripped yet, rips a few seconds after it goes in.
 

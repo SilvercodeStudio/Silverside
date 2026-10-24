@@ -21,12 +21,14 @@ command-line tool.
   gain adjustment can be decoded into 20-bit FLAC or Apple Lossless files
   (HDCD's own resolution; 24-bit for AIFF and WAV) tagged `HDCD=decoded`, with
   ReplayGain measured on the decode. The app asks before it encodes such a
-  disc, and advises keeping lossless files as pressed and decoding for AAC and
-  MP3; Settings › Encoding can answer for every disc (`hdcd`: ask, decode,
-  keep; `--hdcd` on the command line). **Decode HDCD…** on an earlier rip
-  makes a decoded copy beside the album, as "<Album> (HDCD)" or another name
-  you give, or decodes in
-  place of its files, even after the rip's WAV files are gone.
+  disc, and advises decoding, except for AIFF and WAV, whose 24-bit files are
+  half again as large; Settings › Encoding can answer for every disc (`hdcd`:
+  ask, decode, keep; `--hdcd` on the command line). In a set, a disc whose
+  codes ask for nothing is decoded too when another disc is, so that the
+  discs play at one level. **Decode HDCD…** on an earlier rip makes a decoded
+  copy beside the album, as "<Album> (HDCD)" or another name you give, or
+  decodes in place of its files, even after the rip's WAV files are gone; in
+  place, no file is replaced until every track is decoded and checked.
 - `silverside encode` takes an album folder in the library as its input,
   encoding it again from its lossless files, each checked against the rip's
   CRC-32; `--hdcd-copy` writes the decoded copy beside it.

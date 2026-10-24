@@ -143,7 +143,8 @@ extension RippedDisc {
     }
 
     /// A track's ripped audio: its WAV file, or a lossless encoded file, which must decode to
-    /// the CRC-32 the report has for the track.
+    /// the CRC-32 the report has for the track. A report too old to have the CRC-32 cannot
+    /// check the file, and its audio is taken as it is.
     func audio(of track: Track) throws -> [UInt32] {
         if track.file.pathExtension.lowercased() == "wav" { return try WAVFile.read(track.file) }
         let samples = try AudioEncoder.decode(track.file)
@@ -213,8 +214,9 @@ public struct DiscEncoder: Sendable {
     /// the album: the copy gets a folder of its own, and players list it apart.
     public var albumSuffix: String?
     /// How many tracks encode at once. Each track in flight holds its audio twice (the rip and
-    /// the decoded check), about 300 MB for a long track, so the default stays at four even on
-    /// a Mac with many cores: half the cores, at least two, at most four.
+    /// the decoded check), about 300 MB for a long track (twice that for an HDCD decode, which
+    /// uses half as many lanes), so the default stays at four even on a Mac with many cores:
+    /// half the cores, at least two, at most four.
     public var parallelTracks = DiscEncoder.defaultParallelTracks
 
     public static var defaultParallelTracks: Int {
@@ -322,8 +324,23 @@ public struct DiscEncoder: Sendable {
 
         let cover = try disc.coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }
         let audioTracks = disc.toc.audioTracks
-        let hdcd = try decodesHDCD ? hdcdStatus(of: disc) : disc.report?.hdcd
-        let decodes = decodesHDCD && hdcd == .featuresUsed
+        // A disc whose codes ask for nothing is decoded too when another disc of the release in
+        // the album folder holds the decode. Its decode is its audio 6.02 dB lower, nothing lost,
+        // and without it the discs of one album would play 6 dB apart.
+        let followsDecodedDiscs =
+            release.cdPositions.count > 1
+            && jobs.first.map { job in
+                Self.albumReports(of: release, in: job.folder).contains {
+                    $0.report.discPosition != medium.position && $0.report.encoding?.hdcdDecoded == true
+                }
+            } == true
+        let hdcd = try decodesHDCD || followsDecodedDiscs ? hdcdStatus(of: disc) : disc.report?.hdcd
+        let decodes =
+            (decodesHDCD && hdcd == .featuresUsed)
+            || (followsDecodedDiscs && (hdcd == .codesOnly || hdcd == .featuresUsed))
+        if decodes && hdcd == .codesOnly {
+            log("HDCD: the codes ask for nothing, but the other discs of the release hold the decode.")
+        }
         if decodes {
             log(
                 "HDCD: decoding the codes"
@@ -331,13 +348,17 @@ public struct DiscEncoder: Sendable {
         }
         for index in jobs.indices { jobs[index].extraComments = HDCDStatus.tags(hdcd, decoded: decodes) }
 
+        // A track in flight holds its audio; an HDCD decode's samples are twice as wide, so
+        // half as many tracks go at once.
+        let lanes = max(1, decodes ? parallelTracks / 2 : parallelTracks)
+
         // ReplayGain needs every track's loudness before the first tag is written: the album's
         // gain is one gating over all of them. The tracks are measured from their WAV files,
-        // `parallelTracks` at a time as they encode, since each holds its track's audio.
+        // as many at a time as they encode.
         // For the last disc of a multi-disc release into the album folder, the album is the whole release.
         var replayGainRecord: RipReport.Encoding.ReplayGainRecord?
         if replayGain {
-            let measured = CTDB.parallelMap(over: jobs, lanes: parallelTracks) {
+            let measured = CTDB.parallelMap(over: jobs, lanes: lanes) {
                 job -> Result<ReplayGain.Analysis, any Error>? in
                 Result { ReplayGain.analyze(try audio(of: job.ripped, in: disc, decodes: decodes)) }
             }
@@ -357,25 +378,52 @@ public struct DiscEncoder: Sendable {
                 album: album, tracks: tracks, histogram: histogram, release: whole?.values, releaseDiscs: whole?.discs)
         }
 
-        // The tracks encode `parallelTracks` at a time. Each lane takes every n-th job, in
-        // order, so the lanes keep in step and no more than that many tracks are in memory.
-        // A failure stops the lanes after the tracks under way; the files written stay, as
-        // they did when the tracks went one by one.
-        let lanes = max(1, min(parallelTracks, jobs.count))
+        // An album encoded from its own files into its own folder replaces its source. Then
+        // every track is written and checked before the first original goes, so a failure
+        // leaves the album as it was, and a later try can read it again.
+        let replacesSource =
+            disc.tracks.contains { $0.file.pathExtension.lowercased() != "wav" }
+            && jobs.first?.folder.standardizedFileURL == disc.folder.standardizedFileURL
+
+        // Each lane takes every n-th job, in order, so the lanes keep in step and no more than
+        // that many tracks are in memory. A failure stops the lanes after the tracks under
+        // way; the files written stay, as they did when the tracks went one by one, except
+        // when they would replace the source.
+        let encodingLanes = min(lanes, max(1, jobs.count))
         let outcomes = EncodeOutcomes()
         let encoder = self
         let laneJobs = jobs
-        DispatchQueue.concurrentPerform(iterations: lanes) { lane in
-            for index in stride(from: lane, to: laneJobs.count, by: lanes) where !outcomes.hasFailed {
+        DispatchQueue.concurrentPerform(iterations: encodingLanes) { lane in
+            for index in stride(from: lane, to: laneJobs.count, by: encodingLanes) where !outcomes.hasFailed {
                 do {
-                    try encoder.encode(laneJobs[index], of: disc, decodes: decodes, cover: cover, lame: lame)
-                    outcomes.finish(index)
+                    let staged = try encoder.encode(
+                        laneJobs[index], of: disc, decodes: decodes, cover: cover, lame: lame, staging: replacesSource)
+                    outcomes.finish(index, staged: staged)
                 } catch {
                     outcomes.fail(index, error)
                 }
             }
         }
-        if let error = outcomes.firstError { throw error }
+        if let error = outcomes.firstError {
+            for staged in outcomes.staged.values { try? FileManager.default.removeItem(at: staged) }
+            throw error
+        }
+        if replacesSource {
+            for job in jobs {
+                guard let staged = outcomes.staged[job.index] else { continue }
+                if FileManager.default.fileExists(atPath: job.file.path) {
+                    try FileManager.default.removeItem(at: job.file)
+                }
+                try FileManager.default.moveItem(at: staged, to: job.file)
+                log("\(job.file.lastPathComponent)")
+                trackEncoded(job.ripped.number, job.file)
+            }
+            // Files the naming gave other names since: the album keeps only the new ones.
+            let written = Set(jobs.map(\.file.standardizedFileURL))
+            for track in disc.tracks where !written.contains(track.file.standardizedFileURL) {
+                try? FileManager.default.removeItem(at: track.file)
+            }
+        }
 
         var written = [URL]()
         var encodedFiles = [RipReport.Encoding.File]()
@@ -536,19 +584,28 @@ public struct DiscEncoder: Sendable {
     }
 
     /// Encodes one track: reads its audio, writes a partial file, checks it, and moves it
-    /// into place. Runs on one of the encoding lanes.
-    private func encode(_ job: Job, of disc: RippedDisc, decodes: Bool, cover: EmbeddedCover?, lame: URL?) throws {
+    /// into place. With `staging`, it leaves the checked partial file for the caller to move,
+    /// and returns it. Runs on one of the encoding lanes.
+    private func encode(
+        _ job: Job, of disc: RippedDisc, decodes: Bool, cover: EmbeddedCover?, lame: URL?, staging: Bool
+    ) throws -> URL? {
         try FileManager.default.createDirectory(at: job.folder, withIntermediateDirectories: true)
         let samples = try audio(of: job.ripped, in: disc, decodes: decodes)
         // Write to a partial file, and move it into place only when it is checked.
         let partial = job.folder.appending(path: ".\(UUID().uuidString).partial.\(format.fileExtension)")
-        defer { try? FileManager.default.removeItem(at: partial) }
+        var keepsPartial = false
+        defer { if !keepsPartial { try? FileManager.default.removeItem(at: partial) } }
         try write(samples, metadata: job.metadata, extra: job.extraComments, cover: cover, to: partial, lame: lame)
         try check(partial, against: samples, final: job.file)
+        if staging {
+            keepsPartial = true
+            return partial
+        }
         if FileManager.default.fileExists(atPath: job.file.path) { try FileManager.default.removeItem(at: job.file) }
         try FileManager.default.moveItem(at: partial, to: job.file)
         log("\(job.file.lastPathComponent)")
         trackEncoded(job.ripped.number, job.file)
+        return nil
     }
 
     /// Decodes the file: a lossless file must give the samples it was made from; a lossy one, about as many.
@@ -572,8 +629,17 @@ private final class EncodeOutcomes: @unchecked Sendable {
     private var done = Set<Int>()
     private var errors = [Int: any Error]()
 
+    private var partials = [Int: URL]()
+
     var hasFailed: Bool { lock.withLock { !errors.isEmpty } }
-    func finish(_ index: Int) { lock.withLock { _ = done.insert(index) } }
+    /// The checked partial files of a staged encoding, by job.
+    var staged: [Int: URL] { lock.withLock { partials } }
+    func finish(_ index: Int, staged: URL?) {
+        lock.withLock {
+            done.insert(index)
+            if let staged { partials[index] = staged }
+        }
+    }
     func finished(_ index: Int) -> Bool { lock.withLock { done.contains(index) } }
     func fail(_ index: Int, _ error: any Error) { lock.withLock { errors[index] = error } }
     /// The error of the first job that failed, in the jobs' order.

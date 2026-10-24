@@ -397,7 +397,7 @@ struct EncodingSettings: View {
                     Text("Keep as pressed").tag(HDCDChoice.keep)
                 }
                 Text(
-                    "Some HDCD discs have codes that ask a decoder to restore the loudest peaks or change the level. Few players decode HDCD. Decoding makes files tagged HDCD=decoded, 20-bit for FLAC and Apple Lossless (24-bit for AIFF and WAV), 6 dB quieter (ReplayGain makes up the level), and larger: about 5% for FLAC, a third for Apple Lossless. Kept as pressed, the files are bit for bit the disc and can be decoded later. Decoding is best for AAC and MP3, where it costs no space. Discs whose codes ask for nothing are never decoded: the audio would be the same."
+                    "Some HDCD discs have codes that ask a decoder to expand the loudest peaks or lower the level, and few players decode them. Decode gives the audio as an HDCD player plays it: 20-bit FLAC and Apple Lossless (24-bit AIFF and WAV), about 6 dB quieter (ReplayGain makes up the level), and larger: about 5% for FLAC, a third for Apple Lossless. Keep as pressed gives files bit for bit the disc, which can be decoded later; AAC and MP3 files lose the codes. A disc whose codes ask for nothing is always kept as pressed."
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }

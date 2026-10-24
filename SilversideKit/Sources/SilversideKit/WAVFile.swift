@@ -32,25 +32,31 @@ public enum WAVFile {
         try data(for: samples).write(to: url, options: .atomic)
     }
 
-    /// A 24-bit WAV file of `values` (`TrackPCM.wide`: each value's high 24 bits).
+    /// A 24-bit WAV file of `values` (`TrackPCM.wide`: each value's high 24 bits). It has the
+    /// extensible format (tag 0xFFFE, PCM subformat), as Microsoft asks for more than 16 bits.
     public static func data(forWide values: [Int32]) -> Data {
         let dataSize = UInt32(values.count * 3)
-        var data = Data(capacity: 44 + Int(dataSize))
+        var data = Data(capacity: 68 + Int(dataSize))
         func append(_ text: String) { data.append(contentsOf: Array(text.utf8)) }
         func append32(_ value: UInt32) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
         func append16(_ value: UInt16) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
 
         append("RIFF")
-        append32(36 + dataSize)
+        append32(60 + dataSize)
         append("WAVE")
         append("fmt ")
-        append32(16)
-        append16(1)  // PCM
+        append32(40)
+        append16(0xFFFE)  // extensible
         append16(2)  // channels
         append32(44100)
         append32(44100 * 6)  // bytes per second
         append16(6)  // bytes per frame
         append16(24)  // bits per sample
+        append16(22)  // the size of the extension
+        append16(24)  // valid bits per sample
+        append32(3)  // channel mask: front left, front right
+        // The PCM subformat GUID, 00000001-0000-0010-8000-00AA00389B71.
+        data.append(contentsOf: [1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
         append("data")
         append32(dataSize)
         var bytes = [UInt8](repeating: 0, count: Int(dataSize))

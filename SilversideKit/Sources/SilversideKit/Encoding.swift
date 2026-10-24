@@ -257,6 +257,7 @@ public struct DiscEncoder: Sendable {
 
         // ReplayGain needs every track's loudness before the first tag is written: the album's
         // gain is one gating over all of them. The tracks are measured in parallel from their WAV files.
+        // For the last disc of a multi-disc release into the album folder, the album is the whole release.
         var replayGainRecord: RipReport.Encoding.ReplayGainRecord?
         if replayGain {
             let measured = CTDB.parallelMap(over: jobs) { job -> Result<ReplayGain.Analysis, any Error>? in
@@ -264,13 +265,18 @@ public struct DiscEncoder: Sendable {
             }
             let analyses = try measured.map { try $0.get() }
             let album = ReplayGain.album(of: analyses)
+            let histogram = ReplayGain.Histogram(analyses)
+            let whole = jobs.first.flatMap {
+                Self.releaseGain(of: release, in: $0.folder, disc: (medium.position, histogram))
+            }
             var tracks = [RipReport.Encoding.ReplayGainRecord.Track]()
             for (index, analysis) in analyses.enumerated() {
                 let track = analysis.loudness.map { ReplayGain.Values(loudness: $0, peak: analysis.peak) }
-                jobs[index].extraComments = ReplayGain.tags(track: track, album: album)
+                jobs[index].extraComments = ReplayGain.tags(track: track, album: whole?.values ?? album)
                 if let track { tracks.append(.init(track: jobs[index].ripped.number, values: track)) }
             }
-            replayGainRecord = .init(album: album, tracks: tracks)
+            replayGainRecord = .init(
+                album: album, tracks: tracks, histogram: histogram, release: whole?.values, releaseDiscs: whole?.discs)
         }
 
         // The tracks encode `parallelTracks` at a time. Each lane takes every n-th job, in
@@ -361,6 +367,9 @@ public struct DiscEncoder: Sendable {
             try writeCueSheet(
                 cueTracks, hiddenTrackFile: hiddenTrackFile, release: release, medium: medium, toc: disc.toc,
                 mcn: disc.report?.mcn, to: albumFolder, discPart: discPart)
+            if let whole = replayGainRecord?.release {
+                updateReleaseGain(whole, of: release, in: albumFolder, except: medium.position, library: library)
+            }
         }
         return (written, encoding)
     }

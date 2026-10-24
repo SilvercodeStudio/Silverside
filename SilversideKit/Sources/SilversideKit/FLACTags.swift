@@ -52,7 +52,7 @@ public enum FLACTags {
 
     /// The file's Vorbis comments, in order.
     public static func read(_ url: URL) throws -> [(key: String, value: String)] {
-        let (blocks, _) = try parseBlocks(try Data(contentsOf: url))
+        let (blocks, _) = try parseBlocks(try Data(contentsOf: url, options: .alwaysMapped))
         guard let block = blocks.first(where: { $0.type == BlockType.vorbisComment.rawValue }) else { return [] }
         let body = [UInt8](block.body)
         var index = 0
@@ -77,7 +77,7 @@ public enum FLACTags {
 
     /// The front cover's image data, if the file has one.
     public static func readFrontCover(_ url: URL) throws -> Data? {
-        let (blocks, _) = try parseBlocks(try Data(contentsOf: url))
+        let (blocks, _) = try parseBlocks(try Data(contentsOf: url, options: .alwaysMapped))
         for block in blocks where block.type == BlockType.picture.rawValue {
             let body = [UInt8](block.body)
             var index = 0

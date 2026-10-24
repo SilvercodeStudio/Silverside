@@ -5,14 +5,21 @@ import Testing
 @testable import SilversideKit
 
 struct EncodingTests {
-    /// A rip folder of a 2-track disc, disc 2 of a 2-disc release, with a cover.
-    func makeRip(verified: Bool = true) throws -> (folder: URL, library: URL) {
+    /// A rip folder of a 2-track disc, disc 2 of a 2-disc release, with a cover. Disc 1 has
+    /// 3 tracks, in a folder of its own beside it (`disc1`), with quieter audio.
+    func makeRip(verified: Bool = true, disc1: Bool = false) throws -> (folder: URL, library: URL) {
         let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
-        let folder = root.appending(path: "rip")
+        let folder = root.appending(path: disc1 ? "rip1" : "rip")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let toc = try TOC(audioTrackStarts: [0, 75], leadOutLBA: 150)
-        let samples = Array(AudioEncoderTests.samples.prefix(75 * 588))
-        for number in 1...2 { try WAVFile.write(samples, to: folder.appending(path: "Track 0\(number).wav")) }
+        let count = disc1 ? 3 : 2
+        let toc = try TOC(audioTrackStarts: (0..<count).map { $0 * 75 }, leadOutLBA: count * 75)
+        let samples = Array(AudioEncoderTests.samples.prefix(75 * 588)).map {
+            // Disc 1 is about 12 dB quieter: each channel's value divided by 4.
+            disc1
+                ? UInt32(UInt16(bitPattern: Int16(bitPattern: UInt16($0 & 0xFFFF)) / 4)) | UInt32(
+                    UInt16(bitPattern: Int16(bitPattern: UInt16($0 >> 16)) / 4)) << 16 : $0
+        }
+        for number in 1...count { try WAVFile.write(samples, to: folder.appending(path: "Track 0\(number).wav")) }
         try makeJPEG(width: 1400, height: 1400).write(to: folder)
         func track(_ position: Int, _ title: String) -> MusicBrainzRelease.Track {
             .init(
@@ -34,7 +41,7 @@ struct EncodingTests {
         var report = RipReport(
             drive: .init(vendor: "V", product: "P", revision: "1", readOffset: 6, offsetSource: "test"), secure: true,
             toc: toc,
-            tracks: (1...2).map {
+            tracks: (1...count).map {
                 .init(
                     number: $0, file: "Track 0\($0).wav", startLBA: ($0 - 1) * 75, sectors: 75, preEmphasis: false,
                     accurateRip: verified || $0 == 1 ? .accurate : .notAccurate, ctdbConfidence: 0)
@@ -279,5 +286,80 @@ extension EncodingTests {
             reportAt: folder.appending(path: "disc.json"), library: library, editsStore: edits,
             coverStore: ReleaseCoverStore(folder: folder.deletingLastPathComponent().appending(path: "covers")))
         #expect(again.renamed == 0 && again.files == update.files)
+    }
+
+    /// The album of a multi-disc release is the whole release: until every disc is encoded,
+    /// each disc's album gain is its own; the last disc takes the gain over every disc, and
+    /// the discs encoded before it are written again with it.
+    @Test func gainsTheAlbumOverEveryDiscOfASet() throws {
+        let (folder2, library) = try makeRip()
+        let root = folder2.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (folder1, _) = try makeRip(disc1: true)
+        defer { try? FileManager.default.removeItem(at: folder1.deletingLastPathComponent()) }
+        let encoder = DiscEncoder(format: .flac)
+        let (files2, record2) = try encoder.encodeWithRecord(try RippedDisc(folder: folder2), into: library)
+        let gain2 = try #require(record2?.replayGain)
+        #expect(gain2.release == nil && gain2.histogram != nil)
+        func albumGain(_ file: URL) throws -> String? {
+            try FLACTags.read(file).first { $0.key == "REPLAYGAIN_ALBUM_GAIN" }?.value
+        }
+        #expect(try albumGain(files2[0]) == gain2.album?.gainText)
+
+        let (files1, record1) = try encoder.encodeWithRecord(try RippedDisc(folder: folder1), into: library)
+        let gain1 = try #require(record1?.replayGain)
+        let whole = try #require(gain1.release)
+        #expect(
+            gain1.releaseDiscs == 2 && files1[0].deletingLastPathComponent() == files2[0].deletingLastPathComponent())
+        // Disc 1 is quieter, so the whole album lies between the two discs.
+        let (quiet, loud) = (try #require(gain1.album).loudness, try #require(gain2.album).loudness)
+        #expect(quiet < whole.loudness && whole.loudness < loud)
+        #expect(try albumGain(files1[0]) == whole.gainText && albumGain(files2[1]) == whole.gainText)
+        let album = files1[0].deletingLastPathComponent()
+        let saved2 = try RipReport.read(from: album.appending(path: "Rip Report (Disc 2).json"))
+        #expect(saved2.encoding?.replayGain?.release == whole && saved2.encoding?.replayGain?.album == gain2.album)
+        let markdown = try String(contentsOf: album.appending(path: "Rip Report (Disc 2).md"), encoding: .utf8)
+        #expect(markdown.contains("the album, all 2 discs, is \(whole.loudnessText)"))
+
+        // A record from before histograms were kept is measured from its files.
+        var old = try #require(saved2.encoding)
+        old.replayGain?.histogram = nil
+        old.replayGain?.release = nil
+        try old.save(inReportAt: album.appending(path: "Rip Report (Disc 2).json"))
+        let again = DiscEncoder.releaseGain(
+            of: try #require(saved2.release), in: album, disc: (1, try #require(gain1.histogram)))
+        #expect(abs((again?.values.loudness ?? 0) - whole.loudness) < 0.01 && again?.discs == 2)
+        let measured = try RipReport.read(from: album.appending(path: "Rip Report (Disc 2).json"))
+        #expect(measured.encoding?.replayGain?.histogram == gain2.histogram)
+    }
+
+    /// A track's title changed after the encoding, in the album folder's report (the rip's
+    /// files are gone): the library update renames that track's file and writes its tags,
+    /// and leaves the other file as it was.
+    @Test func renamesOneTrackAfterTheRip() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = try DiscEncoder(format: .flac).encode(try RippedDisc(folder: folder), into: library)
+        let album = files[0].deletingLastPathComponent()
+        let report = album.appending(path: "Rip Report (Disc 2).json")
+        func inode(_ file: URL) throws -> Int? {
+            try FileManager.default.attributesOfItem(atPath: file.path)[.systemFileNumber] as? Int
+        }
+        let before = try inode(files[1])
+        try MetadataEdits(tracks: [1: .init(title: "Help on the Way (Live)")]).save(inReportAt: report)
+        let store = ReleaseEditsStore(url: root.appending(path: "edits.json"))
+        let release = try #require(try RipReport.read(from: report).release)
+        #expect(MetadataEdits.current(forReportAt: report, release: release, store: store).tracks[1]?.title != nil)
+        let update = try DiscEncoder(format: .flac).updateLibrary(
+            reportAt: report, library: library, editsStore: store,
+            coverStore: ReleaseCoverStore(folder: root.appending(path: "covers")))
+        #expect(update.renamed == 1)
+        #expect(update.files.map(\.lastPathComponent) == ["02-01 Help on the Way (Live).flac", "02-02 Slipknot!.flac"])
+        #expect(
+            try FLACTags.read(update.files[0]).contains { $0.key == "TITLE" && $0.value == "Help on the Way (Live)" })
+        #expect(try inode(update.files[1]) == before)
+        let saved = try RipReport.read(from: report)
+        #expect(saved.encoding?.file(ofTrack: 1) == "02-01 Help on the Way (Live).flac")
     }
 }

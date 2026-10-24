@@ -53,6 +53,10 @@ public struct Settings: Codable, Equatable, Sendable {
     public var mp3 = MP3Options()
     /// Write ReplayGain tags (track and album gain and peak, EBU R 128 loudness) into the encoded files.
     public var replayGain = true
+    /// Add the encoded files to Apple's Music app, in the formats it reads (not FLAC).
+    public var addToMusic = false
+    /// The app rips a disc when it goes in, if MusicBrainz names its release for certain.
+    public var ripOnInsert = false
 
     public init() {}
 
@@ -188,6 +192,8 @@ public struct Settings: Codable, Equatable, Sendable {
         aac = try value(.aac, defaults.aac)
         mp3 = try value(.mp3, defaults.mp3)
         replayGain = try value(.replayGain, defaults.replayGain)
+        addToMusic = try value(.addToMusic, defaults.addToMusic)
+        ripOnInsert = try value(.ripOnInsert, defaults.ripOnInsert)
     }
 }
 

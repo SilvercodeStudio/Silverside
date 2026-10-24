@@ -50,12 +50,15 @@ public struct DiscRipOptions: Sendable {
     /// A cover the user gave (a JPEG or PNG), saved as the rip's cover in place of the
     /// Cover Art Archive's. It works for a disc MusicBrainz does not know too.
     public var cover: CoverImage?
+    /// After encoding, add the files to Apple's Music app, if it reads the format.
+    public var addsToMusic: Bool
 
     public init(settings: Settings) {
         artwork = settings.artwork
         readsC2 = settings.readC2
         testAndCopy = settings.testAndCopy
         keepsRip = settings.keepRipAfterEncoding
+        addsToMusic = settings.addToMusic
     }
 }
 
@@ -121,6 +124,10 @@ public enum DiscRipEvent: Sendable {
     /// After encoding: the rip's files were deleted, or kept because not every track is verified and encoded.
     case ripDeleted
     case ripKept(URL)
+    /// The encoded files went into Apple's Music app: how many tracks it added.
+    case addedToMusic(Int)
+    /// Music did not take the files; the rip and the encoding stand.
+    case addToMusicFailed(any Error)
 }
 
 public enum DiscRipError: Error, Equatable, CustomStringConvertible {
@@ -511,6 +518,13 @@ public struct DiscRip {
             // The rip's own report says where its tracks went, for as long as the rip is kept.
             try record?.save(inReportAt: folder.appending(path: "disc.json"))
             events(.encoded(files, format: encoder.format, record: record))
+            if options.addsToMusic, MusicApp.reads(encoder.format), !files.isEmpty {
+                do {
+                    events(.addedToMusic(try await blocking { try MusicApp.add(files) }))
+                } catch {
+                    events(.addToMusicFailed(error))
+                }
+            }
             // The WAV files go only if every track is verified and encoded; the report is in the album folder.
             if !options.keepsRip {
                 if result.encodedFiles.count == disc.tracks.count && disc.tracks.allSatisfy(\.isVerified) {

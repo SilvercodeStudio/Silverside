@@ -31,8 +31,15 @@ struct Encode: ParsableCommand {
     }
 
     func run() throws {
-        var (encoder, libraryURL) = encoding.encoder(try Settings.load())
+        let settings = try Settings.load()
+        var (encoder, libraryURL) = encoding.encoder(settings)
         let format = encoder.format
+        var addsToMusic = encoding.addsToMusic(settings)
+        if addsToMusic && !MusicApp.reads(format) {
+            print("Music cannot read \(format.name) files, so they are not added to it.")
+            addsToMusic = false
+        }
+        var written = [URL]()
         encoder.allowsUnverified = allowUnverified
         encoder.log = { print("  \($0)") }
         var total = 0
@@ -44,8 +51,12 @@ struct Encode: ParsableCommand {
             print("\(name): \(disc.tracks.count) tracks")
             let files = try encoder.encode(disc, into: libraryURL)
             total += files.count
+            written += files
             if let first = files.first { print("  in \(first.deletingLastPathComponent().path)") }
         }
         print("Encoded \(total) tracks as \(format.rawValue.uppercased()), each checked against the rip.")
+        if addsToMusic {
+            print("Added \(try MusicApp.add(written)) tracks to Music.")
+        }
     }
 }

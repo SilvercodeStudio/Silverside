@@ -103,6 +103,7 @@ struct Rip: AsyncParsableCommand {
         if let test { options.testAndCopy = test }
         options.pool = pool.map { URL(filePath: $0, directoryHint: .isDirectory) }
         if let keepRip { options.keepsRip = keepRip }
+        options.addsToMusic = encoding.addsToMusic(settings)
 
         var rip = DiscRip(
             drive: drive,
@@ -292,6 +293,10 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print("Deleted the rip's WAV files (--keep-rip keeps them). The rip report is in the album folder.")
         case .ripKept(let folder):
             Swift.print("Kept the rip in \(folder.path): not every track is verified and encoded.")
+        case .addedToMusic(let count):
+            Swift.print("Added \(count) tracks to Music.")
+        case .addToMusicFailed(let error):
+            Swift.print("Music: \(error)")
         }
     }
 

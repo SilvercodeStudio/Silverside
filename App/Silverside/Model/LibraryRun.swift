@@ -89,6 +89,14 @@ final class LibraryRun: Identifiable {
                     onMain { run.add("\(rip.title): encoding as \(settings.format.rawValue.uppercased())…") }
                     let (files, record) = try encoder.encodeWithRecord(disc, into: library)
                     try record?.save(inReportAt: rip.folder.appending(path: "disc.json"))
+                    if settings.addToMusic, MusicApp.reads(settings.format), !files.isEmpty {
+                        do {
+                            let added = try MusicApp.add(files)
+                            onMain { run.add("\(rip.title): added \(Format.count(added, "track")) to Music.") }
+                        } catch {
+                            onMain { run.add("\(rip.title): not added to Music: \(error)") }
+                        }
+                    }
                     let deletes =
                         !settings.keepRipAfterEncoding && files.count == disc.tracks.count
                         && disc.tracks.allSatisfy(\.isVerified)

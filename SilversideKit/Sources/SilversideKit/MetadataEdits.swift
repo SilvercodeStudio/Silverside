@@ -95,7 +95,11 @@ public struct MetadataEdits: Equatable, Sendable {
 
     /// The edits in a rip folder's disc.json, if it has any.
     public static func read(fromDiscJSONOf folder: URL) -> MetadataEdits? {
-        let url = folder.appending(path: "disc.json")
+        read(fromReportAt: folder.appending(path: "disc.json"))
+    }
+
+    /// The edits beside a report: in a rip's disc.json, or in the album folder's copy of it.
+    public static func read(fromReportAt url: URL) -> MetadataEdits? {
         guard let data = try? Data(contentsOf: url),
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let edits = object["edits"]
@@ -103,9 +107,23 @@ public struct MetadataEdits: Equatable, Sendable {
         return try? JSONDecoder().decode(MetadataEdits.self, from: JSONSerialization.data(withJSONObject: edits))
     }
 
+    /// The names a rip has now: its own edits, with the album edits kept for its release on
+    /// top, as the library update writes them. A release Silverside made has only its own.
+    public static func current(
+        forReportAt url: URL, release: MusicBrainzRelease, store: ReleaseEditsStore = ReleaseEditsStore()
+    ) -> MetadataEdits {
+        let own = read(fromReportAt: url) ?? MetadataEdits()
+        guard !release.isManual, let kept = store.edits(forReleaseID: release.id) else { return own }
+        return own.merged(with: kept)
+    }
+
     /// Sets "edits" in a folder's disc.json (removes it when there are none), and keeps every other key.
     public func save(inDiscJSONOf folder: URL) throws {
-        let url = folder.appending(path: "disc.json")
+        try save(inReportAt: folder.appending(path: "disc.json"))
+    }
+
+    /// Sets "edits" in a report file (removes it when there are none), and keeps every other key.
+    public func save(inReportAt url: URL) throws {
         var object = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]) ?? [:]
         if isEmpty {
             object["edits"] = nil

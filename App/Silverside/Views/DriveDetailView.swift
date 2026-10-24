@@ -417,7 +417,20 @@ struct StatusBar: View {
                 if isWorking {
                     ProgressView().controlSize(.small).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
                 }
-                Text(statusText).font(.callout.weight(.medium)).lineLimit(1)
+                if let date = slot.ripOnInsertDate, slot.rip == nil {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text("Ripping in \(max(1, Int(date.timeIntervalSince(context.date).rounded(.up)))) s…")
+                            .font(.callout.weight(.medium)).monospacedDigit()
+                    }
+                    Button("Rip Now") { model.ripNow(slot) }
+                    Button("Cancel") { model.cancelRipOnInsert(slot) }
+                        .keyboardShortcut(.cancelAction)
+                } else {
+                    Text(statusText).font(.callout.weight(.medium)).lineLimit(1)
+                    if let note = slot.ripOnInsertNote, slot.rip == nil {
+                        Text("Not ripped at once: \(note).").font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
                 Spacer()
                 Text(timeText).font(.callout).foregroundStyle(.secondary).monospacedDigit()
                 HStack(spacing: 10) {
@@ -540,6 +553,9 @@ struct ResultBanner: View {
                 if rip.keptFiles != nil {
                     Text("Not encoded: the library keeps the files it had. The rip is in the rips folder.")
                         .font(.callout).foregroundStyle(.secondary)
+                }
+                if let music = rip.musicResult {
+                    Text(music).font(.callout).foregroundStyle(.secondary)
                 }
             }
             Spacer()

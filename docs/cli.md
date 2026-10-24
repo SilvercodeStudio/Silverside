@@ -70,7 +70,11 @@ It encodes only tracks that AccurateRip or CTDB verified,
 unless you give `--allow-unverified`. The rip's report goes into the album
 folder too, as `Rip Report (Disc 1).json`. Files that are already in the
 library stay unless you give `--overwrite`; at a terminal, `rip --encode`
-asks first.
+asks first. ReplayGain's album gain is the disc's own until every disc of a
+set is in the album folder; the last disc's encoding gives every disc the
+album gain over all of them. `--add-to-music` (or the `addToMusic` setting)
+adds the files to Apple's Music app, in every format but FLAC; the first time,
+macOS asks whether the terminal may control Music.
 
 After `rip --encode`, a rip whose tracks are all verified and encoded is
 deleted, because the library has everything. `--keep-rip` (or the
@@ -113,6 +117,8 @@ silverside config unset aac.mode                     # back to the default
 | `keepRipAfterEncoding` | `false` | keep the WAV files after `rip --encode` |
 | `ejectAfterRip` | `false` | `rip` ejects the disc when every track is verified |
 | `replayGain` | `true` | ReplayGain tags: each track's gain and peak and the album's, as EBU R 128 measures them, for players that level albums; the audio is not changed (`encode --no-replay-gain`) |
+| `addToMusic` | `false` | add the encoded files to the Music app, except FLAC (`--add-to-music`) |
+| `ripOnInsert` | `false` | the app rips a disc when it goes in, if its release is certain and it is not ripped yet |
 | `aac.mode`, `aac.bitRate`, `aac.vbrQuality` | `vbr-constrained`, `256`, `127` | Apple's AAC encoder |
 | `mp3.mode`, `mp3.vbrQuality`, `mp3.bitRate`, `mp3.extraArguments` | `vbr`, `0`, `320`, `[]` | LAME |
 

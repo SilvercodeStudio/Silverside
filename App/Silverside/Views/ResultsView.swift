@@ -15,14 +15,31 @@ struct ResultsView: View {
     /// The cover in the rip's folder, or in the album folder for a report kept in the library.
     @State private var cover: Data?
     @State private var coverTargeted = false
+    /// The rip's own edits (track titles and artists), as typed; saved a moment after the last change.
+    @State private var edits = MetadataEdits()
+    @State private var savedEdits = MetadataEdits()
+    /// The album edits kept for the release, which every disc of a set shares.
+    @State private var keptEdits = MetadataEdits()
+    /// Tracks whose artist field shows, though they have no artist of their own.
+    @State private var artistRows: Set<Int> = []
 
     private var toc: TOC? { try? TOC(ctdbTOCString: report.toc) }
 
-    private var titles: [Int: String] {
-        guard let toc, let release = report.release, let medium = release.medium(for: toc) else { return [:] }
-        return Dictionary(
-            uniqueKeysWithValues: zip(toc.audioTracks, medium.tracks).map { ($0.number, $1.title) })
+    /// The release with the names as they are now: the rip's edits, and the kept album edits.
+    private var shownRelease: MusicBrainzRelease? {
+        guard let toc, let release = report.release else { return report.release }
+        return edits.merged(with: keptEdits).applied(to: release, toc: toc)
     }
+
+    private func tracks(of release: MusicBrainzRelease?) -> [Int: MusicBrainzRelease.Track] {
+        guard let toc, let release, let medium = release.medium(for: toc) else { return [:] }
+        return Dictionary(uniqueKeysWithValues: zip(toc.audioTracks, medium.tracks).map { ($0.number, $1) })
+    }
+
+    private var titles: [Int: String] { tracks(of: shownRelease).mapValues(\.title) }
+
+    /// Names can change while the rip has a release, and no library update for it is under way.
+    private var canEditNames: Bool { report.release != nil && !model.updatingNames.contains(recentRip.file) }
 
     var body: some View {
         HSplitView {
@@ -61,13 +78,37 @@ struct ResultsView: View {
                 ["cover.jpg", "cover.png"].lazy.compactMap { try? Data(contentsOf: folder.appending(path: $0)) }
                 .first
         }
-        .navigationTitle(report.release.map { "\($0.title)" } ?? folder.lastPathComponent)
+        .onAppear {
+            edits = MetadataEdits.read(fromReportAt: recentRip.file) ?? MetadataEdits()
+            savedEdits = edits
+            if let release = report.release, !release.isManual {
+                keptEdits = ReleaseEditsStore().edits(forReleaseID: release.id) ?? MetadataEdits()
+            }
+        }
+        // A name is saved, and the encoded files follow it, a moment after the last change.
+        .task(id: edits) {
+            guard edits != savedEdits else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            saveNames()
+        }
+        .onDisappear { saveNames() }
+        .navigationTitle(shownRelease.map { "\($0.title)" } ?? folder.lastPathComponent)
         .navigationSubtitle(
-            [report.release?.artist, report.drive.vendor + " " + report.drive.product].compactMap { $0 }.joined(
+            [shownRelease?.artist, report.drive.vendor + " " + report.drive.product].compactMap { $0 }.joined(
                 separator: " · ")
         )
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                if hasAudio && report.encoding == nil {
+                    Button {
+                        model.startLibraryRun(title: recentRip.title, encode: [recentRip], update: [])
+                    } label: {
+                        Label("Encode", systemImage: "music.note")
+                    }
+                    .help(encodeHelp)
+                    .disabled(!report.isVerified || model.library?.isRunning == true)
+                }
                 Button {
                     model.startRepair(RecentRip(folder: folder, report: report))
                 } label: {
@@ -89,6 +130,18 @@ struct ResultsView: View {
                 }
             }
         }
+    }
+
+    private var encodeHelp: String {
+        if !report.isVerified { return "Only a verified rip is encoded. Repair it first, or rip the disc again." }
+        return "Encode the rip into the library as \(model.settings.format.name), with the names as they are now."
+    }
+
+    /// Saves the edits, if they changed, and brings the encoded files up to date.
+    private func saveNames() {
+        guard edits != savedEdits else { return }
+        savedEdits = edits
+        model.saveNames(edits, of: recentRip)
     }
 
     private var canRepair: Bool {
@@ -162,6 +215,12 @@ struct ResultsView: View {
                 if let advice = report.advice {
                     Text(advice).font(.callout).foregroundStyle(.secondary)
                 }
+                if model.updatingNames.contains(recentRip.file) {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Writing the names into the encoded files…").font(.callout).foregroundStyle(.secondary)
+                    }
+                }
                 if let set = model.set(for: report.release) {
                     Button(setText(set)) { model.selection = .set(set.releaseID) }
                         .buttonStyle(.link).font(.callout)
@@ -211,7 +270,7 @@ struct ResultsView: View {
     @TableColumnBuilder<RipReport.Track, Never> private var discColumns: some TableColumnContent<RipReport.Track, Never>
     {
         TableColumn("#") { track in Text(String(track.number)).foregroundStyle(.secondary) }.width(28)
-        TableColumn("Title") { track in Text(titles[track.number] ?? track.file) }.width(min: 120, ideal: 180)
+        TableColumn("Title") { track in titleCell(track) }.width(min: 120, ideal: 180)
         TableColumn("Time") { track in Text(Format.duration(sectors: track.sectors)).foregroundStyle(.secondary) }
             .width(52)
         TableColumn("") { track in
@@ -220,6 +279,59 @@ struct ResultsView: View {
             }
         }
         .width(22)
+    }
+
+    /// A track's title, and its artist when it has one of its own, editable as in a drive's table.
+    @ViewBuilder private func titleCell(_ track: RipReport.Track) -> some View {
+        let shown = tracks(of: shownRelease)[track.number]
+        let ownArtist = shown.flatMap { $0.artist != shownRelease?.artist ? $0.artist : nil }
+        VStack(alignment: .leading, spacing: 1) {
+            if canEditNames, shown != nil {
+                TextField("", text: title(of: track.number)).textFieldStyle(.plain)
+                if ownArtist != nil || artistRows.contains(track.number) {
+                    TextField("", text: artist(of: track.number), prompt: Text("Track artist"))
+                        .textFieldStyle(.plain).font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Text(titles[track.number] ?? track.file)
+                if let ownArtist { Text(ownArtist).font(.caption).foregroundStyle(.secondary) }
+            }
+        }
+        .contextMenu {
+            if canEditNames, shown != nil {
+                if ownArtist == nil && !artistRows.contains(track.number) {
+                    Button("Add Track Artist") { artistRows.insert(track.number) }
+                }
+                Button("Clear This Track's Edits") {
+                    edits.setTitle(nil, ofTrack: track.number)
+                    edits.setArtist(nil, ofTrack: track.number)
+                    artistRows.remove(track.number)
+                }
+                .disabled(edits.tracks[track.number] == nil)
+            }
+        }
+    }
+
+    /// A binding to a track's title edit: MusicBrainz's title, or an empty one, clears the edit.
+    private func title(of number: Int) -> Binding<String> {
+        Binding(
+            get: { titles[number] ?? "" },
+            set: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespaces)
+                let original = tracks(of: report.release)[number]?.title
+                edits.setTitle(trimmed.isEmpty || trimmed == original ? nil : trimmed, ofTrack: number)
+            })
+    }
+
+    /// A binding to a track's artist edit: the release's own artist for the track, or none, clears the edit.
+    private func artist(of number: Int) -> Binding<String> {
+        Binding(
+            get: { edits.tracks[number]?.artist ?? tracks(of: shownRelease)[number]?.artist ?? "" },
+            set: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespaces)
+                let original = tracks(of: report.release)[number]?.artist
+                edits.setArtist(trimmed.isEmpty || trimmed == original ? nil : trimmed, ofTrack: number)
+            })
     }
 
     private var table: some View {

@@ -160,7 +160,6 @@ makes, and the settings.
 ## TODO or future ideas
 
 - **Multi-disc sets:** reusable style recipes for titles.
-- Ability to add image art after encoding
 - Pre-emphasis support as mentioned above.
 - Option for automatic rip on insertion and recognition
 - Option to import rips to Apple Music if compatible

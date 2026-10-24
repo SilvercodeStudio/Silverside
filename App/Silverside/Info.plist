@@ -2,6 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Apple Events to the Music app, when the settings add encoded files to it. -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Silverside adds the files it encodes to your Music library, when you turn this on in Settings.</string>
 	<!-- AccurateRip and CUETools DB are plain HTTP. Every other service uses HTTPS. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>

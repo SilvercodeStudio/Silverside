@@ -255,14 +255,31 @@ public struct RipReport: Codable, Equatable, Sendable {
                 }
             }
 
-            /// Nil when every track is silent.
+            /// This disc's own values. Nil when every track is silent.
             public var album: ReplayGain.Values?
             public var tracks: [Track]
+            /// The disc's blocks, for the gain of a multi-disc album. Nil in older records.
+            public var histogram: ReplayGain.Histogram?
+            /// For a disc of a multi-disc release: the album's values over every CD of the
+            /// release, which the tags have as the album gain in place of `album`. Nil until
+            /// every disc is encoded into the album folder.
+            public var release: ReplayGain.Values?
+            /// The discs that `release` covers.
+            public var releaseDiscs: Int?
 
-            public init(album: ReplayGain.Values?, tracks: [Track]) {
+            public init(
+                album: ReplayGain.Values?, tracks: [Track], histogram: ReplayGain.Histogram? = nil,
+                release: ReplayGain.Values? = nil, releaseDiscs: Int? = nil
+            ) {
                 self.album = album
                 self.tracks = tracks
+                self.histogram = histogram
+                self.release = release
+                self.releaseDiscs = releaseDiscs
             }
+
+            /// The values that the tags have as the album's: the whole release's, else the disc's.
+            public var albumInTags: ReplayGain.Values? { release ?? album }
         }
 
         public init(

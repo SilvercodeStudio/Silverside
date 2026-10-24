@@ -52,6 +52,8 @@ final class AppModel {
     private(set) var library: LibraryRun?
     var libraryShown = false
 
+    /// False until the first look at the drives: a disc in a drive at launch is not ripped by itself.
+    @ObservationIgnored private var hasListedDrives = false
     @ObservationIgnored private var watcher: DiskWatcher?
     @ObservationIgnored private var observers: [any NSObjectProtocol] = []
 
@@ -183,8 +185,66 @@ final class AppModel {
         {
             selection = .drive(arrived.id)
         }
-        for slot in drives where slot.needsDisc { slot.readDisc(settings: settings) }
+        let inserted = hasListedDrives
+        hasListedDrives = true
+        for slot in drives where slot.needsDisc {
+            slot.readDisc(settings: settings) { [weak self] in
+                if inserted { self?.considerRipOnInsert(slot) }
+            }
+        }
         for slot in drives where !slot.isDemo && slot.device.discBSDName == nil { player.stop(drive: slot.id) }
+    }
+
+    /// Seconds between a disc's lookup and its rip, with "rip it at once" on.
+    static let ripOnInsertDelay: TimeInterval = 5
+
+    /// With "rip it at once" on, a disc that just went in rips after a few seconds, if its
+    /// release is certain and it is not ripped yet. Otherwise the slot says why it waits.
+    func considerRipOnInsert(_ slot: DriveSlot) {
+        guard settings.ripOnInsert, !slot.isDemo, slot.rip == nil, !slot.isBusy, let disc = slot.disc else { return }
+        if let reason = Self.reasonNotToRipOnInsert(disc, earlierRips: recentRips) {
+            slot.ripOnInsertNote = reason
+            return
+        }
+        let date = Date().addingTimeInterval(Self.ripOnInsertDelay)
+        slot.ripOnInsertDate = date
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Self.ripOnInsertDelay))
+            // Cancelled, started by hand, or another disc since: the date is not this one.
+            guard let self, slot.ripOnInsertDate == date else { return }
+            slot.ripOnInsertDate = nil
+            startRip(slot)
+        }
+    }
+
+    /// Why a disc should wait for the user, or nil to rip it.
+    static func reasonNotToRipOnInsert(_ disc: DiscInfo, earlierRips: [RecentRip]) -> String? {
+        switch disc.lookup {
+        case .found: break
+        case .notFound: return "MusicBrainz does not know this disc"
+        case .failed: return "the MusicBrainz lookup failed"
+        case .notLookedUp, .lookingUp: return "the disc is not looked up yet"
+        }
+        guard let release = disc.release else { return "MusicBrainz does not know this disc" }
+        if disc.isAmbiguous { return "several releases have this disc" }
+        if disc.isFuzzy && !ReleaseChoiceStore().allChoices().contains(release.id) {
+            return "MusicBrainz matched the disc by its track lengths only"
+        }
+        if earlierRips.contains(where: { $0.report.toc == disc.toc.ctdbTOCString }) {
+            return "this disc is ripped already"
+        }
+        return nil
+    }
+
+    /// Starts a rip that waits for its few seconds now.
+    func ripNow(_ slot: DriveSlot) {
+        slot.ripOnInsertDate = nil
+        startRip(slot)
+    }
+
+    func cancelRipOnInsert(_ slot: DriveSlot) {
+        slot.ripOnInsertDate = nil
+        slot.ripOnInsertNote = nil
     }
 
     private func discsChanged() {
@@ -212,6 +272,8 @@ final class AppModel {
 
     func startRip(_ slot: DriveSlot) {
         guard slot.rip?.isRunning != true, !slot.isBusy, let disc = slot.disc else { return }
+        slot.ripOnInsertDate = nil
+        slot.ripOnInsertNote = nil
         player.stop(drive: slot.id)
         var options = DiscRipOptions(settings: settings)
         options.folder = slot.choices.folder
@@ -231,6 +293,7 @@ final class AppModel {
         options.singlePass = slot.fastMode
         if slot.isDemo {
             options.offline = true
+            options.addsToMusic = false
             options.readOffset = 6
             options.folder = URL.temporaryDirectory.appending(path: "Silverside Demo \(UUID().uuidString)")
         }
@@ -342,6 +405,37 @@ final class AppModel {
             } catch {
                 alert = AppAlert(title: "The cover could not be changed", message: "\(error)")
             }
+        }
+    }
+
+    /// Library updates for changed names, one after another, so two never touch one album at once.
+    @ObservationIgnored private var namesUpdate: Task<Void, Never>?
+    /// The rips whose files are being brought up to date with their names.
+    private(set) var updatingNames: Set<URL> = []
+
+    /// Saves an earlier rip's own edits (its track titles and artists) in its report, then
+    /// writes the names into its encoded files and renames them, as Update the Library does.
+    /// The selection follows a report that moved with its album folder.
+    func saveNames(_ edits: MetadataEdits, of rip: RecentRip) {
+        let settings = settings
+        let previous = namesUpdate
+        updatingNames.insert(rip.file)
+        namesUpdate = Task { @MainActor in
+            // The update before this one writes the report too, so the save waits for it.
+            await previous?.value
+            do {
+                try edits.save(inReportAt: rip.file)
+                let update = try await Task.detached {
+                    try DiscEncoder(settings: settings).updateLibrary(reportAt: rip.file, library: settings.libraryURL)
+                }.value
+                if !rip.hasAudio, let album = update.albumFolder, selection == .rip(rip.file) {
+                    selection = .rip(album.appending(path: rip.file.lastPathComponent))
+                }
+            } catch {
+                alert = AppAlert(title: "The library could not be updated", message: "\(error)")
+            }
+            updatingNames.remove(rip.file)
+            refreshRecentRips()
         }
     }
 

@@ -93,6 +93,63 @@ public enum ReplayGain {
         return Values(loudness: loudness, peak: analyses.map(\.peak).max() ?? 0)
     }
 
+    /// What an album's gating needs from a disc, small enough to keep in its report: how many
+    /// blocks fall in each 0.1 LU step of loudness from -70 LUFS, and the highest sample peak.
+    /// The album of a multi-disc release is gated over every disc's blocks, so each disc keeps
+    /// this, and the album's gain is found without the audio of the other discs. A step's
+    /// blocks count at its middle loudness, as libebur128's histogram mode does: for music,
+    /// whose blocks spread over many steps, the result is within 0.01 dB of a gating over
+    /// the blocks themselves, and never more than half a step (0.05 dB) from it.
+    public struct Histogram: Codable, Equatable, Sendable {
+        /// The step of the first count: step i holds blocks from -70 + i / 10 LUFS.
+        public var first: Int
+        public var counts: [Int]
+        public var peak: Double
+
+        static let stepsPerLU = 10.0
+
+        /// The blocks of the analyses above the absolute gate, and their highest peak.
+        public init(_ analyses: [Analysis]) {
+            var counts = [Int: Int]()
+            for power in analyses.lazy.flatMap(\.blockPowers) where power > 0 {
+                let loudness = -0.691 + 10 * log10(power)
+                guard loudness > -70 else { continue }
+                counts[Int(((loudness + 70) * Self.stepsPerLU).rounded(.down)), default: 0] += 1
+            }
+            first = counts.keys.min() ?? 0
+            let last = counts.keys.max() ?? -1
+            self.counts = last < first ? [] : (first...last).map { counts[$0] ?? 0 }
+            peak = analyses.map(\.peak).max() ?? 0
+        }
+
+        /// The integrated loudness of every block of the histograms, gated as BS.1770 says, or
+        /// nil if no block is above the absolute gate.
+        public static func loudness(of histograms: [Histogram]) -> Double? {
+            func power(_ loudness: Double) -> Double { pow(10, (loudness + 0.691) / 10) }
+            var steps = [(loudness: Double, count: Int)]()
+            for histogram in histograms {
+                for (offset, count) in histogram.counts.enumerated() where count > 0 {
+                    steps.append((-70 + (Double(histogram.first + offset) + 0.5) / stepsPerLU, count))
+                }
+            }
+            let blocks = steps.reduce(0) { $0 + $1.count }
+            guard blocks > 0 else { return nil }
+            let mean = steps.reduce(0) { $0 + Double($1.count) * power($1.loudness) } / Double(blocks)
+            let relative = -0.691 + 10 * log10(mean) - 10
+            let gated = steps.filter { $0.loudness > relative }
+            let gatedBlocks = gated.reduce(0) { $0 + $1.count }
+            guard gatedBlocks > 0 else { return nil }
+            return -0.691 + 10
+                * log10(gated.reduce(0) { $0 + Double($1.count) * power($1.loudness) } / Double(gatedBlocks))
+        }
+    }
+
+    /// An album's values over several discs: one gating over every disc's blocks, and the highest peak.
+    public static func album(of histograms: [Histogram]) -> Values? {
+        guard let loudness = Histogram.loudness(of: histograms) else { return nil }
+        return Values(loudness: loudness, peak: histograms.map(\.peak).max() ?? 0)
+    }
+
     /// The tags, as Vorbis comments: track and album gain and peak, and the reference loudness.
     public static func tags(track: Values?, album: Values?) -> [(key: String, value: String)] {
         var tags = [(key: String, value: String)]()

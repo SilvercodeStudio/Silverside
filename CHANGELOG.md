@@ -27,6 +27,18 @@ command-line tool.
   and shown with both. The report keeps both.
 - The Markdown report's track table has a Composer column when MusicBrainz
   names one, and its Disc table the genre.
+- **Rip a disc when it goes in** (Settings › General): when MusicBrainz names
+  the disc's release for certain and the disc is not ripped yet, the rip
+  starts after five seconds, with Rip Now and Cancel in the status bar.
+  Otherwise the status bar says why the disc waits for you.
+- **Add the files to the Music app** after encoding (Settings › General, or
+  `--add-to-music` on `rip` and `encode`), in every format but FLAC, which
+  Music cannot read. Music adds them where they are, or copies them if its own
+  settings say so. macOS asks once whether Silverside may control Music.
+- **Edit an earlier rip's track titles and artists,** in its track table, as
+  before a rip. A moment after a change, the encoded files take the new names
+  and are renamed; the other files are not touched.
+- An earlier rip that is not encoded has an **Encode** button.
 
 ### Changed
 
@@ -55,7 +67,10 @@ command-line tool.
   same from the terminal.
 - **ReplayGain tags,** on by default: each track's gain and peak, and the
   album's, measured as EBU R 128 does, written into every format, and listed
-  in the rip report. Settings › Encoding, or `encode --no-replay-gain`.
+  in the rip report. Settings › Encoding, or `encode --no-replay-gain`. For a
+  set, the album is the whole set: once every disc is in the library, every
+  disc's files get the album gain over all of them, so a show split across
+  discs plays at one level.
 - **Tracks encode in parallel,** up to four at a time (half the Mac's cores,
   at least two), each still checked against the rip before it goes into the
   library.

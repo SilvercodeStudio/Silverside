@@ -6,7 +6,9 @@ Silverside and the `silverside` command line share one settings file, so a chang
 
 - **Music library** is where encoded albums go, in folders named by the Naming settings.
 - **Rips** is where each rip's WAV files, report, and cover go. Keep it out of the library: music apps would import the WAV files.
-- **After a rip:** encode the disc into the library in the chosen format; keep or delete the rip's WAV files once the album is encoded and verified; eject the disc when every track is verified. MP3 is in the list of formats once the LAME encoder is installed (see Encoding).
+- **After a rip:** encode the disc into the library in the chosen format; keep or delete the rip's WAV files once the album is encoded and verified; add the files to the Music app; eject the disc when every track is verified. MP3 is in the list of formats once the LAME encoder is installed (see Encoding).
+- **Add the files to the Music app** works for every format but FLAC, which Music cannot read. Music adds the files where they are, in the library folder, or copies them into its own folder if "Copy files to Music Media folder when adding to Library" is on in Music's settings. The first time, macOS asks whether Silverside may control Music; the answer is in System Settings › Privacy & Security › Automation. A file renamed later by Update the Library or a name change stays in Music, which follows a moved file on the same disk.
+- **When a disc goes in, rip it at once:** a disc that goes in while Silverside runs is ripped five seconds after its lookup, if MusicBrainz names its release for certain (an exact match, and not one of several releases unless you chose one for the set) and the disc is not ripped yet. The status bar counts down, with Rip Now and Cancel. Otherwise the disc waits for you, and the status bar says why. A disc already in a drive when Silverside starts is never ripped by itself. With eject after the rip on as well, a set rips with no more than a swap of discs.
 - **Artwork:** the front cover only (saved as `cover.jpg` and embedded in the files), every image in the Cover Art Archive, or none.
 
 ## Ripping
@@ -32,6 +34,8 @@ Every encoded file is decoded again and compared with the rip before it goes int
 ### ReplayGain
 
 Albums are mastered at different levels, so one is quiet and the next is loud. ReplayGain tags tell a player how much to turn each one up or down to play them at the same level. Silverside measures each track and the whole album as the broadcast standard EBU R 128 does, and writes the result into the files as five tags: the track's gain and peak, the album's gain and peak, and the reference level (−18 LUFS). The audio itself is not changed, in any format, and the tags can be removed with any tag editor. The rip report lists the values.
+
+For a set of several discs, the album is the whole set, as a player sees it: every disc has the same album name. Until every disc is in the library, each disc's album gain is its own; when the last disc is encoded, the files of every disc get the album gain over all of them, so a show split across discs does not jump in level at a disc change.
 
 What the tags do depends on the player:
 

@@ -58,6 +58,16 @@ struct EncodingOptions: ParsableArguments {
     @Flag(inversion: .prefixedNo, help: "Write ReplayGain tags: each track's gain and peak, and the album's.")
     var replayGain: Bool?
 
+    @Flag(
+        inversion: .prefixedNo, help: "Add the encoded files to Apple's Music app (not for FLAC, which it cannot read)."
+    )
+    var addToMusic: Bool?
+
+    /// Add the files to Music: the option, else the setting; never for a format Music cannot read.
+    func addsToMusic(_ settings: Settings) -> Bool {
+        addToMusic ?? settings.addToMusic
+    }
+
     /// The encoder, and the library, from these options over the settings.
     func encoder(_ settings: Settings) -> (encoder: DiscEncoder, library: URL) {
         var encoder = DiscEncoder(settings: settings, format: format)

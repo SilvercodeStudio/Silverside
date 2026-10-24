@@ -87,6 +87,10 @@ final class RipRun {
     private(set) var encodeStates: [Int: EncodeState] = [:]
     /// The files that the library already had and the user kept, so the rip was not encoded.
     private(set) var keptFiles: [URL]?
+    /// What became of adding the files to Music: "Added 12 tracks to Music", or why not.
+    private(set) var musicResult: String?
+    /// True if the encoded files go into Music.
+    private(set) var addsToMusic = false
     private(set) var overwriteQuestion: OverwriteQuestion?
     private(set) var startDate = Date()
     private(set) var endDate: Date?
@@ -156,6 +160,7 @@ final class RipRun {
         onFinish: @escaping @MainActor () -> Void
     ) {
         self.encodes = encodes
+        addsToMusic = encodes && options.addsToMusic && MusicApp.reads(settings.format)
         tracksToRip = options.tracks ?? disc.toc.audioTracks.map(\.number)
         for track in disc.toc.audioTracks {
             trackStates[track.number] = tracksToRip.contains(track.number) ? .queued : .skipped
@@ -320,6 +325,9 @@ final class RipRun {
             return text
         case .checkingCTDB: return ctdbStatus ?? "Checking the disc against CUETools DB…"
         case .encoding:
+            if !encodedFiles.isEmpty {
+                return addsToMusic && musicResult == nil ? "Adding the files to Music…" : "Finishing…"
+            }
             let format = encodingFormat?.rawValue.uppercased() ?? ""
             return "Encoding as \(format) · track \(min(encodedCount + 1, tracksToRip.count)) of \(tracksToRip.count)"
         case .finished:
@@ -487,6 +495,12 @@ final class RipRun {
             add("Deleted the rip's WAV files. The rip report is in the album folder.")
         case .ripKept(let folder):
             add("Kept the rip in \(folder.path): not every track is verified and encoded.")
+        case .addedToMusic(let count):
+            musicResult = "Added \(Format.count(count, "track")) to Music."
+            add(musicResult!)
+        case .addToMusicFailed(let error):
+            musicResult = "Not added to Music: \(error)"
+            add(musicResult!)
         }
     }
 

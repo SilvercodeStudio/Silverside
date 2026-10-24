@@ -58,4 +58,44 @@ struct LoudnessTests {
         #expect(tags[0].value == "+5.00 dB" && tags[1].value == "0.500000" && tags[4].value == "-18.00 LUFS")
         #expect(ReplayGain.tags(track: nil, album: nil).isEmpty)
     }
+
+    /// Music whose level moves slowly over `seconds`, from `low` to `high` dBFS and back:
+    /// its blocks spread over many steps of loudness, as a disc's do.
+    func swell(low: Double, high: Double, seconds: Double) -> [UInt32] {
+        let count = Int(44100 * seconds)
+        return (0..<count).map { i in
+            let level = low + (high - low) * sin(.pi * Double(i) / Double(count))
+            let amplitude = pow(10, level / 20) * 32767
+            let value = Int16((amplitude * sin(2 * .pi * 997 * Double(i) / 44100)).rounded())
+            return UInt32(UInt16(bitPattern: value)) | UInt32(UInt16(bitPattern: value)) << 16
+        }
+    }
+
+    /// A disc keeps a histogram of its blocks, so the album of several discs is gated without
+    /// their audio, including a quiet part that the relative gate leaves out. For music, it
+    /// is within 0.01 dB of a gating over the blocks themselves; at worst (every block at one
+    /// loudness, as in a steady sine) within 0.05 dB, half a step.
+    @Test func gatesAnAlbumOfSeveralDiscsFromTheirHistograms() throws {
+        let one = [
+            ReplayGain.analyze(swell(low: -30, high: -20, seconds: 20)),
+            ReplayGain.analyze(swell(low: -45, high: -40, seconds: 5)),
+        ]
+        let two = [ReplayGain.analyze(swell(low: -24, high: -14, seconds: 15))]
+        let exact = try #require(ReplayGain.album(of: one + two))
+        let fromHistograms = try #require(ReplayGain.album(of: [ReplayGain.Histogram(one), ReplayGain.Histogram(two)]))
+        #expect(abs(fromHistograms.loudness - exact.loudness) < 0.01 && fromHistograms.peak == exact.peak)
+        // One disc's histogram gives the disc's own loudness.
+        let alone = try #require(ReplayGain.album(of: [ReplayGain.Histogram(two)]))
+        #expect(abs(alone.loudness - (ReplayGain.album(of: two)?.loudness ?? 0)) < 0.01)
+        let steady = [ReplayGain.analyze(sine(level: -23, seconds: 4))]
+        let steadyLoudness = try #require(ReplayGain.album(of: [ReplayGain.Histogram(steady)])?.loudness)
+        #expect(abs(steadyLoudness - (steady[0].loudness ?? 0)) <= 0.05)
+        // Silence gives an empty histogram and no loudness; the histogram survives JSON.
+        let silent = ReplayGain.Histogram([ReplayGain.analyze([UInt32](repeating: 0, count: 44100))])
+        #expect(silent.counts.isEmpty && ReplayGain.album(of: [silent]) == nil)
+        let histogram = ReplayGain.Histogram(one)
+        let decoded = try JSONDecoder().decode(
+            ReplayGain.Histogram.self, from: JSONEncoder().encode(histogram))
+        #expect(decoded == histogram && histogram.counts.count < 400)
+    }
 }

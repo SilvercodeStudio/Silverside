@@ -100,6 +100,7 @@ struct DetailView: View {
                 SetView(ripSet: set)
             } else if let rip = model.selectedRip {
                 ResultsView(folder: rip.folder, report: rip.report, hasAudio: rip.hasAudio, reportFile: rip.file)
+                    .id(rip.file)
             } else if model.drives.isEmpty {
                 NoDriveView()
             } else {

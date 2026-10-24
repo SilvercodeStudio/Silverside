@@ -77,10 +77,7 @@ extension DiscEncoder {
         let toc = try TOC(ctdbTOCString: report.toc)
 
         // The names: the rip's edits, with the release's kept album names on top.
-        var edits = Self.edits(inReportAt: file) ?? MetadataEdits()
-        if !original.isManual, let kept = editsStore.edits(forReleaseID: original.id) {
-            edits = edits.merged(with: kept)
-        }
+        let edits = MetadataEdits.current(forReportAt: file, release: original, store: editsStore)
         let release = edits.applied(to: original, toc: toc)
         guard let medium = release.medium(for: toc) else { throw EncodingError.unknownMedium(folder) }
         let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
@@ -89,7 +86,7 @@ extension DiscEncoder {
         // templates name: with the names as they are now, else as the rip alone had them, else
         // as MusicBrainz has them, since the album may have been renamed since it was encoded.
         if report.encoding == nil, let library {
-            let ripEdits = Self.edits(inReportAt: file) ?? MetadataEdits()
+            let ripEdits = MetadataEdits.read(fromReportAt: file) ?? MetadataEdits()
             for candidate in [release, ripEdits.applied(to: original, toc: toc), original] {
                 guard let candidateMedium = candidate.medium(for: toc), let first = candidateMedium.tracks.first
                 else { continue }
@@ -159,6 +156,18 @@ extension DiscEncoder {
             .first { FileManager.default.fileExists(atPath: $0.path) } ?? coverFile
         let embedded = try coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }
 
+        // ReplayGain: the album's gain is the whole release's once every disc is in the album
+        // folder. A record from before histograms were kept is measured from its files.
+        if var gain = encoding.replayGain {
+            if gain.histogram == nil { gain.histogram = try? Self.measuredHistogram(of: encoding, in: album) }
+            let whole = gain.histogram.flatMap {
+                Self.releaseGain(of: release, in: album, disc: (medium.position, $0))
+            }
+            gain.release = whole?.values
+            gain.releaseDiscs = whole?.discs
+            encoding.replayGain = gain
+        }
+
         // Each file: its name as the template has it now, then its tags.
         let audioTracks = toc.audioTracks
         var files = [URL]()
@@ -195,13 +204,19 @@ extension DiscEncoder {
             let gain = encoding.replayGain
             let comments =
                 meta.vorbisComments
-                + ReplayGain.tags(track: gain?.tracks.first { $0.track == entry.track }?.values, album: gain?.album)
-            switch encoding.format {
-            case .flac: try FLACTags.write(comments, cover: embedded, to: url)
-            case .alac, .aac: try MP4Tags.write(comments, cover: embedded, to: url)
-            case .aiff: try ChunkTags.writeAIFF(comments, cover: embedded, to: url)
-            case .wav: try ChunkTags.writeWAV(comments, cover: embedded, to: url)
-            case .mp3: try ID3Tags.write(comments, cover: embedded, to: url)
+                + ReplayGain.tags(
+                    track: gain?.tracks.first { $0.track == entry.track }?.values, album: gain?.albumInTags)
+            // A file whose tags are already these is left alone (a library on a network
+            // volume is slow to write), unless the cover changes.
+            if cover != nil || Self.comments(of: url, format: encoding.format).map({ !Self.same($0, comments) }) ?? true
+            {
+                switch encoding.format {
+                case .flac: try FLACTags.write(comments, cover: embedded, to: url)
+                case .alac, .aac: try MP4Tags.write(comments, cover: embedded, to: url)
+                case .aiff: try ChunkTags.writeAIFF(comments, cover: embedded, to: url)
+                case .wav: try ChunkTags.writeWAV(comments, cover: embedded, to: url)
+                case .mp3: try ID3Tags.write(comments, cover: embedded, to: url)
+                }
             }
             files.append(url)
             if entry.track == 0 {
@@ -231,7 +246,7 @@ extension DiscEncoder {
         let albumReport = album.appending(path: "Rip Report\(discPart).json")
         if FileManager.default.fileExists(atPath: albumReport.path) {
             try encoding.save(inReportAt: albumReport)
-            try Self.saveEdits(edits, inReportAt: albumReport)
+            try edits.save(inReportAt: albumReport)
             var shown = report
             shown.release = release
             shown.encoding = encoding
@@ -241,32 +256,97 @@ extension DiscEncoder {
         return LibraryUpdate(files: files, renamed: renamed, albumFolder: album)
     }
 
+    /// The tags of a FLAC or MP4 file, as the writer would give them; nil for other formats or a file that cannot be read.
+    private static func comments(of url: URL, format: AudioFormat) -> [(key: String, value: String)]? {
+        switch format {
+        case .flac: try? FLACTags.read(url)
+        case .alac, .aac: try? MP4Tags.read(url).comments
+        case .aiff, .wav, .mp3: nil
+        }
+    }
+
+    private static func same(_ a: [(key: String, value: String)], _ b: [(key: String, value: String)]) -> Bool {
+        a.count == b.count && zip(a, b).allSatisfy { $0.key == $1.key && $0.value == $1.value }
+    }
+
+    // MARK: ReplayGain for a set
+
+    /// The album's ReplayGain over every CD of a multi-disc release, from the discs' reports
+    /// in `album` ("Rip Report (Disc N).json"), once every CD of the release is encoded there.
+    /// Nil before then, for a release of one CD, and when a disc was encoded without
+    /// ReplayGain. `disc` stands in for its position's report: the disc being encoded or
+    /// updated. A report from before histograms were kept is measured from its files once,
+    /// and the histogram is saved in it.
+    static func releaseGain(
+        of release: MusicBrainzRelease, in album: URL, disc: (position: Int, histogram: ReplayGain.Histogram)?
+    ) -> (values: ReplayGain.Values, discs: Int)? {
+        let positions = release.cdPositions
+        guard positions.count > 1 else { return nil }
+        var histograms = [Int: ReplayGain.Histogram]()
+        if let disc { histograms[disc.position] = disc.histogram }
+        for (file, report) in albumReports(of: release, in: album) {
+            guard let position = report.discPosition, histograms[position] == nil, positions.contains(position),
+                var encoding = report.encoding
+            else { continue }
+            guard var gain = encoding.replayGain else { return nil }
+            if gain.histogram == nil {
+                guard let measured = try? measuredHistogram(of: encoding, in: album) else { return nil }
+                gain.histogram = measured
+                encoding.replayGain = gain
+                try? encoding.save(inReportAt: file)
+            }
+            histograms[position] = gain.histogram
+        }
+        guard positions.allSatisfy({ histograms[$0] != nil }),
+            let values = ReplayGain.album(of: positions.compactMap { histograms[$0] })
+        else { return nil }
+        return (values, positions.count)
+    }
+
+    /// The reports of the release's discs in an album folder.
+    static func albumReports(of release: MusicBrainzRelease, in album: URL) -> [(file: URL, report: RipReport)] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: album.path)) ?? []
+        return names.sorted().compactMap { name in
+            guard name.hasPrefix("Rip Report"), name.hasSuffix(".json") else { return nil }
+            let file = album.appending(path: name)
+            guard let report = try? RipReport.read(from: file), report.release?.id == release.id else { return nil }
+            return (file, report)
+        }
+    }
+
+    /// A disc's blocks, measured from its encoded files.
+    static func measuredHistogram(of encoding: RipReport.Encoding, in album: URL) throws -> ReplayGain.Histogram {
+        let files = encoding.files.map { album.appending(path: $0.file) }
+        let measured = CTDB.parallelMap(over: files) { file -> Result<ReplayGain.Analysis, any Error>? in
+            Result { ReplayGain.analyze(try AudioEncoder.decode(file)) }
+        }
+        return ReplayGain.Histogram(try measured.map { try $0.get() })
+    }
+
+    /// After a disc's encoding: the other discs of its release in the album folder take the
+    /// whole release's album gain, if it changed (`updateLibrary` writes it). Each disc that
+    /// cannot be updated is logged, and the encoding stands.
+    func updateReleaseGain(
+        _ values: ReplayGain.Values, of release: MusicBrainzRelease, in album: URL, except position: Int, library: URL
+    ) {
+        for (file, report) in Self.albumReports(of: release, in: album) {
+            guard let other = report.discPosition, other != position, report.encoding?.replayGain != nil,
+                report.encoding?.replayGain?.release != values
+            else { continue }
+            do {
+                _ = try updateLibrary(reportAt: file, library: library)
+                log("Disc \(other): album gain \(values.gainText), over all \(release.cdPositions.count) discs")
+            } catch {
+                log("Disc \(other): the album gain could not be written: \(error)")
+            }
+        }
+    }
+
     private func metadata(
         release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium, track: MusicBrainzRelease.Track, isrc: String?
     ) -> TrackMetadata {
         TrackMetadata(
             release: release, medium: medium, track: track, isrc: isrc, liveShowStyle: liveShowStyle,
             plainPunctuation: plainPunctuation, segueMarks: segueMarks, compilationFolder: compilationFolder)
-    }
-
-    /// The "edits" beside a report, in a rip's disc.json or the album folder's copy of it.
-    static func edits(inReportAt file: URL) -> MetadataEdits? {
-        guard let object = try? JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any],
-            let edits = object["edits"]
-        else { return nil }
-        return try? JSONDecoder().decode(MetadataEdits.self, from: JSONSerialization.data(withJSONObject: edits))
-    }
-
-    /// Sets "edits" in a report file, and keeps every other key.
-    static func saveEdits(_ edits: MetadataEdits, inReportAt url: URL) throws {
-        var object = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]) ?? [:]
-        if edits.isEmpty {
-            object["edits"] = nil
-        } else {
-            object["edits"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(edits))
-        }
-        let data = try JSONSerialization.data(
-            withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try data.write(to: url, options: .atomic)
     }
 }

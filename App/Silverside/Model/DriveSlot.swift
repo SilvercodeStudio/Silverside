@@ -42,6 +42,11 @@ final class DriveSlot: Identifiable {
     /// Which names the header and the table show.
     var namesSource = DiscInfo.Source.musicBrainz
     var rip: RipRun?
+    /// With "rip it at once" on, for a disc that just went in: the rip starts at this time
+    /// unless the user cancels it (`AppModel.considerRipOnInsert`).
+    var ripOnInsertDate: Date?
+    /// Why a disc that just went in was not ripped at once: "several releases have this disc".
+    var ripOnInsertNote: String?
     /// A drive of the slot's own, such as the demo's simulated drive.
     private let customDrive: (@Sendable () throws -> any CDDrive)?
     let isDemo: Bool
@@ -95,6 +100,8 @@ final class DriveSlot: Identifiable {
             disc = nil
             discState = .empty
             discBSDName = nil
+            ripOnInsertDate = nil
+            ripOnInsertNote = nil
             readTask?.cancel()
             // A finished rip stays on show until the next disc.
             if rip?.isRunning == true { rip?.stop() }
@@ -102,13 +109,16 @@ final class DriveSlot: Identifiable {
     }
 
     /// Reads the disc's TOC, MCN, and CD-Text, then looks up the release and its cover.
-    func readDisc(settings: Settings) {
+    /// `looked` hears when the lookup is done.
+    func readDisc(settings: Settings, then looked: (@MainActor () -> Void)? = nil) {
         guard let bsdName = device.discBSDName, rip?.isRunning != true else { return }
         discBSDName = bsdName
         discState = .reading
         disc = nil
         rip = nil
         choices.folder = nil
+        ripOnInsertDate = nil
+        ripOnInsertNote = nil
         let make = makeDrive
         readTask?.cancel()
         readTask = Task { @MainActor in
@@ -125,6 +135,7 @@ final class DriveSlot: Identifiable {
                 await info.lookUpRelease()
                 guard !Task.isCancelled else { return }
                 disc = info
+                looked?()
             } catch {
                 discState = .failed("\(error)")
             }

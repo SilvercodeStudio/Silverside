@@ -47,7 +47,7 @@ The engine does the work, and the CLI only parses options and prints. Put new be
 - **Reading:** `AudioReader` (offset correction, cache flush), `TrackRipper` (one pass, AccurateRip check), `SecureRipper` (re-reads, C2, shifted reads), `HiddenTrack`, `RipEvent` (progress).
 - **Verification and repair:** `AccurateRipChecksum`, `AccurateRipOffsetFinder`, `AccurateRipRecord` and `OnlineLookup` (AccurateRip and CTDB downloads), `CTDB`, `GaloisField16` (with `ReedSolomonDecoder`), `DiscRepairer` (with `TrackAudio`, the suspects).
 - **Metadata:** `WebClient` (rate limits, cache, retries), `MusicBrainz`, `ReleaseChoice` (`ReleaseRanking`, `ReleaseChoiceStore`), `ReleaseLookup`, `CoverArt`, `NameTemplate`, `TrackMetadata`, `MetadataEdits` (the user's changes to names, `ReleaseEditsStore` by release ID, and `MusicBrainzRelease.manual` for discs MusicBrainz does not know).
-- **Output:** `WAVFile`, `AudioEncoder`, `EncoderOptions`, `MP3` (lame and ID3), `FLACTags`, `MP4Tags`, `ChunkTags` (AIFF and WAV), `EmbeddedCover`, `CueSheet`, `RipReport` and `RipReportMarkdown`, `Encoding` (`RippedDisc`, `DiscEncoder`), `License` (`SilversideLicense`, the text of `LICENSE`).
+- **Output:** `WAVFile`, `AudioEncoder`, `EncoderOptions`, `MP3` (lame and ID3), `FLACTags`, `MP4Tags`, `ChunkTags` (AIFF and WAV), `EmbeddedCover`, `CueSheet`, `RipReport` and `RipReportMarkdown`, `Encoding` (`RippedDisc`, `DiscEncoder`), `Retag` (`DiscEncoder.updateLibrary`, the release's ReplayGain over every disc), `Loudness` (`ReplayGain`), `MusicApp` (Add to Music through `osascript`), `License` (`SilversideLicense`, the text of `LICENSE`).
 - **Workflows:** `DiscRip` (a whole rip, as `silverside rip` does it), `RipRepair` (`silverside repair`), `RipPool` (earlier rips, and `RipFolder` claims), `RipSets` (`RipSet`, the discs of a multi-disc release among earlier rips), `RipSummaries` (text for people), `Settings`, `StopToken` and `Blocking` (stopping, and long work off the cooperative pool).
 
 ## App
@@ -135,7 +135,7 @@ The full list is in `docs/internal/Milestones.md`. Keep both up to date.
 5. Mostly done: metadata (`MusicBrainzClient`, `ReleaseRanking`, `CoverArtClient`, `NameTemplate`, `silverside metadata`; `rip` names its folder from the release).
 4. Mostly done: encoding (`AudioEncoder`, `FLACTags`, `MP4Tags`, `ID3Tags`, `DiscEncoder`, `silverside encode`, `silverside rip --encode`), checked by decoding each file again.
 8. Mostly done: the Markdown rip report, CUE sheets, pregaps, CD-Text (`silverside cdtext`), hidden track one audio, AIFF and WAV tags; and the drive report (`silverside drives --report`).
-9. In part: multi-disc releases (shared release choice and album edits, sets in the app) and the naming styles; not yet: style recipes, and a set as one unit of work.
+9. Mostly done: multi-disc releases (shared release choice, album edits, and cover; the set view; ReplayGain over the whole release) and the naming styles as named settings (no recipe language, decided 2026-10-23); deferred: a second format for a set, Foundation Models, the single-show style.
 10. In progress: the app.
 
 The CLI is finished for daily use, and the app is in daily use. The loose ends (built but not tested on hardware, and deferred work) are in `docs/internal/Milestones.md`.

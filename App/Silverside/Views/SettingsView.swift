@@ -65,7 +65,22 @@ struct GeneralSettings: View {
                     "Otherwise a rip whose tracks are all verified and encoded is deleted, and its report goes in the album folder."
                 )
                 .font(.caption).foregroundStyle(.secondary)
+                Toggle("Add the files to the Music app", isOn: $model.settings.addToMusic)
+                    .disabled(!model.settings.encodeAfterRip || !MusicApp.reads(model.settings.format))
+                Text(
+                    MusicApp.reads(model.settings.format)
+                        ? "Music adds them where they are, or copies them if its own settings say so. macOS asks once whether Silverside may control Music."
+                        : "Music cannot read FLAC files. Choose Apple Lossless to add rips to Music."
+                )
+                .font(.caption).foregroundStyle(.secondary)
                 Toggle("Eject the disc if every track is verified", isOn: $model.settings.ejectAfterRip)
+            }
+            Section("When a disc goes in") {
+                Toggle("Rip it at once", isOn: $model.settings.ripOnInsert)
+                Text(
+                    "Only when MusicBrainz names the disc's release for certain, and the disc is not ripped yet. The rip starts after a few seconds, so you can cancel it; otherwise the disc waits for you."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
             Section("Artwork") {
                 Picker("Save from the Cover Art Archive", selection: $model.settings.artwork) {
@@ -371,7 +386,7 @@ struct EncodingSettings: View {
             Section("Tags") {
                 Toggle("ReplayGain: each track's loudness, and the album's", isOn: $model.settings.replayGain)
                 Text(
-                    "Measured as EBU R 128 does, so a player that reads the tags plays albums at one level. The audio is not changed. The Music app uses its own Sound Check instead."
+                    "Measured as EBU R 128 does, so a player that reads the tags plays albums at one level. For a set of several discs, the album is the whole set once every disc is in the library. The audio is not changed. The Music app uses its own Sound Check instead."
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }

@@ -55,11 +55,15 @@ to be installed. All other supported formats are handled natively.
   read at all are re-read until their data matches or the re-reads give up.
 - **Repair.** A disc with errors is repaired with CTDB's repair data, and the
   repaired tracks are checked against AccurateRip again.
+- **Check Again.** A new release is often in neither database at first. Check
+  Again looks an earlier rip up again weeks later, and checks it from its
+  files, without the disc.
 - **Metadata from [MusicBrainz](https://musicbrainz.org)**, and cover art from
   the [Cover Art Archive](https://coverartarchive.org): front covers, and
   back covers and booklets if you want them. The tags carry the composers,
-  lyricists, genre, and sort names that MusicBrainz has, and your own cover
-  can replace the archive's, before or after the rip.
+  lyricists, genre, and sort names that MusicBrainz has. You can choose
+  another of the archive's images, or your own, before or after the rip, and
+  the discs of a box set can each take their own sleeve.
 - **Encoding** to FLAC, Apple Lossless (ALAC), AAC, AIFF, WAV, or MP3, with
   tags and the cover embedded. Each file is checked after encoding: a
   lossless file must decode to exactly the ripped audio. Optionally, the
@@ -96,8 +100,10 @@ to be installed. All other supported formats are handled natively.
   `silverside metadata --set`, and the files are named and tagged with the edits.
   After the rip too: the encoded files are tagged and renamed again, and the
   audio is not touched. The album's edits are kept for the release, so the
-  other discs of a set get them. A disc that MusicBrainz does not know gets its
-  names from CD-Text or from you, and its files carry no MusicBrainz IDs.
+  other discs of a set get them. The disc's CD-Text names (in your language,
+  if the disc has it) can replace MusicBrainz's. A disc that MusicBrainz does
+  not know gets its names from CD-Text or from you, and its files carry no
+  MusicBrainz IDs.
 - **Play a track** from the disc, read as a rip reads it, or from an earlier
   rip, to check it.
 - **Rip on insertion**, if you want it: a disc whose release is certain, and
@@ -189,7 +195,7 @@ makes, and the settings.
 
 ## TODO or future ideas
 
-- Pre-emphasis support as mentioned above (planned for 0.7).
+- Pre-emphasis support as mentioned above (planned for 0.8).
 - Ripping of data tracks for mixed-mode / Enhanced CDs.
 - Option to slow down drive speed (quieter)
   - Autodetect and engage this during problem rips

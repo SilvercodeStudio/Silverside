@@ -3,7 +3,7 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
-## 0.7 (not released yet)
+## 0.7 (2026-10-25)
 
 ### Added
 
@@ -15,6 +15,8 @@ command-line tool.
   HDCD. The report has an HDCD table for each track, and the encoded files
   of a disc with HDCD codes are tagged `MEDIA=HDCD`, as MusicBrainz names
   the medium.
+- About › Acknowledgments and `silverside license` credit FFmpeg's HDCD
+  decoder, which Silverside includes under its BSD license.
 - `silverside hdcd` looks for HDCD codes in audio files and folders, such as
   rips and albums from before.
 - **HDCD decoding**, as an option: a disc whose codes ask for peak extend or a
@@ -76,6 +78,8 @@ command-line tool.
 - A click on a cover shows it at full size in Quick Look, and the cover's
   menu has Quick Look too. Choose Cover… is in the menu; a click still
   chooses one where there is no cover yet.
+- The AccurateRip and CTDB columns say in a tooltip what their numbers count.
+- The welcome window is shorter, so it fits on a 13-inch MacBook's screen.
 - The chips under a disc's names, and after a rip, wrap onto more rows in a
   narrow window. Before, they pushed the album's fields past the window's
   edge, or scrolled out of sight. "Names from" moves above its picker when

@@ -15,7 +15,7 @@ Ripping is verification-first: rip fast with offset correction, verify each trac
 Open `Silverside.xcworkspace` in Xcode: it has the app project and the `SilversideKit` package, with schemes for the app, `silverside`, and the engine tests.
 
 ```sh
-make cli ARGS='info'   # build and run the silverside CLI (drives, info, cdtext, rip, repair, metadata, encode, hdcd, config, eject, license; -d diskN)
+make cli ARGS='info'   # build and run the silverside CLI (drives, info, cdtext, rip, repair, check, metadata, encode, hdcd, config, eject, license; -d diskN)
 make install PREFIX=~/.local   # universal release build of silverside, and shell completions (make install-cli-local does the same)
 make install-app               # universal release build of the app, copied to ~/Applications (APP_DIR=... for another folder)
 swift build --package-path SilversideKit -c release --product silverside   # CTDB repair needs the release build to be fast
@@ -48,7 +48,7 @@ The engine does the work, and the CLI only parses options and prints. Put new be
 - **Verification and repair:** `AccurateRipChecksum`, `AccurateRipOffsetFinder`, `AccurateRipRecord` and `OnlineLookup` (AccurateRip and CTDB downloads), `CTDB`, `GaloisField16` (with `ReedSolomonDecoder`), `DiscRepairer` (with `TrackAudio`, the suspects).
 - **Metadata:** `WebClient` (rate limits, cache, retries), `MusicBrainz`, `ReleaseChoice` (`ReleaseRanking`, `ReleaseChoiceStore`), `ReleaseLookup`, `CoverArt`, `NameTemplate`, `TrackMetadata`, `MetadataEdits` (the user's changes to names, `ReleaseEditsStore` by release ID, and `MusicBrainzRelease.manual` for discs MusicBrainz does not know).
 - **Output:** `WAVFile`, `AudioEncoder`, `EncoderOptions`, `MP3` (lame and ID3), `FLACTags`, `MP4Tags`, `ChunkTags` (AIFF and WAV), `EmbeddedCover`, `CueSheet`, `RipReport` and `RipReportMarkdown`, `Encoding` (`RippedDisc`, `DiscEncoder`), `DiscImage` (the whole disc in one lossless file with a CUE sheet, `Settings.writeImages`), `Retag` (`DiscEncoder.updateLibrary`, the release's ReplayGain over every disc), `Loudness` (`ReplayGain`), `HDCD` (`HDCDCodes`: the HDCD codes of a track, from FFmpeg's decoder, vendored as the C target `CHDCD` in `SilversideKit/Vendor/HDCD`), `MusicApp` (Add to Music through `osascript`), `License` (`SilversideLicense`, the text of `LICENSE`).
-- **Workflows:** `DiscRip` (a whole rip, as `silverside rip` does it), `RipRepair` (`silverside repair`), `RipPool` (earlier rips, and `RipFolder` claims), `RipSets` (`RipSet`, the discs of a multi-disc release among earlier rips), `RipSummaries` (text for people), `Settings`, `StopToken` and `Blocking` (stopping, and long work off the cooperative pool).
+- **Workflows:** `DiscRip` (a whole rip, as `silverside rip` does it), `RipRepair` (`silverside repair`), `RipCheck` (Check Again, `silverside check`: an earlier rip looked up in AccurateRip and CTDB again), `RipPool` (earlier rips, and `RipFolder` claims), `RipSets` (`RipSet`, the discs of a multi-disc release among earlier rips), `RipSummaries` (text for people), `Settings`, `StopToken` and `Blocking` (stopping, and long work off the cooperative pool).
 
 ## App
 

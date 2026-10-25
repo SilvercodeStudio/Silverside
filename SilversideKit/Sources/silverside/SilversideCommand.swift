@@ -21,7 +21,7 @@ struct SilversideCommand: AsyncParsableCommand {
             """,
         version: SilversideVersion.string,
         subcommands: [
-            Drives.self, Info.self, CDTextCommand.self, Rip.self, Repair.self, Metadata.self, Encode.self,
+            Drives.self, Info.self, CDTextCommand.self, Rip.self, Repair.self, Check.self, Metadata.self, Encode.self,
             HDCDCommand.self,
             Config.self, Eject.self, License.self,
         ]

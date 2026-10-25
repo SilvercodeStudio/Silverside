@@ -12,10 +12,11 @@ public enum OnlineLookupError: Error, Equatable, CustomStringConvertible {
 
 extension AccurateRipRecord {
     /// Downloads the records for a disc. Returns none if the disc is not in AccurateRip.
+    /// `useCache: false` asks again, for a disc that may have been added since.
     public static func download(
-        for discID: AccurateRipDiscID, client: WebClient = .shared
+        for discID: AccurateRipDiscID, client: WebClient = .shared, useCache: Bool = true
     ) async throws -> [AccurateRipRecord] {
-        guard let data = try await client.data(from: discID.databaseURL) else { return [] }
+        guard let data = try await client.data(from: discID.databaseURL, useCache: useCache) else { return [] }
         return try records(from: [UInt8](data))
     }
 }
@@ -46,8 +47,11 @@ public struct CTDBEntry: Equatable, Sendable {
         return syndromes
     }
 
-    /// Looks up a disc by its TOC. Returns none if the disc is not in CTDB.
-    public static func lookup(_ toc: TOC, client: WebClient = .shared) async throws -> [CTDBEntry] {
+    /// Looks up a disc by its TOC. Returns none if the disc is not in CTDB. `useCache: false`
+    /// asks again, for a disc that may have been added since.
+    public static func lookup(_ toc: TOC, client: WebClient = .shared, useCache: Bool = true) async throws
+        -> [CTDBEntry]
+    {
         var components = URLComponents(string: "http://db.cuetools.net/lookup2.php")!
         components.queryItems = [
             URLQueryItem(name: "version", value: "3"),
@@ -55,7 +59,7 @@ public struct CTDBEntry: Equatable, Sendable {
             URLQueryItem(name: "fuzzy", value: "0"),
             URLQueryItem(name: "toc", value: toc.ctdbTOCString),
         ]
-        guard let data = try await client.data(from: components.url!) else { return [] }
+        guard let data = try await client.data(from: components.url!, useCache: useCache) else { return [] }
         return try entries(fromXML: data)
     }
 

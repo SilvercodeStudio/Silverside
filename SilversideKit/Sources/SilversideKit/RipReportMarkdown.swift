@@ -23,6 +23,11 @@ extension RipReport {
         lines.append(result + ".")
         lines.append("")
         lines.append("CTDB: " + ctdbSummary + ".")
+        if let checkedAgain {
+            lines += [
+                "", "Checked again in AccurateRip and CTDB \(ISO8601DateFormatter().string(from: checkedAgain)).",
+            ]
+        }
         let tested = tracks.filter { $0.testCRC32 != nil }
         if !tested.isEmpty {
             let differing = tested.filter { $0.testReadMatches == false }.map(\.number)

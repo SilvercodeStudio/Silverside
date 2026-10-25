@@ -38,12 +38,21 @@ The result banner says what is most likely to help next. In short:
 - Clean the disc and rip again. The new rip pools with the first (see Options under Ripping a Disc): a track that either rip got accurate is kept.
 - Rip in another drive. Each drive reads damage differently, so two drives together often get what one cannot.
 - Repair the rip.
+- For a new release, wait, then use Check Again (below).
 
 ## Repair
 
 Repair, in the toolbar of an earlier rip and in the Disc menu, checks the rip against CTDB again and repairs it with CTDB's data, as `silverside repair` does. Every other rip of the same disc in the rips folder joins the pool. When the disc is in a drive that is free, the sectors where the repair still fails are read again, which gives it more versions to try.
 
 A rip that CTDB verifies as it is gets its report brought up to date: a rip made offline becomes a verified rip. A rip that the repair changes stays as it was, and the repaired rip goes in a folder of its own next to it ("… repaired"), with its own report, so it can be encoded like any rip.
+
+## Check Again
+
+A new release is often in neither AccurateRip nor CTDB at first, so its tracks show as Copied: the reads agree, but no database can confirm them. Other people's rips fill the databases in over the weeks after a release, and CTDB usually has a disc first.
+
+Check Again, in the toolbar of an earlier rip, looks the disc up in both databases again and checks the rip against what they have now. A set's toolbar has it too, for every disc that can use it. The disc does not have to be in a drive: Silverside checks the rip's WAV files, or, after they are deleted, the album's FLAC or Apple Lossless files, which must still decode to exactly the audio that was ripped. The rip's report gets the new results and the date of the check. A match found before is never lost, even if a database cannot be reached.
+
+Check Again shows for a rip that is not verified, and for one that AccurateRip or CTDB did not have, since a second database is a second, independent proof. It cannot check AAC or MP3 files, or a library decoded from HDCD, as these are no longer the ripped audio. When CTDB has the disc now but the rip does not match, Repair can try to fix it. `silverside check` does the same from a terminal.
 
 ## Multi-disc sets
 

@@ -128,6 +128,17 @@ struct ResultsView: View {
                     )
                     .disabled(model.library?.isRunning == true)
                 }
+                if recentRip.canCheckAgain {
+                    Button {
+                        model.checkAgain([recentRip])
+                    } label: {
+                        Label("Check Again", systemImage: "arrow.clockwise")
+                    }
+                    .help(
+                        "Look the disc up in AccurateRip and CTDB again, for results that came since the rip, and check the rip's audio against them. The disc is not needed."
+                    )
+                    .disabled(model.checking.contains(recentRip.file))
+                }
                 Button {
                     model.startRepair(RecentRip(folder: folder, report: report))
                 } label: {
@@ -266,6 +277,18 @@ struct ResultsView: View {
                 )
                 .foregroundStyle(.secondary)
                 ChipRow(chips: ResultChips.chips(for: report))
+                if model.checking.contains(recentRip.file) {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Looking the disc up in AccurateRip and CTDB again…")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                } else if let result = model.checkResults[recentRip.file] {
+                    Text("Checked again: \(result)").font(.callout).foregroundStyle(.secondary)
+                } else if let checked = report.checkedAgain {
+                    Text("Checked again \(checked.formatted(date: .abbreviated, time: .shortened)).")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
                 if let advice = report.advice {
                     Text(advice).font(.callout).foregroundStyle(.secondary)
                 }

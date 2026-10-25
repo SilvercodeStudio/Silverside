@@ -59,6 +59,11 @@ command-line tool.
   shows them all. Before, only the first block was read, and Japanese text came
   out garbled.
 
+- **Check Again** looks an earlier rip up in AccurateRip and CTDB again, for
+  a new release that they did not have at the time of the rip, and checks
+  the rip's audio against them: its WAV files, or the album's FLAC or Apple
+  Lossless files. The disc is not needed. A set's toolbar has it for every
+  disc that can use it, and `silverside check` does the same in a terminal.
 - **Use These Names** tags a rip with the disc's CD-Text in place of the
   MusicBrainz names. Show the CD-Text names, click it, and the names become
   edits that you can still change before the rip.

@@ -48,6 +48,11 @@ struct SetView: View {
         }
     }
 
+    /// Discs that Check Again may find more for, such as a new release's.
+    private var toCheck: [RecentRip] {
+        ripSet.positions.compactMap { rip(at: $0) }.filter(\.canCheckAgain)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header.padding(16)
@@ -77,6 +82,17 @@ struct SetView: View {
                 .help(
                     "Write the album's names and cover into every encoded disc's files, and rename them as the templates say"
                 )
+                if !toCheck.isEmpty {
+                    Button {
+                        model.checkAgain(toCheck)
+                    } label: {
+                        Label("Check Again", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(toCheck.allSatisfy { model.checking.contains($0.file) })
+                    .help(
+                        "Look \(Format.count(toCheck.count, "disc")) up in AccurateRip and CTDB again, for results that came since they were ripped, and check their audio against them"
+                    )
+                }
                 InfoButton(title: "Set Info", help: "The release as MusicBrainz has it") {
                     release.map { InfoSection.disc(release: $0) } ?? []
                 }
@@ -195,6 +211,14 @@ struct SetView: View {
                     .help(
                         "Each disc is measured when it is encoded. When the last disc of the set is encoded, every disc's files get the album gain over the whole set, so the set plays at one level."
                     )
+                }
+                let checking = ripSet.discs.values.filter { model.checking.contains($0.file) }.count
+                if checking > 0 {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Looking \(Format.count(checking, "disc")) up in AccurateRip and CTDB again…")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
                 }
             }
         }

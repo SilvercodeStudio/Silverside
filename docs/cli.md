@@ -37,6 +37,7 @@ silverside encode -i "<rip folder>"       # encode a rip later
 | `cdtext` | Shows every field of a disc's CD-Text, in each of its languages, or its raw packs (`--packs`). |
 | `rip` | Rips a disc to WAV files: verifies, re-reads, repairs, looks up the release, saves the cover, and can encode. |
 | `repair` | Repairs rips again with CTDB: pools rips from several drives, and re-reads with the disc in a drive. |
+| `check` | Looks earlier rips up in AccurateRip and CTDB again, for a new release that they did not have yet, and checks the rip's audio (its WAV files, or the album's lossless files) against them. |
 | `metadata` | Shows the MusicBrainz releases for a disc, and keeps the chosen one in a rip's `disc.json`; `--set` edits names, `--cover` gives a cover, and `--retag` writes both into the album's encoded files. |
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
 | `hdcd` | Looks for HDCD codes in audio files and folders (WAV, AIFF, FLAC, Apple Lossless), such as rips and albums from before. |
@@ -106,6 +107,11 @@ deleted, because the library has everything. `--keep-rip` (or the
 `keepRipAfterEncoding` setting) keeps the WAV files, for example as an
 archive. A rip with any track that is not verified is always kept, so that
 `silverside repair` can try again.
+
+A new release is often in neither AccurateRip nor CTDB at first, and both
+fill in over weeks. `silverside check` with a rip folder, or an album folder
+in the library, looks each disc up again and updates its report. A match
+found before is never lost, and the disc is not needed.
 
 ## Settings
 

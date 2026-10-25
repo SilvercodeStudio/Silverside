@@ -171,6 +171,8 @@ public struct RipReport: Codable, Equatable, Sendable {
     public var started: Date?
     /// The time the CTDB check and repair took, in seconds. Nil if there was none, and in older reports.
     public var ctdbSeconds: Int?
+    /// When Check Again last looked the disc up in AccurateRip and CTDB (`RipCheck`), if it did.
+    public var checkedAgain: Date?
     public var drive: Drive
     /// True for a secure rip, with re-reads; false for a single pass.
     public var secure: Bool
@@ -413,6 +415,15 @@ extension RipReport {
                 || ($0.ctdbConfidence ?? 0) > 0
         }
         return tracksVerified && hiddenTrack?.readsAgree != false
+    }
+}
+
+extension RipReport {
+    /// True if Check Again (`RipCheck`) may find more: a track is not verified, or AccurateRip
+    /// or CTDB did not have the disc, as is usual for a new release.
+    public var mayCheckAgain: Bool {
+        !isVerified || ctdb.status == .notInDatabase || ctdb.status == .notChecked
+            || tracks.contains { $0.accurateRip == .notInDatabase }
     }
 }
 

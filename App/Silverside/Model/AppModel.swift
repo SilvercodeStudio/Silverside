@@ -463,6 +463,40 @@ final class AppModel {
         }
     }
 
+    // MARK: Check Again
+
+    /// The rips that Check Again is looking up, and the outcome of the latest check of each.
+    private(set) var checking: Set<URL> = []
+    private(set) var checkResults: [URL: String] = [:]
+    @ObservationIgnored private var checks: Task<Void, Never>?
+
+    /// Looks earlier rips up in AccurateRip and CTDB again (`RipCheck`), one after another,
+    /// and updates their reports.
+    func checkAgain(_ rips: [RecentRip]) {
+        let rips = rips.filter { !checking.contains($0.file) }
+        guard !rips.isEmpty else { return }
+        checking.formUnion(rips.map(\.file))
+        let previous = checks
+        checks = Task { @MainActor in
+            await previous?.value
+            var failures = [String]()
+            for rip in rips {
+                do {
+                    let file = rip.file
+                    let result = try await Task.detached { try await RipCheck(reportAt: file).run() }.value
+                    checkResults[rip.file] = result.summary
+                } catch {
+                    failures.append("\(rip.title): \(error)")
+                }
+                checking.remove(rip.file)
+                refreshRecentRips()
+            }
+            if !failures.isEmpty {
+                alert = AppAlert(title: "Check Again did not finish", message: failures.joined(separator: "\n"))
+            }
+        }
+    }
+
     // MARK: Earlier rips
 
     func refreshRecentRips(then completion: (@MainActor () -> Void)? = nil) {

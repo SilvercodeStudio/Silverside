@@ -43,6 +43,13 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     var driveName: String { "\(report.drive.vendor) \(report.drive.product)" }
     var date: Date { report.date }
 
+    /// A rip that a database did not have, or that is not verified, with its audio to check
+    /// again: its WAV files, or the album's lossless files, not an HDCD decode.
+    var canCheckAgain: Bool {
+        guard report.mayCheckAgain else { return false }
+        return hasAudio || (report.encoding?.format.isLossless == true && report.encoding?.hdcdDecoded != true)
+    }
+
     /// The tracks that AccurateRip or CTDB proves.
     var verifiedCount: Int { Self.verifiedCount(of: report) }
 

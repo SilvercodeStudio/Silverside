@@ -425,6 +425,11 @@ final class RipRun {
         case .release(let lookup):
             if let chosen = lookup?.chosen {
                 add("MusicBrainz: " + chosen.summary(for: disc.toc))
+                if let failure = lookup?.detailsFailure {
+                    add(
+                        "MusicBrainz: the release's own lookup failed (\(failure)), so the files get no writers or genre"
+                    )
+                }
             } else if lookup != nil {
                 add("MusicBrainz: no release has this disc")
             }

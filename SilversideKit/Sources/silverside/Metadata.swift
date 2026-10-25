@@ -92,6 +92,9 @@ struct Metadata: AsyncParsableCommand {
                 "No MusicBrainz release: the names come from " + (cdText == nil ? "nowhere yet" : "the disc's CD-Text")
                     + ".")
         }
+        if let failure = choice.detailsFailure {
+            print("The release's own lookup failed (\(failure)): no writers or genre. Run this again later for them.")
+        }
         if !choice.isExact, !chosen.isManual {
             print("MusicBrainz does not know this disc ID. These releases have nearly the same TOC.")
             print(

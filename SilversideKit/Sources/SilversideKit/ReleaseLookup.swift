@@ -8,6 +8,9 @@ public struct ReleaseLookupResult: Sendable {
     public var chosen: MusicBrainzRelease?
     /// True if MusicBrainz knows the disc ID; false for a fuzzy match of the TOC.
     public var isExact: Bool
+    /// Why the chosen release's own lookup failed, if it did. `chosen` is then the disc
+    /// lookup's release: the names are all there, but not the writers or the genre.
+    public var detailsFailure: String?
 
     /// The number of releases other than the chosen one.
     public var otherCount: Int {
@@ -32,8 +35,8 @@ public enum ReleaseLookup {
     /// else the first, unless the ranking cannot settle it and `choose` picks another. A
     /// release that the user chose (by ID or with `choose`) is remembered for the other
     /// discs of the release. With `details`, the chosen release is looked up by its ID too,
-    /// for what a disc lookup cannot give: the composers of each track. A rip wants them;
-    /// the app's look at a new disc does not.
+    /// for what a disc lookup cannot give: the composers of each track. If that lookup fails
+    /// (MusicBrainz is busy), the disc lookup's release is used without them, rather than none.
     public static func find(
         toc: TOC, mcn: String?, releaseID: String? = nil, details: Bool = false,
         choose: (([MusicBrainzRelease]) -> MusicBrainzRelease?)? = nil,
@@ -53,14 +56,36 @@ public enum ReleaseLookup {
                 chosen = choose(ranked)
                 if let chosen { try store.remember(chosen) }
             }
-            if details, let summary = chosen { chosen = try await client.release(id: summary.id) ?? summary }
-            return ReleaseLookupResult(ranked: ranked, chosen: chosen, isExact: lookup.isExact)
+            var failure: String?
+            if details, let summary = chosen {
+                (chosen, failure) = try await detailed(summary, client: client)
+            }
+            return ReleaseLookupResult(
+                ranked: ranked, chosen: chosen, isExact: lookup.isExact, detailsFailure: failure)
         }
         var chosen = ranked.first { $0.id == releaseID }
-        if chosen == nil || details { chosen = try await client.release(id: releaseID) ?? chosen }
+        var failure: String?
+        if let summary = chosen, details {
+            (chosen, failure) = try await detailed(summary, client: client)
+        } else if chosen == nil {
+            chosen = try await client.release(id: releaseID)
+        }
         guard let chosen else { throw ReleaseLookupError.noSuchRelease(releaseID) }
         try store.remember(chosen)
-        return ReleaseLookupResult(ranked: ranked, chosen: chosen, isExact: lookup.isExact)
+        return ReleaseLookupResult(ranked: ranked, chosen: chosen, isExact: lookup.isExact, detailsFailure: failure)
+    }
+
+    /// The release looked up by its ID, or the summary and why that lookup failed.
+    private static func detailed(
+        _ summary: MusicBrainzRelease, client: MusicBrainzClient
+    ) async throws -> (MusicBrainzRelease, String?) {
+        do {
+            return (try await client.release(id: summary.id) ?? summary, nil)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return (summary, "\(error)")
+        }
     }
 }
 

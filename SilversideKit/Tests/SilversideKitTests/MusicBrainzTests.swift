@@ -55,6 +55,30 @@ struct MusicBrainzTests {
                 == "Grateful Dead - Cornell 5-8-77 (Disc 1)")
     }
 
+    /// When MusicBrainz answers the disc lookup but not the release's own lookup (a 503 on a
+    /// busy evening), the disc keeps its release, without the writers.
+    @Test func keepsTheReleaseWhenItsOwnLookupFails() async throws {
+        let toc = try TOC(
+            musicBrainzOffsets: [150, 25220, 61075, 82890, 116599, 145802, 173575, 189016, 210578, 236749, 251121],
+            sectors: 301_681)
+        let transport = FakeTransport([
+            .status(200, body: String(decoding: try fixture("cornell-1977-disc1"), as: UTF8.self)), .status(500),
+        ])
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let web = WebClient(
+            directory: directory, transport: transport,
+            policies: ["musicbrainz.org": .init(interval: .zero, lifetime: .seconds(60))],
+            firstRetryDelay: .milliseconds(10))
+        let result = try await ReleaseLookup.find(
+            toc: toc, mcn: nil, details: true, client: MusicBrainzClient(client: web),
+            store: ReleaseChoiceStore(url: directory.appending(path: "ReleaseChoices.json")))
+        #expect(result.isExact && result.chosen?.id == "aa0d7d7e-1d78-4f78-ba03-7a32c200f660")
+        #expect(result.chosen?.media.first?.tracks.first?.title == "New Minglewood Blues")
+        #expect(result.detailsFailure != nil)
+        #expect(await transport.requests.count == 2)
+    }
+
     /// *Saint of Circumstance*: MusicBrainz has no disc IDs for its discs (8, 9, and 5 tracks).
     /// A fuzzy match must still give each disc its own medium.
     @Test func findsTheDiscOfAFuzzyMatchByItsTracks() throws {

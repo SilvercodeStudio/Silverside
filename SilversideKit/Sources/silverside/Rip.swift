@@ -245,6 +245,9 @@ private final class RipPrinter: @unchecked Sendable {
             if !lookup.isExact {
                 Swift.print("  To add the disc ID: \(MusicBrainzRelease.submissionURL(for: toc).absoluteString)")
             }
+            if let failure = lookup.detailsFailure {
+                Swift.print("  The release's own lookup failed (\(failure)), so the files get no writers or genre.")
+            }
         case .releaseLookupFailed(let error):
             Swift.print("MusicBrainz: the lookup failed (\(error))")
         case .folder(let folder, _):

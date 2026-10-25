@@ -3,6 +3,15 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.8 (not released yet)
+
+### Fixed
+
+- A disc that MusicBrainz knows no longer becomes "Unknown Album" when
+  MusicBrainz is busy. If the release's own lookup fails after the disc's
+  lookup found it, the disc keeps the release's names, without the writers
+  and the genre, and the rip log says so.
+
 ## 0.7 (2026-10-25)
 
 ### Added

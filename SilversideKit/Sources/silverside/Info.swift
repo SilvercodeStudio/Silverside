@@ -112,5 +112,6 @@ struct Info: AsyncParsableCommand {
         }
         if let code = text.codes[0] { print("  UPC/EAN  \(code)") }
         if let genre = text.genre { print("  Genre    \(genre)") }
+        if let languages = text.languagesText { print("  Languages \(languages)") }
     }
 }

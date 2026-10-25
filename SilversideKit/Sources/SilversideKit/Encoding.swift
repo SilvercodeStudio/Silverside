@@ -213,6 +213,8 @@ public struct DiscEncoder: Sendable {
     /// Added to the album's title in names and tags, as " (HDCD)" for a decoded copy beside
     /// the album: the copy gets a folder of its own, and players list it apart.
     public var albumSuffix: String?
+    /// Where disc images go (see `writeImage`), or nil for none.
+    public var images: URL?
     /// How many tracks encode at once. Each track in flight holds its audio twice (the rip and
     /// the decoded check), about 300 MB for a long track (twice that for an HDCD decode, which
     /// uses half as many lanes), so the default stays at four even on a Mac with many cores:
@@ -245,6 +247,7 @@ public struct DiscEncoder: Sendable {
         mp3 = settings.mp3
         replayGain = settings.replayGain
         decodesHDCD = settings.hdcd == .decode
+        images = settings.writeImages ? settings.imagesURL : nil
     }
 
     /// The files that `encode` would write, one for each track, in order. It throws as `encode`
@@ -504,6 +507,22 @@ public struct DiscEncoder: Sendable {
             if let whole = replayGainRecord?.release {
                 updateReleaseGain(whole, of: release, in: albumFolder, except: medium.position, library: library)
             }
+            // Last, so that the album and its report are done even if the image fails. A decoded
+            // copy beside the album gets none: the image is the disc as it is.
+            if let images, albumSuffix == nil {
+                let sheet = cueSheet(
+                    cueTracks, hiddenTrackFile: nil, release: release, medium: medium, toc: disc.toc,
+                    mcn: disc.report?.mcn)
+                let image = try writeImage(
+                    of: disc, sheet: sheet, name: NameTemplate.safeComponent(sheet.title ?? "Disc") + discPart,
+                    folder: imageFolder(for: albumFolder, library: library, images: images),
+                    tags: imageTags(sheet: sheet, release: release, medium: medium, hdcd: disc.report?.hdcd),
+                    cover: cover)
+                var record = encoding
+                record.image = image.path
+                try record.save(inReportAt: destination)
+                return (written, record)
+            }
         }
         return (written, encoding)
     }
@@ -522,6 +541,17 @@ public struct DiscEncoder: Sendable {
         _ tracks: [CueSheet.Track], hiddenTrackFile: String?, release: MusicBrainzRelease,
         medium: MusicBrainzRelease.Medium, toc: TOC, mcn: String?, to folder: URL, discPart: String
     ) throws {
+        let sheet = cueSheet(
+            tracks, hiddenTrackFile: hiddenTrackFile, release: release, medium: medium, toc: toc, mcn: mcn)
+        let name = NameTemplate.safeComponent(sheet.title ?? "Disc") + discPart + ".cue"
+        try Data(sheet.text.utf8).write(to: folder.appending(path: name))
+    }
+
+    /// The CUE sheet of the tracks' files, with the album's names, the MCN, and remarks.
+    func cueSheet(
+        _ tracks: [CueSheet.Track], hiddenTrackFile: String?, release: MusicBrainzRelease,
+        medium: MusicBrainzRelease.Medium, toc: TOC, mcn: String?
+    ) -> CueSheet {
         let sample = TrackMetadata(
             release: release, medium: medium, track: medium.tracks[0], plainPunctuation: plainPunctuation,
             segueMarks: segueMarks, compilationFolder: compilationFolder)
@@ -537,8 +567,7 @@ public struct DiscEncoder: Sendable {
         if release.media.count > 1 {
             sheet.remarks += ["DISCNUMBER \(medium.position)", "TOTALDISCS \(release.media.count)"]
         }
-        let name = NameTemplate.safeComponent(sheet.title ?? "Disc") + discPart + ".cue"
-        try Data(sheet.text.utf8).write(to: folder.appending(path: name))
+        return sheet
     }
 
     private func write(

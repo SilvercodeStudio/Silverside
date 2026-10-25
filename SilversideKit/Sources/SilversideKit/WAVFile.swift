@@ -78,6 +78,26 @@ public enum WAVFile {
         }
     }
 
+    /// Writes 16-bit audio as a WAV file, part by part: `next` gives each part, and nil at the
+    /// end. For a whole disc, which is too large to hold at once.
+    public static func write(to url: URL, parts next: () throws -> [UInt32]?) throws {
+        try data(for: []).write(to: url)
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        var count = 0
+        while let samples = try next() {
+            try handle.write(contentsOf: samples.withUnsafeBytes { Data($0) })
+            count += samples.count
+        }
+        // The header's sizes, now that they are known: RIFF's at byte 4, data's at byte 40.
+        let size = UInt32(count * CDDA.bytesPerSample)
+        for (offset, value) in [(UInt64(4), 36 + size), (UInt64(40), size)] {
+            try handle.seek(toOffset: offset)
+            try handle.write(contentsOf: withUnsafeBytes(of: value.littleEndian) { Data($0) })
+        }
+    }
+
     /// Reads CD audio from a WAV file that holds 44.1 kHz, 16-bit, stereo PCM, in the plain
     /// form or the extensible form (format tag 0xFFFE with the PCM subformat) that some
     /// programs write.

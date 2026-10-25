@@ -67,6 +67,39 @@ struct CueSheetTests {
                 """)
     }
 
+    /// The same disc as one image: each index is a time in the one file.
+    @Test func placesEveryIndexInADiscImage() {
+        var sheet = CueSheet(tracks: [
+            .init(number: 1, file: "01 One.flac", sectors: 4500, pregapSectors: 32),
+            .init(number: 2, file: "02 Two.flac", sectors: 3000, pregapSectors: 150),
+        ])
+        sheet.imageFile = "Album.flac"
+        #expect(
+            sheet.text == """
+                FILE "Album.flac" WAVE
+                  TRACK 01 AUDIO
+                    PREGAP 00:00:32
+                    INDEX 01 00:00:00
+                  TRACK 02 AUDIO
+                    INDEX 00 00:58:00
+                    INDEX 01 01:00:00
+
+                """)
+        // With the hidden track one audio at the start of the file.
+        sheet.hiddenTrackSectors = 32
+        #expect(
+            sheet.text == """
+                FILE "Album.flac" WAVE
+                  TRACK 01 AUDIO
+                    INDEX 00 00:00:00
+                    INDEX 01 00:00:32
+                  TRACK 02 AUDIO
+                    INDEX 00 00:58:32
+                    INDEX 01 01:00:32
+
+                """)
+    }
+
     @Test func writesTimesInFrames() {
         #expect(
             CueSheet.time(0) == "00:00:00" && CueSheet.time(74) == "00:00:74" && CueSheet.time(4500 + 76) == "01:01:01")

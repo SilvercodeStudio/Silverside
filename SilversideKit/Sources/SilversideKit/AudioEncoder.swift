@@ -124,7 +124,34 @@ public enum AudioEncoder {
     public static func encode(
         _ pcm: TrackPCM, format: AudioFormat, to url: URL, aac: AACOptions = AACOptions()
     ) throws {
-        let wide = pcm.bitsPerSample == 24
+        let file = try create(url, format: format, wide: pcm.bitsPerSample == 24, aac: aac)
+        var closed = false
+        defer { if !closed { ExtAudioFileDispose(file) } }
+        switch pcm {
+        case .cd(let samples): try samples.withUnsafeBytes { try write($0, bytesPerFrame: 4, to: file) }
+        case .wide(let values): try values.withUnsafeBytes { try write($0, bytesPerFrame: 8, to: file) }
+        }
+        closed = true
+        try check("ExtAudioFileDispose", ExtAudioFileDispose(file))
+    }
+
+    /// Writes 16-bit audio to `url` in `format`, part by part: `next` gives each part, and nil
+    /// at the end. For a whole disc, which is too large to hold at once.
+    public static func encode(
+        format: AudioFormat, to url: URL, aac: AACOptions = AACOptions(), parts next: () throws -> [UInt32]?
+    ) throws {
+        let file = try create(url, format: format, wide: false, aac: aac)
+        var closed = false
+        defer { if !closed { ExtAudioFileDispose(file) } }
+        while let samples = try next() {
+            try samples.withUnsafeBytes { try write($0, bytesPerFrame: 4, to: file) }
+        }
+        closed = true
+        try check("ExtAudioFileDispose", ExtAudioFileDispose(file))
+    }
+
+    /// A new file at `url` in `format`, which takes 16-bit audio, or 32-bit if `wide`.
+    private static func create(_ url: URL, format: AudioFormat, wide: Bool, aac: AACOptions) throws -> ExtAudioFileRef {
         let wideFlag =
             format.hdcdBits == 20 ? kAppleLosslessFormatFlag_20BitSourceData : kAppleLosslessFormatFlag_24BitSourceData
         var destination = AudioStreamBasicDescription()
@@ -171,40 +198,37 @@ public enum AudioEncoder {
             ExtAudioFileCreateWithURL(
                 url as CFURL, fileType, &destination, nil, AudioFileFlags.eraseFile.rawValue, &file))
         guard let file else { throw AudioEncoderError.audioToolbox(operation: "ExtAudioFileCreateWithURL", status: -1) }
-        var closed = false
-        defer { if !closed { ExtAudioFileDispose(file) } }
-
-        var client = wide ? wideClientFormat : clientFormat
-        try check(
-            "ExtAudioFileSetProperty(ClientDataFormat)",
-            ExtAudioFileSetProperty(
-                file, kExtAudioFileProperty_ClientDataFormat, UInt32(MemoryLayout<AudioStreamBasicDescription>.size),
-                &client))
-        if format == .aac {
-            try configure(aac, of: file)
-        }
-
-        // Write in parts of 1 second.
-        func write(_ bytes: UnsafeRawBufferPointer, bytesPerFrame: Int) throws {
-            let frames = bytes.count / bytesPerFrame
-            var start = 0
-            while start < frames {
-                let count = min(44_100, frames - start)
-                var list = AudioBufferList(
-                    mNumberBuffers: 1,
-                    mBuffers: AudioBuffer(
-                        mNumberChannels: 2, mDataByteSize: UInt32(count * bytesPerFrame),
-                        mData: UnsafeMutableRawPointer(mutating: bytes.baseAddress! + start * bytesPerFrame)))
-                try check("ExtAudioFileWrite", ExtAudioFileWrite(file, UInt32(count), &list))
-                start += count
+        do {
+            var client = wide ? wideClientFormat : clientFormat
+            try check(
+                "ExtAudioFileSetProperty(ClientDataFormat)",
+                ExtAudioFileSetProperty(
+                    file, kExtAudioFileProperty_ClientDataFormat,
+                    UInt32(MemoryLayout<AudioStreamBasicDescription>.size), &client))
+            if format == .aac {
+                try configure(aac, of: file)
             }
+        } catch {
+            ExtAudioFileDispose(file)
+            throw error
         }
-        switch pcm {
-        case .cd(let samples): try samples.withUnsafeBytes { try write($0, bytesPerFrame: 4) }
-        case .wide(let values): try values.withUnsafeBytes { try write($0, bytesPerFrame: 8) }
+        return file
+    }
+
+    /// Writes interleaved frames to the file, in parts of 1 second.
+    private static func write(_ bytes: UnsafeRawBufferPointer, bytesPerFrame: Int, to file: ExtAudioFileRef) throws {
+        let frames = bytes.count / bytesPerFrame
+        var start = 0
+        while start < frames {
+            let count = min(44_100, frames - start)
+            var list = AudioBufferList(
+                mNumberBuffers: 1,
+                mBuffers: AudioBuffer(
+                    mNumberChannels: 2, mDataByteSize: UInt32(count * bytesPerFrame),
+                    mData: UnsafeMutableRawPointer(mutating: bytes.baseAddress! + start * bytesPerFrame)))
+            try check("ExtAudioFileWrite", ExtAudioFileWrite(file, UInt32(count), &list))
+            start += count
         }
-        closed = true
-        try check("ExtAudioFileDispose", ExtAudioFileDispose(file))
     }
 
     /// Reads a file that AudioToolbox can decode (FLAC, ALAC, AAC, AIFF, WAV, MP3) as Silverside samples.
@@ -231,8 +255,32 @@ public enum AudioEncoder {
             ExtAudioFileSetProperty(
                 file, kExtAudioFileProperty_ClientDataFormat, UInt32(MemoryLayout<AudioStreamBasicDescription>.size),
                 &client))
-        let perFrame = Int(format.mBytesPerFrame) / MemoryLayout<T>.size
         var samples = [T]()
+        try read(file, client: format) { samples += $0 }
+        return samples
+    }
+
+    /// Reads a file that AudioToolbox can decode as Silverside samples, a second at a time:
+    /// `part` gets each second. For a whole disc, which is too large to hold at once.
+    public static func decode(_ url: URL, parts part: (ArraySlice<UInt32>) throws -> Void) throws {
+        var file: ExtAudioFileRef?
+        try check("ExtAudioFileOpenURL", ExtAudioFileOpenURL(url as CFURL, &file))
+        guard let file else { throw AudioEncoderError.audioToolbox(operation: "ExtAudioFileOpenURL", status: -1) }
+        defer { ExtAudioFileDispose(file) }
+        var client = clientFormat
+        try check(
+            "ExtAudioFileSetProperty(ClientDataFormat)",
+            ExtAudioFileSetProperty(
+                file, kExtAudioFileProperty_ClientDataFormat, UInt32(MemoryLayout<AudioStreamBasicDescription>.size),
+                &client))
+        try read(file, client: clientFormat, part)
+    }
+
+    /// Reads the open file to its end, a second at a time.
+    private static func read<T: FixedWidthInteger>(
+        _ file: ExtAudioFileRef, client format: AudioStreamBasicDescription, _ body: (ArraySlice<T>) throws -> Void
+    ) throws {
+        let perFrame = Int(format.mBytesPerFrame) / MemoryLayout<T>.size
         var part = [T](repeating: 0, count: 44_100 * perFrame)
         while true {
             var frames = UInt32(44_100)
@@ -245,9 +293,8 @@ public enum AudioEncoder {
             }
             try check("ExtAudioFileRead", status)
             if frames == 0 { break }
-            samples += part[0..<(Int(frames) * perFrame)]
+            try body(part[0..<(Int(frames) * perFrame)])
         }
-        return samples
     }
 
     /// Sets the AAC encoder's mode, then its bit rate or its VBR quality.

@@ -253,6 +253,9 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// Added to the album's title in the names and tags, as " (HDCD)" for a decoded copy
         /// beside the album as it is on the disc. Nil for the album itself.
         public var albumSuffix: String?
+        /// The disc image (the whole disc in one file, with its CUE sheet beside it), if one was
+        /// written. Nil in older records.
+        public var image: String?
 
         /// The loudness of the album and its tracks, as the ReplayGain tags have them.
         public struct ReplayGainRecord: Codable, Equatable, Sendable {

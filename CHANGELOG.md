@@ -33,6 +33,19 @@ command-line tool.
   encoding it again from its lossless files, each checked against the rip's
   CRC-32; `--hdcd-copy` writes the decoded copy beside it.
 
+- **Disc images,** off by default (Settings › Encoding, `writeImages`, or
+  `--image` on the command line): each disc that is encoded is also written as
+  one lossless file with a CUE sheet, from which a burner can make the disc
+  again. It goes into a folder of its own (`~/Music/Silverside Images`, named as
+  the library's albums), in the library's format, or FLAC when the library is
+  AAC or MP3, and is checked against the rip like every file.
+- **CD-Text in every language a disc has.** A disc can carry CD-Text in up to
+  eight languages, and Japanese discs write it in MS-JIS (Shift-JIS). Silverside
+  reads every block, uses the one in your Mac's language if the disc has it
+  (else the first), and keeps the others in the report; `silverside cdtext`
+  shows them all. Before, only the first block was read, and Japanese text came
+  out garbled.
+
 ### Changed
 
 - A click on a cover shows it at full size in Quick Look, and the cover's

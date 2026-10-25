@@ -171,6 +171,10 @@ extension RipReport {
             lines.append(summary + ", \(ISO8601DateFormatter().string(from: encoding.date)). " + encoding.checkText)
             lines.append("")
             lines.append("Folder: `\((encoding.folder as NSString).abbreviatingWithTildeInPath)`")
+            if let image = encoding.image {
+                lines.append("")
+                lines.append("Disc image: `\((image as NSString).abbreviatingWithTildeInPath)`")
+            }
             lines.append("")
             lines.append("| Track | File |")
             lines.append("|---:|---|")
@@ -219,8 +223,7 @@ extension RipReport {
         lines.append("| CTDB TOC | \(self.toc) |")
         if let mcn { lines.append("| MCN (barcode) | \(mcn) |") }
         if let cdText {
-            let disc = [cdText.performers[0], cdText.titles[0]].compactMap { $0 }.joined(separator: " - ")
-            lines.append("| CD-Text | \(Self.escaped(disc.isEmpty ? "tracks only" : disc)) |")
+            lines.append("| CD-Text | \(Self.escaped(cdText.summary)) |")
         }
         lines.append("")
 

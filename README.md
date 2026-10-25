@@ -2,7 +2,7 @@
 
 Welcome to Silverside!
 
-<img src="docs/silverside-md.png" width="300" alt="Silverside.app logo">
+<img src="./docs/site/images/icon.png" alt="Silverside.app logo">
 
 Silverside is a CD ripping app for macOS intended to produce secure,
 verified rips of audio CDs, inspired by Exact Audio Copy (EAC) for
@@ -10,13 +10,25 @@ Windows but with a modern Mac interface. It extracts the audio from CDs into
 a folder of your choice in a highly accurate manner with an extraction
 report, and can optionally encode the tracks into your preferred format
 such as FLAC, Apple Lossless, AAC, WAV, or (with a helper app) MP3, as well
-as tag the tracks with appropriate metadata (song and album titles).
+as tag the tracks with accurate metadata (song titles, composers, and so on).
 
-Website: [silverside.app](https://silverside.app).
+My goal for Silverside is to be the best CD ripping app you can get, whether
+free or paid.
 
-It is a Mac app, Silverside, and a command-line tool, `silverside`, which share
-one engine and one settings file. [CHANGELOG.md](CHANGELOG.md) says what
-changed in each version.
+## Key features 
+
+- Easy to use Mac app and a command-line tool `silverside` that share one engine 
+  and settings file.
+- Advanced CD audio extraction and verification
+- 20-bit HDCD decoding when applicable for enhanced dynamic range.
+- ReplayGain tags for consistent playback volume
+- Excellent handling of multi-CD sets and online metadata lookup (track titles, etc.)
+
+See also:
+
+- [silverside.app](https://silverside.app) official site
+- [CHANGELOG.md](CHANGELOG.md) changes in each version.
+- [LICENSE](LICENSE)
 
 ## Requirements
 
@@ -32,7 +44,7 @@ Thunderbolt, or a SATA drive in an enclosure.
 Encoding to MP3 requires an [external CLI encoder app](#encoding-to-mp3)
 to be installed. All other supported formats are handled natively.
 
-## Features
+## Silverside features
 
 - **Accurate rips.** Each track is read with the drive's read offset corrected,
   and checked against [AccurateRip](http://www.accuraterip.com) and the
@@ -53,12 +65,25 @@ to be installed. All other supported formats are handled natively.
   lossless file must decode to exactly the ripped audio. Optionally, the
   files go into the Music app (every format but FLAC).
 - **ReplayGain tags**, measured as EBU R 128 does, so players that read them
-  play albums at one level. The audio is not changed.
+  play albums at one volume level. The raw audio samples are not changed.
 - **Multi-disc sets.** The discs of a release share the release choice, the
   album's names, the cover, one album folder, and one album gain. A set has
   a view of its own: each disc's state, the work left, and buttons that
   encode the discs not in the library yet and bring the encoded ones up to
   date with the set's names and cover.
+- **HDCD.** Each track is checked for HDCD codes, and the app shows the HDCD
+  logo with what they ask for. Most discs with the logo have codes that ask
+  for nothing, so a decoder would play the same audio. A disc whose codes ask
+  for peak extend or gain can be decoded, at the rip or later, into 20-bit
+  FLAC or Apple Lossless files that keep what the decoder restores, or into
+  AAC or MP3 before a lossy encode removes the codes.
+- **Pre-emphasis.** [COMING SOON] A few early CDs were mastered with pre-emphasis, a 
+  treble boost that the player undoes. Silverside marks such tracks in the rip report
+  and the CUE sheet (`FLAGS PRE`), and warns when it encodes them, but it does not
+  change the audio: the files sound too bright in a player that does not read
+  the flag.
+- **Disc images**, if you want them: the whole disc in one lossless file with
+  a CUE sheet, beside the library, from which the disc can be burned again.
 - **A rip report**, as Markdown to read and as JSON (`disc.json`), with every
   track's result, its CRC-32 as EAC and XLD print it, the TOC, pregaps, the
   disc IDs, the ISRCs, MCN, and CD-Text, the media (pressed CD or CD-R), the
@@ -75,28 +100,11 @@ to be installed. All other supported formats are handled natively.
   names from CD-Text or from you, and its files carry no MusicBrainz IDs.
 - **Play a track** from the disc, read as a rip reads it, or from an earlier
   rip, to check it.
-- **HDCD.** Each track is checked for HDCD codes, and the app shows the HDCD
-  logo with what they ask for. Most discs with the logo have codes that ask
-  for nothing, so a decoder would play the same audio. A disc whose codes ask
-  for peak extend or gain can be decoded, at the rip or later, into 20-bit
-  FLAC or Apple Lossless files that keep what the decoder restores, or into
-  AAC or MP3 before a lossy encode removes the codes.
 - **Rip on insertion**, if you want it: a disc whose release is certain, and
   that is not ripped yet, rips a few seconds after it goes in.
 
-## Known limits
+### Known limits
 
-- **Pre-emphasis.** A few early CDs were mastered with pre-emphasis, a treble
-  boost that the player undoes. Silverside marks such tracks in the rip report and
-  the CUE sheet (`FLAGS PRE`), and warns when it encodes them, but it does not
-  change the audio: the files sound too bright in a player that does not read
-  the flag. De-emphasis is planned for 0.7. This is not yet confirmed on a real
-  pre-emphasis disc, because none has turned up in testing.
-
-AccurateRip and CTDB answer over plain HTTP, as their other clients use them.
-Their checksums are public, so there is nothing to keep secret, but a network
-that forged their answers could make a bad rip look verified. MusicBrainz and
-the Cover Art Archive are reached over HTTPS.
 
 ## Ripping marginal CDs
 

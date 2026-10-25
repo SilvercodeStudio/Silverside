@@ -10,8 +10,8 @@ struct CDTextCommand: ParsableCommand {
         discussion: """
             CD-Text can hold, for the disc and each track: a title, performer, songwriter, composer, arranger, \
             and message; and for the disc: a disc ID (the label's), a genre, and the UPC or EAN, with each \
-            track's ISRC. A disc can carry it in up to 8 languages; silverside reads the first (block 0). Few discs \
-            have CD-Text at all.
+            track's ISRC. A disc can carry it in up to 8 languages; silverside shows the one in your language \
+            (else the first), then the others. Few discs have CD-Text at all.
 
             Examples:
               silverside cdtext -d disk14
@@ -57,6 +57,16 @@ struct CDTextCommand: ParsableCommand {
             print(String(decoding: try encoder.encode(text), as: UTF8.self))
             return
         }
+        Self.printBlock(text, languages: text.languages, toc: toc)
+        for (number, block) in (text.otherBlocks ?? [:]).sorted(by: { $0.key < $1.key }) {
+            print("")
+            print("Block \(number)" + (text.languages[number].map { ", \($0)" } ?? ""))
+            Self.printBlock(block, languages: [:], toc: toc)
+        }
+    }
+
+    /// Prints one block's fields: the disc's, then each track's.
+    static func printBlock(_ text: CDText, languages: [Int: String], toc: TOC) {
         let fields: [(String, [Int: String])] = [
             ("Title", text.titles), ("Performer", text.performers), ("Songwriter", text.songwriters),
             ("Composer", text.composers), ("Arranger", text.arrangers), ("Message", text.messages),
@@ -68,8 +78,9 @@ struct CDTextCommand: ParsableCommand {
         if let id = text.discID { print("  Disc ID     \(id)") }
         if let genre = text.genre { print("  Genre       \(genre)") }
         if let code = text.codes[0] { print("  UPC/EAN     \(code)") }
-        let languages = text.languages.sorted { $0.key < $1.key }.map { "block \($0.key): \($0.value)" }
-        if !languages.isEmpty { print("  Languages   \(languages.joined(separator: ", "))") }
+        let blocks = languages.sorted { $0.key < $1.key }.map { "block \($0.key): \($0.value)" }
+        if !blocks.isEmpty { print("  Languages   \(blocks.joined(separator: ", "))") }
+        if let block = text.block, text.otherBlocks != nil { print("  Shown       block \(block)") }
         if let set = text.characterSet { print("  Characters  \(set)") }
         for track in toc.audioTracks {
             let lines =

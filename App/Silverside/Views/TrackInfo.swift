@@ -244,8 +244,7 @@ extension InfoSection {
         }
         if let mcn { rows.append(.init(label: "MCN", value: mcn)) }
         if let cdText {
-            let text = [cdText.performers[0], cdText.titles[0]].compactMap { $0 }.joined(separator: " - ")
-            rows.append(.init(label: "CD-Text", value: text.isEmpty ? "tracks only" : text))
+            rows.append(.init(label: "CD-Text", value: cdText.summary))
         }
         if let media { rows.append(.init(label: "Media", value: "\(media)")) }
         if !rows.isEmpty { sections.append(InfoSection(title: "Disc", rows: rows)) }

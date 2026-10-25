@@ -61,8 +61,18 @@ struct HiddenTrackTests {
         report.hiddenTrack = .init(file: "Track 00.wav", sectors: 75, peak: 9000, readsAgree: true, reads: 2)
         try report.write(to: folder.appending(path: "disc.json"))
         try WAVFile.write(Array(AudioEncoderTests.samples.prefix(75 * 588)), to: folder.appending(path: "Track 00.wav"))
-        let files = try DiscEncoder(format: .flac).encode(try RippedDisc(folder: folder), into: library)
+        var encoder = DiscEncoder(format: .flac)
+        encoder.images = folder.deletingLastPathComponent().appending(path: "images")
+        let (files, record) = try encoder.encodeWithRecord(try RippedDisc(folder: folder), into: library)
         #expect(files.map(\.lastPathComponent).first == "02-00 Hidden Track.flac")
+        // The disc image starts with it, as track 1's index 00.
+        let image = URL(filePath: try #require(record?.image))
+        #expect(try AudioEncoder.decode(image).count == 3 * 75 * 588)
+        #expect(
+            try String(contentsOf: image.deletingPathExtension().appendingPathExtension("cue"), encoding: .utf8)
+                .contains(
+                    "  TRACK 01 AUDIO\n    TITLE \"Help on the Way >\"\n    PERFORMER \"Grateful Dead\"\n    ISRC USRH11900001\n    INDEX 00 00:00:00\n    INDEX 01 00:01:00\n"
+                ))
         let cue = try #require(
             try FileManager.default.contentsOfDirectory(
                 at: files[0].deletingLastPathComponent(), includingPropertiesForKeys: nil

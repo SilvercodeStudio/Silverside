@@ -48,6 +48,12 @@ The setting is on by default because the tags cost nothing until a player uses t
 
 What to do with a disc whose HDCD codes ask for peak extend or gain: **Ask each time** (the default), **Decode** (20-bit FLAC and Apple Lossless, 24-bit AIFF and WAV), or **Keep as pressed** (files bit for bit the disc). A disc whose codes ask for nothing is always kept as pressed. See HDCD under Ripping a Disc.
 
+### Disc image
+
+With **Also write a disc image** on, each disc that is encoded is also written as one file, with a CUE sheet: the image. A burner (such as cdrdao) can make the disc again from it, and some players (foobar2000, for one) show its tracks. The image is lossless: in the library's format, or FLAC when the library is AAC or MP3. It goes into the images folder, in folders named as the library's, and the album's tracks are written as usual. Like every file, it is decoded again and compared with the rip. A FLAC image also holds its CUE sheet in its tags.
+
+An image holds the audio only: a data track (on an Enhanced CD or a game disc) and CD+G graphics are not in it. An image is not renamed or retagged when you change an album's names later.
+
 ## Naming
 
 Templates name the album folder and the track files in the library, and the rip's folder. The fields:

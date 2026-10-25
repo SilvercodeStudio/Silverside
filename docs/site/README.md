@@ -36,7 +36,3 @@ swift docs/site/tools/shot.swift ~/Desktop/capture.png docs/site/images/rip-repo
 ```
 
 Make each capture in both appearances, name them `-dark` and `-light`, and write alt text that says what the screenshot shows.
-
-## Placeholders
-
-`[PRICE]` in the version lines, `[PRICE AND LICENSE]` in the FAQ, and the download button, which points at the GitHub releases page until there is a signed build.

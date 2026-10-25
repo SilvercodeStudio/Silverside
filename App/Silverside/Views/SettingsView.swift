@@ -473,6 +473,15 @@ struct EncodingSettings: View {
                 )
                 .font(.callout).foregroundStyle(.secondary)
             }
+            Section("Disc image") {
+                Toggle("Also write a disc image", isOn: $model.settings.writeImages)
+                FolderField(label: "Images", path: $model.settings.images)
+                    .disabled(!model.settings.writeImages)
+                Text(
+                    "The whole disc in one lossless file (FLAC when the library is AAC or MP3), with a CUE sheet from which a burner can make the disc again. It is in addition to the album's tracks, in folders named as the library's. Data tracks and CD+G graphics are not in it."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .watchingForLAME($lame)

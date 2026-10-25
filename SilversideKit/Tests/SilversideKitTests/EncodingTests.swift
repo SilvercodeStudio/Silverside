@@ -77,6 +77,43 @@ struct EncodingTests {
         #expect(try again.encode(disc, into: library).count == 2)
     }
 
+    /// A disc image: every track in one file, beside the library, checked, with a CUE sheet
+    /// that names the one file and the album's tags.
+    @Test func writesADiscImage() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let disc = try RippedDisc(folder: folder)
+        let whole = try disc.tracks.flatMap { try WAVFile.read($0.file) }
+        var encoder = DiscEncoder(format: .flac)
+        encoder.images = root.appending(path: "images")
+        let (_, record) = try encoder.encodeWithRecord(disc, into: library)
+        let album = "Grateful Dead/Saint of Circumstance- Giants Stadium · East Rutherford · NJ · 6-17-91"
+        let name = "Saint of Circumstance- Giants Stadium · East Rutherford · NJ · 6-17-91 (Disc 2)"
+        let image = root.appending(path: "images/\(album)/\(name).flac")
+        #expect(record?.image == image.path)
+        #expect(try AudioEncoder.decode(image) == whole)
+        let cue = try String(contentsOf: image.deletingPathExtension().appendingPathExtension("cue"), encoding: .utf8)
+        #expect(cue.contains("FILE \"\(name).flac\" WAVE\n  TRACK 01 AUDIO"))
+        #expect(cue.contains("  TRACK 02 AUDIO\n    TITLE \"Slipknot!\"") && cue.contains("INDEX 01 00:01:00"))
+        let tags = Dictionary(try FLACTags.read(image).map { ($0.key, $0.value) }, uniquingKeysWith: { a, _ in a })
+        #expect(tags["ALBUM"] == tags["TITLE"])
+        #expect(tags["DISCNUMBER"] == "2")
+        #expect(tags["CUESHEET"] == cue)
+        #expect(tags["TRACKNUMBER"] == nil && tags["ISRC"] == nil)
+        let report = try RipReport.read(from: library.appending(path: "\(album)/Rip Report (Disc 2).json"))
+        #expect(report.encoding?.image == image.path)
+
+        // A library in a lossy format gets a FLAC image; a WAV library, a WAV image.
+        encoder.format = .aac
+        encoder.overwrites = true
+        #expect(try encoder.encodeWithRecord(disc, into: library).encoding?.image == image.path)
+        encoder.format = .wav
+        let wav = try #require(try encoder.encodeWithRecord(disc, into: library).encoding?.image)
+        #expect(wav.hasSuffix(".wav"))
+        #expect(try WAVFile.read(URL(filePath: wav)) == whole)
+    }
+
     /// The lanes give the same files, in the tracks' order, however many there are.
     @Test func encodesTheSameOnOneLaneAndSeveral() throws {
         let (folder, library) = try makeRip()

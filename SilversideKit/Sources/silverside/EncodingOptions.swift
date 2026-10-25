@@ -63,6 +63,14 @@ struct EncodingOptions: ParsableArguments {
     )
     var addToMusic: Bool?
 
+    @Flag(
+        inversion: .prefixedNo,
+        help: "Also write a disc image: the whole disc in one lossless file (FLAC for AAC and MP3), with a CUE sheet.")
+    var image: Bool?
+
+    @Option(help: "The folder for disc images, in place of the setting's (~/Music/Silverside Images).")
+    var images: String?
+
     @Option(
         help: """
             For a disc whose HDCD codes ask for peak extend or a gain adjustment: decode them into 20-bit files \
@@ -100,6 +108,11 @@ struct EncodingOptions: ParsableArguments {
         encoder.overwrites = overwrite
         if let replayGain { encoder.replayGain = replayGain }
         encoder.decodesHDCD = hdcdChoice(settings) == .decode
+        if image ?? settings.writeImages {
+            encoder.images = images.map(Settings.expand) ?? settings.imagesURL
+        } else {
+            encoder.images = nil
+        }
         return (encoder, library.map(Settings.expand) ?? settings.libraryURL)
     }
 }

@@ -11,7 +11,7 @@ When a disc appears, Silverside reads its table of contents and asks MusicBrainz
 | Several releases match | More than one release has the disc, and Silverside cannot tell which. Choose one. The choice is kept for the other discs of the set. |
 | Not in MusicBrainz | No release has the disc. The names come from the disc's CD-Text, or you type them in the header and the track table. The files get those names, but no MusicBrainz IDs. |
 
-Other Releases shows every release that matches. A disc with CD-Text gets a switch between the MusicBrainz names and the names on the disc. The rip's tags always come from MusicBrainz.
+Other Releases shows every release that matches. A disc with CD-Text gets a switch between the MusicBrainz names and the names on the disc. The rip's tags always come from MusicBrainz. A disc can have CD-Text in several languages, such as Japanese and English: Silverside shows the one in your Mac's language if the disc has it, else the disc's first.
 
 The cover comes from the Cover Art Archive. For a disc that has none there, or a better scan of your own, drop an image file on the cover, or right-click it and choose Choose Cover. It is saved with the rip and embedded in the files. JPEG and PNG are kept as they are; other formats become JPEG. Click a cover to see it at full size in Quick Look (with no cover yet, a click chooses one). To keep a copy of any cover, drag it out to the Finder, or right-click it and choose Export Cover.
 
@@ -106,4 +106,4 @@ Silverside decodes from the rip's WAV files. If they are gone, it uses the album
 
 ## Where the files go
 
-Each rip gets a folder in the rips folder (Settings › General), named from the release: the WAV files, `disc.json` and `Rip Report.md` with every detail, and the cover. With "Encode the disc into the library" on, the album is encoded into the library after the rip, with the cover, the report, and a CUE sheet in its folder; the files carry the names and credits from MusicBrainz, and ReplayGain loudness tags unless Settings › Encoding turns them off. Then a rip whose tracks are all verified and encoded is deleted, unless you keep it.
+Each rip gets a folder in the rips folder (Settings › General), named from the release: the WAV files, `disc.json` and `Rip Report.md` with every detail, and the cover. With "Encode the disc into the library" on, the album is encoded into the library after the rip, with the cover, the report, and a CUE sheet in its folder; the files carry the names and credits from MusicBrainz, and ReplayGain loudness tags unless Settings › Encoding turns them off. Then a rip whose tracks are all verified and encoded is deleted, unless you keep it. Settings › Encoding can also write a disc image of each disc: the whole disc in one file, with a CUE sheet.

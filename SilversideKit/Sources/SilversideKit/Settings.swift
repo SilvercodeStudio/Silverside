@@ -59,6 +59,11 @@ public struct Settings: Codable, Equatable, Sendable {
     public var ripOnInsert = false
     /// What to do with a disc whose HDCD codes ask for peak extend or a gain adjustment.
     public var hdcd = HDCDChoice.ask
+    /// Also write a disc image when a disc is encoded: the whole disc in one lossless file, with
+    /// a CUE sheet, in `images`.
+    public var writeImages = false
+    /// Where disc images go, each in its album's folder as the library names it.
+    public var images = "~/Music/Silverside Images"
 
     public init() {}
 
@@ -100,6 +105,9 @@ public struct Settings: Codable, Equatable, Sendable {
 
     /// The library folder, with "~" made into the home folder.
     public var libraryURL: URL { Self.expand(library) }
+
+    /// The folder for disc images, with "~" made into the home folder.
+    public var imagesURL: URL { Self.expand(images) }
 
     /// The folder for rips: the `rips` setting, or the current folder if it is empty.
     public var ripsURL: URL { rips.isEmpty ? URL.currentDirectory() : Self.expand(rips) }
@@ -197,6 +205,8 @@ public struct Settings: Codable, Equatable, Sendable {
         addToMusic = try value(.addToMusic, defaults.addToMusic)
         ripOnInsert = try value(.ripOnInsert, defaults.ripOnInsert)
         hdcd = try value(.hdcd, defaults.hdcd)
+        writeImages = try value(.writeImages, defaults.writeImages)
+        images = try value(.images, defaults.images)
     }
 }
 

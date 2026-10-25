@@ -46,9 +46,15 @@ public struct CTDBLayout: Equatable, Sendable {
 /// a table, and a CTDB check of a whole disc is a handful of these.
 public enum CRC32 {
     public static func checksum(of samples: ArraySlice<UInt32>) -> UInt32 {
+        checksum(of: samples, after: 0)
+    }
+
+    /// The checksum of `samples` after the samples whose checksum is `crc`: a long run of audio
+    /// can be checked part by part.
+    public static func checksum(of samples: ArraySlice<UInt32>, after crc: UInt32) -> UInt32 {
         samples.withUnsafeBytes { bytes in
-            guard let base = bytes.baseAddress, !bytes.isEmpty else { return 0 }
-            return UInt32(crc32(0, base.assumingMemoryBound(to: Bytef.self), uInt(bytes.count)))
+            guard let base = bytes.baseAddress, !bytes.isEmpty else { return crc }
+            return UInt32(crc32(uLong(crc), base.assumingMemoryBound(to: Bytef.self), uInt(bytes.count)))
         }
     }
 

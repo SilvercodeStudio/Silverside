@@ -34,7 +34,7 @@ silverside encode -i "<rip folder>"       # encode a rip later
 |---|---|
 | `drives` | Lists the drives, their discs, read offsets, and caches. Sets a drive's offset by hand (`--set-offset`), measures its cache (`--measure-cache`), or writes a drive report for a bug report (`--report`). |
 | `info` | Shows a disc's TOC, pregaps, ISRCs, MCN, CD-Text, disc IDs, and whether AccurateRip and CTDB have it. |
-| `cdtext` | Shows every field of a disc's CD-Text, or its raw packs (`--packs`). |
+| `cdtext` | Shows every field of a disc's CD-Text, in each of its languages, or its raw packs (`--packs`). |
 | `rip` | Rips a disc to WAV files: verifies, re-reads, repairs, looks up the release, saves the cover, and can encode. |
 | `repair` | Repairs rips again with CTDB: pools rips from several drives, and re-reads with the disc in a drive. |
 | `metadata` | Shows the MusicBrainz releases for a disc, and keeps the chosen one in a rip's `disc.json`; `--set` edits names, `--cover` gives a cover, and `--retag` writes both into the album's encoded files. |
@@ -93,6 +93,14 @@ album gain over all of them. `--add-to-music` (or the `addToMusic` setting)
 adds the files to Apple's Music app, in every format but FLAC; the first time,
 macOS asks whether the terminal may control Music.
 
+`--image` (or the `writeImages` setting) also writes a disc image: the whole
+disc in one lossless file, in the library's format or FLAC for AAC and MP3,
+with a CUE sheet from which a burner makes the disc again. It goes into the
+images folder (`--images`, or the `images` setting), in folders named as the
+library's: `Artist/Album/Album (Disc 2).flac` and `.cue`. The image is decoded
+again and must match the rip's audio. A FLAC image also holds the CUE sheet in
+its `CUESHEET` tag. Data tracks and CD+G graphics are not in it.
+
 After `rip --encode`, a rip whose tracks are all verified and encoded is
 deleted, because the library has everything. `--keep-rip` (or the
 `keepRipAfterEncoding` setting) keeps the WAV files, for example as an
@@ -137,6 +145,8 @@ silverside config unset aac.mode                     # back to the default
 | `addToMusic` | `false` | add the encoded files to the Music app, except FLAC (`--add-to-music`) |
 | `ripOnInsert` | `false` | the app rips a disc when it goes in, if its release is certain and it is not ripped yet |
 | `hdcd` | `ask` | for a disc whose HDCD codes ask for peak extend or a gain: `decode` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--hdcd`) |
+| `writeImages` | `false` | also write a disc image when a disc is encoded (`--image`) |
+| `images` | `~/Music/Silverside Images` | the folder for disc images (`--images`) |
 | `aac.mode`, `aac.bitRate`, `aac.vbrQuality` | `vbr-constrained`, `256`, `127` | Apple's AAC encoder |
 | `mp3.mode`, `mp3.vbrQuality`, `mp3.bitRate`, `mp3.extraArguments` | `vbr`, `0`, `320`, `[]` | LAME |
 

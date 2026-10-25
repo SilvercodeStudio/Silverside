@@ -95,7 +95,11 @@ public struct RipSet: Equatable, Sendable {
 
     /// "1", "1 and 3", "1, 2, and 4".
     static func list(_ numbers: [Int]) -> String {
-        let words = numbers.map(String.init)
+        list(numbers.map(String.init))
+    }
+
+    /// "a", "a and b", "a, b, and c".
+    static func list(_ words: [String]) -> String {
         switch words.count {
         case 0: return ""
         case 1: return words[0]
@@ -171,4 +175,63 @@ extension RipReport {
 
     /// The disc's position in its release: 2 for disc 2 of 3.
     public var discPosition: Int? { medium?.position }
+}
+
+/// Where a set's ReplayGain stands. Each disc is measured when it is encoded, and its album
+/// gain is its own until every disc of the set is in the album folder; then every disc's files
+/// get the album gain over all of them (see `DiscEncoder.updateReleaseGain`).
+public struct SetReplayGain: Equatable, Sendable {
+    /// Each encoded disc's own album gain, by position; nil for a disc encoded without ReplayGain.
+    public var discs: [Int: ReplayGain.Values?]
+    /// The album gain over every disc, once each disc's files have it.
+    public var whole: ReplayGain.Values?
+    public var discCount: Int
+
+    /// The state, as one line for people.
+    public var text: String {
+        let own = discs.keys.sorted().compactMap { position in
+            discs[position]!.map { "disc \(position) \($0.gainText)" }
+        }
+        if let whole {
+            return "Album gain over all \(discCount) discs: \(whole.gainText), peak "
+                + String(format: "%.3f", whole.peak) + ". On its own, " + RipSet.list(own) + "."
+        }
+        if let without = discs.keys.sorted().first(where: { discs[$0]! == nil }) {
+            return "Disc \(without) was encoded without ReplayGain, so the set has no album gain over all its discs."
+        }
+        if discs.count < discCount {
+            return "Each disc has its own album gain until all \(discCount) are encoded (\(discs.count) so far):"
+                + " " + RipSet.list(own) + ". Then every disc gets the album gain over the whole set."
+        }
+        return "Each disc has its own album gain: " + RipSet.list(own)
+            + ". Update the Library writes the album gain over the whole set."
+    }
+}
+
+extension RipSet {
+    /// The set's ReplayGain, from the reports in its album folder: the first of `folders` (the
+    /// album folders that the discs' reports name) that has the release's reports. Nil when no
+    /// disc there was encoded with ReplayGain.
+    public static func replayGain(of release: MusicBrainzRelease, folders: [URL]) -> SetReplayGain? {
+        let positions = release.cdPositions
+        for folder in folders {
+            let reports = DiscEncoder.albumReports(of: release, in: folder)
+            guard !reports.isEmpty else { continue }
+            var discs = [Int: ReplayGain.Values?]()
+            var wholes = [ReplayGain.Values?]()
+            for (_, report) in reports {
+                guard let position = report.discPosition, positions.contains(position), let encoding = report.encoding,
+                    encoding.albumSuffix == nil
+                else { continue }
+                discs[position] = encoding.replayGain?.album
+                wholes.append(encoding.replayGain?.release)
+            }
+            guard discs.values.contains(where: { $0 != nil }) else { return nil }
+            // The whole set's gain counts once every disc's report has the same one.
+            let whole =
+                discs.count == positions.count && Set(wholes.map { $0?.gainText }).count == 1 ? wholes.first! : nil
+            return SetReplayGain(discs: discs, whole: whole, discCount: positions.count)
+        }
+        return nil
+    }
 }

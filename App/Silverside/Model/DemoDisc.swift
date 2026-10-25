@@ -37,7 +37,7 @@
                 drive.readSpeed = 40
                 return drive
             }
-            var disc = DiscInfo(bsdName: nil, toc: toc, mcn: nil, cdText: nil)
+            var disc = DiscInfo(bsdName: nil, toc: toc, mcn: nil, cdText: demoCDText)
             if let release = fixtureRelease() {
                 disc.release = release
                 disc.medium = release.media.first
@@ -47,7 +47,22 @@
             let device = OpticalDrive(
                 vendor: "Silverside", product: "Simulated Drive", revision: "demo", interconnect: "None",
                 location: "Internal")
-            return DriveSlot(id: "demo", device: device, disc: disc, makeDrive: makeDrive)
+            let slot = DriveSlot(id: "demo", device: device, disc: disc, makeDrive: makeDrive)
+            if UserDefaults.standard.integer(forKey: "demoCDText") == 2 { slot.namesSource = .cdText }
+            return slot
+        }
+
+        /// `-demoCDText 1` gives the disc CD-Text, with the venue in each title as some box sets
+        /// have it, to show the Names from picker; `-demoCDText 2` shows the CD-Text names.
+        private static var demoCDText: CDText? {
+            guard UserDefaults.standard.integer(forKey: "demoCDText") > 0 else { return nil }
+            var text = CDText()
+            text.titles[0] = "Cornell 5/8/77"
+            text.performers[0] = "Grateful Dead"
+            for track in 1...11 {
+                text.titles[track] = "Track \(track) (Live at Barton Hall, Cornell University, 5/8/1977)"
+            }
+            return text
         }
 
         /// HDCD codes that ask for nothing, as the real disc has them: a packet (a sync word and

@@ -12,9 +12,12 @@ struct SetView: View {
     @State private var coverTargeted = false
     /// The cover's file while Quick Look shows it.
     @State private var coverPreview: URL?
+    @State private var archivePickerShown = false
     @State private var album = ""
     @State private var albumArtist = ""
     @State private var date = ""
+    /// The set's ReplayGain, from the reports in its album folder.
+    @State private var replayGain: SetReplayGain?
 
     /// The release, from the newest disc's report.
     private var release: MusicBrainzRelease? {
@@ -87,6 +90,19 @@ struct SetView: View {
                     }.first
                 }.first ?? ReleaseCoverStore().cover(forReleaseID: ripSet.releaseID)?.data
         }
+        .task(id: "\(ripSet.releaseID) \(model.recentRips.count) \(model.library?.isRunning == true)") {
+            guard let release else {
+                replayGain = nil
+                return
+            }
+            // The album folders that the discs' reports name; a kept rip's may be out of date.
+            let folders = ripSet.positions.compactMap { position -> [URL]? in
+                guard let disc = ripSet.discs[position] else { return nil }
+                let named = rip(at: position)?.report.encoding.map { URL(filePath: $0.folder) }
+                return [named, disc.folder].compactMap { $0 }
+            }.flatMap { $0 }
+            replayGain = await Task.detached { RipSet.replayGain(of: release, folders: folders) }.value
+        }
         .onAppear(perform: loadFields)
         .onChange(of: ripSet.releaseID) { loadFields() }
     }
@@ -94,6 +110,9 @@ struct SetView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 16) {
             CoverView(data: cover)
+                .overlay(alignment: .bottomTrailing) {
+                    CoverArchiveBadge(release: release) { archivePickerShown = true }
+                }
                 .overlay {
                     if coverTargeted {
                         RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 3)
@@ -118,6 +137,9 @@ struct SetView: View {
                     Button("Quick Look") { coverPreview = CoverDrop.file(for: cover, name: coverFileName) }
                         .disabled(cover == nil)
                     Button("Choose Cover…", action: chooseCover)
+                    if release?.hasArtwork == true {
+                        Button("Cover Art Archive…") { archivePickerShown = true }
+                    }
                     if release?.hasFrontCover == true {
                         Button("Use the Cover Art Archive's") { changeCover(to: nil) }
                     }
@@ -128,8 +150,21 @@ struct SetView: View {
                     .disabled(cover == nil)
                 }
                 .help(
-                    "Click to see the cover at full size. Drop an image here, or choose one from the menu, to give every disc of the set this cover: in the rips, the album folder, and the files' tags."
+                    "Click to see the cover at full size. Drop an image here, or choose one from the menu (your own, or another of the Cover Art Archive's), to give every disc of the set this cover: in the rips, the album folder, and the files' tags."
                 )
+                .sheet(isPresented: $archivePickerShown) {
+                    if let release {
+                        CoverArtPickerSheet(release: release, disc: nil) { choice in
+                            switch choice {
+                            case .image(let image): changeCover(to: image)
+                            case .discSleeves: model.useDiscSleeves(of: release)
+                            }
+                        }
+                    }
+                }
+                #if DEBUG
+                    .onAppear { archivePickerShown = UserDefaults.standard.bool(forKey: "coverArchive") }
+                #endif
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top, spacing: 16) {
                     field("Album", text: $album, prompt: release?.title ?? ripSet.title)
@@ -151,6 +186,16 @@ struct SetView: View {
                     if !edits.isEmpty { Chip(text: "Edited", tone: .warning, systemImage: "pencil") }
                 }
                 Text(ripSet.summary).font(.callout).foregroundStyle(.secondary)
+                if let replayGain {
+                    Label(
+                        "ReplayGain: " + replayGain.text.prefix(1).lowercased() + replayGain.text.dropFirst(),
+                        systemImage: "speaker.wave.2"
+                    )
+                    .font(.callout).foregroundStyle(.secondary)
+                    .help(
+                        "Each disc is measured when it is encoded. When the last disc of the set is encoded, every disc's files get the album gain over the whole set, so the set plays at one level."
+                    )
+                }
             }
         }
     }

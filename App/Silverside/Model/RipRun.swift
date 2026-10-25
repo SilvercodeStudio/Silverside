@@ -498,7 +498,8 @@ final class RipRun {
         case .artwork(let result):
             isSavingArtwork = false
             switch result {
-            case .saved(let files): add("Cover: saved \(files.count == 1 ? "cover.jpg" : "\(files.count) images")")
+            case .saved(let files):
+                add("Cover: saved \(files.count == 1 ? files[0].lastPathComponent : "\(files.count) images")")
             default: add("Cover: \(result)")
             }
         case .artworkFailed(let error):

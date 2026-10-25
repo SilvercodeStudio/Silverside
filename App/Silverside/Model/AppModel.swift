@@ -163,7 +163,10 @@ final class AppModel {
     }
 
     /// Encodes rips into the library, and brings encoded ones up to date, in a sheet.
-    func startLibraryRun(title: String, encode: [RecentRip], update: [RecentRip], cover: CoverImage? = nil) {
+    func startLibraryRun(
+        title: String, encode: [RecentRip], update: [RecentRip], cover: CoverImage? = nil,
+        discCovers: [URL: DiscCoverChange] = [:]
+    ) {
         guard library?.isRunning != true else {
             libraryShown = true
             return
@@ -171,9 +174,40 @@ final class AppModel {
         let run = LibraryRun(title: title, encode: encode, update: update)
         library = run
         libraryShown = true
-        run.start(settings: settings, cover: cover) { [weak self] in
+        run.start(settings: settings, cover: cover, discCovers: discCovers) { [weak self] in
             self?.coverVersion += 1
             self?.refreshRecentRips()
+        }
+    }
+
+    /// Each disc of a box set takes its own sleeve from the Cover Art Archive, from now on (a
+    /// disc ripped later finds the choice kept for the release): the earlier rips and the
+    /// encoded discs get theirs, and a disc that no sleeve names keeps the set's cover.
+    func useDiscSleeves(of release: MusicBrainzRelease) {
+        try? ReleaseCoverStore().useDiscSleeves(true, releaseID: release.id)
+        let rips =
+            sets.first { $0.releaseID == release.id }.map { set in
+                set.positions.compactMap { set.discs[$0] }.compactMap { disc in
+                    recentRips.first { $0.file == disc.file }
+                }
+            } ?? []
+        guard !rips.isEmpty else { return }
+        Task { @MainActor in
+            do {
+                let images = try await CoverArtClient().images(releaseID: release.id)
+                var covers = [URL: DiscCoverChange]()
+                for rip in rips {
+                    let sleeve = rip.report.discPosition.flatMap { CoverArtImage.sleeve(forDisc: $0, in: images) }
+                    if let sleeve, let image = try await CoverArtClient().download(sleeve) {
+                        covers[rip.file] = .set(image)
+                    } else {
+                        covers[rip.file] = .remove
+                    }
+                }
+                startLibraryRun(title: release.title, encode: [], update: rips, discCovers: covers)
+            } catch {
+                alert = AppAlert(title: "The sleeves could not be downloaded", message: "\(error)")
+            }
         }
     }
 
@@ -207,7 +241,9 @@ final class AppModel {
                     return
                 }
             }
-            startLibraryRun(title: set.title, encode: [], update: rips, cover: cover)
+            startLibraryRun(
+                title: set.title, encode: [], update: rips, cover: cover,
+                discCovers: Dictionary(uniqueKeysWithValues: rips.map { ($0.file, .remove) }))
         }
     }
 
@@ -461,7 +497,8 @@ final class AppModel {
                 let (file, remember) = (rip.file, image != nil)
                 _ = try await Task.detached {
                     try DiscEncoder(settings: settings).retag(
-                        reportAt: file, cover: cover, remember: remember, library: settings.libraryURL)
+                        reportAt: file, cover: cover, remember: remember, discCover: .remove,
+                        library: settings.libraryURL)
                 }.value
                 coverVersion += 1
                 refreshRecentRips()

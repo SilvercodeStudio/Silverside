@@ -91,6 +91,68 @@ struct Chip: View {
     }
 }
 
+/// Views in rows, as words wrap: a view that does not fit on its row starts the next one, so a
+/// row of chips grows taller in a narrow window, not wider.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+    var rowSpacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let frames = frames(for: subviews, width: proposal.width ?? .infinity)
+        return CGSize(
+            width: frames.map(\.maxX).max() ?? 0, height: frames.map(\.maxY).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (subview, frame) in zip(subviews, frames(for: subviews, width: bounds.width)) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                proposal: ProposedViewSize(frame.size))
+        }
+    }
+
+    /// Each view at its own size, left to right, and centered on its row's height.
+    private func frames(for subviews: Subviews, width: CGFloat) -> [CGRect] {
+        var rows = [[(index: Int, size: CGSize)]]()
+        var x: CGFloat = 0
+        for (index, subview) in subviews.enumerated() {
+            let size = subview.sizeThatFits(.unspecified)
+            if rows.isEmpty || (x > 0 && x + spacing + size.width > width) {
+                // A view kept with the one before it takes that one to the new row.
+                let previous =
+                    subview[KeepsWithPrevious.self] && (rows.last?.count ?? 0) > 1
+                    ? rows[rows.count - 1].popLast() : nil
+                rows.append(previous.map { [$0] } ?? [])
+                x = previous?.size.width ?? 0
+            }
+            x += (x > 0 ? spacing : 0) + size.width
+            rows[rows.count - 1].append((index, size))
+        }
+        var frames = [CGRect](repeating: .zero, count: subviews.count)
+        var y: CGFloat = 0
+        for row in rows {
+            let height = row.map(\.size.height).max() ?? 0
+            var x: CGFloat = 0
+            for (index, size) in row {
+                frames[index] = CGRect(x: x, y: y + (height - size.height) / 2, width: size.width, height: size.height)
+                x += size.width + spacing
+            }
+            y += height + rowSpacing
+        }
+        return frames
+    }
+}
+
+private nonisolated struct KeepsWithPrevious: LayoutValueKey {
+    static let defaultValue = false
+}
+
+extension View {
+    /// In a `FlowLayout`, the view never starts a row by itself: it goes to the next row with
+    /// the view before it, as an info button with its chip.
+    func keepsWithPrevious() -> some View { layoutValue(key: KeepsWithPrevious.self, value: true) }
+}
+
 /// A progress bar filled with the sheen while reading, and green once verified.
 struct SheenProgressBar: View {
     var fraction: Double

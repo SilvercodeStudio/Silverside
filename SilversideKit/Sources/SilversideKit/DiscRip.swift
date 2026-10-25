@@ -190,6 +190,8 @@ public struct DiscRip {
     public var profiles: DriveProfileStore
     /// The client for every lookup and download. Tests give one with a fake transport.
     public var webClient = WebClient.shared
+    /// The covers kept for releases, and the box sets whose discs take their own sleeves.
+    public var coverStore = ReleaseCoverStore()
     /// Stops the rip when set, from any thread.
     public var stop = StopToken()
 
@@ -303,8 +305,22 @@ public struct DiscRip {
         // The user's cover: this rip's, else the one kept for the release by an earlier disc or rip.
         var userCover = options.cover
         if userCover == nil, let chosen, !chosen.isManual {
-            userCover = ReleaseCoverStore().cover(forReleaseID: chosen.id)
+            userCover = coverStore.cover(forReleaseID: chosen.id)
         }
+        // A box set whose discs each take their own sleeve from the Cover Art Archive (the
+        // user's choice, kept for the release); the cover above stays the set's.
+        let position = chosen?.medium(for: toc)?.position
+        let sleeveTask: Task<CoverImage?, any Error>? =
+            if options.cover == nil, let chosen, !chosen.isManual, let position,
+                coverStore.usesDiscSleeves(releaseID: chosen.id)
+            {
+                Task { [webClient] in
+                    try await CoverArtClient(client: webClient).discSleeve(releaseID: chosen.id, disc: position)
+                }
+            } else {
+                nil
+            }
+        defer { sleeveTask?.cancel() }
         let name =
             named.map {
                 NameTemplate(settings.ripFolderTemplate).name(
@@ -460,7 +476,10 @@ public struct DiscRip {
             do {
                 let file = try cover.write(to: folder)
                 written.insert(Self.relativePath(of: file, in: folder))
-                if let chosen, !chosen.isManual { try? ReleaseCoverStore().remember(cover, forReleaseID: chosen.id) }
+                // Only a cover given for this rip is new; one kept already would end the sleeves.
+                if options.cover != nil, let chosen, !chosen.isManual {
+                    try? coverStore.remember(cover, forReleaseID: chosen.id)
+                }
                 events(.artwork(.saved([file])))
             } catch {
                 events(.artworkFailed(error))
@@ -473,6 +492,17 @@ public struct DiscRip {
                     for file in files { written.insert(Self.relativePath(of: file, in: folder)) }
                 }
                 events(.artwork(artwork))
+            } catch {
+                events(.artworkFailed(error))
+            }
+        }
+        if let sleeveTask, let position {
+            do {
+                if let sleeve = try await sleeveTask.value {
+                    let file = try CoverFiles.writeDisc(sleeve, position: position, in: folder)
+                    written.insert(Self.relativePath(of: file, in: folder))
+                    events(.artwork(.saved([file])))
+                }
             } catch {
                 events(.artworkFailed(error))
             }

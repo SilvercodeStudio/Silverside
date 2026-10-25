@@ -19,6 +19,7 @@ struct ResultsView: View {
     @State private var coverTargeted = false
     /// The cover's file while Quick Look shows it.
     @State private var coverPreview: URL?
+    @State private var archivePickerShown = false
     /// The rip's own edits (track titles and artists), as typed; saved a moment after the last change.
     @State private var edits = MetadataEdits()
     @State private var savedEdits = MetadataEdits()
@@ -78,9 +79,8 @@ struct ResultsView: View {
             .frame(width: reportShown ? nil : 0)
         }
         .task(id: "\(folder.path) \(model.coverVersion)") {
-            cover =
-                ["cover.jpg", "cover.png"].lazy.compactMap { try? Data(contentsOf: folder.appending(path: $0)) }
-                .first
+            // The disc's own sleeve, in a box set whose discs have theirs, else the album's cover.
+            cover = CoverFiles.embedded(forDisc: report.discPosition, in: folder).flatMap { try? Data(contentsOf: $0) }
         }
         .onAppear {
             edits = MetadataEdits.read(fromReportAt: recentRip.file) ?? MetadataEdits()
@@ -200,6 +200,9 @@ struct ResultsView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
             CoverView(data: cover, size: 112)
+                .overlay(alignment: .bottomTrailing) {
+                    CoverArchiveBadge(release: report.release) { archivePickerShown = true }
+                }
                 .overlay {
                     if coverTargeted {
                         RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 3)
@@ -225,6 +228,9 @@ struct ResultsView: View {
                     Button("Quick Look") { coverPreview = CoverDrop.file(for: cover, name: coverFileName) }
                         .disabled(cover == nil)
                     Button("Choose Cover…") { chooseCover() }
+                    if let release = report.release, release.hasArtwork {
+                        Button("Cover Art Archive…") { archivePickerShown = true }
+                    }
                     if let release = report.release, !release.isManual, release.hasFrontCover {
                         Button("Use the Cover Art Archive's") { model.changeCover(of: recentRip, to: nil) }
                     }
@@ -232,8 +238,21 @@ struct ResultsView: View {
                     Button("Export Cover…") { CoverDrop.export(cover, name: coverFileName) }.disabled(cover == nil)
                 }
                 .help(
-                    "Click to see the cover at full size. Drop an image here, or choose one from the menu, to change the cover: in the rip, in the album folder, and in the encoded files' tags. Drag the cover out to save a copy."
+                    "Click to see the cover at full size. Drop an image here, or choose one from the menu (your own, or another of the Cover Art Archive's), to change the cover: in the rip, in the album folder, and in the encoded files' tags. Drag the cover out to save a copy."
                 )
+                .sheet(isPresented: $archivePickerShown) {
+                    if let release = report.release {
+                        CoverArtPickerSheet(release: release, disc: report.discPosition) { choice in
+                            switch choice {
+                            case .image(let image): model.changeCover(of: recentRip, to: image)
+                            case .discSleeves: model.useDiscSleeves(of: release)
+                            }
+                        }
+                    }
+                }
+                #if DEBUG
+                    .onAppear { archivePickerShown = UserDefaults.standard.bool(forKey: "coverArchive") }
+                #endif
             VStack(alignment: .leading, spacing: 6) {
                 Label {
                     Text(RipRun.headline(for: report)).font(.title2.weight(.semibold))

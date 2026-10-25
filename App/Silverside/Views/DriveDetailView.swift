@@ -182,10 +182,16 @@ struct AlbumHeader: View {
     @State private var coverTargeted = false
     /// The cover's file while Quick Look shows it.
     @State private var coverPreview: URL?
+    @State private var archivePickerShown = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             CoverView(data: disc.shownCover)
+                .overlay(alignment: .bottomTrailing) {
+                    if slot.rip?.isRunning != true {
+                        CoverArchiveBadge(release: disc.release) { archivePickerShown = true }
+                    }
+                }
                 .overlay {
                     if coverTargeted {
                         RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 3)
@@ -211,10 +217,13 @@ struct AlbumHeader: View {
                     Button("Quick Look") { coverPreview = CoverDrop.file(for: disc.shownCover, name: coverFileName) }
                         .disabled(disc.shownCover == nil)
                     Button("Choose Cover…") { chooseCover() }.disabled(slot.rip?.isRunning == true)
-                    if disc.userCover != nil {
+                    if let release = disc.release, release.hasArtwork {
+                        Button("Cover Art Archive…") { archivePickerShown = true }
+                            .disabled(slot.rip?.isRunning == true)
+                    }
+                    if disc.userCover != nil || disc.keptCover != nil || disc.sleeve != nil {
                         Button(disc.cover == nil ? "Remove Cover" : "Use the Cover Art Archive's") {
-                            slot.disc?.userCover = nil
-                            if let release = disc.release { try? ReleaseCoverStore().forget(releaseID: release.id) }
+                            useArchiveCover()
                         }
                         .disabled(slot.rip?.isRunning == true)
                     }
@@ -223,8 +232,26 @@ struct AlbumHeader: View {
                         .disabled(disc.shownCover == nil)
                 }
                 .help(
-                    "Click to see the cover at full size. Drop an image here, or choose one from the menu, to use your own cover: it goes in the rip and the tags. Drag the cover out to save a copy."
+                    "Click to see the cover at full size. Drop an image here, or choose one from the menu (your own, or another of the Cover Art Archive's), to change the cover: it goes in the rip and the tags. Drag the cover out to save a copy."
                 )
+                .sheet(isPresented: $archivePickerShown) {
+                    if let release = disc.release {
+                        CoverArtPickerSheet(release: release, disc: disc.shownMedium?.position) { choice in
+                            switch choice {
+                            case .image(let image?): slot.disc?.userCover = image
+                            case .image(nil): useArchiveCover()
+                            case .discSleeves:
+                                try? ReleaseCoverStore().useDiscSleeves(true, releaseID: release.id)
+                                slot.disc?.userCover = nil
+                                Task {
+                                    var info = disc
+                                    await info.loadSleeve()
+                                    slot.disc?.sleeve = info.sleeve
+                                }
+                            }
+                        }
+                    }
+                }
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 16) {
                     EditableField(
@@ -255,58 +282,81 @@ struct AlbumHeader: View {
                     }
                     .frame(width: 120, alignment: .leading)
                 }
-                HStack(spacing: 8) {
-                    lookupChip
-                    hdcdChip
-                    if disc.userCover != nil {
-                        Chip(text: "Your cover", tone: .warning, systemImage: "photo")
-                            .help("The cover you gave is saved with the rip and embedded in the files.")
-                    }
-                    if !disc.edits.isEmpty {
-                        Chip(text: "Edited", tone: .warning, systemImage: "pencil")
-                            .help(
-                                "Names you changed. They go into the rip's tags and names, and the album's into the other discs of the set."
-                            )
-                    }
-                    if let label = disc.labelText { Chip(text: label) }
-                    if let genre = disc.shownRelease?.genre {
-                        Chip(text: genre, systemImage: "music.note.list")
-                            .help("The genre with the most votes in MusicBrainz. It goes into the files' tags.")
-                    }
-                    if let discLabel = disc.discLabel { Chip(text: discLabel) }
-                    if let set = model.set(for: disc.release) {
-                        Button {
-                            model.selection = .set(set.releaseID)
-                        } label: {
-                            Chip(
-                                text: "\(set.discs.count) of \(set.discCount) discs ripped",
-                                tone: set.isComplete ? .good : .neutral, systemImage: "square.stack")
+                HStack(alignment: .top, spacing: 8) {
+                    FlowLayout(spacing: 8) {
+                        lookupChip
+                        hdcdChip
+                        if disc.userCover != nil || (disc.sleeve == nil && disc.keptCover != nil) {
+                            Chip(text: "Your cover", tone: .warning, systemImage: "photo")
+                                .help("The cover you gave is saved with the rip and embedded in the files.")
+                        } else if disc.sleeve != nil {
+                            Chip(text: "This disc's sleeve", systemImage: "photo.stack")
+                                .help(
+                                    "Each disc of this set takes its own sleeve from the Cover Art Archive: this one's files embed it, and the album folder keeps the set's cover."
+                                )
                         }
-                        .buttonStyle(.plain)
-                        .help(set.summary + ". The album's names and cover are the set's. Click for the set.")
-                    }
-                    InfoButton(help: "Disc info: the release as MusicBrainz has it, and the disc's own codes") {
-                        InfoSection.disc(disc)
-                    }
-                    if let mcn = disc.mcn { Chip(text: "MCN \(mcn)") }
-                    Spacer()
-                    if disc.hasCDText, disc.release != nil {
-                        HStack(spacing: 6) {
-                            Text("Names from").font(.callout).foregroundStyle(.secondary)
-                            Picker("Names from", selection: $source) {
-                                Text("MusicBrainz").tag(DiscInfo.Source.musicBrainz)
-                                Text("CD-Text").tag(DiscInfo.Source.cdText)
+                        if !disc.edits.isEmpty {
+                            Chip(text: "Edited", tone: .warning, systemImage: "pencil")
+                                .help(
+                                    "Names you changed. They go into the rip's tags and names, and the album's into the other discs of the set."
+                                )
+                        }
+                        if let label = disc.labelText { Chip(text: label) }
+                        if let genre = disc.shownRelease?.genre {
+                            Chip(text: genre, systemImage: "music.note.list")
+                                .help("The genre with the most votes in MusicBrainz. It goes into the files' tags.")
+                        }
+                        if let discLabel = disc.discLabel { Chip(text: discLabel) }
+                        if let set = model.set(for: disc.release) {
+                            Button {
+                                model.selection = .set(set.releaseID)
+                            } label: {
+                                Chip(
+                                    text: "\(set.discs.count) of \(set.discCount) discs ripped",
+                                    tone: set.isComplete ? .good : .neutral, systemImage: "square.stack")
                             }
-                            .pickerStyle(.segmented)
-                            .labelsHidden()
-                            .fixedSize()
+                            .buttonStyle(.plain)
+                            .help(set.summary + ". The album's names and cover are the set's. Click for the set.")
+                        }
+                        InfoButton(help: "Disc info: the release as MusicBrainz has it, and the disc's own codes") {
+                            InfoSection.disc(disc)
+                        }
+                        .keepsWithPrevious()
+                        if let mcn = disc.mcn { Chip(text: "MCN \(mcn)") }
+                    }
+                    .layoutPriority(1)
+                    Spacer(minLength: 0)
+                    if disc.hasCDText, disc.release != nil {
+                        // The label goes above the picker when the chips leave no room beside it.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 6) {
+                                namesFromLabel
+                                namesFromPicker
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                namesFromLabel
+                                namesFromPicker
+                            }
                         }
                         .help(
-                            "Show the names from MusicBrainz, or the CD-Text on the disc. The rip's tags come from MusicBrainz."
+                            "Show the names from MusicBrainz, or the CD-Text on the disc. The rip's tags come from MusicBrainz, unless you choose Use These Names."
                         )
+                        if source == .cdText, let cdTextEdits {
+                            Button("Use These Names") {
+                                slot.disc?.edits = disc.edits.merged(with: cdTextEdits)
+                                source = .musicBrainz
+                            }
+                            .fixedSize()
+                            .disabled(slot.rip?.isRunning == true || cdTextEdits.isEmpty)
+                            .help(
+                                cdTextEdits.isEmpty
+                                    ? "The CD-Text names are the same as MusicBrainz's."
+                                    : "Tag the rip with the CD-Text names. They become your edits to the MusicBrainz names, so you can change them before the rip; Undo Edits goes back."
+                            )
+                        }
                     }
                     if !disc.edits.isEmpty, editable {
-                        Button("Undo Edits") { slot.disc?.edits = MetadataEdits() }
+                        Button("Undo Edits") { slot.disc?.edits = MetadataEdits() }.fixedSize()
                     }
                     if disc.releases.count > 1 {
                         Button(
@@ -314,6 +364,7 @@ struct AlbumHeader: View {
                         ) {
                             releasePickerShown = true
                         }
+                        .fixedSize()
                     }
                 }
                 .padding(.top, 2)
@@ -321,10 +372,38 @@ struct AlbumHeader: View {
         }
     }
 
+    /// The edits that give the release the CD-Text's names.
+    private var cdTextEdits: MetadataEdits? {
+        guard let cdText = disc.cdText, let release = disc.baseRelease else { return nil }
+        return MetadataEdits(cdText: cdText, release: release, medium: disc.medium, toc: disc.toc)
+    }
+
+    private var namesFromLabel: some View {
+        Text("Names from").font(.callout).foregroundStyle(.secondary).fixedSize()
+    }
+
+    private var namesFromPicker: some View {
+        Picker("Names from", selection: $source) {
+            Text("MusicBrainz").tag(DiscInfo.Source.musicBrainz)
+            Text("CD-Text").tag(DiscInfo.Source.cdText)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+    }
+
     /// "Grateful Dead - Cornell 5-8-77 cover", for a cover dragged out or exported.
     private var coverFileName: String {
         NameTemplate.safeComponent(
             [disc.artist, disc.title].filter { !$0.isEmpty }.joined(separator: " - ") + " cover")
+    }
+
+    /// Back to the Cover Art Archive's main front, for this disc and the release.
+    private func useArchiveCover() {
+        slot.disc?.userCover = nil
+        slot.disc?.keptCover = nil
+        slot.disc?.sleeve = nil
+        if let release = disc.release { try? ReleaseCoverStore().forget(releaseID: release.id) }
     }
 
     private func chooseCover() {
@@ -732,15 +811,13 @@ struct RipOptionsView: View {
     }
 }
 
-/// A row of chips that scrolls sideways when there are many, so it never widens the window.
+/// A row of chips that wraps onto more rows when there are many, so it never widens the window.
 struct ChipRow: View {
     var chips: [Chip]
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(chips, id: \.text) { $0 }
-            }
+        FlowLayout {
+            ForEach(chips, id: \.text) { $0 }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

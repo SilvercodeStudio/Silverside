@@ -42,6 +42,10 @@ public struct RippedDisc: Sendable {
             }
         }
         files += [RipFolder.claimFile, RipFolder.oldClaimFile].map { folder.appending(path: $0) }
+        // The disc's own cover, which a later change of covers can write after the report.
+        if let position = report?.discPosition {
+            files += CoverFiles.extensions.map { folder.appending(path: "\(CoverFiles.discName(position)).\($0)") }
+        }
         for file in files where manager.fileExists(atPath: file.path) { try manager.removeItem(at: file) }
         for directory in [folder.appending(path: "Artwork"), folder] {
             let contents = try? manager.contentsOfDirectory(atPath: directory.path)
@@ -49,11 +53,14 @@ public struct RippedDisc: Sendable {
         }
     }
 
-    /// The folder's cover image (cover.jpg or cover.png), if it has one.
+    /// The cover that the disc's files embed: its own ("cover (Disc 2).jpg", a box set's
+    /// sleeve), else the folder's (cover.jpg or cover.png), if it has one.
     public var coverFile: URL? {
-        ["cover.jpg", "cover.png"].map { folder.appending(path: $0) }
-            .first { FileManager.default.fileExists(atPath: $0.path) }
+        CoverFiles.embedded(forDisc: report?.discPosition, in: folder)
     }
+
+    /// The album's cover in the folder (cover.jpg or cover.png), for the album folder.
+    public var albumCoverFile: URL? { CoverFiles.album(in: folder) }
 
     public init(folder: URL) throws {
         self.folder = folder
@@ -457,10 +464,15 @@ public struct DiscEncoder: Sendable {
             }
         }
         // The album folder keeps the cover at full size, the other artwork, and the rip's report.
-        if let albumFolder, let coverFile = disc.coverFile {
-            let destination = albumFolder.appending(path: coverFile.lastPathComponent)
-            if !FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.copyItem(at: coverFile, to: destination)
+        // A disc with its own cover (a box set's sleeve) keeps it there too, by its number.
+        if let albumFolder, let coverFile = disc.albumCoverFile, CoverFiles.album(in: albumFolder) == nil {
+            try FileManager.default.copyItem(
+                at: coverFile, to: albumFolder.appending(path: coverFile.lastPathComponent))
+        }
+        if let albumFolder, albumFolder.standardizedFileURL != disc.folder.standardizedFileURL {
+            try CoverFiles.removeDisc(medium.position, in: albumFolder)
+            if let own = CoverFiles.disc(medium.position, in: disc.folder) {
+                try FileManager.default.copyItem(at: own, to: albumFolder.appending(path: own.lastPathComponent))
             }
         }
         if let albumFolder {

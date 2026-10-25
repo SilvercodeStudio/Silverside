@@ -37,6 +37,51 @@ public struct CoverImage: Equatable, Sendable {
     }
 }
 
+/// The cover files in a rip's folder or an album folder: "cover.jpg" (or .png) is the album's,
+/// and "cover (Disc 2).jpg" a disc's own, such as a box set's sleeve, which that disc's files
+/// embed in place of the album's.
+public enum CoverFiles {
+    static let extensions = ["jpg", "png"]
+
+    /// "cover (Disc 2)", with no extension.
+    public static func discName(_ position: Int) -> String { "cover (Disc \(position))" }
+
+    /// The album's cover file in `folder`, if it has one.
+    public static func album(in folder: URL) -> URL? {
+        existing(extensions.map { folder.appending(path: "cover.\($0)") })
+    }
+
+    /// The disc's own cover file in `folder`, if it has one.
+    public static func disc(_ position: Int?, in folder: URL) -> URL? {
+        guard let position else { return nil }
+        return existing(extensions.map { folder.appending(path: "\(discName(position)).\($0)") })
+    }
+
+    /// The cover that the disc's files embed: its own, else the album's.
+    public static func embedded(forDisc position: Int?, in folder: URL) -> URL? {
+        disc(position, in: folder) ?? album(in: folder)
+    }
+
+    /// Writes the disc's own cover into `folder`, in place of an older one.
+    @discardableResult
+    static func writeDisc(_ cover: CoverImage, position: Int, in folder: URL) throws -> URL {
+        try removeDisc(position, in: folder)
+        return try cover.write(to: folder, name: discName(position))
+    }
+
+    /// Removes the disc's own cover from `folder`: its files take the album's again.
+    static func removeDisc(_ position: Int, in folder: URL) throws {
+        for file in extensions.map({ folder.appending(path: "\(discName(position)).\($0)") })
+        where FileManager.default.fileExists(atPath: file.path) {
+            try FileManager.default.removeItem(at: file)
+        }
+    }
+
+    private static func existing(_ files: [URL]) -> URL? {
+        files.first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+}
+
 public enum CoverArtError: Error, Equatable, CustomStringConvertible {
     case unknownFormat
     case malformedListing
@@ -78,6 +123,21 @@ public struct CoverArtClient: Sendable {
         try await client.data(from: image.url).map(CoverImage.init)
     }
 
+    /// The disc's own sleeve in a box set (see `CoverArtImage.sleeve`), at full size. Nil if
+    /// the archive has none for it.
+    public func discSleeve(releaseID: String, disc position: Int) async throws -> CoverImage? {
+        guard let sleeve = CoverArtImage.sleeve(forDisc: position, in: try await images(releaseID: releaseID))
+        else { return nil }
+        return try await download(sleeve)
+    }
+
+    /// A small copy of the image (250 pixels), for a choice among a release's images. Nil if
+    /// the archive has none.
+    public func thumbnail(_ image: CoverArtImage) async throws -> Data? {
+        guard let url = image.thumbnailURL else { return nil }
+        return try await client.data(from: url)
+    }
+
     static func images(fromJSON data: Data) throws -> [CoverArtImage] {
         struct Listing: Decodable {
             struct Image: Decodable {
@@ -87,6 +147,7 @@ public struct CoverArtClient: Sendable {
                 var back: Bool?
                 var image: String
                 var comment: String?
+                var thumbnails: [String: String]?
             }
             var images: [Image]
         }
@@ -105,14 +166,19 @@ public struct CoverArtClient: Sendable {
         guard let listing = try? JSONDecoder().decode(Listing.self, from: data) else {
             throw CoverArtError.malformedListing
         }
-        return listing.images.compactMap { image in
-            // The archive's links are http; the same files are served over https.
-            guard var components = URLComponents(string: image.image) else { return nil }
+        // The archive's links are http; the same files are served over https.
+        func secure(_ link: String?) -> URL? {
+            guard let link, var components = URLComponents(string: link) else { return nil }
             components.scheme = "https"
-            guard let url = components.url else { return nil }
+            return components.url
+        }
+        return listing.images.compactMap { image in
+            guard let url = secure(image.image) else { return nil }
+            let thumbnails = image.thumbnails ?? [:]
             return CoverArtImage(
                 id: image.id.text, types: image.types ?? [], isFront: image.front ?? false,
-                isBack: image.back ?? false, url: url, comment: image.comment ?? "")
+                isBack: image.back ?? false, url: url, comment: image.comment ?? "",
+                thumbnailURL: secure(thumbnails["250"] ?? thumbnails["small"] ?? thumbnails["500"]))
         }
     }
 
@@ -152,14 +218,66 @@ public struct CoverArtClient: Sendable {
 }
 
 /// One image in the Cover Art Archive.
-public struct CoverArtImage: Equatable, Sendable {
+public struct CoverArtImage: Equatable, Identifiable, Sendable {
     public var id: String
     /// "Front", "Back", "Booklet", "Medium", "Tray", "Obi", "Spine", "Track", "Liner", "Sticker", and so on.
     public var types: [String]
+    /// The release's main front cover, which Silverside uses unless the user chooses another.
+    /// A release can have more images of the type "Front" (such as each disc's sleeve in a box set).
     public var isFront: Bool
     public var isBack: Bool
     public var url: URL
     public var comment: String
+    /// A copy 250 pixels wide, if the archive made one.
+    public var thumbnailURL: URL?
+
+    public init(
+        id: String, types: [String], isFront: Bool, isBack: Bool, url: URL, comment: String, thumbnailURL: URL? = nil
+    ) {
+        self.id = id
+        self.types = types
+        self.isFront = isFront
+        self.isBack = isBack
+        self.url = url
+        self.comment = comment
+        self.thumbnailURL = thumbnailURL
+    }
+
+    /// The sleeve for a disc of a box set whose discs have their own: a front image (not the
+    /// main front) whose comment names the disc, as "(Mediums 1–2)". Nil if none does.
+    public static func sleeve(forDisc position: Int, in images: [CoverArtImage]) -> CoverArtImage? {
+        images.first { !$0.isFront && $0.types.contains("Front") && $0.mediums?.contains(position) == true }
+    }
+
+    /// Which sleeve each disc takes, for `positions` (the release's CDs): the sleeve's discs,
+    /// in the archive's order, and the discs that no sleeve names, which keep the set's cover.
+    public static func sleeves(
+        for positions: [Int], in images: [CoverArtImage]
+    ) -> (sleeves: [(image: CoverArtImage, discs: [Int])], others: [Int]) {
+        var sleeves = [(image: CoverArtImage, discs: [Int])]()
+        var others = [Int]()
+        for position in positions {
+            guard let sleeve = sleeve(forDisc: position, in: images) else {
+                others.append(position)
+                continue
+            }
+            if let index = sleeves.firstIndex(where: { $0.image.id == sleeve.id }) {
+                sleeves[index].discs.append(position)
+            } else {
+                sleeves.append((sleeve, [position]))
+            }
+        }
+        return (sleeves, others)
+    }
+
+    /// The discs that the image's comment names, as editors write them for a box set's sleeves:
+    /// 1...2 for "(Mediums 1–2)", 3...3 for "Disc 3". Nil if it names none.
+    public var mediums: ClosedRange<Int>? {
+        let pattern = /(?i)\b(?:mediums?|discs?|cds?)\s+(\d+)(?:\s*[-–—]\s*(\d+))?/
+        guard let match = comment.firstMatch(of: pattern), let first = Int(match.1) else { return nil }
+        let last = match.2.flatMap { Int($0) } ?? first
+        return first <= last ? first...last : nil
+    }
 
     /// File names, with no extension, for images: the first type in lowercase, such as
     /// "back", with "-01", "-02", and so on when more than one image has that type.

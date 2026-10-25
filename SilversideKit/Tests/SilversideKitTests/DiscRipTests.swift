@@ -21,7 +21,7 @@ struct DiscRipTests {
     /// is audio before track 1. `prepare` can damage the drive.
     func rip(
         trackSectors: [Int] = [800, 900], hidesFirstTrack: Bool = false, tracks: [Int]? = nil, web: FakeWeb? = nil,
-        cover: CoverImage? = nil, prepare: (SimulatedDrive) -> Void = { _ in },
+        cover: CoverImage? = nil, coverStore: ReleaseCoverStore? = nil, prepare: (SimulatedDrive) -> Void = { _ in },
         configure: (inout DiscRipOptions) -> Void = { _ in }
     ) async throws -> (DiscRipResult, [DiscRipEvent], samples: [UInt32], root: URL) {
         let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
@@ -45,6 +45,7 @@ struct DiscRipTests {
             drive: drive, identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"),
             settings: settings, options: options, profiles: profiles)
         if let web { rip.webClient = await web.client(in: root.appending(path: "cache")) }
+        if let coverStore { rip.coverStore = coverStore }
         // The offset comes from the options, since the drive is not in AccurateRip's list.
         rip.options.readOffset = 6
         let events = DiscRipEvents()
@@ -347,6 +348,56 @@ struct DiscRipTests {
         #expect(try Data(contentsOf: file) == png.data)
         #expect(result.report.files?.contains("cover.png") == true)
         #expect(events.contains { if case .artwork(.saved([file])) = $0 { true } else { false } })
+    }
+
+    /// A box set whose discs take their own sleeves: the rip saves the set's cover (the
+    /// archive's main front) and, beside it, the sleeve whose comment names this disc.
+    @Test func savesTheDiscsOwnSleeve() async throws {
+        let front = CoverImage(data: Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1]))
+        let sleeve = CoverImage(data: Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 2]))
+        let listing = """
+            {"images": [
+              {"id": 1, "types": ["Front"], "front": true, "comment": "Outer box, front",
+               "image": "http://coverartarchive.org/release/box/1.png"},
+              {"id": 2, "types": ["Front"], "front": false, "comment": "Day one (Mediums 1–2)",
+               "image": "http://coverartarchive.org/release/box/2.png"}
+            ]}
+            """
+        let web = FakeWeb([
+            ("https://coverartarchive.org/release/box/1.png", front.data),
+            ("https://coverartarchive.org/release/box/2.png", sleeve.data),
+            ("https://coverartarchive.org/release/box", Data(listing.utf8)),
+        ])
+        func medium(_ position: Int, tracks: Int) -> MusicBrainzRelease.Medium {
+            .init(
+                position: position, format: "CD", title: nil, discIDs: [],
+                tracks: (1...tracks).map {
+                    .init(
+                        position: $0, number: String($0), title: "T\($0)", length: nil, artistCredit: [],
+                        recordingID: nil)
+                })
+        }
+        let release = MusicBrainzRelease(
+            id: "box", title: "Box", artistCredit: [.init(name: "Band")], date: nil, country: nil, status: nil,
+            barcode: nil, disambiguation: nil, labels: [], releaseGroup: nil,
+            media: [medium(1, tracks: 3), medium(2, tracks: 2)], hasFrontCover: true)
+        let store = ReleaseCoverStore(
+            folder: FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())"))
+        defer { try? FileManager.default.removeItem(at: store.folder) }
+        try store.useDiscSleeves(true, releaseID: "box")
+        let (result, _, _, root) = try await rip(
+            web: web, coverStore: store,
+            configure: {
+                $0.offline = true
+                $0.release = release
+            })
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(try Data(contentsOf: result.folder.appending(path: "cover.png")) == front.data)
+        #expect(try Data(contentsOf: result.folder.appending(path: "cover (Disc 2).png")) == sleeve.data)
+        #expect(result.report.files?.contains("cover (Disc 2).png") == true)
+        #expect(try RippedDisc(folder: result.folder).coverFile?.lastPathComponent == "cover (Disc 2).png")
+        // The rule stays: nothing the rip did chose a cover for the whole set.
+        #expect(store.usesDiscSleeves(releaseID: "box") && store.cover(forReleaseID: "box") == nil)
     }
 
     /// Every track's report has the CRC-32s that EAC and XLD print, and the disc's media type.

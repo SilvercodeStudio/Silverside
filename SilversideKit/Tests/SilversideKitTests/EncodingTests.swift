@@ -114,6 +114,45 @@ struct EncodingTests {
         #expect(try WAVFile.read(URL(filePath: wav)) == whole)
     }
 
+    /// A box set's disc with its own sleeve: its files embed the sleeve, and the album folder
+    /// keeps the set's cover beside "cover (Disc 2)". A library update can take the sleeve
+    /// away, or give another.
+    @Test func embedsADiscsOwnSleeve() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try makeJPEG(width: 600, height: 600).write(to: folder, name: "cover (Disc 2)")
+        let disc = try RippedDisc(folder: folder)
+        #expect(disc.coverFile?.lastPathComponent == "cover (Disc 2).jpg")
+        let (files, _) = try DiscEncoder(format: .flac).encodeWithRecord(disc, into: library)
+        func embeddedWidth(_ file: URL) throws -> Int? {
+            try FLACTags.readFrontCover(file).map { try EmbeddedCover(CoverImage(data: $0)).width }
+        }
+        #expect(try embeddedWidth(files[0]) == 600)
+        let album = files[0].deletingLastPathComponent()
+        #expect(FileManager.default.fileExists(atPath: album.appending(path: "cover (Disc 2).jpg").path))
+        #expect(try CoverImage(data: Data(contentsOf: album.appending(path: "cover.jpg"))).data.count > 0)
+
+        // The disc takes the set's cover again, then a sleeve of 300 pixels.
+        let stores = (
+            ReleaseEditsStore(url: root.appending(path: "edits.json")),
+            ReleaseCoverStore(folder: root.appending(path: "covers"))
+        )
+        _ = try DiscEncoder(format: .flac).updateLibrary(
+            reportAt: folder.appending(path: "disc.json"), discCover: .remove, library: library,
+            editsStore: stores.0, coverStore: stores.1)
+        #expect(try embeddedWidth(files[0]) == 1000)
+        #expect(CoverFiles.disc(2, in: album) == nil && CoverFiles.disc(2, in: folder) == nil)
+        _ = try DiscEncoder(format: .flac).updateLibrary(
+            reportAt: folder.appending(path: "disc.json"), discCover: .set(try makeJPEG(width: 300, height: 300)),
+            library: library, editsStore: stores.0, coverStore: stores.1)
+        #expect(try embeddedWidth(files[0]) == 300)
+        #expect(CoverFiles.disc(2, in: album) != nil && CoverFiles.disc(2, in: folder) != nil)
+        // The rip's files go, its sleeve with them.
+        try disc.deleteRipFiles()
+        #expect(!FileManager.default.fileExists(atPath: folder.path))
+    }
+
     /// The lanes give the same files, in the tracks' order, however many there are.
     @Test func encodesTheSameOnOneLaneAndSeveral() throws {
         let (folder, library) = try makeRip()
@@ -342,6 +381,12 @@ extension EncodingTests {
             try FLACTags.read(file).first { $0.key == "REPLAYGAIN_ALBUM_GAIN" }?.value
         }
         #expect(try albumGain(files2[0]) == gain2.album?.gainText)
+        // The set view says that the whole set's gain waits for disc 1.
+        let release = try #require(try RippedDisc(folder: folder2).release)
+        let albumFolder = files2[0].deletingLastPathComponent()
+        let waiting = try #require(RipSet.replayGain(of: release, folders: [root, albumFolder]))
+        #expect(waiting.whole == nil && waiting.discs.count == 1)
+        #expect(waiting.text.hasPrefix("Each disc has its own album gain until all 2 are encoded (1 so far): disc 2 "))
 
         let (files1, record1) = try encoder.encodeWithRecord(try RippedDisc(folder: folder1), into: library)
         let gain1 = try #require(record1?.replayGain)
@@ -357,6 +402,10 @@ extension EncodingTests {
         #expect(saved2.encoding?.replayGain?.release == whole && saved2.encoding?.replayGain?.album == gain2.album)
         let markdown = try String(contentsOf: album.appending(path: "Rip Report (Disc 2).md"), encoding: .utf8)
         #expect(markdown.contains("the album, all 2 discs, is \(whole.loudnessText)"))
+        let done = try #require(RipSet.replayGain(of: release, folders: [album]))
+        #expect(done.whole == whole && done.discs.count == 2)
+        #expect(done.text.hasPrefix("Album gain over all 2 discs: \(whole.gainText), peak "))
+        #expect(done.text.contains("On its own, disc 1 \(try #require(gain1.album).gainText) and disc 2 "))
 
         // A record from before histograms were kept is measured from its files.
         var old = try #require(saved2.encoding)

@@ -68,12 +68,16 @@ struct MainWindow: View {
                 if let id = UserDefaults.standard.string(forKey: "openWindow"), !id.isEmpty {
                     if id == "settings" { openSettings() } else { openWindow(id: id) }
                 }
-                // `-selectHistory 1` shows the rip history; `-selectSet 1` the first multi-disc set.
+                // `-selectHistory 1` shows the rip history; `-selectSet 1` the first multi-disc set,
+                // and `-selectSetTitle Dozin` the first whose title starts so.
                 if UserDefaults.standard.bool(forKey: "selectHistory") { model.selection = .history }
-                if UserDefaults.standard.bool(forKey: "selectSet") {
+                let setTitle = UserDefaults.standard.string(forKey: "selectSetTitle")
+                if UserDefaults.standard.bool(forKey: "selectSet") || setTitle != nil {
                     Task { @MainActor in
                         try? await Task.sleep(for: .seconds(1))
-                        if let set = model.sets.first { model.selection = .set(set.releaseID) }
+                        if let set = model.sets.first(where: { setTitle.map($0.title.hasPrefix) ?? true }) {
+                            model.selection = .set(set.releaseID)
+                        }
                     }
                 }
                 // `-selectRecent 1` shows the newest earlier rip, for screenshots of the results;

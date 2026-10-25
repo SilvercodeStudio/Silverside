@@ -333,6 +333,9 @@ struct AccurateRipCell: View {
             case .accurate:
                 let confidence = track.accurateRipConfidence.map { max($0[0], $0[1]) } ?? 0
                 Text("Accurate · conf \(confidence)").foregroundStyle(Theme.good)
+                    .help(
+                        "\(confidence) rips in AccurateRip have this track's checksum, at this pressing's offset (the larger of the v1 and v2 counts). AccurateRip stops counting at 200."
+                    )
             case .otherPressings:
                 Text("Other pressing").foregroundStyle(Theme.good)
                     .help("Matches AccurateRip at other offsets only, so it is free of errors.")
@@ -357,6 +360,7 @@ struct CTDBCell: View {
         if let run, case .finished(let track) = run.trackStates[number] {
             if let confidence = track.ctdbConfidence, confidence > 0 {
                 Text("Verified · \(confidence)").foregroundStyle(Theme.good)
+                    .help("\(confidence) rips in the CUETools database have this track's checksum.")
             } else if let ctdb = run.ctdb {
                 switch ctdb.status {
                 case .verified, .repaired: Text("Verified").foregroundStyle(Theme.good)

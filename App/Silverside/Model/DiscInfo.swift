@@ -57,10 +57,14 @@ struct DiscInfo {
     /// The ranking could not settle on a release, and the user has not chosen one.
     var isAmbiguous = false
     var cover: Data?
-    /// A cover the user dropped or chose, used in place of the Cover Art Archive's.
+    /// A cover the user dropped or chose for this rip, used in place of the Cover Art Archive's.
     var userCover: CoverImage?
-    /// The cover to show and to save with the rip.
-    var shownCover: Data? { userCover?.data ?? cover }
+    /// A cover chosen for the release before, on another disc or rip; the rip finds it itself.
+    var keptCover: CoverImage?
+    /// This disc's own sleeve, for a box set whose discs take theirs from the Cover Art Archive.
+    var sleeve: CoverImage?
+    /// The cover to show: the one the rip's files will embed.
+    var shownCover: Data? { (userCover ?? sleeve ?? keptCover)?.data ?? cover }
     /// A release Silverside made, when MusicBrainz has none: from CD-Text, or "Unknown".
     var manual: MusicBrainzRelease?
     /// The user's changes to the names, kept with the rip and, for the album, for the release.
@@ -259,10 +263,20 @@ struct DiscInfo {
         medium = chosen.medium(for: toc) ?? (chosen.media.count == 1 ? chosen.media.first : nil)
         edits = ReleaseEditsStore().edits(forReleaseID: chosen.id) ?? MetadataEdits()
         // A cover chosen for this release before, on another disc or rip.
-        userCover = chosen.isManual ? nil : ReleaseCoverStore().cover(forReleaseID: chosen.id)
+        keptCover = chosen.isManual ? nil : ReleaseCoverStore().cover(forReleaseID: chosen.id)
         cover = nil
+        await loadSleeve()
         guard chosen.hasFrontCover else { return }
         cover = try? await CoverArtClient().frontCover(releaseID: chosen.id)?.data
+    }
+
+    /// This disc's sleeve, if its release's discs take their own (see `ReleaseCoverStore`).
+    mutating func loadSleeve() async {
+        sleeve = nil
+        guard let release, !release.isManual, let position = medium?.position,
+            ReleaseCoverStore().usesDiscSleeves(releaseID: release.id)
+        else { return }
+        sleeve = try? await CoverArtClient().discSleeve(releaseID: release.id, disc: position)
     }
 }
 

@@ -118,6 +118,10 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
     /// The number of images that the Cover Art Archive has for the release: front, back,
     /// booklet pages, and others. Nil in releases saved before Silverside kept it.
     public var artworkCount: Int?
+
+    /// True if the Cover Art Archive may have images for the release: a front cover, or any
+    /// image (in releases saved before the count was kept, any release MusicBrainz knows).
+    public var hasArtwork: Bool { !isManual && (hasFrontCover || (artworkCount ?? 1) > 0) }
     /// The genre with the most votes in MusicBrainz, from the release group, else the release:
     /// "Rock", "Jazz". Nil when there are no votes, and in releases saved before Silverside kept it.
     public var genre: String?

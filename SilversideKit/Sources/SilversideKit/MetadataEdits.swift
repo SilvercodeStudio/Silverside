@@ -91,6 +91,29 @@ public struct MetadataEdits: Equatable, Sendable {
         return edited
     }
 
+    /// The edits that give a release the names in the disc's CD-Text: the album, its artist,
+    /// and each track's title and artist, where CD-Text has a name that differs from the
+    /// release's. `medium` is the release's medium for the disc, if the TOC does not find it.
+    public init(cdText: CDText, release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium? = nil, toc: TOC) {
+        func name(_ text: String?) -> String? {
+            let trimmed = text?.trimmingCharacters(in: .whitespaces) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        self.init()
+        if let title = name(cdText.titles[0]), title != release.title { album = title }
+        if let performer = name(cdText.performers[0]), performer != release.artist { albumArtist = performer }
+        let medium = release.medium(for: toc) ?? medium
+        for (position, track) in toc.audioTracks.enumerated() {
+            let named = medium.flatMap { position < $0.tracks.count ? $0.tracks[position] : nil }
+            if let title = name(cdText.titles[track.number]), title != named?.title {
+                setTitle(title, ofTrack: track.number)
+            }
+            if let performer = name(cdText.performers[track.number]), performer != named?.artist {
+                setArtist(performer, ofTrack: track.number)
+            }
+        }
+    }
+
     // MARK: disc.json
 
     /// The edits in a rip folder's disc.json, if it has any.

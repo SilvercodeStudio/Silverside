@@ -59,6 +59,49 @@ struct CoverArtListingTests {
         #expect(throws: CoverArtError.malformedListing) { try CoverArtClient.images(fromJSON: Data("{}".utf8)) }
     }
 
+    /// Box-set sleeves, as *Summer Magic 1985* has them: thumbnails, and the discs each is for.
+    @Test func readsThumbnailsAndTheDiscsOfASleeve() throws {
+        let listing = """
+            {"images": [
+              {"id": 1, "types": ["Front"], "front": true, "comment": "Outer box, front",
+               "image": "http://coverartarchive.org/release/r/1.png",
+               "thumbnails": {"250": "http://coverartarchive.org/release/r/1-250.jpg", "small": "http://x/1-s.jpg"}},
+              {"id": 2, "types": ["Front"], "front": false,
+               "comment": "Greek Theatre, Berkeley, CA — 1985-06-14 (Mediums 1–2)",
+               "image": "http://coverartarchive.org/release/r/2.png", "thumbnails": {"small": "http://x/2-s.jpg"}},
+              {"id": 3, "types": ["Front"], "front": false, "comment": "Hershey Park Stadium (Mediums 12 - 14)",
+               "image": "http://coverartarchive.org/release/r/3.png"},
+              {"id": 4, "types": ["Medium"], "front": false, "comment": "Disc 3",
+               "image": "http://coverartarchive.org/release/r/4.png"}
+            ]}
+            """
+        let images = try CoverArtClient.images(fromJSON: Data(listing.utf8))
+        #expect(images[0].thumbnailURL?.absoluteString == "https://coverartarchive.org/release/r/1-250.jpg")
+        #expect(images[1].thumbnailURL?.absoluteString == "https://x/2-s.jpg" && images[2].thumbnailURL == nil)
+        #expect(images.map(\.mediums) == [nil, 1...2, 12...14, 3...3])
+        // A disc's sleeve is a front that names it, not the main front, nor a photo of the disc.
+        #expect(CoverArtImage.sleeve(forDisc: 2, in: images)?.id == "2")
+        #expect(CoverArtImage.sleeve(forDisc: 3, in: images) == nil)
+        let plan = CoverArtImage.sleeves(for: Array(1...14), in: images)
+        #expect(plan.sleeves.map(\.image.id) == ["2", "3"] && plan.sleeves.map(\.discs) == [[1, 2], [12, 13, 14]])
+        #expect(plan.others == Array(3...11))
+    }
+
+    /// The sleeves rule is kept for the release, and a cover for the whole set ends it.
+    @Test func keepsTheSleevesRuleUntilASetCoverReplacesIt() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = ReleaseCoverStore(folder: folder)
+        #expect(!store.usesDiscSleeves(releaseID: "rel"))
+        try store.useDiscSleeves(true, releaseID: "rel")
+        #expect(store.usesDiscSleeves(releaseID: "rel") && !store.usesDiscSleeves(releaseID: "other"))
+        try store.remember(try makeJPEG(width: 10, height: 10), forReleaseID: "rel")
+        #expect(!store.usesDiscSleeves(releaseID: "rel") && store.cover(forReleaseID: "rel") != nil)
+        try store.useDiscSleeves(true, releaseID: "rel")
+        try store.forget(releaseID: "rel")
+        #expect(!store.usesDiscSleeves(releaseID: "rel") && store.cover(forReleaseID: "rel") == nil)
+    }
+
     @Test func namesTheImagesByType() throws {
         let images = try CoverArtClient.images(fromJSON: Data(Self.listing.utf8))
         #expect(

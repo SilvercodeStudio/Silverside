@@ -39,6 +39,19 @@ command-line tool.
   again. It goes into a folder of its own (`~/Music/Silverside Images`, named as
   the library's albums), in the library's format, or FLAC when the library is
   AAC or MP3, and is checked against the rip like every file.
+- **Choose among the Cover Art Archive's images.** Cover Art Archive… in a
+  cover's menu (before a rip, on an earlier rip, and in a set) shows every
+  image the archive has for the release, with its type and comment, and uses
+  the one you pick, for every disc of a set. Silverside still takes the main
+  front by itself, but a release can have better ones, such as a digital
+  release's art or a box set's sleeves; a sleeve whose comment names the disc
+  is marked "This disc". A badge with the count of images, in the corner of a
+  cover, opens it too.
+- **A sleeve for each disc of a box set,** when the archive's editors noted
+  which discs each sleeve is for (such as *Summer Magic 1985*, with one for
+  each show): Use Each Disc's Sleeve gives every disc its own, in the discs
+  ripped so far and in the ones ripped later, which show theirs before the rip.
+  Each disc's files embed its sleeve; the album folder keeps the set's cover.
 - **CD-Text in every language a disc has.** A disc can carry CD-Text in up to
   eight languages, and Japanese discs write it in MS-JIS (Shift-JIS). Silverside
   reads every block, uses the one in your Mac's language if the disc has it
@@ -46,11 +59,22 @@ command-line tool.
   shows them all. Before, only the first block was read, and Japanese text came
   out garbled.
 
+- **Use These Names** tags a rip with the disc's CD-Text in place of the
+  MusicBrainz names. Show the CD-Text names, click it, and the names become
+  edits that you can still change before the rip.
+
 ### Changed
 
+- A set's view says where its ReplayGain stands: the album gain over every
+  disc once the last disc is encoded (with each disc's own beside it), or how
+  many discs are still to be encoded before then.
 - A click on a cover shows it at full size in Quick Look, and the cover's
   menu has Quick Look too. Choose Cover… is in the menu; a click still
   chooses one where there is no cover yet.
+- The chips under a disc's names, and after a rip, wrap onto more rows in a
+  narrow window. Before, they pushed the album's fields past the window's
+  edge, or scrolled out of sight. "Names from" moves above its picker when
+  there is no room beside it, in place of one letter to a line.
 
 ## 0.6 (2026-10-23)
 

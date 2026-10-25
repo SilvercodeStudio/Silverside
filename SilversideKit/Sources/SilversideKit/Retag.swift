@@ -2,7 +2,9 @@ import Foundation
 
 /// The user's own cover for a release, kept by release ID beside the album edits, so that
 /// every disc of a set gets it and a later rip of the same release finds it. One file for
-/// each release, "<id>.jpg" or ".png", in Application Support.
+/// each release, "<id>.jpg" or ".png", in Application Support. For a box set whose discs
+/// each have their own sleeve in the Cover Art Archive, "<id>.sleeves" says that each disc
+/// takes its sleeve (see `CoverArtImage.sleeve`); the cover, if any, stays the set's.
 public struct ReleaseCoverStore: Sendable {
     public let folder: URL
 
@@ -13,14 +15,38 @@ public struct ReleaseCoverStore: Sendable {
     }
 
     private func files(for releaseID: String) -> [URL] {
-        let name = releaseID.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "_")
-        return ["jpg", "png"].map { folder.appending(path: "\(name).\($0)") }
+        ["jpg", "png"].map { folder.appending(path: "\(Self.name(releaseID)).\($0)") }
+    }
+
+    private func sleevesFile(for releaseID: String) -> URL {
+        folder.appending(path: "\(Self.name(releaseID)).sleeves")
+    }
+
+    private static func name(_ releaseID: String) -> String {
+        releaseID.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "_")
+    }
+
+    /// True if each disc of the release takes its own sleeve from the Cover Art Archive.
+    public func usesDiscSleeves(releaseID: String) -> Bool {
+        FileManager.default.fileExists(atPath: sleevesFile(for: releaseID).path)
+    }
+
+    /// Each disc of the release takes its own sleeve from now on (or, with `false`, the set's cover).
+    public func useDiscSleeves(_ uses: Bool, releaseID: String) throws {
+        let file = sleevesFile(for: releaseID)
+        if uses {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data().write(to: file)
+        } else if FileManager.default.fileExists(atPath: file.path) {
+            try FileManager.default.removeItem(at: file)
+        }
     }
 
     public func cover(forReleaseID releaseID: String) -> CoverImage? {
         files(for: releaseID).lazy.compactMap { try? Data(contentsOf: $0) }.first.map(CoverImage.init)
     }
 
+    /// Keeps a cover for every disc of the release, in place of any disc's own sleeve.
     public func remember(_ cover: CoverImage, forReleaseID releaseID: String) throws {
         guard let fileExtension = cover.fileExtension else { throw CoverArtError.unknownFormat }
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -28,11 +54,23 @@ public struct ReleaseCoverStore: Sendable {
         try cover.data.write(to: files(for: releaseID).first { $0.pathExtension == fileExtension }!, options: .atomic)
     }
 
+    /// Forgets the cover and the discs' sleeves: the release takes the archive's main front again.
     public func forget(releaseID: String) throws {
         for file in files(for: releaseID) where FileManager.default.fileExists(atPath: file.path) {
             try FileManager.default.removeItem(at: file)
         }
+        try useDiscSleeves(false, releaseID: releaseID)
     }
+}
+
+/// What a library update does with a disc's own cover (a box set's sleeve, "cover (Disc 2).jpg").
+public enum DiscCoverChange: Sendable {
+    /// Leaves it as it is.
+    case keep
+    /// The disc's files embed this, in place of the album's cover.
+    case set(CoverImage)
+    /// The disc takes the album's cover again.
+    case remove
 }
 
 /// What a library update did to an encoded album.
@@ -48,10 +86,12 @@ public struct LibraryUpdate: Sendable {
 extension DiscEncoder {
     /// Writes a new cover, and the current names, into an encoded album's files (see `updateLibrary`).
     @discardableResult
-    public func retag(reportAt file: URL, cover: CoverImage? = nil, remember: Bool = true, library: URL? = nil) throws
-        -> [URL]
-    {
-        try updateLibrary(reportAt: file, cover: cover, remember: remember, library: library).files
+    public func retag(
+        reportAt file: URL, cover: CoverImage? = nil, remember: Bool = true, discCover: DiscCoverChange = .keep,
+        library: URL? = nil
+    ) throws -> [URL] {
+        try updateLibrary(reportAt: file, cover: cover, remember: remember, discCover: discCover, library: library)
+            .files
     }
 
     /// Brings an encoded album up to date with the release's current names and cover, without
@@ -62,13 +102,15 @@ extension DiscEncoder {
     /// made on one disc reaches the others. `file` is a rip's `disc.json`, or the album
     /// folder's "Rip Report.json" after the rip's files were deleted. A new `cover` replaces
     /// the cover file in the rip's folder and the album's, and is kept for the release (unless
-    /// `remember` is false, as when the archive's own cover is put back). A rip's `disc.json`
+    /// `remember` is false, as when the archive's own cover is put back). `discCover` sets or
+    /// removes the disc's own cover, which its files embed in place of the album's. A rip's `disc.json`
     /// records its encoding only when the rip itself encoded; for one encoded later, the album
     /// folder in `library`, named as this encoder names it, is looked at. A rip not yet
     /// encoded gets the cover file only.
     public func updateLibrary(
-        reportAt file: URL, cover: CoverImage? = nil, remember: Bool = true, library: URL? = nil,
-        editsStore: ReleaseEditsStore = ReleaseEditsStore(), coverStore: ReleaseCoverStore = ReleaseCoverStore()
+        reportAt file: URL, cover: CoverImage? = nil, remember: Bool = true, discCover: DiscCoverChange = .keep,
+        library: URL? = nil, editsStore: ReleaseEditsStore = ReleaseEditsStore(),
+        coverStore: ReleaseCoverStore = ReleaseCoverStore()
     ) throws -> LibraryUpdate {
         var report = try RipReport.read(from: file)
         let folder = file.deletingLastPathComponent()
@@ -120,6 +162,15 @@ extension DiscEncoder {
                 .flatMap { folder in ["cover.jpg", "cover.png"].map { folder.appending(path: $0) } }
                 .first { FileManager.default.fileExists(atPath: $0.path) }
         }
+        // The disc's own cover (a box set's sleeve), beside the album's in each folder.
+        for destination in [isRipFolder ? folder : nil, albumFolder].compactMap({ $0 })
+        where FileManager.default.fileExists(atPath: destination.path) {
+            switch discCover {
+            case .keep: break
+            case .set(let own): try CoverFiles.writeDisc(own, position: medium.position, in: destination)
+            case .remove: try CoverFiles.removeDisc(medium.position, in: destination)
+            }
+        }
         if isRipFolder, !edits.isEmpty { try edits.save(inDiscJSONOf: folder) }
         guard var encoding = report.encoding, let current = albumFolder else {
             return LibraryUpdate(files: [], renamed: 0, albumFolder: nil)
@@ -153,9 +204,7 @@ extension DiscEncoder {
             }
         }
         let album = albumFolder ?? current
-        coverFile =
-            ["cover.jpg", "cover.png"].map { album.appending(path: $0) }
-            .first { FileManager.default.fileExists(atPath: $0.path) } ?? coverFile
+        coverFile = CoverFiles.embedded(forDisc: medium.position, in: album) ?? coverFile
         let embedded = try coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }
 
         // ReplayGain: the album's gain is the whole release's once every disc is in the album
@@ -210,7 +259,9 @@ extension DiscEncoder {
                     track: gain?.tracks.first { $0.track == entry.track }?.values, album: gain?.albumInTags)
             // A file whose tags are already these is left alone (a library on a network
             // volume is slow to write), unless the cover changes.
-            if cover != nil || Self.comments(of: url, format: encoding.format).map({ !Self.same($0, comments) }) ?? true
+            let coverChanges: Bool
+            if case .keep = discCover { coverChanges = cover != nil } else { coverChanges = true }
+            if coverChanges || Self.comments(of: url, format: encoding.format).map({ !Self.same($0, comments) }) ?? true
             {
                 switch encoding.format {
                 case .flac: try FLACTags.write(comments, cover: embedded, to: url)

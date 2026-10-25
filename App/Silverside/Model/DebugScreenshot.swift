@@ -5,7 +5,8 @@
     /// Debug aid: `-screenshotPath /path/shot.png -screenshotDelay 4` renders every visible
     /// window to PNG files after the delay (the main window to the path, the others with
     /// -2, -3 added), then quits. It draws the view hierarchy, so it needs no screen
-    /// recording permission.
+    /// recording permission. `-screenshotWidth 700` makes the main window that wide first, to
+    /// check a narrow layout.
     enum DebugScreenshot {
         private static var scheduled = false
 
@@ -16,6 +17,17 @@
             scheduled = true
             let configured = UserDefaults.standard.double(forKey: "screenshotDelay")
             let delay = configured > 0 ? configured : 4
+            let width = UserDefaults.standard.double(forKey: "screenshotWidth")
+            if width > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + max(delay - 1.5, 0.5)) {
+                    guard let window = NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 100 }) else {
+                        return
+                    }
+                    var frame = window.frame
+                    frame.size.width = width
+                    window.setFrame(frame, display: true)
+                }
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 capture(to: URL(fileURLWithPath: path))
                 // A plain exit: terminate(nil) waits while a sheet or a repair is up, and this is a debug aid.

@@ -193,9 +193,14 @@ makes, and the settings.
 - Ripping of data tracks for mixed-mode / Enhanced CDs.
 - Option to slow down drive speed (quieter)
   - Autodetect and engage this during problem rips
-- Search MusicBrainz by album or artist, for a disc whose TOC it does not know (a
-  burned disc, or a pressing it has not seen), and tag the disc from the chosen
-  release
+- Submit to MusicBrainz from the app: a disc ID for a release, or a new
+  release seeded from the disc (planned for 2.0).
+- Search MusicBrainz by album or artist (planned for 1.0), for a disc whose
+  TOC it does not know (a burned disc, or a pressing it has not seen), and tag
+  the disc from the chosen release
+- Check Again (planned for 1.0): look an unverified rip up in AccurateRip and
+  CTDB again, for a new release that the databases did not know yet.
+- Submit rips to CTDB (planned for 2.0), also later from a saved rip.
 - Secondary metadata source (GnuDB)
 - Multiple encodings at once (e.g. FLAC + AAC)
 - Filename template enhancements

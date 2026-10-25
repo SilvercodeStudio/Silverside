@@ -40,6 +40,23 @@ struct MetadataEditsTests {
         #expect(edits.albumLevel == edits)
     }
 
+    /// CD-Text with the venue in each title, as *Summer Magic 1985* has it.
+    @Test func takesTheNamesFromCDText() throws {
+        let toc = try TOC(audioTrackStarts: [0, 75], leadOutLBA: 150)
+        var release = release()
+        release.media[0].discIDs = [toc.musicBrainzDiscID]
+        var cdText = CDText()
+        cdText.titles = [0: "Cornell 5/8/77 (Live)", 1: "A (Live at Barton Hall)", 2: "B"]
+        cdText.performers = [0: "Grateful Dead", 1: "Grateful Dead", 2: " Donna Jean "]
+        let edits = MetadataEdits(cdText: cdText, release: release, toc: toc)
+        // Only the names that differ become edits; the album's artist is the same.
+        #expect(edits.album == "Cornell 5/8/77 (Live)" && edits.albumArtist == nil)
+        #expect(edits.tracks == [1: .init(title: "A (Live at Barton Hall)"), 2: .init(artist: "Donna Jean")])
+        let edited = edits.applied(to: release, toc: toc)
+        #expect(edited.media[0].tracks.map(\.title) == ["A (Live at Barton Hall)", "B"])
+        #expect(MetadataEdits(cdText: CDText(), release: release, toc: toc).isEmpty)
+    }
+
     @Test func mergesWithTheRipsEditsOnTop() {
         let kept = MetadataEdits(album: "Kept", date: "1977")
         var mine = MetadataEdits(album: "Mine")

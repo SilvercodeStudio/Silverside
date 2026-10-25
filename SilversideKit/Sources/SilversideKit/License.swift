@@ -25,8 +25,7 @@ public enum SilversideLicense {
         a different name and icon.
 
         The HDCD decoder in SilversideKit/Vendor/HDCD comes from FFmpeg and is under its own BSD license, in \
-        that folder. The HDCD logo (App/Silverside/Assets.xcassets/HDCD.imageset) is a trademark of its owner \
-        and is not covered by this license either.
+        that folder. The HDCD logo is a trademark of its owner and is not covered by this license.
         """
 
     /// The license of FFmpeg's HDCD decoder (`Vendor/HDCD/LICENSE`, which a test checks), which

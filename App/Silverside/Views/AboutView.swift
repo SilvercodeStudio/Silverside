@@ -185,7 +185,7 @@ private struct AcknowledgmentsSheet: View {
         ),
         (
             "[FFmpeg](https://ffmpeg.org)'s HDCD decoder",
-            "by Chris Moeller, Gumboot, and Burt P., from Christopher Key's, finds the HDCD codes in a rip. Silverside includes it under its own BSD license (see License)."
+            "finds and decodes the HDCD codes in a rip. Chris Moeller wrote it from Christopher Key's HDCD library, with work by Gumboot and Burt P. Silverside includes it under its BSD license (see License)."
         ),
         (
             "[Claude Code](https://claude.com/claude-code)",

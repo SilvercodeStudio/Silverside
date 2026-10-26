@@ -8,6 +8,8 @@ AccurateRip holds checksums of each track from many people's rips of the same di
 
 A disc that is not in AccurateRip cannot be proved this way. Then Silverside reads each track twice and reports whether the reads agree.
 
+AccurateRip keeps no checksum for a track that is all silence, so such a track shows **No checksum**, not "Not accurate", even when the rest of the disc is in AccurateRip. CTDB checks it with the rest of the disc.
+
 ## CUETools database (CTDB)
 
 CTDB checks the whole disc at once, so a rip of some tracks only is not checked. It also holds repair data: when a few thousand samples are wrong, CTDB can correct them. Silverside tries a repair when a track is not verified, then checks the repaired track against AccurateRip again. **Verified** means the disc matches an entry; **repaired** means it matches after the repair.
@@ -52,7 +54,7 @@ A new release is often in neither AccurateRip nor CTDB at first, so its tracks s
 
 Check Again, in the toolbar of an earlier rip, looks the disc up in both databases again and checks the rip against what they have now. A set's toolbar has it too, for every disc that can use it. The disc does not have to be in a drive: Silverside checks the rip's WAV files, or, after they are deleted, the album's FLAC or Apple Lossless files, which must still decode to exactly the audio that was ripped. The rip's report gets the new results and the date of the check. A match found before is never lost, even if a database cannot be reached.
 
-Check Again shows for a rip that is not verified, and for one that AccurateRip or CTDB did not have, since a second database is a second, independent proof. It cannot check AAC or MP3 files, or a library decoded from HDCD, as these are no longer the ripped audio. When CTDB has the disc now but the rip does not match, Repair can try to fix it. `silverside check` does the same from a terminal.
+Check Again shows for a rip that is not verified, for one that AccurateRip or CTDB did not have, and for one with tracks AccurateRip did not match, since a second database is a second, independent proof. It cannot check AAC or MP3 files, or a library decoded from HDCD, as these are no longer the ripped audio. When CTDB has the disc now but the rip does not match, Repair can try to fix it. `silverside check` does the same from a terminal.
 
 ## Multi-disc sets
 

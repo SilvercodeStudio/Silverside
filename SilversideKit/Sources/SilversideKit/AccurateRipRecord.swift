@@ -41,6 +41,16 @@ public struct AccurateRipRecord: Equatable, Sendable {
     }
 }
 
+extension [AccurateRipRecord] {
+    /// The records' entries for the audio track at `index` (0 is the first audio track). An entry
+    /// with no submissions is left out: AccurateRip keeps one, with checksum 0, for a track it has
+    /// no checksum for. It keeps none for a track that is all silence (*Denon Audio Technical CD*,
+    /// tracks 34 and 35: confidence 0 in all 7 records).
+    public func entries(forTrackAt index: Int) -> [AccurateRipRecord.Track] {
+        compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }.filter { $0.confidence > 0 }
+    }
+}
+
 public enum AccurateRipError: Error, Equatable {
     case malformedResponse
 }

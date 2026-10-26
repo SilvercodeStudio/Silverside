@@ -343,6 +343,11 @@ struct AccurateRipCell: View {
                 Text("Not accurate").foregroundStyle(Theme.bad)
             case .notInDatabase:
                 Text("Not in database").foregroundStyle(.secondary)
+            case .noChecksum:
+                Text("No checksum").foregroundStyle(.secondary)
+                    .help(
+                        "AccurateRip has this disc, but no checksum for this track, so it cannot check it. It keeps none for a track that is all silence."
+                    )
             }
         case .reading, .rereading:
             Text("Pending").foregroundStyle(.secondary)

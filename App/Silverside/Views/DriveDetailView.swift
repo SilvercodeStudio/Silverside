@@ -163,7 +163,8 @@ struct DiscView: View {
             TrackTable(slot: slot)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     RipButton(slot: slot)
-                        .padding(RipButton.inset)
+                        .padding([.top, .bottom, .leading], RipButton.inset)
+                        .padding(.trailing, RipButton.trailingInset)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .background(ScrollersPastInset(table: slot.rip != nil))
@@ -856,12 +857,23 @@ enum ResultChips {
         var chips = [Chip]()
         let accurate = report.tracks.filter { $0.accurateRip == .accurate }.count
         let others = report.tracks.filter { $0.accurateRip == .otherPressings }.count
-        let total = report.tracks.count
+        // AccurateRip cannot check a track it has no checksum for (a silent one), so it is not counted.
+        let noChecksum = report.tracks.filter { $0.accurateRip == .noChecksum }.count
+        let total = report.tracks.count - noChecksum
         if report.tracks.allSatisfy({ $0.accurateRip == .notInDatabase }) {
             chips.append(Chip(text: "Not in AccurateRip"))
         } else {
             chips.append(Chip(text: "AccurateRip \(accurate) / \(total)", tone: accurate == total ? .good : .warning))
             if others > 0 { chips.append(Chip(text: "\(others) match other pressings", tone: .good)) }
+            if noChecksum > 0 {
+                chips.append(
+                    Chip(
+                        text: Format.count(noChecksum, "track") + " with no checksum",
+                        help: "AccurateRip has this disc, but no checksum for "
+                            + (noChecksum == 1
+                                ? "this track, so it cannot check it" : "these tracks, so it cannot check them")
+                            + ". It keeps none for a track that is all silence."))
+            }
         }
         switch report.ctdb.status {
         case .verified: chips.append(Chip(text: "CTDB verified", tone: .good))

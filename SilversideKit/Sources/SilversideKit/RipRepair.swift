@@ -119,7 +119,7 @@ public struct RipRepair {
         for (index, track) in audioTracks.enumerated() {
             let length = versions[index][0].count
             let edges = (isFirst: index == 0, isLast: index == audioTracks.count - 1)
-            let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
+            let known = records.entries(forTrackAt: index)
             let accurate = versions[index].first { samples in
                 if case .accurate = RipPool.verification(of: samples, track: track, toc: toc, records: records) {
                     return true
@@ -230,13 +230,15 @@ public struct RipRepair {
             report.tracks[position].hdcd = HDCDCodes.scan(samples)
             let checksum = AccurateRipAccumulator.checksum(
                 of: samples[...], isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
-            let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
+            let known = records.entries(forTrackAt: index)
             switch TrackRipper.verification(of: checksum, known: known) {
             case .accurate(let v1, let v2):
                 report.tracks[position].accurateRip = .accurate
                 report.tracks[position].accurateRipConfidence = [v1, v2]
             case .notAccurate where report.tracks[position].accurateRip != .otherPressings:
                 report.tracks[position].accurateRip = .notAccurate
+            case .notChecked where !records.isEmpty:
+                report.tracks[position].accurateRip = .noChecksum
             case .notAccurate, .notChecked:
                 break
             }
@@ -281,7 +283,7 @@ public struct RipRepair {
             try WAVFile.write(samples, to: output.appending(path: String(format: "Track %02d.wav", track.number)))
             let checksum = AccurateRipAccumulator.checksum(
                 of: samples[...], isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
-            let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
+            let known = records.entries(forTrackAt: index)
             events(
                 .trackWritten(
                     number: track.number, repairedSamples: result.changedSamples(inTrack: index),

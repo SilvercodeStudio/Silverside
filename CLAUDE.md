@@ -112,6 +112,7 @@ Four drives so far (MATSHITA UJ260AF +103, HL-DT-ST BU50N +6, ASUS BW-16D1HT +6,
 - Read MCN and ISRC from the Q subchannel (`SubchannelCodes`), not with `DKIOCCDREADISRC` and `DKIOCCDREADMCN`. On the HL-DT-ST, the ISRC ioctl returned the previous track's code for several tracks of *The Story of the Ghost*, and the code no longer uses either ioctl. MCN and ISRC frames are about 1 in 100 Q frames; in the 6-bit ISRC characters, `0`–`9` are 0x00–0x09 and `A`–`Z` are 0x11–0x2A.
 - A valid MCN or ISRC frame can sit at a track change (*The Story of the Ghost*, LBA 17441). `PregapFinder` counts such frames as part of the previous track.
 - C2 flags are a hint only. On damaged discs, the result for a sector can change between reads: *Reckoning* track 12 was accurate in a rip, but a later C2 scan found 3 bad sectors. Raw P-W subchannel can be unreliable too (MATSHITA, *Reckoning*).
+- AccurateRip has no checksum for a silent track: each record has an entry with checksum 0 and confidence 0 (*Denon Audio Technical CD*, tracks 34 and 35, all 7 records). `entries(forTrackAt:)` leaves such entries out, and the track's status is `noChecksum`, not `notAccurate`.
 - AccurateRip records can be v2 only (Vulfpeck *Clarity of Cal* has one v2 submission). The v1 offset search finds nothing there; the sector 450 checksum, which is v1-style for both versions, finds the offset.
 
 ## Constraints

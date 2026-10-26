@@ -30,6 +30,15 @@ public struct RipReport: Codable, Equatable, Sendable {
         case notInDatabase
         /// The track does not match AccurateRip.
         case notAccurate
+        /// AccurateRip has the disc, but no checksum for this track, so it cannot check it. It
+        /// keeps none for a track that is all silence.
+        case noChecksum
+
+        /// The status of a track that matches no AccurateRip checksum: the audio track at `index`.
+        public static func unmatched(trackAt index: Int, records: [AccurateRipRecord]) -> Self {
+            if records.isEmpty { return .notInDatabase }
+            return records.entries(forTrackAt: index).isEmpty ? .noChecksum : .notAccurate
+        }
     }
 
     public struct Track: Codable, Equatable, Sendable {
@@ -419,11 +428,12 @@ extension RipReport {
 }
 
 extension RipReport {
-    /// True if Check Again (`RipCheck`) may find more: a track is not verified, or AccurateRip
-    /// or CTDB did not have the disc, as is usual for a new release.
+    /// True if Check Again (`RipCheck`) may find more: a track is not verified, AccurateRip
+    /// or CTDB did not have the disc, as is usual for a new release, or a track did not match
+    /// AccurateRip (CTDB can verify a disc whose tracks AccurateRip does not have yet).
     public var mayCheckAgain: Bool {
         !isVerified || ctdb.status == .notInDatabase || ctdb.status == .notChecked
-            || tracks.contains { $0.accurateRip == .notInDatabase }
+            || tracks.contains { $0.accurateRip == .notInDatabase || $0.accurateRip == .notAccurate }
     }
 }
 

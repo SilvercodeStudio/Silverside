@@ -13,6 +13,8 @@ struct RipButton: View {
 
     /// Its distance from the track table's edges.
     static let inset: CGFloat = 16
+    /// Its distance from the right edge, which leaves room for the vertical scroller.
+    static let trailingInset: CGFloat = 30
 
     var body: some View {
         Button(action: click) {

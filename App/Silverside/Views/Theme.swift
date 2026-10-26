@@ -28,7 +28,7 @@ enum Theme {
     static func color(for status: RipReport.AccurateRipStatus) -> Color {
         switch status {
         case .accurate, .otherPressings: good
-        case .notInDatabase: .secondary
+        case .notInDatabase, .noChecksum: .secondary
         case .notAccurate: bad
         }
     }

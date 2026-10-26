@@ -242,6 +242,30 @@ struct DiscRipTests {
         }
     }
 
+    /// AccurateRip keeps an entry with checksum 0 and no submissions for a track it has no
+    /// checksum for, such as a silent one (*Denon Audio Technical CD*, tracks 34 and 35). That
+    /// track is not "not accurate", and it gets no extra reads to look for a match.
+    @Test func tellsATrackWithNoChecksumFromOneThatIsNotAccurate() async throws {
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900, 700])
+        var accurateRip = Self.accurateRipFile(toc: toc, samples: samples)
+        let second = 13 + 9
+        accurateRip.replaceSubrange(second..<(second + 9), with: [UInt8](repeating: 0, count: 9))
+        let ctdb = Self.ctdbAnswer(toc: toc, samples: samples)
+        let web = FakeWeb([
+            (toc.accurateRipDiscID.databaseURL.absoluteString, accurateRip),
+            ("http://db.cuetools.net/lookup2.php", ctdb.lookup),
+            ("http://p.cuetools.net/1", ctdb.repairData),
+        ])
+        let (result, _, _, root) = try await rip(trackSectors: [800, 900, 700], web: web)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let report = result.report
+        #expect(report.tracks.map(\.accurateRip) == [.accurate, .noChecksum, .accurate])
+        #expect(report.tracks[1].fullReads == 2)
+        #expect(report.isVerified && !report.mayCheckAgain)
+        #expect(report.noChecksumNote == "AccurateRip has no checksum for track 2 (it keeps none for a silent track)")
+        #expect(RipReport.AccurateRipStatus.unmatched(trackAt: 1, records: []) == .notInDatabase)
+    }
+
     /// A sector that reads wrong every time: the secure rip cannot see it, CTDB repairs it,
     /// and the track is written again and matches AccurateRip.
     @Test func repairsWithCTDBAndWritesTheTrackAgain() async throws {

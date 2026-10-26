@@ -21,6 +21,7 @@ extension RipReport {
         var result = "\(accurate) of \(tracks.count) tracks are accurate in AccurateRip"
         if otherPressings > 0 { result += ", and \(otherPressings) match other pressings (free of errors)" }
         lines.append(result + ".")
+        if let noChecksumNote { lines += ["", noChecksumNote + "."] }
         lines.append("")
         lines.append("CTDB: " + ctdbSummary + ".")
         if let checkedAgain {
@@ -65,6 +66,7 @@ extension RipReport {
                 case .otherPressings: "other pressings"
                 case .notInDatabase: "not in database"
                 case .notAccurate: "**not accurate**"
+                case .noChecksum: "no checksum"
                 }
             let unresolved = track.unresolvedSectors.count
             var cells = [String]()

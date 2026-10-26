@@ -39,12 +39,14 @@ public struct RipCheck {
 
         /// The outcome in a sentence, for people.
         public var summary: String {
-            let accurateRip: String
+            var accurateRip: String
             let accurate = after.tracks.filter { $0.accurateRip == .accurate || $0.accurateRip == .otherPressings }
             if after.tracks.allSatisfy({ $0.accurateRip == .notInDatabase }) {
                 accurateRip = "AccurateRip does not have this disc yet"
             } else {
                 accurateRip = "AccurateRip: \(accurate.count) of \(after.tracks.count) tracks accurate"
+                let silent = after.tracks.filter { $0.accurateRip == .noChecksum }.count
+                if silent > 0 { accurateRip += " (\(silent) with no checksum)" }
             }
             let ctdb: String =
                 switch after.ctdb.status {
@@ -129,11 +131,11 @@ public struct RipCheck {
         }
         for (position, reported) in before.tracks.enumerated() {
             guard let index = audioTracks.firstIndex(where: { $0.number == reported.number }) else { continue }
-            let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
+            let known = records.entries(forTrackAt: index)
             var checked = reported
             checked.accurateRipConfidence = nil
             checked.matchingOffsets = []
-            checked.accurateRip = records.isEmpty ? .notInDatabase : .notAccurate
+            checked.accurateRip = .unmatched(trackAt: index, records: records)
             if case .accurate(let v1, let v2) = RipPool.verification(
                 of: samples[position], track: audioTracks[index], toc: toc, records: records)
             {

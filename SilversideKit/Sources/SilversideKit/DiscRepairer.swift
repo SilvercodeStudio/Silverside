@@ -499,8 +499,7 @@ public struct DiscRepairer {
         for (index, track) in toc.audioTracks.enumerated() {
             let length = toc.sectorRange(of: track).count * CDDA.samplesPerSector
             guard length >= 451 * CDDA.samplesPerSector else { continue }
-            let known = Set(
-                records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index].frame450Checksum : nil })
+            let known = Set(records.entries(forTrackAt: index).map(\.frame450Checksum))
             let window = Self.window(of: audio, start: trackStarts[index], length: length, margin: margin)
             let found = AccurateRipOffsetFinder.frame450Offsets(
                 matching: known, in: window, trackLength: length, margin: margin)

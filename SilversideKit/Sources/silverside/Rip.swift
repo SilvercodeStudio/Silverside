@@ -362,6 +362,7 @@ private final class RipPrinter: @unchecked Sendable {
                 summary += ", and \(otherPressingCount) more are free of errors (they match other pressings)"
             }
             Swift.print(summary + ".")
+            if let note = report.noChecksumNote { Swift.print(note + ".") }
             if !discOffsets.isEmpty {
                 let offsets = discOffsets.sorted().map(\.signedDescription).joined(separator: ", ")
                 Swift.print("This disc matches AccurateRip at offsets \(offsets).")

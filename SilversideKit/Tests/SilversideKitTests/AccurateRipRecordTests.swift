@@ -21,6 +21,24 @@ struct AccurateRipRecordTests {
         #expect(records[0].tracks[0].checksum == 0xD953_5D76)
     }
 
+    @Test func leavesOutEntriesWithNoSubmissions() {
+        let id = AccurateRipDiscID(audioTrackCount: 2, id1: 1, id2: 2, freedbID: 3)
+        let records = [
+            AccurateRipRecord(
+                discID: id,
+                tracks: [
+                    .init(confidence: 49, checksum: 0xEA8F_0F8F, frame450Checksum: 1),
+                    .init(confidence: 0, checksum: 0, frame450Checksum: 0),
+                ]),
+            AccurateRipRecord(
+                discID: id, tracks: [.init(confidence: 48, checksum: 0x7E8E_2C9F, frame450Checksum: 2)]),
+        ]
+        #expect(records.entries(forTrackAt: 0).map(\.confidence) == [49, 48])
+        #expect(records.entries(forTrackAt: 1).isEmpty)
+        #expect(RipReport.AccurateRipStatus.unmatched(trackAt: 0, records: records) == .notAccurate)
+        #expect(RipReport.AccurateRipStatus.unmatched(trackAt: 1, records: records) == .noChecksum)
+    }
+
     @Test func rejectsTruncatedFile() throws {
         let bytes = try Self.dozinDisc1()
         #expect(throws: AccurateRipError.malformedResponse) {

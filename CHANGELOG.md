@@ -21,6 +21,11 @@ command-line tool.
 
 ### Fixed
 
+- A track that AccurateRip keeps no checksum for, such as a silent one, shows
+  "No checksum" instead of "Not accurate", is not counted in the AccurateRip
+  chip, and gets two reads instead of four. Check Again corrects an earlier
+  rip, and it is now offered for a rip with tracks AccurateRip did not match,
+  even when CTDB verified the disc.
 - The area under the disc graph no longer gets a little shorter while the
   pointer is over a track.
 - A disc that MusicBrainz knows no longer becomes "Unknown Album" when

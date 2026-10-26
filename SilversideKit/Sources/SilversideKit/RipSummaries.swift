@@ -73,6 +73,15 @@ extension SecureTrackRip {
 }
 
 extension RipReport {
+    /// "AccurateRip has no checksum for tracks 34 and 35 (it keeps none for a silent track)", or
+    /// nil when it has one for every track, or does not have the disc.
+    public var noChecksumNote: String? {
+        let numbers = tracks.filter { $0.accurateRip == .noChecksum }.map(\.number)
+        guard !numbers.isEmpty else { return nil }
+        return "AccurateRip has no checksum for \(numbers.count == 1 ? "track" : "tracks") \(RipSet.list(numbers))"
+            + " (it keeps none for a silent track)"
+    }
+
     /// The next step that is most likely to help, when the rip is not verified: for the
     /// app's result banner and the CLI. Nil when the rip is verified.
     public var advice: String? {

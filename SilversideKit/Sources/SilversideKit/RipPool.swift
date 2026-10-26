@@ -48,7 +48,7 @@ public enum RipPool {
         guard let index = audioTracks.firstIndex(of: track) else { return .notChecked }
         let checksum = AccurateRipAccumulator.checksum(
             of: samples[...], isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
-        let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
+        let known = records.entries(forTrackAt: index)
         return TrackRipper.verification(of: checksum, known: known)
     }
 

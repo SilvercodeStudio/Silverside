@@ -57,7 +57,7 @@ public struct TrackRipper {
     /// The AccurateRip records' entries for one track.
     func known(for track: TOC.Track) -> [AccurateRipRecord.Track] {
         guard let index = reader.toc.audioTracks.firstIndex(of: track) else { return [] }
-        return records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
+        return records.entries(forTrackAt: index)
     }
 
     /// How a track's checksum compares with the AccurateRip records' entries for the track.

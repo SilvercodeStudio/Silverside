@@ -616,6 +616,9 @@ public struct DiscRip {
             sectors: toc.sectorRange(of: track).count, preEmphasis: track.hasPreEmphasis, accurateRip: .notInDatabase)
         report.isrc = try? SubchannelCodes.isrc(of: track, in: toc, drive: drive)
         report.pregapSectors = try? PregapFinder.pregap(of: track, in: toc, drive: drive)
+        // The status when the track matches no checksum: not in AccurateRip, no checksum for it, or not accurate.
+        let unmatched = RipReport.AccurateRipStatus.unmatched(
+            trackAt: toc.audioTracks.firstIndex(of: track) ?? 0, records: records)
         if options.singlePass {
             let rip = try ripper.rip(track) { events(.reading($0)) }
             report.matchingOffsets = rip.matchingOffsets
@@ -626,7 +629,7 @@ public struct DiscRip {
                 report.accurateRip = .accurate
                 report.accurateRipConfidence = [v1, v2]
             case .notAccurate: report.accurateRip = rip.matchingOffsets.isEmpty ? .notAccurate : .otherPressings
-            case .notChecked: break
+            case .notChecked: report.accurateRip = unmatched
             }
             return (rip.samples, rip.summary, TrackAudio(samples: rip.samples), report)
         }
@@ -644,9 +647,7 @@ public struct DiscRip {
             report.accurateRip = .accurate
             report.accurateRipConfidence = [v1, v2]
         case .matchesOtherPressings: report.accurateRip = .otherPressings
-        case .consistent: break
-        case .consistentButNotAccurate, .suspect:
-            report.accurateRip = records.isEmpty ? .notInDatabase : .notAccurate
+        case .consistent, .consistentButNotAccurate, .suspect: report.accurateRip = unmatched
         }
         // A track free of errors needs no suspects: they could only let a repair change it.
         let errorFree = report.accurateRip == .accurate || report.accurateRip == .otherPressings
@@ -719,7 +720,7 @@ public struct DiscRip {
             reports[index].hdcd = HDCDCodes.scan(samples)
             let checksum = AccurateRipAccumulator.checksum(
                 of: samples[...], isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
-            let known = records.compactMap { $0.tracks.indices.contains(index) ? $0.tracks[index] : nil }
+            let known = records.entries(forTrackAt: index)
             let verification = TrackRipper.verification(of: checksum, known: known)
             switch verification {
             case .accurate(let v1, let v2):

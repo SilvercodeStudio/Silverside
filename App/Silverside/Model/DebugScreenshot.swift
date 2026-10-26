@@ -6,7 +6,7 @@
     /// window to PNG files after the delay (the main window to the path, the others with
     /// -2, -3 added), then quits. It draws the view hierarchy, so it needs no screen
     /// recording permission. `-screenshotWidth 700` makes the main window that wide first, to
-    /// check a narrow layout. `-appearance light` or `dark` overrides the system's, for a
+    /// check a narrow layout (`-screenshotHeight 500` that high, for a short one). `-appearance light` or `dark` overrides the system's, for a
     /// capture in each.
     enum DebugScreenshot {
         private static var scheduled = false
@@ -24,13 +24,18 @@
             let configured = UserDefaults.standard.double(forKey: "screenshotDelay")
             let delay = configured > 0 ? configured : 4
             let width = UserDefaults.standard.double(forKey: "screenshotWidth")
-            if width > 0 {
+            let height = UserDefaults.standard.double(forKey: "screenshotHeight")
+            if width > 0 || height > 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + max(delay - 1.5, 0.5)) {
                     guard let window = NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 100 }) else {
                         return
                     }
                     var frame = window.frame
-                    frame.size.width = width
+                    if width > 0 { frame.size.width = width }
+                    if height > 0 {
+                        frame.origin.y += frame.height - height
+                        frame.size.height = height
+                    }
                     window.setFrame(frame, display: true)
                 }
             }

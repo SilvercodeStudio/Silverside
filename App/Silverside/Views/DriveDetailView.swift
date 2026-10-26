@@ -158,11 +158,14 @@ struct DiscView: View {
                     .padding(.bottom, 12)
             }
             Divider()
+            // The Rip button floats over the table's lower right. As a safe area inset (the
+            // table does not take content margins), it lets the last tracks scroll out from under it.
             TrackTable(slot: slot)
-            Divider()
-            RipButton(slot: slot)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    RipButton(slot: slot)
+                        .padding(RipButton.inset)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
             Divider()
             StatusBar(slot: slot)
                 .padding(.horizontal, 16)

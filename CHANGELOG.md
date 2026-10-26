@@ -9,7 +9,9 @@ command-line tool.
 
 - The Rip button has the new rip icon. During a rip, level bars hang from the
   top and bounce behind the arm, the laser's spot pulses, and a line in the
-  progress bar's colors fills around the edge.
+  progress bar's colors fills around the edge. It floats over the lower right
+  of the track list, so the list has more room; the last tracks scroll out
+  from under it.
 - The "nearly the same TOC" chip opens the MusicBrainz page that adds the
   disc's ID to its release, and its tooltip says what the match means. An
   earlier rip that MusicBrainz matched by its track lengths shows the chip

@@ -1,7 +1,7 @@
 import SilversideKit
 import SwiftUI
 
-/// The Rip button under the track table: the rip icon (`SilversideRipIcon.icon`), which moves
+/// The Rip button over the track table's lower right: the rip icon (`SilversideRipIcon.icon`), which moves
 /// during a rip. Before a rip it starts one. During the rip level bars hang from the top and
 /// bounce behind the arm, the laser's spot pulses, and a line fills around the edge; a click
 /// asks to stop. After it, a badge shows the verdict, and a click opens the rip's results.
@@ -10,6 +10,9 @@ struct RipButton: View {
     var slot: DriveSlot
     var size: CGFloat = 120
     @State private var stopAsked = false
+
+    /// Its distance from the track table's edges.
+    static let inset: CGFloat = 16
 
     var body: some View {
         Button(action: click) {

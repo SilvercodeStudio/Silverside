@@ -5,6 +5,13 @@ command-line tool.
 
 ## 0.8 (not released yet)
 
+### Changed
+
+- The "nearly the same TOC" chip opens the MusicBrainz page that adds the
+  disc's ID to its release, and its tooltip says what the match means. An
+  earlier rip that MusicBrainz matched by its track lengths shows the chip
+  too, so its disc ID can be added without the disc.
+
 ### Fixed
 
 - A disc that MusicBrainz knows no longer becomes "Unknown Album" when

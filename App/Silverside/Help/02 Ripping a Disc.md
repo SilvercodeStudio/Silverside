@@ -7,7 +7,7 @@ When a disc appears, Silverside reads its table of contents and asks MusicBrainz
 | Chip | Meaning |
 |---|---|
 | Disc ID match | MusicBrainz knows this exact disc. |
-| Nearly the same TOC | MusicBrainz does not know the disc ID, but these releases have almost the same track lengths. Check the release, and consider adding the disc ID to MusicBrainz (the link is in the release picker). |
+| Nearly the same TOC | MusicBrainz does not know the disc ID, but these releases have almost the same track lengths. Check the release, and consider adding the disc ID to MusicBrainz: click the chip (an earlier rip shows it too) or use the link in the release picker. You need a MusicBrainz account. |
 | Several releases match | More than one release has the disc, and Silverside cannot tell which. Choose one. The choice is kept for the other discs of the set. |
 | Not in MusicBrainz | No release has the disc. The names come from the disc's CD-Text, or you type them in the header and the track table. The files get those names, but no MusicBrainz IDs. |
 

@@ -450,7 +450,7 @@ struct AlbumHeader: View {
         case .found where disc.isAmbiguous:
             Chip(text: "MusicBrainz · several releases match", tone: .warning, systemImage: "questionmark")
         case .found where disc.isFuzzy:
-            Chip(text: "MusicBrainz · nearly the same TOC", tone: .warning, systemImage: "approximatelyequal")
+            ResultChips.lengthsMatch(toc: disc.toc)
         case .found:
             Chip(text: "MusicBrainz · Disc ID match", tone: .good, systemImage: "checkmark")
         case .notFound:
@@ -835,6 +835,17 @@ enum ResultChips {
         return Chip(
             text: features.isEmpty ? "codes only" : features.joined(separator: ", "), logo: "HDCD",
             help: HDCDStatus.text(for: tracks))
+    }
+
+    /// For a release that MusicBrainz matched by its track lengths: a click opens the page
+    /// that adds the disc ID to it.
+    static func lengthsMatch(toc: TOC) -> Chip {
+        Chip(
+            text: "MusicBrainz · nearly the same TOC", tone: .warning, systemImage: "approximatelyequal",
+            help: "MusicBrainz does not know this disc ID, so the release was matched by its track lengths. "
+                + "Click to add the disc ID to the right release in MusicBrainz (you need an account); "
+                + "after that, every ripper finds the disc by its ID.",
+            link: MusicBrainzRelease.submissionURL(for: toc))
     }
 
     static func chips(for report: RipReport) -> [Chip] {

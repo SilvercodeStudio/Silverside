@@ -113,6 +113,18 @@ struct MusicBrainzTests {
         #expect(release.medium(for: try TOC(audioTrackStarts: [0, 100], leadOutLBA: 200)) == nil)
     }
 
+    /// A release matched by its track lengths lacks the disc ID; one found by the ID, and a
+    /// manual release, do not.
+    @Test func tellsAMatchOfTheLengthsFromAMatchOfTheDiscID() throws {
+        let toc = try TOC(
+            musicBrainzOffsets: [150, 25220, 61075, 82890, 116599, 145802, 173575, 189016, 210578, 236749, 251121],
+            sectors: 301_681)
+        let exact = try #require(try MusicBrainzClient.lookup(fromJSON: fixture("cornell-1977-disc1")).releases.first)
+        #expect(!exact.lacksDiscID(of: toc) && !MusicBrainzRelease.manual(toc: toc).lacksDiscID(of: toc))
+        let fuzzy = try #require(try MusicBrainzClient.lookup(fromJSON: fixture("fuzzy-example")).releases.first)
+        #expect(fuzzy.lacksDiscID(of: toc))
+    }
+
     @Test func linksToTheDiscIDSubmissionPage() throws {
         let toc = try TOC(musicBrainzOffsets: [150, 20000, 40000], sectors: 60000)
         let url = MusicBrainzRelease.submissionURL(for: toc).absoluteString

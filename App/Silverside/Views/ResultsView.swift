@@ -30,6 +30,12 @@ struct ResultsView: View {
 
     private var toc: TOC? { try? TOC(ctdbTOCString: report.toc) }
 
+    /// The chip for a release that MusicBrainz matched by its track lengths at the rip.
+    private var lengthsMatchChip: [Chip] {
+        guard let toc, report.release?.lacksDiscID(of: toc) == true else { return [] }
+        return [ResultChips.lengthsMatch(toc: toc)]
+    }
+
     /// The release with the names as they are now: the rip's edits, and the kept album edits.
     private var shownRelease: MusicBrainzRelease? {
         guard let toc, let release = report.release else { return report.release }
@@ -276,7 +282,7 @@ struct ResultsView: View {
                     "Ripped \(report.date.formatted(date: .abbreviated, time: .shortened)) on \(report.drive.vendor) \(report.drive.product), read offset \(report.drive.readOffset.signedDescription), \(report.secure ? "secure" : "one read per track")."
                 )
                 .foregroundStyle(.secondary)
-                ChipRow(chips: ResultChips.chips(for: report))
+                ChipRow(chips: lengthsMatchChip + ResultChips.chips(for: report))
                 if model.checking.contains(recentRip.file) {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)

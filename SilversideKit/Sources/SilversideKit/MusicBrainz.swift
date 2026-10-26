@@ -154,6 +154,13 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
         return ranked[0].0
     }
 
+    /// True if MusicBrainz gave this release for the disc without the disc's ID: a match of
+    /// the track lengths, as for a release no one has added the disc ID to (`submissionURL`).
+    /// False for a manual release, which is not MusicBrainz's.
+    public func lacksDiscID(of toc: TOC) -> Bool {
+        !isManual && medium(withDiscID: toc.musicBrainzDiscID) == nil
+    }
+
     /// The page where a user can add this disc ID to a release in MusicBrainz.
     public static func submissionURL(for toc: TOC) -> URL {
         var components = URLComponents(string: "https://musicbrainz.org/cdtoc/attach")!

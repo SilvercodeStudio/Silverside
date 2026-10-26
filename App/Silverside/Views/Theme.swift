@@ -50,8 +50,18 @@ struct Chip: View {
     var logo: String?
     /// The tooltip, for a chip in a `ChipRow`.
     var help: String?
+    /// A web page that a click opens.
+    var link: URL?
 
     var body: some View {
+        if let link {
+            Link(destination: link) { content }.buttonStyle(.plain)
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         HStack(spacing: 4) {
             if isWorking {
                 ProgressView().controlSize(.mini)

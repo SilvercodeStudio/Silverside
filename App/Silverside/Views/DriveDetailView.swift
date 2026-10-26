@@ -897,12 +897,39 @@ enum ResultChips {
         }
         if repaired > 0 { chips.append(Chip(text: "\(repaired.formatted()) samples repaired", tone: .warning)) }
         if report.hdcd != nil, let chip = hdcd(report.tracks) { chips.append(chip) }
+        let emphasized = report.tracks.filter(\.preEmphasis)
+        if !emphasized.isEmpty {
+            let qOnly = emphasized.allSatisfy { $0.tocFlags?.preEmphasis == false }
+            chips.append(
+                Chip(
+                    text: emphasized.count == report.tracks.count
+                        ? "Pre-emphasis" : "Pre-emphasis · " + Format.count(emphasized.count, "track"),
+                    help: "The disc marks these tracks as mastered with pre-emphasis, a treble boost that a CD player"
+                        + " takes out again. "
+                        + (report.encoding?.deEmphasizedTracks?.isEmpty == false
+                            ? "The files hold them de-emphasized, as a CD player plays them, tagged DE_EMPHASIZED=yes."
+                            : "The files keep the audio as on the disc, tagged PRE_EMPHASIS=yes, so a player that"
+                                + " ignores the flag plays them too bright.")
+                        + " The CUE sheet marks them (FLAGS PRE)."
+                        + (qOnly ? " The flag is in the Q subchannel only, not in the TOC." : "")))
+        }
+        let fourChannel = report.tracks.filter(\.isFourChannel)
+        if !fourChannel.isEmpty {
+            chips.append(
+                Chip(
+                    text: "Four-channel audio · " + Format.count(fourChannel.count, "track"), tone: .warning,
+                    help: "The disc's control bits say four-channel audio: a mode in early versions of the CD"
+                        + " standard that no player supports and no released disc is known to use (the 1999 edition"
+                        + " gives the bit to broadcasting). Silverside ripped the"
+                        + " audio as two channels, as on any CD. The report has the details."))
+        }
         if let encoding = report.encoding {
             let all = encoding.files.count >= report.tracks.count
             chips.append(
                 Chip(
                     text: "Encoded · \(encoding.format.rawValue.uppercased())"
                         + (encoding.hdcdDecoded == true ? " · HDCD decoded" : "")
+                        + (encoding.deEmphasizedTracks?.isEmpty == false ? " · de-emphasized" : "")
                         + (all ? "" : " · \(encoding.files.count) tracks"),
                     tone: all ? .good : .warning, systemImage: "music.note"))
         }

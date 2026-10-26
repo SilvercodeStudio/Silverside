@@ -24,6 +24,9 @@ extension RipReport {
         if let noChecksumNote { lines += ["", noChecksumNote + "."] }
         lines.append("")
         lines.append("CTDB: " + ctdbSummary + ".")
+        if let controlBits = Self.controlBitsSummary(of: tracks) {
+            lines += ["", "Control bits (TOC and Q subchannel): " + controlBits]
+        }
         if let checkedAgain {
             lines += [
                 "", "Checked again in AccurateRip and CTDB \(ISO8601DateFormatter().string(from: checkedAgain)).",

@@ -242,6 +242,33 @@ struct DiscRipTests {
         }
     }
 
+    /// The *Denon Audio Technical CD* sets pre-emphasis in the Q subchannel and not in the TOC.
+    /// The rip finds it in the first read's Q frames, and the report and the log say where it was.
+    @Test func findsPreEmphasisInTheQSubchannelOnly() async throws {
+        let (result, events, _, root) = try await rip(trackSectors: [800, 900, 700]) { $0.qControl = [2: 0x1] }
+        defer { try? FileManager.default.removeItem(at: root) }
+        let tracks = result.report.tracks
+        #expect(tracks.map(\.preEmphasis) == [false, true, false])
+        #expect(tracks.map { $0.tocFlags?.preEmphasis } == [false, false, false])
+        #expect(tracks[1].subchannel?.frames == 900 && tracks[1].subchannel?.preEmphasis == 900)
+        let summaries = events.compactMap { event -> String? in
+            if case .trackFinished(_, let summary, _) = event { return summary }
+            return nil
+        }
+        #expect(summaries[1].contains(", pre-emphasis (Q subchannel only)"))
+        #expect(!summaries[0].contains("pre-emphasis"))
+        let controlBits = events.compactMap { event -> String? in
+            if case .controlBits(let text) = event { return text }
+            return nil
+        }
+        #expect(
+            controlBits == [
+                "Pre-emphasis: track 2 (Q subchannel only, not the TOC). Digital copy permitted: no track."
+                    + " Four-channel audio: no track."
+            ])
+        #expect(result.report.markdown.contains("Control bits (TOC and Q subchannel): Pre-emphasis: track 2"))
+    }
+
     /// AccurateRip keeps an entry with checksum 0 and no submissions for a track it has no
     /// checksum for, such as a silent one (*Denon Audio Technical CD*, tracks 34 and 35). That
     /// track is not "not accurate", and it gets no extra reads to look for a match.

@@ -59,6 +59,8 @@ public struct Settings: Codable, Equatable, Sendable {
     public var ripOnInsert = false
     /// What to do with a disc whose HDCD codes ask for peak extend or a gain adjustment.
     public var hdcd = HDCDChoice.ask
+    /// What to do with tracks whose control bits say pre-emphasis.
+    public var preEmphasis = PreEmphasisChoice.ask
     /// Also write a disc image when a disc is encoded: the whole disc in one lossless file, with
     /// a CUE sheet, in `images`.
     public var writeImages = false
@@ -205,6 +207,7 @@ public struct Settings: Codable, Equatable, Sendable {
         addToMusic = try value(.addToMusic, defaults.addToMusic)
         ripOnInsert = try value(.ripOnInsert, defaults.ripOnInsert)
         hdcd = try value(.hdcd, defaults.hdcd)
+        preEmphasis = try value(.preEmphasis, defaults.preEmphasis)
         writeImages = try value(.writeImages, defaults.writeImages)
         images = try value(.images, defaults.images)
     }

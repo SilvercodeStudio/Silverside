@@ -105,6 +105,7 @@ struct Rip: AsyncParsableCommand {
         if let keepRip { options.keepsRip = keepRip }
         options.addsToMusic = encoding.addsToMusic(settings)
         options.hdcd = encoding.hdcdChoice(settings)
+        options.preEmphasis = encoding.preEmphasisChoice(settings)
 
         var rip = DiscRip(
             drive: drive,
@@ -123,6 +124,10 @@ struct Rip: AsyncParsableCommand {
             rip.chooseHDCD = { [printer] report, format in
                 printer.progress.clear()
                 return Self.askToDecodeHDCD(report, format: format)
+            }
+            rip.choosePreEmphasis = { [printer] report, format in
+                printer.progress.clear()
+                return Self.askToDeEmphasize(report, format: format)
             }
         }
         // Ctrl-C stops the rip after the read under way; the tracks done so far stay.
@@ -175,13 +180,28 @@ struct Rip: AsyncParsableCommand {
             !format.isLossless
                 ? "Decoding gives the \(format.name) encoder the decoded audio, at no cost in size; \(format.name)"
                     + " files lose the codes, so they cannot be decoded later."
-                : "Decoding makes \(format.hdcdBits)-bit \(format.name) files, \(format.hdcdBits == 20 ? "a little" : "half again as")"
+                : "Decoding makes \(format.wideBits)-bit \(format.name) files, \(format.wideBits == 20 ? "a little" : "half again as")"
                     + " larger, as an HDCD player plays the disc. Kept, the files are bit for bit the disc, and can be"
                     + " decoded later.")
         print("Decode the HDCD codes? [\(recommended ? "Y/n" : "y/N")] ", terminator: "")
         fflush(stdout)
         let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
         return answer.isEmpty ? recommended : answer == "y" || answer == "yes"
+    }
+
+    /// Asks at the terminal whether to de-emphasize a disc's tracks with pre-emphasis. Yes is the default.
+    static func askToDeEmphasize(_ report: RipReport, format: AudioFormat) -> Bool {
+        print()
+        if let text = report.preEmphasisText { print(text) }
+        print(
+            "Few players take pre-emphasis out, so those tracks play too bright. De-emphasizing takes it out, as a CD"
+                + " player does, into "
+                + (format.isLossless ? "\(format.wideBits)-bit \(format.name) files" : "\(format.name) files")
+                + " tagged DE_EMPHASIZED=yes. Kept, the files are bit for bit the disc, tagged PRE_EMPHASIS=yes.")
+        print("De-emphasize? [Y/n] ", terminator: "")
+        fflush(stdout)
+        let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        return answer.isEmpty || answer == "y" || answer == "yes"
     }
 
     static func trackNumbers(_ list: String) throws -> [Int] {
@@ -271,6 +291,8 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print(
                 String(format: "Track %2d  %@  %3d s  ", report.number, Info.duration(report.sectors), seconds)
                     + summary)
+        case .controlBits(let summary):
+            Swift.print("Control bits: " + summary)
         case .checkingCTDB:
             Swift.print()
         case .repairLog(let line):

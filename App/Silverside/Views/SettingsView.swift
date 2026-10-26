@@ -401,6 +401,17 @@ struct EncodingSettings: View {
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Pre-emphasis") {
+                Picker("Tracks with pre-emphasis", selection: $model.settings.preEmphasis) {
+                    Text("Ask each time").tag(PreEmphasisChoice.ask)
+                    Text("De-emphasize").tag(PreEmphasisChoice.deEmphasize)
+                    Text("Keep as pressed").tag(PreEmphasisChoice.keep)
+                }
+                Text(
+                    "A few CDs were mastered with pre-emphasis, a treble boost that a CD player takes out again; few other players do. De-emphasize takes it out, as a CD player does, into 20-bit FLAC and Apple Lossless files (24-bit AIFF and WAV), tagged DE_EMPHASIZED=yes. Keep as pressed gives files bit for bit the disc, tagged PRE_EMPHASIS=yes. A disc image always keeps the disc as pressed."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+            }
             Section {
                 Picker("Mode", selection: $model.settings.aac.mode) {
                     ForEach(AACOptions.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }

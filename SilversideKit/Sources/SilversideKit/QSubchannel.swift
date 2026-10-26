@@ -19,12 +19,13 @@ public struct QSubchannel: Equatable, Sendable {
     }
 
     /// Makes a valid ADR 1 frame for an audio sector, with the relative time left at zero.
-    public static func position(track: Int, index: Int, lba: Int) -> QSubchannel {
+    /// `control` is the 4 control bits (see `Control`).
+    public static func position(track: Int, index: Int, lba: Int, control: UInt8 = 0) -> QSubchannel {
         func bcd(_ value: Int) -> UInt8 { UInt8((value / 10) << 4 | value % 10) }
         let msf = lba + CDDA.leadInSectors
         let seconds = msf / CDDA.sectorsPerSecond
         return withCRC([
-            0x01, track == leadOutTrack ? 0xAA : bcd(track), bcd(index), 0, 0, 0, 0,
+            control << 4 | 0x01, track == leadOutTrack ? 0xAA : bcd(track), bcd(index), 0, 0, 0, 0,
             bcd(seconds / 60), bcd(seconds % 60), bcd(msf % CDDA.sectorsPerSecond),
         ])
     }
@@ -56,6 +57,7 @@ public struct QSubchannel: Equatable, Sendable {
     /// The 6-bit character codes of an ISRC's first five characters. "?" marks unused codes.
     private static let isrcCodes = Array("0123456789???????ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
+    /// The control bits, as in the TOC: 1 pre-emphasis, 2 digital copy permitted, 4 data, 8 four-channel audio.
     public var control: UInt8 { bytes[0] >> 4 }
     public var adr: UInt8 { bytes[0] & 0x0F }
 
@@ -114,5 +116,40 @@ public struct QSubchannel: Equatable, Sendable {
             }
         }
         return ~crc
+    }
+}
+
+/// The control bits of a track's Q frames: how many valid frames of the track were read, and
+/// how many had each bit. A pressed disc can set a bit here and not in the TOC: the *Denon
+/// Audio Technical CD* has pre-emphasis in the Q frames of 23 tracks and in none of its TOC entries.
+public struct SubchannelControl: Codable, Equatable, Sendable {
+    public var frames = 0
+    public var preEmphasis = 0
+    public var copyPermitted = 0
+    public var data = 0
+    public var fourChannel = 0
+
+    public init() {}
+
+    /// Counts the valid position frames of `track` among `frames`. Frames of other tracks
+    /// (the next track's pregap, a read's margins) and MCN and ISRC frames are left out.
+    public mutating func add(_ frames: some Sequence<QSubchannel>, track: Int) {
+        for frame in frames where frame.position?.track == track {
+            self.frames += 1
+            if frame.control & 0x01 != 0 { preEmphasis += 1 }
+            if frame.control & 0x02 != 0 { copyPermitted += 1 }
+            if frame.control & 0x04 != 0 { data += 1 }
+            if frame.control & 0x08 != 0 { fourChannel += 1 }
+        }
+    }
+
+    /// True if most frames have pre-emphasis. A frame whose CRC passes can still be wrong, so one frame does not decide.
+    public var hasPreEmphasis: Bool { preEmphasis * 2 > frames }
+    public var isCopyPermitted: Bool { copyPermitted * 2 > frames }
+    public var isFourChannel: Bool { fourChannel * 2 > frames }
+
+    /// True if the frames disagree on a bit: some have it and some do not.
+    public var isMixed: Bool {
+        [preEmphasis, copyPermitted, data, fourChannel].contains { $0 > 0 && $0 < frames }
     }
 }

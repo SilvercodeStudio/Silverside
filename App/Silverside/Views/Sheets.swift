@@ -263,7 +263,7 @@ struct HDCDQuestionSheet: View {
                     .init(
                         "**Decode:** the audio as an HDCD player plays it, in "
                             + (format.isLossless
-                                ? "\(format.hdcdBits)-bit \(format.name) files" : "\(format.name) files")
+                                ? "\(format.wideBits)-bit \(format.name) files" : "\(format.name) files")
                             + (HDCDSizeWarning.growth(for: format).map { ", \($0)" } ?? " of the same size")
                             + ". They are 6 dB quieter; ReplayGain makes up the level."))
                 Text(
@@ -304,6 +304,55 @@ struct HDCDQuestionSheet: View {
     private func answer(decodes: Bool) {
         if remembers { model.settings.hdcd = decodes ? .decode : .keep }
         rip.answerHDCD(decodes: decodes)
+    }
+}
+
+/// After a rip with tracks that have pre-emphasis, before encoding: take it out, as a CD
+/// player does, or keep the audio as pressed. De-emphasizing is the advice for every format.
+struct PreEmphasisQuestionSheet: View {
+    @Environment(AppModel.self) private var model
+    var rip: RipRun
+    var question: RipRun.PreEmphasisQuestion
+    @State private var remembers = false
+
+    var body: some View {
+        let format = question.format
+        VStack(alignment: .leading, spacing: 12) {
+            Text("“\(question.album)” has pre-emphasis").font(.title3.bold())
+            Text(
+                (question.everyTrack ? "Every track was" : "Some tracks were")
+                    + " mastered with pre-emphasis, a treble boost that a CD player takes out again. Few other players"
+                    + " take it out, so they play "
+                    + (question.everyTrack ? "the tracks" : question.tracks) + " too bright."
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(
+                    .init(
+                        "**De-emphasize:** the audio as a CD player plays it, in "
+                            + (format.isLossless
+                                ? "\(format.wideBits)-bit \(format.name) files" : "\(format.name) files")
+                            + ", tagged DE_EMPHASIZED=yes. The other tracks stay as they are."))
+                Text(
+                    .init(
+                        "**Keep as pressed:** files bit for bit the disc, tagged PRE_EMPHASIS=yes, for a player that takes it out itself."
+                    ))
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Toggle("Use this answer for every disc with pre-emphasis (Settings › Encoding)", isOn: $remembers)
+            HStack {
+                Spacer()
+                Button("Keep as Pressed") { answer(deEmphasizes: false) }
+                Button("De-emphasize") { answer(deEmphasizes: true) }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
+    }
+
+    private func answer(deEmphasizes: Bool) {
+        if remembers { model.settings.preEmphasis = deEmphasizes ? .deEmphasize : .keep }
+        rip.answerPreEmphasis(deEmphasizes: deEmphasizes)
     }
 }
 
@@ -363,7 +412,7 @@ struct HDCDDecodeSheet: View {
             } else if let encoding {
                 HDCDSizeWarning(format: encoding.format)
                 Text(
-                    "The album's \(encoding.format.name) files become \(encoding.format.isLossless ? "\(encoding.format.hdcdBits)-bit, " : "")tagged HDCD=decoded, with ReplayGain measured again. The audio as pressed is gone from the library"
+                    "The album's \(encoding.format.name) files become \(encoding.format.isLossless ? "\(encoding.format.wideBits)-bit, " : "")tagged HDCD=decoded, with ReplayGain measured again. The audio as pressed is gone from the library"
                         + (rip.hasAudio
                             ? ", but stays in the rip's WAV files." : "; only a new rip of the disc gets it back.")
                 )

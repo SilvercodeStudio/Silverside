@@ -124,6 +124,7 @@ extension RippedDisc {
         guard let encoding = report.encoding else { throw EncodingError.noDiscJSON(folder) }
         guard encoding.format.isLossless else { throw EncodingError.lossySource(folder) }
         guard encoding.hdcdDecoded != true else { throw EncodingError.alreadyDecoded(folder) }
+        guard encoding.deEmphasizedTracks?.isEmpty != false else { throw EncodingError.deEmphasized(folder) }
         self.folder = folder
         reportFile = file
         self.report = report
@@ -173,6 +174,7 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
     case verificationFailed(URL)
     case lossySource(URL)
     case alreadyDecoded(URL)
+    case deEmphasized(URL)
     case sourceChanged(URL)
 
     public var description: String {
@@ -189,6 +191,8 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
             "\(folder.path) holds lossy files, which no longer have the ripped audio to encode from."
         case .alreadyDecoded(let folder):
             "\(folder.path) holds an HDCD decode, which is no longer the ripped audio to encode from."
+        case .deEmphasized(let folder):
+            "\(folder.path) holds de-emphasized tracks, which are no longer the ripped audio to encode from."
         case .sourceChanged(let file): "\(file.path) no longer decodes to the audio that was ripped and verified."
         }
     }
@@ -217,6 +221,11 @@ public struct DiscEncoder: Sendable {
     /// Decode a disc whose HDCD codes ask for peak extend or a gain adjustment into 20-bit (24-bit for AIFF and WAV)
     /// files, tagged HDCD=decoded. A disc whose codes ask for nothing is encoded as it is.
     public var decodesHDCD = false
+    /// Take the pre-emphasis out of the tracks whose control bits ask for it (in the TOC or the
+    /// Q subchannel, as the rip's report has them), as a CD player does: 20-bit files (24-bit
+    /// for AIFF and WAV), tagged DE_EMPHASIZED=yes. Other tracks are encoded as they are. When
+    /// false, those tracks are tagged PRE_EMPHASIS=yes.
+    public var deEmphasizes = true
     /// Added to the album's title in names and tags, as " (HDCD)" for a decoded copy beside
     /// the album: the copy gets a folder of its own, and players list it apart.
     public var albumSuffix: String?
@@ -254,6 +263,7 @@ public struct DiscEncoder: Sendable {
         mp3 = settings.mp3
         replayGain = settings.replayGain
         decodesHDCD = settings.hdcd == .decode
+        deEmphasizes = settings.preEmphasis != .keep
         images = settings.writeImages ? settings.imagesURL : nil
     }
 
@@ -270,6 +280,12 @@ public struct DiscEncoder: Sendable {
         var metadata: TrackMetadata
         var folder: URL
         var file: URL
+        /// True if the track has pre-emphasis, from its control bits (track 1's, for a hidden track).
+        var hasPreEmphasis = false
+        /// True if the encoding takes the pre-emphasis out.
+        var deEmphasizes = false
+        /// The track before it on the disc, when it is de-emphasized too: its end settles the filter.
+        var previous: RippedDisc.Track?
         /// Tags beyond the metadata's: the ReplayGain values, once every track is measured.
         var extraComments: [(key: String, value: String)] = []
     }
@@ -307,6 +323,17 @@ public struct DiscEncoder: Sendable {
             let folder = library.appending(path: folderTemplate.name(values), directoryHint: .isDirectory)
             let file = folder.appending(path: trackTemplate.name(values) + "." + format.fileExtension)
             jobs.append(Job(ripped: ripped, index: index, metadata: metadata, folder: folder, file: file))
+        }
+        // Pre-emphasis, from the report's flags (the TOC's or the Q subchannel's). The audio
+        // before track 1 follows track 1's flag.
+        let emphasized = Set(disc.report?.tracks.filter(\.preEmphasis).map(\.number) ?? [])
+        for position in jobs.indices {
+            let number = jobs[position].ripped.number
+            jobs[position].hasPreEmphasis = emphasized.contains(number == 0 ? audioTracks.first?.number ?? 1 : number)
+            jobs[position].deEmphasizes = deEmphasizes && jobs[position].hasPreEmphasis
+            guard jobs[position].deEmphasizes, position > 0, jobs[position - 1].deEmphasizes else { continue }
+            let before = jobs[position - 1].ripped.number
+            if before == 0 || before == number - 1 { jobs[position].previous = jobs[position - 1].ripped }
         }
         return (release, medium, jobs)
     }
@@ -354,13 +381,24 @@ public struct DiscEncoder: Sendable {
         if decodes {
             log(
                 "HDCD: decoding the codes"
-                    + (format.isLossless ? " into \(format.hdcdBits)-bit files" : "") + ", tagged HDCD=decoded.")
+                    + (format.isLossless ? " into \(format.wideBits)-bit files" : "") + ", tagged HDCD=decoded.")
         }
-        for index in jobs.indices { jobs[index].extraComments = HDCDStatus.tags(hdcd, decoded: decodes) }
+        for index in jobs.indices {
+            jobs[index].extraComments =
+                HDCDStatus.tags(hdcd, decoded: decodes)
+                + PreEmphasis.tags(hasPreEmphasis: jobs[index].hasPreEmphasis, deEmphasized: jobs[index].deEmphasizes)
+        }
+        let deEmphasized = jobs.filter(\.deEmphasizes).map(\.ripped.number)
+        if !deEmphasized.isEmpty {
+            log(
+                "Pre-emphasis: de-emphasizing " + (deEmphasized.count == 1 ? "track " : "tracks ")
+                    + RipReport.list(deEmphasized)
+                    + (format.isLossless ? " into \(format.wideBits)-bit files" : "") + ", tagged DE_EMPHASIZED=yes.")
+        }
 
-        // A track in flight holds its audio; an HDCD decode's samples are twice as wide, so
-        // half as many tracks go at once.
-        let lanes = max(1, decodes ? parallelTracks / 2 : parallelTracks)
+        // A track in flight holds its audio; an HDCD decode's or de-emphasis's values are twice
+        // as wide, so half as many tracks go at once.
+        let lanes = max(1, decodes || !deEmphasized.isEmpty ? parallelTracks / 2 : parallelTracks)
 
         // ReplayGain needs every track's loudness before the first tag is written: the album's
         // gain is one gating over all of them. The tracks are measured from their WAV files,
@@ -370,7 +408,7 @@ public struct DiscEncoder: Sendable {
         if replayGain {
             let measured = CTDB.parallelMap(over: jobs, lanes: lanes) {
                 job -> Result<ReplayGain.Analysis, any Error>? in
-                Result { ReplayGain.analyze(try audio(of: job.ripped, in: disc, decodes: decodes)) }
+                Result { ReplayGain.analyze(try audio(of: job, in: disc, decodes: decodes)) }
             }
             let analyses = try measured.map { try $0.get() }
             let album = ReplayGain.album(of: analyses)
@@ -418,9 +456,11 @@ public struct DiscEncoder: Sendable {
             for staged in outcomes.staged.values { try? FileManager.default.removeItem(at: staged) }
             throw error
         }
+        // Outcomes are kept by the job's place in `jobs`, not by `job.index` (its audio track's
+        // index), which differs for a hidden track and for a rip of some tracks only.
         if replacesSource {
-            for job in jobs {
-                guard let staged = outcomes.staged[job.index] else { continue }
+            for (position, job) in jobs.enumerated() {
+                guard let staged = outcomes.staged[position] else { continue }
                 if FileManager.default.fileExists(atPath: job.file.path) {
                     try FileManager.default.removeItem(at: job.file)
                 }
@@ -440,7 +480,7 @@ public struct DiscEncoder: Sendable {
         var albumFolder: URL?
         var cueTracks = [CueSheet.Track]()
         var hiddenTrackFile: String?
-        for job in jobs where outcomes.finished(job.index) {
+        for (position, job) in jobs.enumerated() where outcomes.finished(position) {
             let (ripped, index, metadata, folder, file) = (job.ripped, job.index, job.metadata, job.folder, job.file)
             albumFolder = folder
             written.append(file)
@@ -450,17 +490,21 @@ public struct DiscEncoder: Sendable {
                 hiddenTrackFile = file.lastPathComponent
                 continue
             }
+            // The report's flags include the Q subchannel's, which can set a flag that the TOC does not.
+            let reported = disc.report?.tracks.first { $0.number == tocTrack.number }
+            let preEmphasis = tocTrack.hasPreEmphasis || reported?.preEmphasis == true
             cueTracks.append(
                 CueSheet.Track(
                     number: tocTrack.number, file: file.lastPathComponent,
-                    sectors: disc.toc.sectorRange(of: tocTrack).count,
-                    pregapSectors: disc.report?.tracks.first { $0.number == tocTrack.number }?.pregapSectors ?? 0,
+                    sectors: disc.toc.sectorRange(of: tocTrack).count, pregapSectors: reported?.pregapSectors ?? 0,
                     title: metadata.title, performer: metadata.vorbisComments.first { $0.key == "ARTIST" }?.value,
-                    isrc: ripped.isrc, preEmphasis: tocTrack.hasPreEmphasis, copyPermitted: tocTrack.isCopyPermitted))
-            if audioTracks[index].hasPreEmphasis {
+                    isrc: ripped.isrc, preEmphasis: preEmphasis,
+                    copyPermitted: tocTrack.isCopyPermitted || reported?.isCopyPermitted == true))
+            if preEmphasis && !job.deEmphasizes {
                 log(
                     "  This track has pre-emphasis: the audio is as on the disc, and sounds too bright in a player"
-                        + " that does not de-emphasize it. The CUE sheet marks it (FLAGS PRE).")
+                        + " that does not de-emphasize it. It is tagged PRE_EMPHASIS=yes, and the CUE sheet marks it"
+                        + " (FLAGS PRE).")
             }
         }
         // The album folder keeps the cover at full size, the other artwork, and the rip's report.
@@ -494,6 +538,7 @@ public struct DiscEncoder: Sendable {
         }.map {
             var encoding = $0
             encoding.hdcdDecoded = decodes ? true : nil
+            encoding.deEmphasizedTracks = deEmphasized.isEmpty ? nil : deEmphasized
             encoding.albumSuffix = albumSuffix
             return encoding
         }
@@ -609,7 +654,19 @@ public struct DiscEncoder: Sendable {
     /// A track's audio to encode: as ripped, or its HDCD decode, at the format's bits.
     func audio(of track: RippedDisc.Track, in disc: RippedDisc, decodes: Bool) throws -> TrackPCM {
         let samples = try disc.audio(of: track)
-        return decodes ? .wide(HDCDCodes.decode(samples, bits: format.hdcdBits)) : .cd(samples)
+        return decodes ? .wide(HDCDCodes.decode(samples, bits: format.wideBits)) : .cd(samples)
+    }
+
+    /// A job's audio to encode: as ripped, HDCD decoded, de-emphasized, or both, at the
+    /// format's bits. HDCD is decoded first, at 24 bits, and de-emphasis rounds to the format's.
+    private func audio(of job: Job, in disc: RippedDisc, decodes: Bool) throws -> TrackPCM {
+        guard job.deEmphasizes else { return try audio(of: job.ripped, in: disc, decodes: decodes) }
+        func source(_ track: RippedDisc.Track) throws -> TrackPCM {
+            let samples = try disc.audio(of: track)
+            return decodes ? .wide(HDCDCodes.decode(samples, bits: 24)) : .cd(samples)
+        }
+        let previous = try job.previous.map(source)
+        return .wide(DeEmphasis.apply(try source(job.ripped), bits: format.wideBits, previous: previous))
     }
 
     /// Whether the disc's HDCD codes ask for anything: from its report, or for a rip from
@@ -631,7 +688,7 @@ public struct DiscEncoder: Sendable {
         _ job: Job, of disc: RippedDisc, decodes: Bool, cover: EmbeddedCover?, lame: URL?, staging: Bool
     ) throws -> URL? {
         try FileManager.default.createDirectory(at: job.folder, withIntermediateDirectories: true)
-        let samples = try audio(of: job.ripped, in: disc, decodes: decodes)
+        let samples = try audio(of: job, in: disc, decodes: decodes)
         // Write to a partial file, and move it into place only when it is checked.
         let partial = job.folder.appending(path: ".\(UUID().uuidString).partial.\(format.fileExtension)")
         var keepsPartial = false

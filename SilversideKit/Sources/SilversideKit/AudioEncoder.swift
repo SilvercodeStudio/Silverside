@@ -19,11 +19,12 @@ public enum AudioFormat: String, CaseIterable, Codable, Sendable {
     /// True if the format keeps every sample, so a decoded file must equal the rip.
     public var isLossless: Bool { self != .aac && self != .mp3 }
 
-    /// The bits of an HDCD decode in this format: 20 for FLAC and Apple Lossless, HDCD's own
-    /// resolution (the bits below it hold nothing that 16-bit audio had, and cost a third more
-    /// space in Apple Lossless); 24 for AIFF and WAV, which store 20 bits in three bytes anyway,
-    /// and for the lossy encoders' input.
-    public var hdcdBits: Int {
+    /// The bits of audio wider than the disc's 16 (an HDCD decode, or de-emphasized audio) in
+    /// this format: 20 for FLAC and Apple Lossless, HDCD's own resolution, which puts the
+    /// rounding error near -120 dBFS, under the 16-bit source's own noise (the bits below it
+    /// would cost a third more space in Apple Lossless); 24 for AIFF and WAV, which store 20
+    /// bits in three bytes anyway, and for the lossy encoders' input.
+    public var wideBits: Int {
         switch self {
         case .flac, .alac: 20
         case .aiff, .wav, .aac, .mp3: 24
@@ -77,7 +78,7 @@ public enum TrackPCM: Equatable, Sendable {
     case cd([UInt32])
     /// Interleaved values (left, right, ...), each a sample in the high 24 bits of an `Int32`,
     /// its low 8 bits zero: 32-bit PCM, as AudioToolbox and lame take it. FLAC and Apple
-    /// Lossless keep the high 20 bits (`AudioFormat.hdcdBits`), so for those the low 12 must be zero.
+    /// Lossless keep the high 20 bits (`AudioFormat.wideBits`), so for those the low 12 must be zero.
     case wide([Int32])
 
     public var frameCount: Int {
@@ -120,7 +121,7 @@ public enum AudioEncoder {
     }
 
     /// Writes `pcm` to `url` in `format`: a lossless format keeps its 16 bits, or for wide
-    /// audio the format's `hdcdBits`. WAV and MP3 have their own writers.
+    /// audio the format's `wideBits`. WAV and MP3 have their own writers.
     public static func encode(
         _ pcm: TrackPCM, format: AudioFormat, to url: URL, aac: AACOptions = AACOptions()
     ) throws {
@@ -153,7 +154,7 @@ public enum AudioEncoder {
     /// A new file at `url` in `format`, which takes 16-bit audio, or 32-bit if `wide`.
     private static func create(_ url: URL, format: AudioFormat, wide: Bool, aac: AACOptions) throws -> ExtAudioFileRef {
         let wideFlag =
-            format.hdcdBits == 20 ? kAppleLosslessFormatFlag_20BitSourceData : kAppleLosslessFormatFlag_24BitSourceData
+            format.wideBits == 20 ? kAppleLosslessFormatFlag_20BitSourceData : kAppleLosslessFormatFlag_24BitSourceData
         var destination = AudioStreamBasicDescription()
         let fileType: AudioFileTypeID
         destination.mSampleRate = 44_100

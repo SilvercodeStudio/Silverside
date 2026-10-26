@@ -48,6 +48,8 @@ public struct SecureTrackRip: Sendable {
 
     /// The samples, by index in the track, from sectors that the first read could not read.
     public var unreadableSamples: [Int] = []
+    /// The control bits of the track's Q frames in the first read. Nil if the drive did not read them.
+    public var subchannel: SubchannelControl?
 
     /// The sectors, counted from the track's start, that the first read could not read. A
     /// later read may have read some of them; `versionCounts` is 0 for one that none could.
@@ -145,7 +147,7 @@ public struct SecureRipper {
         var result = SecureTrackRip(
             track: track, samples: first.samples, status: .consistent, suspectSectors: [], unresolvedSectors: [],
             rounds: 0, matchingOffsets: first.matchingOffsets, c2Samples: first.c2Samples,
-            unreadableSamples: first.unreadableSamples)
+            unreadableSamples: first.unreadableSamples, subchannel: first.subchannel)
         if case .accurate(let v1, let v2) = first.verification {
             result.status = .accurate(v1Confidence: v1, v2Confidence: v2)
             return result

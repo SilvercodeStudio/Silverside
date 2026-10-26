@@ -65,7 +65,7 @@ public struct HDCDCodes: Codable, Equatable, Sendable {
     }
 
     /// Decodes the track as an HDCD decoder plays it: audio of `bits` bits (`TrackPCM.wide`),
-    /// 20 for FLAC and Apple Lossless, 24 otherwise (`AudioFormat.hdcdBits`). The decoder
+    /// 20 for FLAC and Apple Lossless, 24 otherwise (`AudioFormat.wideBits`). The decoder
     /// leaves room for the peaks that peak extend restores, so audio that the codes do not
     /// change comes out as it went in, 6.02 dB lower; audio without codes too.
     public static func decode(_ samples: [UInt32], bits: Int = 24, sampleRate: Int = 44100) -> [Int32] {
@@ -187,7 +187,7 @@ extension HDCDStatus {
         return "HDCD: \(which) HDCD codes, and an HDCD decoder would change the audio (\(features))."
             + (decodedFormat.map {
                 $0.isLossless
-                    ? " The files hold the HDCD decode, at \($0.hdcdBits) bits." : " The files hold the HDCD decode."
+                    ? " The files hold the HDCD decode, at \($0.wideBits) bits." : " The files hold the HDCD decode."
             } ?? " The files hold the audio as it is on the disc.")
     }
 

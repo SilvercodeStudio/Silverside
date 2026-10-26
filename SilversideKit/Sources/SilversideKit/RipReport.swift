@@ -46,6 +46,7 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var file: String
         public var startLBA: Int
         public var sectors: Int
+        /// True if the TOC or most of the track's Q frames say the track has pre-emphasis.
         public var preEmphasis: Bool
         public var accurateRip: AccurateRipStatus
         /// The submissions for the v1 and the v2 checksum, when the track is accurate.
@@ -88,6 +89,11 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var seconds: Int?
         /// The track's HDCD codes. Nil if it has none, and in older reports (see `RipReport.hdcd`).
         public var hdcd: HDCDCodes?
+        /// The track's control bits in the TOC. Nil in reports from before 0.8.
+        public var tocFlags: ControlFlags?
+        /// The control bits of the track's Q frames in its first read. Nil if the drive did not
+        /// read them, and in reports from before 0.8.
+        public var subchannel: SubchannelControl?
 
         /// Whether the test read gave the same audio as the copy, as read: a repair can change
         /// the copy after the test. Nil without a test read.
@@ -101,6 +107,19 @@ public struct RipReport: Codable, Equatable, Sendable {
                 of: samples[...], isFirstTrack: isFirstTrack, isLastTrack: isLastTrack)
             accurateRipChecksums = [CRC32.hex(checksum.v1), CRC32.hex(checksum.v2)]
         }
+
+        /// Records the control bits of the track's Q frames. The track has pre-emphasis if the
+        /// TOC or most of the frames say so.
+        public mutating func recordSubchannel(_ control: SubchannelControl?) {
+            subchannel = control
+            preEmphasis = (tocFlags?.preEmphasis ?? preEmphasis) || control?.hasPreEmphasis == true
+        }
+
+        /// True if the TOC or most of the track's Q frames permit digital copies.
+        public var isCopyPermitted: Bool { tocFlags?.copyPermitted == true || subchannel?.isCopyPermitted == true }
+
+        /// True if the TOC or most of the track's Q frames say four-channel audio.
+        public var isFourChannel: Bool { tocFlags?.fourChannel == true || subchannel?.isFourChannel == true }
 
         public init(
             number: Int, file: String, startLBA: Int, sectors: Int, preEmphasis: Bool,
@@ -122,6 +141,19 @@ public struct RipReport: Codable, Equatable, Sendable {
             self.unresolvedSectors = unresolvedSectors
             self.ctdbConfidence = ctdbConfidence
             self.repairedSamples = repairedSamples
+        }
+    }
+
+    /// A track's control bits in the TOC.
+    public struct ControlFlags: Codable, Equatable, Sendable {
+        public var preEmphasis: Bool
+        public var copyPermitted: Bool
+        public var fourChannel: Bool
+
+        public init(_ track: TOC.Track) {
+            preEmphasis = track.hasPreEmphasis
+            copyPermitted = track.isCopyPermitted
+            fourChannel = track.isFourChannel
         }
     }
 
@@ -258,9 +290,12 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var seconds: Int?
         /// The ReplayGain values written into the tags. Nil when they were not, and in older records.
         public var replayGain: ReplayGainRecord?
-        /// True if the files hold the HDCD decode of the rip (at the format's `hdcdBits`), tagged HDCD=decoded.
+        /// True if the files hold the HDCD decode of the rip (at the format's `wideBits`), tagged HDCD=decoded.
         /// Nil (or false) when they hold the audio as it is on the disc.
         public var hdcdDecoded: Bool?
+        /// The tracks whose pre-emphasis the encoding took out, at the format's `wideBits`, tagged
+        /// DE_EMPHASIZED=yes. Nil when none was.
+        public var deEmphasizedTracks: [Int]?
         /// Added to the album's title in the names and tags, as " (HDCD)" for a decoded copy
         /// beside the album as it is on the disc. Nil for the album itself.
         public var albumSuffix: String?
@@ -338,9 +373,17 @@ public struct RipReport: Codable, Equatable, Sendable {
 
         /// How each file was checked after it was written.
         public var checkText: String {
+            if let tracks = deEmphasizedTracks, !tracks.isEmpty {
+                let which = (tracks.count == 1 ? "track " : "tracks ") + RipReport.list(tracks)
+                return format.isLossless
+                    ? (hdcdDecoded == true ? "HDCD decoded, then " : "")
+                        + "\(which) de-emphasized, at \(format.wideBits) bits: each file decodes to exactly the"
+                        + " audio it was made from."
+                    : "Each file decodes to the track's length; a lossy file cannot equal the rip."
+            }
             if hdcdDecoded == true {
                 return format.isLossless
-                    ? "HDCD decoded, at \(format.hdcdBits) bits: each file decodes to exactly the HDCD decode of the"
+                    ? "HDCD decoded, at \(format.wideBits) bits: each file decodes to exactly the HDCD decode of the"
                         + " ripped audio."
                     : "HDCD decoded: each file decodes to the track's length; a lossy file cannot equal the rip."
             }

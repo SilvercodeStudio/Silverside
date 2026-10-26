@@ -55,6 +55,9 @@ public struct DiscRipOptions: Sendable {
     /// For a disc whose HDCD codes ask for peak extend or a gain adjustment: decode, keep, or
     /// ask `DiscRip.chooseHDCD`.
     public var hdcd: HDCDChoice
+    /// For a disc with tracks that have pre-emphasis: de-emphasize them, keep them, or ask
+    /// `DiscRip.choosePreEmphasis`.
+    public var preEmphasis: PreEmphasisChoice
 
     public init(settings: Settings) {
         artwork = settings.artwork
@@ -63,6 +66,7 @@ public struct DiscRipOptions: Sendable {
         keepsRip = settings.keepRipAfterEncoding
         addsToMusic = settings.addToMusic
         hdcd = settings.hdcd
+        preEmphasis = settings.preEmphasis
     }
 }
 
@@ -99,6 +103,8 @@ public enum DiscRipEvent: Sendable {
     case reading(RipEvent)
     /// A track is done. `summary` says how it compares with AccurateRip, for people to read.
     case trackFinished(RipReport.Track, summary: String, seconds: Int)
+    /// The control bits of every track, after the last one: pre-emphasis, digital copy permitted, four-channel audio.
+    case controlBits(String)
     /// The CTDB check (and repair, if it is needed) starts.
     case checkingCTDB
     /// A line from the CTDB repair, for people to read.
@@ -187,6 +193,10 @@ public struct DiscRip {
     /// adjustment: called after the rip, before encoding. True decodes the codes into 20-bit
     /// files. Nil asks nothing, and the disc is encoded as it is.
     public var chooseHDCD: (@Sendable (_ report: RipReport, _ format: AudioFormat) async -> Bool)?
+    /// With `options.preEmphasis` at `.ask`, for a disc with tracks that have pre-emphasis:
+    /// called after the rip (and after `chooseHDCD`), before encoding. True de-emphasizes them.
+    /// Nil asks nothing, and they are de-emphasized, as advised.
+    public var choosePreEmphasis: (@Sendable (_ report: RipReport, _ format: AudioFormat) async -> Bool)?
     public var profiles: DriveProfileStore
     /// The client for every lookup and download. Tests give one with a fake transport.
     public var webClient = WebClient.shared
@@ -418,12 +428,14 @@ public struct DiscRip {
             if let unreadable = report.unreadableSectors, !unreadable.isEmpty {
                 summary += ", \(unreadable.count) sectors could not be read"
             }
-            if track.hasPreEmphasis { summary += ", pre-emphasis" }
+            summary += report.controlBitsSummary
             if let hdcd = report.hdcd {
                 summary += hdcd.changesAudio ? ", HDCD codes (\(hdcd.featuresText))" : ", HDCD codes"
             }
             events(.trackFinished(report, summary: summary, seconds: report.seconds ?? 0))
         }
+
+        if let controlBits = RipReport.controlBitsSummary(of: reports) { events(.controlBits(controlBits)) }
 
         var ctdb = RipReport.CTDBResult(status: entries.isEmpty && checkedCTDB ? .notInDatabase : .notChecked)
         var ctdbSeconds: Int?
@@ -562,6 +574,16 @@ public struct DiscRip {
                     try stop.check()
                 }
             }
+            switch options.preEmphasis {
+            case .deEmphasize: encoder.deEmphasizes = true
+            case .keep: encoder.deEmphasizes = false
+            case .ask:
+                encoder.deEmphasizes = true
+                if report.tracks.contains(where: \.preEmphasis), let choosePreEmphasis {
+                    encoder.deEmphasizes = await choosePreEmphasis(report, encoder.format)
+                    try stop.check()
+                }
+            }
             events(.encoding(encoder.format))
             encoder.log = { events(.encodedTrack($0)) }
             encoder.trackEncoded = { events(.trackEncoded(number: $0, file: $1)) }
@@ -614,6 +636,7 @@ public struct DiscRip {
         var report = RipReport.Track(
             number: track.number, file: String(format: "Track %02d.wav", track.number), startLBA: track.startLBA,
             sectors: toc.sectorRange(of: track).count, preEmphasis: track.hasPreEmphasis, accurateRip: .notInDatabase)
+        report.tocFlags = RipReport.ControlFlags(track)
         report.isrc = try? SubchannelCodes.isrc(of: track, in: toc, drive: drive)
         report.pregapSectors = try? PregapFinder.pregap(of: track, in: toc, drive: drive)
         // The status when the track matches no checksum: not in AccurateRip, no checksum for it, or not accurate.
@@ -624,6 +647,7 @@ public struct DiscRip {
             report.matchingOffsets = rip.matchingOffsets
             report.c2Sectors = rip.c2Samples.map { Array(Set($0.map { $0 / CDDA.samplesPerSector })).sorted() }
             report.unreadableSectors = Array(Set(rip.unreadableSamples.map { $0 / CDDA.samplesPerSector })).sorted()
+            report.recordSubchannel(rip.subchannel)
             switch rip.verification {
             case .accurate(let v1, let v2):
                 report.accurateRip = .accurate
@@ -642,6 +666,7 @@ public struct DiscRip {
         report.c2Sectors = rip.c2Sectors
         report.shiftedReads = rip.shiftedReads
         report.unreadableSectors = rip.unreadableSectors
+        report.recordSubchannel(rip.subchannel)
         switch rip.status {
         case .accurate(let v1, let v2):
             report.accurateRip = .accurate

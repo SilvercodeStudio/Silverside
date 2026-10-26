@@ -23,6 +23,8 @@ public struct TrackRip: Sendable {
     public var c2Samples: [Int]?
     /// The samples, by index in the track, from sectors that could not be read. They are silence.
     public var unreadableSamples: [Int] = []
+    /// The control bits of the track's Q frames in the read. Nil if the drive did not read them.
+    public var subchannel: SubchannelControl?
 }
 
 /// Rips tracks with offset correction and checks them against AccurateRip.
@@ -33,6 +35,9 @@ public struct TrackRipper {
     /// If true, the first read of each track asks for C2 error flags. A drive that
     /// refuses gives a plain read.
     public var readsC2 = false
+    /// If true, the first read of each track reads its Q subchannel too, for the control bits
+    /// (pre-emphasis, copy permitted, four-channel). A drive that refuses gives a read without it.
+    public var readsQ = true
 
     /// Samples read before and after each track, so other offsets can be checked.
     /// AccurateRip skips this many samples at the disc's edges.
@@ -93,11 +98,13 @@ public struct TrackRipper {
                 )
             }
         }
-        if readsC2, let withC2 = try? reader.read(positions, withC2: true, progress: report) {
+        if readsC2, let withC2 = try? reader.read(positions, withC2: true, withQ: readsQ, progress: report) {
             (read, flagged) = (withC2, withC2.flagged)
         } else {
-            read = try reader.read(positions, withC2: false, progress: report)
+            read = try reader.read(positions, withC2: false, withQ: readsQ, progress: report)
         }
+        var subchannel = SubchannelControl()
+        subchannel.add(read.q, track: track.number)
         let buffer = read.samples
         // The checksum of the track as if the drive's offset were `shift` samples more.
         func checksum(shiftedBy shift: Int) -> AccurateRipChecksum {
@@ -139,6 +146,7 @@ public struct TrackRipper {
             track: track, samples: samples, checksum: trackChecksum, verification: trackVerification,
             matchingOffsets: matchingOffsets,
             c2Samples: flagged?.map { $0 - margin }.filter { (0..<length).contains($0) },
-            unreadableSamples: read.unreadable.map { $0 - margin }.filter { (0..<length).contains($0) })
+            unreadableSamples: read.unreadable.map { $0 - margin }.filter { (0..<length).contains($0) },
+            subchannel: subchannel.frames > 0 ? subchannel : nil)
     }
 }

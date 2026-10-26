@@ -114,3 +114,47 @@ struct AudioReaderTests {
             ])
     }
 }
+
+/// A drive that refuses to read the Q subchannel with the audio, as a drive could.
+private final class NoQWithAudioDrive: CDDrive {
+    let drive: SimulatedDrive
+    init(_ drive: SimulatedDrive) { self.drive = drive }
+
+    struct Refused: Error {}
+
+    func readTOC() throws -> TOC { try drive.readTOC() }
+    func readAudioSectors(at lba: Int, count: Int) throws -> [UInt8] {
+        try drive.readAudioSectors(at: lba, count: count)
+    }
+    func readQSubchannel(at lba: Int, count: Int) throws -> [QSubchannel] {
+        try drive.readQSubchannel(at: lba, count: count)
+    }
+    func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8]) {
+        try drive.readAudioSectorsWithC2(at: lba, count: count)
+    }
+    func readAudioSectors(at lba: Int, count: Int, c2: Bool, q: Bool) throws -> SectorRead {
+        if q { throw Refused() }
+        return try drive.readAudioSectors(at: lba, count: count, c2: c2, q: false)
+    }
+    func readCDText() throws -> [UInt8]? { nil }
+}
+
+struct AudioReaderQTests {
+    /// The Q frames come with the audio, and a drive that refuses them still gives the audio.
+    @Test(arguments: [false, true])
+    func readsTheQSubchannelWithTheAudio(refused: Bool) throws {
+        let (toc, samples) = try makeDisc(trackSectors: [40, 25, 60])
+        let simulated = SimulatedDrive(toc: toc, samples: samples, readOffset: 6)
+        simulated.qControl = [2: 0x1]
+        var reader = AudioReader(
+            drive: refused ? NoQWithAudioDrive(simulated) : simulated, toc: toc, readOffset: 6, canOverread: false)
+        reader.sectorsPerRead = 7
+        let sectors = toc.sectorRange(of: toc.tracks[1])
+        let read = try reader.read(
+            (sectors.lowerBound * 588)..<(sectors.upperBound * 588), withC2: false, withQ: true)
+        #expect(read.samples[...] == samples[(sectors.lowerBound * 588)..<(sectors.upperBound * 588)])
+        var control = SubchannelControl()
+        control.add(read.q, track: 2)
+        #expect(control.frames == (refused ? 0 : 25) && control.preEmphasis == control.frames)
+    }
+}

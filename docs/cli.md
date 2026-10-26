@@ -70,6 +70,15 @@ with ReplayGain measured on the decode;
 at a terminal (yes, except for AIFF and WAV), and `encode`
 keeps the audio as pressed.
 
+Tracks with pre-emphasis (in the TOC or the Q subchannel, as the report has
+them) are de-emphasized by `--pre-emphasis deemphasize` (or the `preEmphasis`
+setting), as a CD player plays them: 20-bit FLAC or Apple Lossless files (24-bit
+AIFF and WAV) tagged `DE_EMPHASIZED=yes`, with ReplayGain measured on the result;
+the disc's other tracks are encoded as they are. `--pre-emphasis keep` encodes
+them as pressed, tagged `PRE_EMPHASIS=yes`. With `ask`, the default, `rip` asks
+at a terminal (yes by default), and `encode` de-emphasizes. The CUE sheet marks
+the tracks (`FLAGS PRE`) either way.
+
 `encode -i` also takes an album folder in the library: the album is encoded
 again from its lossless files, each checked against the rip's CRC-32 first.
 `--hdcd-copy` writes the decode as an album of its own beside it,
@@ -151,6 +160,7 @@ silverside config unset aac.mode                     # back to the default
 | `addToMusic` | `false` | add the encoded files to the Music app, except FLAC (`--add-to-music`) |
 | `ripOnInsert` | `false` | the app rips a disc when it goes in, if its release is certain and it is not ripped yet |
 | `hdcd` | `ask` | for a disc whose HDCD codes ask for peak extend or a gain: `decode` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--hdcd`) |
+| `preEmphasis` | `ask` | for tracks with pre-emphasis: `deemphasize` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--pre-emphasis`) |
 | `writeImages` | `false` | also write a disc image when a disc is encoded (`--image`) |
 | `images` | `~/Music/Silverside Images` | the folder for disc images (`--images`) |
 | `aac.mode`, `aac.bitRate`, `aac.vbrQuality` | `vbr-constrained`, `256`, `127` | Apple's AAC encoder |

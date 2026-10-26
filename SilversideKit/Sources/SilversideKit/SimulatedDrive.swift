@@ -105,6 +105,10 @@ public final class SimulatedDrive: CDDrive {
     /// ISRCs by track number. Sectors whose LBA ends in 83 have their track's ISRC frame, if it has one.
     public var isrcs: [Int: String] = [:]
 
+    /// The control bits in the Q frames of each track, by track number (see `QSubchannel.control`),
+    /// whatever the TOC says. A track that is not here has none.
+    public var qControl: [Int: UInt8] = [:]
+
     public init(toc: TOC, samples: [UInt32], readOffset: Int = 0, canOverread: Bool = false) {
         precondition(samples.count == toc.leadOutLBA * CDDA.samplesPerSector, "Image length does not match the TOC")
         self.toc = toc
@@ -231,7 +235,9 @@ public final class SimulatedDrive: CDDrive {
         } else if let isrc = isrcs[track.number], lba % 100 == 83 {
             frame = .isrc(isrc)
         } else {
-            frame = .position(track: track.number, index: lba < track.startLBA ? 0 : 1, lba: lba)
+            frame = .position(
+                track: track.number, index: lba < track.startLBA ? 0 : 1, lba: lba,
+                control: qControl[track.number] ?? 0)
         }
         var bytes = frame.bytes
         if corruptQSectors.contains(lba) {

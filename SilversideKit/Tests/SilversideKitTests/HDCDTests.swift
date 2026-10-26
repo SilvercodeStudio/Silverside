@@ -179,8 +179,8 @@ struct HDCDTests {
         #expect(values.contains { $0 & 0xF00 != 0 })
         for format in [AudioFormat.flac, .alac, .aiff] {
             let file = folder.appending(path: "t.\(format.rawValue)")
-            let decoded = HDCDCodes.decode(samples, bits: format.hdcdBits)
-            #expect(decoded.allSatisfy { $0 & ((1 << (32 - format.hdcdBits)) - 1) == 0 })
+            let decoded = HDCDCodes.decode(samples, bits: format.wideBits)
+            #expect(decoded.allSatisfy { $0 & ((1 << (32 - format.wideBits)) - 1) == 0 })
             try AudioEncoder.encode(.wide(decoded), format: format, to: file)
             #expect(try AudioEncoder.decodeWide(file) == decoded, "\(format)")
         }

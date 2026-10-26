@@ -79,9 +79,23 @@ struct EncodingOptions: ParsableArguments {
             """)
     var hdcd: HDCDChoice?
 
+    @Option(
+        help: """
+            For tracks whose control bits say pre-emphasis: deemphasize takes it out, as a CD player does, into \
+            20-bit files (24-bit for AIFF and WAV) tagged DE_EMPHASIZED=yes; keep encodes the audio as it is on \
+            the disc, tagged PRE_EMPHASIS=yes. ask (the setting's default) asks in rip at a terminal, and \
+            de-emphasizes otherwise.
+            """)
+    var preEmphasis: PreEmphasisChoice?
+
     /// The HDCD choice: the option, else the setting.
     func hdcdChoice(_ settings: Settings) -> HDCDChoice {
         hdcd ?? settings.hdcd
+    }
+
+    /// The pre-emphasis choice: the option, else the setting.
+    func preEmphasisChoice(_ settings: Settings) -> PreEmphasisChoice {
+        preEmphasis ?? settings.preEmphasis
     }
 
     /// Add the files to Music: the option, else the setting; never for a format Music cannot read.
@@ -108,6 +122,7 @@ struct EncodingOptions: ParsableArguments {
         encoder.overwrites = overwrite
         if let replayGain { encoder.replayGain = replayGain }
         encoder.decodesHDCD = hdcdChoice(settings) == .decode
+        encoder.deEmphasizes = preEmphasisChoice(settings) != .keep
         if image ?? settings.writeImages {
             encoder.images = images.map(Settings.expand) ?? settings.imagesURL
         } else {
@@ -123,3 +138,4 @@ extension MP3Options.Mode: ExpressibleByArgument {}
 extension ArtworkChoice: ExpressibleByArgument {}
 extension SegueMarks: ExpressibleByArgument {}
 extension HDCDChoice: ExpressibleByArgument {}
+extension PreEmphasisChoice: ExpressibleByArgument {}

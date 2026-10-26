@@ -33,8 +33,22 @@ struct Info: AsyncParsableCommand {
                 pregap = "?"
                 notes.append(error.description)
             }
-            if track.hasPreEmphasis { notes.append("pre-emphasis") }
-            if track.isCopyPermitted { notes.append("copy permitted") }
+            // The control bits from the TOC and from Q frames in the middle of the track: a disc
+            // can set pre-emphasis in the Q subchannel only.
+            var control = SubchannelControl()
+            if track.kind == .audio {
+                let range = toc.sectorRange(of: track)
+                control.add(
+                    try drive.readQSubchannel(at: range.lowerBound + range.count / 2, count: min(20, range.count / 2)),
+                    track: track.number)
+            }
+            for (name, inTOC, inQ) in [
+                ("pre-emphasis", track.hasPreEmphasis, control.hasPreEmphasis),
+                ("copy permitted", track.isCopyPermitted, control.isCopyPermitted),
+                ("four-channel", track.isFourChannel, control.isFourChannel),
+            ] where inTOC || (control.frames > 0 && inQ) {
+                notes.append(name + (!inTOC ? " (Q only)" : control.frames > 0 && !inQ ? " (TOC only)" : ""))
+            }
             if track.session > 1 { notes.append("session \(track.session)") }
             if track == toc.tracks[0] && track.kind == .audio && track.startLBA > 0 {
                 notes.append(try Self.describeStart(of: track, drive: drive, toc: toc))

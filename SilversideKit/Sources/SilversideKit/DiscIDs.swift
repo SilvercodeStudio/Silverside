@@ -60,8 +60,9 @@ extension TOC {
 
     /// The AccurateRip disc IDs.
     ///
-    /// Verified against the AccurateRip database for audio-only discs.
-    /// Not yet verified for discs with data tracks.
+    /// Verified against the AccurateRip database for audio-only discs, and for an Enhanced CD
+    /// (*Mirrorball*, 2026-10-26: the real lead-out, audio tracks only). Not yet verified for a
+    /// data track before the audio (mixed mode).
     public var accurateRipDiscID: AccurateRipDiscID {
         var id1: UInt32 = 0
         var id2: UInt32 = 0
@@ -77,10 +78,6 @@ extension TOC {
         return AccurateRipDiscID(audioTrackCount: audio.count, id1: id1, id2: id2, freedbID: freedbDiscID)
     }
 
-    /// The TOC string for CUETools DB lookups: track starts, then the lead-out, separated by colons.
-    ///
-    /// Verified against CTDB for audio-only discs. Data tracks have a "-" prefix,
-    /// which is not yet verified.
     /// Makes a TOC from a CTDB TOC string, the reverse of `ctdbTOCString`. A data
     /// track after the audio is put in a second session, as on an enhanced CD.
     public init(ctdbTOCString string: String) throws(TOCError) {
@@ -96,6 +93,10 @@ extension TOC {
         try self.init(tracks: tracks, leadOutLBA: leadOut)
     }
 
+    /// The TOC string for CUETools DB lookups: track starts, then the lead-out, separated by colons.
+    ///
+    /// Verified against CTDB for audio-only discs, and for an Enhanced CD, whose data track has
+    /// a "-" prefix (*Mirrorball*, 2026-10-26). Not yet verified for a data track before the audio.
     public var ctdbTOCString: String {
         let starts = tracks.map { ($0.kind == .data ? "-" : "") + String($0.startLBA) }
         return (starts + [String(leadOutLBA)]).joined(separator: ":")

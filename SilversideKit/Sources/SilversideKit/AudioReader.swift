@@ -37,6 +37,9 @@ public struct AudioReader {
         public var flagged: [Int] = []
         /// Samples from sectors that could not be read. They are silence.
         public var unreadable: [Int] = []
+        /// The Q subchannel frames of the sectors read, if asked for: as the drive returned them,
+        /// in the order read. Empty if the drive refused to read them with the audio.
+        public var q: [QSubchannel] = []
     }
 
     /// Reads the true samples at the given positions (588 samples for each sector, from LBA 0).
@@ -51,10 +54,11 @@ public struct AudioReader {
         return (read.samples, read.flagged)
     }
 
-    /// Reads the true samples at the given positions, with C2 error flags if `withC2`.
-    /// If `unreadableRetries` is set, a sector that cannot be read is silence, not an error.
+    /// Reads the true samples at the given positions, with C2 error flags if `withC2`, and the
+    /// sectors' Q frames if `withQ`. If `unreadableRetries` is set, a sector that cannot be read
+    /// is silence, not an error.
     public func read(
-        _ positions: Range<Int>, withC2: Bool, progress: ((ReadProgress) -> Void)? = nil
+        _ positions: Range<Int>, withC2: Bool, withQ: Bool = false, progress: ((ReadProgress) -> Void)? = nil
     ) throws -> Read {
         var result = Read(samples: [UInt32](repeating: 0, count: positions.count))
         guard !positions.isEmpty else { return result }
@@ -71,11 +75,14 @@ public struct AudioReader {
         var sectorsRead = 0
         var flaggedSectors = Set<Int>()
         var unreadableSectors = Set<Int>()
+        var withQ = withQ
         for part in parts {
             for lba in stride(from: part.lowerBound, to: part.upperBound, by: sectorsPerRead) {
                 try stop?.check()
                 let count = min(sectorsPerRead, part.upperBound - lba)
-                let (bytes, flags, unreadable) = try readChunk(at: lba, count: count, withC2: withC2)
+                let (sectors, unreadable) = try readChunk(at: lba, count: count, withC2: withC2, withQ: &withQ)
+                let (bytes, flags) = (sectors.audio, sectors.errorFlags)
+                result.q += sectors.q
                 sectorsRead += count
                 let chunk = CDDA.samples(fromSectorBytes: bytes)
                 let chunkStart = lba * CDDA.samplesPerSector - readOffset
@@ -115,31 +122,42 @@ public struct AudioReader {
         return result
     }
 
+    /// Reads one chunk. A drive that refuses the Q subchannel with the audio (an error other
+    /// than a failed read) gets the chunk again without it, and no more Q requests in this read.
     private func readChunk(
-        at lba: Int, count: Int, withC2: Bool
-    ) throws -> (audio: [UInt8], errorFlags: [UInt8], unreadable: [Int]) {
-        func read(_ lba: Int, _ count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8]) {
-            withC2
-                ? try drive.readAudioSectorsWithC2(at: lba, count: count)
-                : (try drive.readAudioSectors(at: lba, count: count), [])
+        at lba: Int, count: Int, withC2: Bool, withQ: inout Bool
+    ) throws -> (sectors: SectorRead, unreadable: [Int]) {
+        if withQ {
+            do {
+                return try readChunk(at: lba, count: count, withC2: withC2, q: true)
+            } catch let error where !(error is DriveError) && !(error is CancellationError) {
+                withQ = false
+            }
         }
+        return try readChunk(at: lba, count: count, withC2: withC2, q: false)
+    }
+
+    private func readChunk(
+        at lba: Int, count: Int, withC2: Bool, q: Bool
+    ) throws -> (sectors: SectorRead, unreadable: [Int]) {
         do {
-            let (audio, flags) = try read(lba, count)
-            return (audio, flags, [])
+            return (try drive.readAudioSectors(at: lba, count: count, c2: withC2, q: q), [])
         } catch DriveError.readFailed where unreadableRetries != nil {
-            var audio = [UInt8]()
-            var flags = [UInt8]()
+            var sectors = SectorRead(audio: [])
             var unreadable = [Int]()
             for sector in lba..<(lba + count) {
-                var data: (audio: [UInt8], errorFlags: [UInt8])?
+                var data: SectorRead?
                 for _ in 0...unreadableRetries! where data == nil {
-                    data = try? read(sector, 1)
+                    data = try? drive.readAudioSectors(at: sector, count: 1, c2: withC2, q: q)
                 }
                 if data == nil { unreadable.append(sector) }
-                audio += data?.audio ?? [UInt8](repeating: 0, count: CDDA.bytesPerSector)
-                if withC2 { flags += data?.errorFlags ?? [UInt8](repeating: 0, count: CDDA.errorFlagBytesPerSector) }
+                sectors.audio += data?.audio ?? [UInt8](repeating: 0, count: CDDA.bytesPerSector)
+                if withC2 {
+                    sectors.errorFlags += data?.errorFlags ?? [UInt8](repeating: 0, count: CDDA.errorFlagBytesPerSector)
+                }
+                sectors.q += data?.q ?? []
             }
-            return (audio, flags, unreadable)
+            return (sectors, unreadable)
         }
     }
 

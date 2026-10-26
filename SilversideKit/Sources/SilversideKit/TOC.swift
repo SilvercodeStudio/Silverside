@@ -13,6 +13,9 @@ public struct TOC: Equatable, Sendable {
         public var session: Int
         public var hasPreEmphasis: Bool
         public var isCopyPermitted: Bool
+        /// Four-channel audio: in early versions of the standard, but no released disc is known to
+        /// use it. IEC 60908 (1999) gives the bit to broadcasting use.
+        public var isFourChannel: Bool
 
         public init(
             number: Int,
@@ -20,7 +23,8 @@ public struct TOC: Equatable, Sendable {
             kind: Kind = .audio,
             session: Int = 1,
             hasPreEmphasis: Bool = false,
-            isCopyPermitted: Bool = false
+            isCopyPermitted: Bool = false,
+            isFourChannel: Bool = false
         ) {
             self.number = number
             self.startLBA = startLBA
@@ -28,6 +32,7 @@ public struct TOC: Equatable, Sendable {
             self.session = session
             self.hasPreEmphasis = hasPreEmphasis
             self.isCopyPermitted = isCopyPermitted
+            self.isFourChannel = isFourChannel
         }
     }
 
@@ -139,7 +144,8 @@ extension TOC {
                 tracks.append(
                     Track(
                         number: Int(point), startLBA: lba, kind: isData ? .data : .audio, session: session,
-                        hasPreEmphasis: !isData && control & 0x01 != 0, isCopyPermitted: control & 0x02 != 0))
+                        hasPreEmphasis: !isData && control & 0x01 != 0, isCopyPermitted: control & 0x02 != 0,
+                        isFourChannel: !isData && control & 0x08 != 0))
             case 0xA2 where session >= (leadOut?.session ?? 0):
                 leadOut = (session, lba)
             default:

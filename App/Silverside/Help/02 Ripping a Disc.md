@@ -110,6 +110,19 @@ HDCD was made to carry 20 bits. In tests, 24-bit files held almost nothing more,
 
 Silverside decodes from the rip's WAV files. If they are gone, it uses the album's lossless files, and first checks each one against the CRC-32 of the verified rip.
 
+## Pre-emphasis and other flags
+
+A few early CDs were mastered with **pre-emphasis**: a treble boost, up to about 10 dB in the highest frequencies, that a CD player takes out again (de-emphasis). Few other players take it out, so they play such tracks too bright. A disc marks it for each track, in its table of contents, in its subchannel (data beside the audio), or in both; some discs mark it in one place only. Silverside reads both while it rips, at no cost in time, and a rip with pre-emphasis shows a chip.
+
+Before it encodes such a disc, Silverside asks what to do with those tracks, and advises De-emphasize:
+
+- **De-emphasize:** the audio as a CD player plays it, in 20-bit FLAC or Apple Lossless files (24-bit AIFF and WAV), tagged `DE_EMPHASIZED=yes`. The rounding at 20 bits is far below the disc's own noise. ReplayGain is measured on the result, and the disc's other tracks stay bit for bit as pressed.
+- **Keep as pressed:** files bit for bit the disc, tagged `PRE_EMPHASIS=yes`, for a player that takes it out itself.
+
+Settings › Encoding can give one answer for every disc. Either way, the CUE sheet marks the tracks (`FLAGS PRE`), and a disc image keeps the disc as pressed. The filter follows the curve of the CD standard (IEC 60908) within 0.1 dB from 20 Hz to 20 kHz.
+
+The rip log and the report list every track's flags, and where each came from: pre-emphasis, **digital copy permitted** (a flag from the 1980s that copying software was meant to obey), and **four-channel audio**, which early versions of the CD standard describe but no released disc is known to use (the 1999 edition gives that bit to broadcasting). If your disc has it, the result shows a chip for it.
+
 ## Where the files go
 
 Each rip gets a folder in the rips folder (Settings › General), named from the release: the WAV files, `disc.json` and `Rip Report.md` with every detail, and the cover. With "Encode the disc into the library" on, the album is encoded into the library after the rip, with the cover, the report, and a CUE sheet in its folder; the files carry the names and credits from MusicBrainz, and ReplayGain loudness tags unless Settings › Encoding turns them off. Then a rip whose tracks are all verified and encoded is deleted, unless you keep it. Settings › Encoding can also write a disc image of each disc: the whole disc in one file, with a CUE sheet.

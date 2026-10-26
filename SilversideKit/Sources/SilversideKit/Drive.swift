@@ -14,6 +14,11 @@ public protocol CDDrive {
     /// change from read to read.
     func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8])
 
+    /// Reads raw audio sectors with their C2 error flags if `c2` (empty if not), and their Q
+    /// subchannel frames if `q` (empty if not). A drive reads them in one command, which costs
+    /// no more time than the audio alone on the drives tested (MATSHITA, ASUS, 2026-10-26).
+    func readAudioSectors(at lba: Int, count: Int, c2: Bool, q: Bool) throws -> SectorRead
+
     /// Reads the disc's CD-Text, as the drive gives it (see `CDText`). Nil if the disc has none.
     func readCDText() throws -> [UInt8]?
 
@@ -21,7 +26,27 @@ public protocol CDDrive {
     func readMediaType() throws -> DiscMediaType?
 }
 
+/// Sectors from `CDDrive.readAudioSectors(at:count:c2:q:)`.
+public struct SectorRead: Sendable {
+    public var audio: [UInt8]
+    public var errorFlags: [UInt8]
+    public var q: [QSubchannel]
+
+    public init(audio: [UInt8], errorFlags: [UInt8] = [], q: [QSubchannel] = []) {
+        self.audio = audio
+        self.errorFlags = errorFlags
+        self.q = q
+    }
+}
+
 extension CDDrive {
+    /// Reads the audio, the C2 flags, and the Q frames one after the other.
+    public func readAudioSectors(at lba: Int, count: Int, c2: Bool, q: Bool) throws -> SectorRead {
+        let (audio, flags) =
+            c2 ? try readAudioSectorsWithC2(at: lba, count: count) : (try readAudioSectors(at: lba, count: count), [])
+        return SectorRead(audio: audio, errorFlags: flags, q: q ? try readQSubchannel(at: lba, count: count) : [])
+    }
+
     /// Reads the Q subchannel of one sector.
     public func readQSubchannel(at lba: Int) throws -> QSubchannel {
         try readQSubchannel(at: lba, count: 1)[0]

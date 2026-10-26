@@ -29,12 +29,17 @@
             // Track 3 has a sector that reads wrong once in two, and track 5 one that fails twice, then reads.
             let unstable: Set<Int> = [starts[2] + 200]
             let failing = [starts[4] + 50: 2]
+            // `-demoPreEmphasis 1` sets pre-emphasis in the Q frames of tracks 2 and 3, as the
+            // *Denon Audio Technical CD* does, so a demo rip that encodes asks about it.
+            let qControl: [Int: UInt8] =
+                UserDefaults.standard.bool(forKey: "demoPreEmphasis") ? [2: 0x1, 3: 0x1] : [:]
             let makeDrive: @Sendable () throws -> any CDDrive = {
                 let drive = SimulatedDrive(toc: toc, samples: image, readOffset: 6)
                 drive.unstableSectors = unstable
                 drive.failingReads = failing
                 drive.reportsC2 = true
                 drive.readSpeed = 40
+                drive.qControl = qControl
                 return drive
             }
             var disc = DiscInfo(bsdName: nil, toc: toc, mcn: nil, cdText: demoCDText)

@@ -55,6 +55,16 @@ final class RipRun {
         var recommendsDecoding: Bool { format.recommendsHDCDDecode }
     }
 
+    /// The rip found tracks with pre-emphasis: it waits for `answerPreEmphasis(deEmphasizes:)`.
+    struct PreEmphasisQuestion: Identifiable {
+        let id = UUID()
+        var album: String
+        /// "tracks 1-11, 28-29 (23 of 99)"
+        var tracks: String
+        var everyTrack: Bool
+        var format: AudioFormat
+    }
+
     /// The sectors of a track that the drive flagged, could not read, or that reads disagree on,
     /// counted from the track's start, for the error strip.
     struct TrackErrors: Equatable {
@@ -103,6 +113,7 @@ final class RipRun {
     private(set) var addsToMusic = false
     private(set) var overwriteQuestion: OverwriteQuestion?
     private(set) var hdcdQuestion: HDCDQuestion?
+    private(set) var preEmphasisQuestion: PreEmphasisQuestion?
     private(set) var startDate = Date()
     private(set) var endDate: Date?
     /// Sectors read so far, over every track to rip, for the whole-rip progress.
@@ -121,6 +132,7 @@ final class RipRun {
     @ObservationIgnored private var sectorsBefore: [Int: Int] = [:]
     @ObservationIgnored private var overwriteAnswer: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var hdcdAnswer: CheckedContinuation<Bool, Never>?
+    @ObservationIgnored private var preEmphasisAnswer: CheckedContinuation<Bool, Never>?
     /// Hears the question about files in the library, so the app can show the drive and ask for attention.
     @ObservationIgnored var onQuestion: (@MainActor () -> Void)?
 
@@ -216,6 +228,15 @@ final class RipRun {
                         }
                     }
                 }
+                rip.choosePreEmphasis = { report, format in
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated {
+                                run.askPreEmphasis(report, format: format, answer: continuation)
+                            }
+                        }
+                    }
+                }
                 let result = try await rip.run()
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
@@ -268,6 +289,7 @@ final class RipRun {
         // A rip that waits for the question stops when it hears the answer.
         if overwriteQuestion != nil { answer(replaces: false) }
         if hdcdQuestion != nil { answerHDCD(decodes: false) }
+        if preEmphasisQuestion != nil { answerPreEmphasis(deEmphasizes: false) }
     }
 
     private func askHDCD(_ report: RipReport, format: AudioFormat, answer: CheckedContinuation<Bool, Never>) {
@@ -286,6 +308,24 @@ final class RipRun {
             decodes
                 ? "Decoding the HDCD codes." : "Keeping the audio as pressed, with its HDCD codes.")
         hdcdAnswer.resume(returning: decodes)
+    }
+
+    private func askPreEmphasis(_ report: RipReport, format: AudioFormat, answer: CheckedContinuation<Bool, Never>) {
+        preEmphasisAnswer = answer
+        preEmphasisQuestion = PreEmphasisQuestion(
+            album: disc.title, tracks: report.preEmphasisTracks ?? "",
+            everyTrack: report.tracks.allSatisfy(\.preEmphasis), format: format)
+        add("Tracks with pre-emphasis. Waiting for an answer: de-emphasize them, or keep the audio as pressed...")
+        onQuestion?()
+    }
+
+    /// Answers the pre-emphasis question: true takes the pre-emphasis out.
+    func answerPreEmphasis(deEmphasizes: Bool) {
+        guard let preEmphasisAnswer else { return }
+        self.preEmphasisAnswer = nil
+        preEmphasisQuestion = nil
+        add(deEmphasizes ? "De-emphasizing the tracks with pre-emphasis." : "Keeping the audio as pressed.")
+        preEmphasisAnswer.resume(returning: deEmphasizes)
     }
 
     private func ask(_ existing: [URL], answer: CheckedContinuation<Bool, Never>) {
@@ -348,6 +388,7 @@ final class RipRun {
         case .ripping:
             if overwriteQuestion != nil { return "Waiting for your answer about the library…" }
             if hdcdQuestion != nil { return "Waiting for your answer about HDCD…" }
+            if preEmphasisQuestion != nil { return "Waiting for your answer about pre-emphasis…" }
             // Between the last read and the encoding: the cover, the lookups' results, and the report.
             guard let currentTrack else {
                 if isSavingArtwork { return "Saving the cover art…" }
@@ -466,6 +507,8 @@ final class RipRun {
             add(
                 String(format: "Track %2d  %@  %d s  ", track.number, Format.duration(sectors: track.sectors), seconds)
                     + summary)
+        case .controlBits(let summary):
+            add("Control bits: " + summary)
         case .checkingCTDB:
             phase = .checkingCTDB
             currentTrack = nil

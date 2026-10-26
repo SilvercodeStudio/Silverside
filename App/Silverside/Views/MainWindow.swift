@@ -12,6 +12,10 @@ struct MainWindow: View {
     private var questionRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.overwriteQuestion != nil } }
     /// A rip that waits to hear whether to decode its HDCD codes.
     private var hdcdRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.hdcdQuestion != nil } }
+    /// A rip that waits to hear whether to de-emphasize its tracks with pre-emphasis.
+    private var preEmphasisRip: RipRun? {
+        model.drives.lazy.compactMap(\.rip).first { $0.preEmphasisQuestion != nil }
+    }
 
     private static func message(for question: RipRun.OverwriteQuestion) -> String {
         let files = question.existing.count == 1 ? "1 file" : "\(question.existing.count) files"
@@ -55,6 +59,11 @@ struct MainWindow: View {
         }
         .sheet(isPresented: Binding(get: { hdcdRip != nil }, set: { _ in })) {
             if let rip = hdcdRip, let question = rip.hdcdQuestion { HDCDQuestionSheet(rip: rip, question: question) }
+        }
+        .sheet(isPresented: Binding(get: { preEmphasisRip != nil }, set: { _ in })) {
+            if let rip = preEmphasisRip, let question = rip.preEmphasisQuestion {
+                PreEmphasisQuestionSheet(rip: rip, question: question)
+            }
         }
         .sheet(isPresented: $model.libraryShown) {
             if let run = model.library { LibrarySheet(run: run) }

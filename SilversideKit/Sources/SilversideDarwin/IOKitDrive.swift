@@ -40,23 +40,7 @@ public final class IOKitDrive: CDDrive {
     }
 
     public func readAudioSectors(at lba: Int, count: Int) throws -> [UInt8] {
-        guard lba >= 0 else { throw DriveError.sectorOutOfRange(lba: lba) }
-        var bytes = [UInt8](repeating: 0, count: count * CDDA.bytesPerSector)
-        var request = dk_cd_read_t()
-        request.offset = UInt64(lba * CDDA.bytesPerSector)
-        request.sectorArea = UInt8(kCDSectorAreaUser.rawValue)
-        request.sectorType = UInt8(kCDSectorTypeCDDA.rawValue)
-        do {
-            try bytes.withUnsafeMutableBytes { buffer in
-                request.buffer = buffer.baseAddress
-                request.bufferLength = UInt32(buffer.count)
-                try control(Ioctl.read, &request)
-            }
-        } catch IOKitDriveError.ioctlFailed(errno: EIO) {
-            throw DriveError.readFailed(lba: lba)
-        }
-        guard request.bufferLength == bytes.count else { throw DriveError.readFailed(lba: lba) }
-        return bytes
+        try readAudioSectors(at: lba, count: count, c2: false, q: false).audio
     }
 
     /// Reads the CD-Text with the TOC ioctl in its CD-Text format. A disc with no CD-Text
@@ -118,44 +102,29 @@ public final class IOKitDrive: CDDrive {
     }
 
     public func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8]) {
-        guard lba >= 0 else { throw DriveError.sectorOutOfRange(lba: lba) }
-        let sectorSize = CDDA.bytesPerSector + CDDA.errorFlagBytesPerSector
-        var bytes = [UInt8](repeating: 0, count: count * sectorSize)
-        var request = dk_cd_read_t()
-        request.offset = UInt64(lba * sectorSize)
-        request.sectorArea = UInt8(kCDSectorAreaUser.rawValue | kCDSectorAreaErrorFlags.rawValue)
-        request.sectorType = UInt8(kCDSectorTypeCDDA.rawValue)
-        do {
-            try bytes.withUnsafeMutableBytes { buffer in
-                request.buffer = buffer.baseAddress
-                request.bufferLength = UInt32(buffer.count)
-                try control(Ioctl.read, &request)
-            }
-        } catch IOKitDriveError.ioctlFailed(errno: EIO) {
-            throw DriveError.readFailed(lba: lba)
-        }
-        guard request.bufferLength == bytes.count else { throw DriveError.readFailed(lba: lba) }
-        var audio = [UInt8]()
-        var flags = [UInt8]()
-        audio.reserveCapacity(count * CDDA.bytesPerSector)
-        flags.reserveCapacity(count * CDDA.errorFlagBytesPerSector)
-        for sector in 0..<count {
-            let start = sector * sectorSize
-            audio += bytes[start..<(start + CDDA.bytesPerSector)]
-            flags += bytes[(start + CDDA.bytesPerSector)..<(start + sectorSize)]
-        }
-        return (audio, flags)
+        let read = try readAudioSectors(at: lba, count: count, c2: true, q: false)
+        return (read.audio, read.errorFlags)
     }
 
     /// Reads the Q subchannel together with the user area, because the
     /// drives tested so far reject a read of Q alone.
     public func readQSubchannel(at lba: Int, count: Int) throws -> [QSubchannel] {
+        try readAudioSectors(at: lba, count: count, c2: false, q: true).q
+    }
+
+    /// Reads the user area, and the C2 flags and Q subchannel as asked, in one command. Each
+    /// sector comes back as its user area, then its flags, then 16 bytes of Q (12 used).
+    public func readAudioSectors(at lba: Int, count: Int, c2: Bool, q: Bool) throws -> SectorRead {
         guard lba >= 0 else { throw DriveError.sectorOutOfRange(lba: lba) }
-        let sectorSize = CDDA.bytesPerSector + 16
+        let flagBytes = c2 ? CDDA.errorFlagBytesPerSector : 0
+        let qBytes = q ? 16 : 0
+        let sectorSize = CDDA.bytesPerSector + flagBytes + qBytes
         var bytes = [UInt8](repeating: 0, count: count * sectorSize)
         var request = dk_cd_read_t()
         request.offset = UInt64(lba * sectorSize)
-        request.sectorArea = UInt8(kCDSectorAreaUser.rawValue | kCDSectorAreaSubChannelQ.rawValue)
+        request.sectorArea = UInt8(
+            kCDSectorAreaUser.rawValue | (c2 ? kCDSectorAreaErrorFlags.rawValue : 0)
+                | (q ? kCDSectorAreaSubChannelQ.rawValue : 0))
         request.sectorType = UInt8(kCDSectorTypeCDDA.rawValue)
         do {
             try bytes.withUnsafeMutableBytes { buffer in
@@ -167,10 +136,20 @@ public final class IOKitDrive: CDDrive {
             throw DriveError.readFailed(lba: lba)
         }
         guard request.bufferLength == bytes.count else { throw DriveError.readFailed(lba: lba) }
-        return (0..<count).map { sector in
-            let start = sector * sectorSize + CDDA.bytesPerSector
-            return QSubchannel(bytes: Array(bytes[start..<(start + QSubchannel.byteCount)]))
+        guard c2 || q else { return SectorRead(audio: bytes) }
+        var read = SectorRead(audio: [])
+        read.audio.reserveCapacity(count * CDDA.bytesPerSector)
+        read.errorFlags.reserveCapacity(count * flagBytes)
+        for sector in 0..<count {
+            let start = sector * sectorSize
+            read.audio += bytes[start..<(start + CDDA.bytesPerSector)]
+            read.errorFlags += bytes[(start + CDDA.bytesPerSector)..<(start + CDDA.bytesPerSector + flagBytes)]
+            if q {
+                let qStart = start + CDDA.bytesPerSector + flagBytes
+                read.q.append(QSubchannel(bytes: Array(bytes[qStart..<(qStart + QSubchannel.byteCount)])))
+            }
         }
+        return read
     }
 
     private func control<Request>(_ code: UInt, _ request: inout Request) throws(IOKitDriveError) {

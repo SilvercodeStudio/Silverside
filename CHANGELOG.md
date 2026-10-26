@@ -5,6 +5,31 @@ command-line tool.
 
 ## 0.8 (not released yet)
 
+### Added
+
+- **De-emphasis:** a track mastered with pre-emphasis, a treble boost that a
+  CD player takes out again, can now be encoded as a CD player plays it. The
+  tracks become 20-bit FLAC or Apple Lossless files (24-bit AIFF and WAV),
+  tagged DE_EMPHASIZED=yes, with ReplayGain measured on the result; the other
+  tracks of the disc stay bit for bit as pressed. The app asks before it
+  encodes such a disc and advises De-emphasize; Settings › Encoding can give
+  one answer for every disc. Kept as pressed, the tracks are tagged
+  PRE_EMPHASIS=yes. `silverside` has `--pre-emphasis` and the `preEmphasis`
+  setting. A disc image always keeps the disc as pressed.
+- Pre-emphasis is found in the disc's subchannel as well as its table of
+  contents. Some discs set it in one place only: the Denon Audio Technical CD
+  marks 23 tracks in the subchannel and none in the table of contents. The
+  rip reads the subchannel with the audio, at no cost in time on the drives
+  tested. A rip with pre-emphasis shows a chip, and the CUE sheet marks the
+  tracks.
+- The rip log and the report list each track's control bits: pre-emphasis,
+  digital copy permitted, and four-channel audio, and say whether each came
+  from the table of contents, the subchannel, or both. Four-channel audio is
+  in early versions of the CD standard, but no released disc is known to use
+  it (the 1999 edition gives the bit to broadcasting); a disc that
+  sets it gets a chip of its own. `silverside info` shows the subchannel's
+  flags too.
+
 ### Changed
 
 - The Rip button has the new rip icon. During a rip, level bars hang from the
@@ -21,6 +46,12 @@ command-line tool.
 
 ### Fixed
 
+- Encoding a rip of only some tracks lost every track but one from the CUE
+  sheet and the report's list of files. Decoding HDCD in place of such an
+  album, or of one with a hidden track before track 1, could put one track's
+  audio in another track's file.
+- An album renamed or retagged after the rip lost the pre-emphasis and
+  copy-permitted marks from its CUE sheet.
 - A track that AccurateRip keeps no checksum for, such as a silent one, shows
   "No checksum" instead of "Not accurate", is not counted in the AccurateRip
   chip, and gets two reads instead of four. Check Again corrects an earlier

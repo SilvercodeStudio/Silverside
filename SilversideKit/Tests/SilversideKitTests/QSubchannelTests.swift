@@ -39,6 +39,24 @@ struct QSubchannelTests {
         let frame = QSubchannel.position(track: 12, index: 0, lba: 249441)
         #expect(frame.isValid)
         #expect(frame.position == QSubchannel.Position(track: 12, index: 0, lba: 249441))
+        #expect(QSubchannel.position(track: 1, index: 1, lba: 0, control: 0x9).control == 0x9)
+    }
+
+    /// The control bits of one track's frames: other tracks' frames, MCN frames, and damaged
+    /// frames are left out, and one stray frame does not set a bit.
+    @Test func countsTheControlBitsOfATrack() {
+        var frames = (0..<10).map { QSubchannel.position(track: 3, index: 1, lba: 1000 + $0, control: 0x1) }
+        frames.append(QSubchannel.position(track: 3, index: 1, lba: 1010, control: 0x2))
+        frames.append(QSubchannel.position(track: 4, index: 0, lba: 1011, control: 0x8))
+        frames.append(.mcn("0075596229722"))
+        var damaged = QSubchannel.position(track: 3, index: 1, lba: 1012, control: 0x8).bytes
+        damaged[11] ^= 1
+        frames.append(QSubchannel(bytes: damaged))
+        var control = SubchannelControl()
+        control.add(frames, track: 3)
+        #expect(control.frames == 11 && control.preEmphasis == 10 && control.copyPermitted == 1)
+        #expect(control.fourChannel == 0 && control.data == 0)
+        #expect(control.hasPreEmphasis && !control.isCopyPermitted && !control.isFourChannel && control.isMixed)
     }
 }
 

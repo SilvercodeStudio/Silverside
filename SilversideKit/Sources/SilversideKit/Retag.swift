@@ -255,6 +255,9 @@ extension DiscEncoder {
             let gain = encoding.replayGain
             let comments =
                 meta.vorbisComments + HDCDStatus.tags(report.hdcd, decoded: encoding.hdcdDecoded == true)
+                + PreEmphasis.tags(
+                    hasPreEmphasis: (entry.track == 0 ? report.tracks.first : reported)?.preEmphasis == true,
+                    deEmphasized: encoding.deEmphasizedTracks?.contains(entry.track) == true)
                 + ReplayGain.tags(
                     track: gain?.tracks.first { $0.track == entry.track }?.values, album: gain?.albumInTags)
             // A file whose tags are already these is left alone (a library on a network
@@ -282,7 +285,9 @@ extension DiscEncoder {
                     number: tocTrack.number, file: url.lastPathComponent, sectors: toc.sectorRange(of: tocTrack).count,
                     pregapSectors: reported?.pregapSectors ?? 0, title: meta.title,
                     performer: meta.vorbisComments.first { $0.key == "ARTIST" }?.value, isrc: reported?.isrc,
-                    preEmphasis: tocTrack.hasPreEmphasis, copyPermitted: tocTrack.isCopyPermitted))
+                    // The TOC here comes from the report's CTDB TOC string, which has no flags.
+                    preEmphasis: tocTrack.hasPreEmphasis || reported?.preEmphasis == true,
+                    copyPermitted: tocTrack.isCopyPermitted || reported?.isCopyPermitted == true))
         }
         encoding.folder = album.path
 
@@ -369,11 +374,11 @@ extension DiscEncoder {
 
     /// A disc's blocks, measured from its encoded files.
     static func measuredHistogram(of encoding: RipReport.Encoding, in album: URL) throws -> ReplayGain.Histogram {
-        let files = encoding.files.map { album.appending(path: $0.file) }
-        let measured = CTDB.parallelMap(over: files, lanes: defaultParallelTracks) {
-            file -> Result<ReplayGain.Analysis, any Error>? in
-            Result {
-                encoding.hdcdDecoded == true
+        let measured = CTDB.parallelMap(over: encoding.files, lanes: defaultParallelTracks) {
+            entry -> Result<ReplayGain.Analysis, any Error>? in
+            let file = album.appending(path: entry.file)
+            return Result {
+                encoding.hdcdDecoded == true || encoding.deEmphasizedTracks?.contains(entry.track) == true
                     ? ReplayGain.analyze(.wide(try AudioEncoder.decodeWide(file)))
                     : ReplayGain.analyze(try AudioEncoder.decode(file))
             }

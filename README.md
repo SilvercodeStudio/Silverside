@@ -81,11 +81,12 @@ to be installed. All other supported formats are handled natively.
   for peak extend or gain can be decoded, at the rip or later, into 20-bit
   FLAC or Apple Lossless files that keep what the decoder restores, or into
   AAC or MP3 before a lossy encode removes the codes.
-- **Pre-emphasis.** [COMING SOON] A few early CDs were mastered with pre-emphasis, a 
-  treble boost that the player undoes. Silverside marks such tracks in the rip report
-  and the CUE sheet (`FLAGS PRE`), and warns when it encodes them, but it does not
-  change the audio: the files sound too bright in a player that does not read
-  the flag.
+- **Pre-emphasis.** A few early CDs were mastered with pre-emphasis, a treble
+  boost that a CD player takes out again. Silverside finds the flag in the table
+  of contents and in the subchannel (some discs set it in only one) and, if you
+  agree, takes it out as a CD player does, into 20-bit FLAC or Apple Lossless
+  files tagged `DE_EMPHASIZED=yes`. Kept as pressed, the files are tagged
+  `PRE_EMPHASIS=yes`, and the CUE sheet marks the tracks (`FLAGS PRE`).
 - **Disc images**, if you want them: the whole disc in one lossless file with
   a CUE sheet, beside the library, from which the disc can be burned again.
 - **A rip report**, as Markdown to read and as JSON (`disc.json`), with every
@@ -195,7 +196,6 @@ makes, and the settings.
 
 ## TODO or future ideas
 
-- Pre-emphasis support as mentioned above (planned for 0.8).
 - Ripping of data tracks for mixed-mode / Enhanced CDs.
 - Option to slow down drive speed (quieter)
   - Autodetect and engage this during problem rips

@@ -172,6 +172,25 @@ struct EncodingTests {
         #expect(DiscEncoder.defaultParallelTracks >= 2 && DiscEncoder.defaultParallelTracks <= 4)
     }
 
+    /// A rip of some tracks only: each file is recorded and in the CUE sheet. The encoder once
+    /// looked its jobs up by their track's index, not their place, and lost every track but one.
+    @Test func recordsEveryTrackOfARipOfSomeTracks() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        var report = try RipReport.read(from: folder.appending(path: "disc.json"))
+        report.tracks.removeFirst()
+        try report.write(to: folder.appending(path: "disc.json"))
+        try FileManager.default.removeItem(at: folder.appending(path: "Track 01.wav"))
+        let (files, record) = try DiscEncoder(format: .flac).encodeWithRecord(RippedDisc(folder: folder), into: library)
+        #expect(files.count == 1 && record?.files.map(\.track) == [2])
+        let cue = try #require(
+            FileManager.default.contentsOfDirectory(
+                at: files[0].deletingLastPathComponent(), includingPropertiesForKeys: nil
+            )
+            .first { $0.pathExtension == "cue" })
+        #expect(try String(contentsOf: cue, encoding: .utf8).contains("TRACK 02 AUDIO"))
+    }
+
     /// The album folder's report says how the files were made: the format, the encoder and
     /// its settings, and each track's file; the Markdown says it too.
     @Test func recordsTheEncodingInTheAlbumFoldersReport() throws {

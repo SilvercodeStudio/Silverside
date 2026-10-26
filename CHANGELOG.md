@@ -12,6 +12,8 @@ command-line tool.
   progress bar's colors fills around the edge. It floats over the lower right
   of the track list, so the list has more room; the last tracks scroll out
   from under it.
+- The About window and the welcome show the icon on warm paper in light mode
+  and on dark brown in dark mode, to match the new icon, in place of dark blue.
 - The "nearly the same TOC" chip opens the MusicBrainz page that adds the
   disc's ID to its release, and its tooltip says what the match means. An
   earlier rip that MusicBrainz matched by its track lengths shows the chip

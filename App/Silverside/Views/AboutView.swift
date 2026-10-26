@@ -2,7 +2,7 @@ import AppKit
 import SilversideKit
 import SwiftUI
 
-/// The About window: the icon on a dark hero with a disc's grooves, the disc's rainbow
+/// The About window: the icon on a hero with a disc's grooves, the disc's rainbow
 /// under it, the version, what the user has ripped, and the services that make it work.
 struct AboutView: View {
     @Environment(AppModel.self) private var model
@@ -90,18 +90,31 @@ struct AboutView: View {
     }
 }
 
-/// The app's icon over a dark blue field with a disc's grooves around it, for the About
-/// window and the welcome.
+/// The app's icon with a disc's grooves around it, for the About window and the welcome.
+/// The field matches the icon's own background: warm paper in light mode, dark brown in dark.
 struct Hero: View {
     var height: CGFloat = 232
     var iconSize: CGFloat = 190
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// The middle and the edge of the field. The middle is a little lighter than the icon's
+    /// background, so that the icon stands out from it.
+    private var field: [Color] {
+        colorScheme == .dark
+            ? [Color(red: 0.25, green: 0.19, blue: 0.12), Color(red: 0.06, green: 0.045, blue: 0.03)]
+            : [Color(red: 0.97, green: 0.94, blue: 0.87), Color(red: 0.84, green: 0.78, blue: 0.65)]
+    }
+
+    private var grooves: Color {
+        colorScheme == .dark ? .white.opacity(0.05) : Color(red: 0.35, green: 0.27, blue: 0.15).opacity(0.08)
+    }
 
     var body: some View {
         Image(nsImage: NSApp.applicationIconImage)
             .resizable()
             .scaledToFit()
             .frame(width: iconSize, height: iconSize)
-            .shadow(color: .black.opacity(0.45), radius: 18, y: 10)
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.5 : 0.25), radius: 18, y: 10)
             .frame(maxWidth: .infinity)
             .frame(height: height)
             // Only the background reaches under the title bar, so the window keeps its height.
@@ -113,16 +126,13 @@ struct Hero: View {
                     context.fill(
                         Path(CGRect(origin: .zero, size: size)),
                         with: .radialGradient(
-                            Gradient(colors: [
-                                Color(red: 0.13, green: 0.25, blue: 0.50), Color(red: 0.04, green: 0.08, blue: 0.20),
-                            ]),
-                            center: center, startRadius: 20, endRadius: 300))
+                            Gradient(colors: field), center: center, startRadius: 20, endRadius: 300))
                     let outer = hypot(size.width, size.height)
                     for radius in stride(from: CGFloat(110), through: outer, by: 7) {
                         let ring = Path(
                             ellipseIn: CGRect(
                                 x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-                        context.stroke(ring, with: .color(.white.opacity(0.05)), lineWidth: 1)
+                        context.stroke(ring, with: .color(grooves), lineWidth: 1)
                     }
                 }
                 .ignoresSafeArea()

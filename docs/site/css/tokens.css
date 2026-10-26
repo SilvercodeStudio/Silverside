@@ -1,25 +1,26 @@
 /* Silverside design tokens, as CSS custom properties.
-   The source is the Silverside design system (tokens.json); keep the two in step.
+   The source is the Silverside design system (tokens.json); keep the two in step. The colors are
+   ahead of it: warm paper and dark brown since 2026-10-26, to match the new icon (it still has blue).
    Dark is the base theme. Light follows prefers-color-scheme, or data-theme on <html>. */
 
 :root {
   color-scheme: dark;
 
-  --ground: #0b1534;
-  --glow: rgba(72, 112, 255, 0.30);
-  --groove: rgba(150, 175, 255, 0.075);
-  --page: #0a0c12;
-  --surface: #141823;
-  --line: rgba(255, 255, 255, 0.09);
-  --chip: rgba(255, 255, 255, 0.06);
-  --ink: #f3f5f9;
-  --ink-2: #aab1c0;
-  --ink-3: #8a91a3;
+  --ground: #17110b;
+  --glow: rgba(255, 186, 102, 0.16);
+  --groove: rgba(255, 228, 190, 0.055);
+  --page: #110d09;
+  --surface: #1c1712;
+  --line: rgba(255, 240, 220, 0.09);
+  --chip: rgba(255, 240, 220, 0.06);
+  --ink: #f6f2ec;
+  --ink-2: #bfb5a6;
+  --ink-3: #9a8f80;
   --action: #1668e3;
   --action-hover: #2b79f2;
   --on-action: #ffffff;
   --verified: #3fd27a;
-  --track-segment: #46536f;
+  --track-segment: #5c5144;
   --track-flagged: #b07a3e;
   --track-reread: #f29d38;
   --track-fixed: #3d8bff;
@@ -30,8 +31,8 @@
   --iris-4: #c9e35f;
   --iris-5: #ffb257;
   --iris-6: #ff6fae;
-  --shadow-shot: 0 50px 120px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.10);
-  --shadow-icon: 0 18px 36px rgba(0, 0, 0, 0.45);
+  --shadow-shot: 0 50px 120px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 240, 220, 0.10);
+  --shadow-icon: 0 18px 36px rgba(0, 0, 0, 0.5);
 
   --space-1: 4px;
   --space-2: 8px;
@@ -64,41 +65,41 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     color-scheme: light;
-    --ground: #dfe6f6;
-    --glow: rgba(100, 140, 255, 0.30);
-    --groove: rgba(30, 60, 150, 0.07);
-    --page: #f6f7fa;
-    --surface: #ffffff;
-    --line: rgba(12, 22, 44, 0.10);
-    --chip: rgba(12, 22, 44, 0.05);
-    --ink: #11141b;
-    --ink-2: #475064;
-    --ink-3: #5b6375;
+    --ground: #e8dec9;
+    --glow: rgba(255, 252, 244, 0.85);
+    --groove: rgba(96, 72, 36, 0.08);
+    --page: #f7f2e9;
+    --surface: #fffdf9;
+    --line: rgba(60, 44, 20, 0.12);
+    --chip: rgba(60, 44, 20, 0.06);
+    --ink: #1d1813;
+    --ink-2: #54493b;
+    --ink-3: #6b5f4f;
     --action: #0a63d8;
     --action-hover: #0856bd;
     --verified: #13803d;
-    --track-segment: #c4d2ec;
-    --shadow-shot: 0 40px 100px rgba(20, 32, 70, 0.24), 0 0 0 1px rgba(12, 22, 44, 0.10);
-    --shadow-icon: 0 18px 36px rgba(20, 32, 70, 0.30);
+    --track-segment: #d9ccb2;
+    --shadow-shot: 0 40px 100px rgba(70, 48, 18, 0.24), 0 0 0 1px rgba(60, 44, 20, 0.12);
+    --shadow-icon: 0 18px 36px rgba(70, 48, 18, 0.30);
   }
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --ground: #dfe6f6;
-  --glow: rgba(100, 140, 255, 0.30);
-  --groove: rgba(30, 60, 150, 0.07);
-  --page: #f6f7fa;
-  --surface: #ffffff;
-  --line: rgba(12, 22, 44, 0.10);
-  --chip: rgba(12, 22, 44, 0.05);
-  --ink: #11141b;
-  --ink-2: #475064;
-  --ink-3: #5b6375;
+  --ground: #e8dec9;
+  --glow: rgba(255, 252, 244, 0.85);
+  --groove: rgba(96, 72, 36, 0.08);
+  --page: #f7f2e9;
+  --surface: #fffdf9;
+  --line: rgba(60, 44, 20, 0.12);
+  --chip: rgba(60, 44, 20, 0.06);
+  --ink: #1d1813;
+  --ink-2: #54493b;
+  --ink-3: #6b5f4f;
   --action: #0a63d8;
   --action-hover: #0856bd;
   --verified: #13803d;
-  --track-segment: #c4d2ec;
-  --shadow-shot: 0 40px 100px rgba(20, 32, 70, 0.24), 0 0 0 1px rgba(12, 22, 44, 0.10);
-  --shadow-icon: 0 18px 36px rgba(20, 32, 70, 0.30);
+  --track-segment: #d9ccb2;
+  --shadow-shot: 0 40px 100px rgba(70, 48, 18, 0.24), 0 0 0 1px rgba(60, 44, 20, 0.12);
+  --shadow-icon: 0 18px 36px rgba(70, 48, 18, 0.30);
 }

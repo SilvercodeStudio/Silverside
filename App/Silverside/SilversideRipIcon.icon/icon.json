@@ -1,0 +1,230 @@
+{
+  "features" : [
+    "specular-location"
+  ],
+  "fill-specializations" : [
+    {
+      "value" : {
+        "linear-gradient" : [
+          "srgb:0.86667,0.81569,0.69804,1.00000",
+          "srgb:0.59216,0.51765,0.37255,1.00000"
+        ]
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "linear-gradient" : [
+          "srgb:0.16471,0.12941,0.09804,1.00000",
+          "srgb:0.07059,0.05098,0.03529,1.00000"
+        ]
+      }
+    }
+  ],
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:0.81176,0.82745,0.85490,1.00000"
+              }
+            }
+          ],
+          "glass" : true,
+          "image-name" : "head.svg",
+          "name" : "head"
+        },
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:0.61961,0.64314,0.68235,1.00000"
+              }
+            }
+          ],
+          "glass" : true,
+          "image-name" : "lens.svg",
+          "name" : "lens"
+        },
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:0.81176,0.82745,0.85490,1.00000"
+              }
+            }
+          ],
+          "glass" : true,
+          "image-name" : "arm.svg",
+          "name" : "arm"
+        }
+      ],
+      "name" : "Arm",
+      "refractivity" : {
+        "depth" : 0,
+        "enabled" : false,
+        "strength" : 0.5
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : "outside",
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.3
+      }
+    },
+    {
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ],
+          "glass" : false,
+          "image-name" : "beam.svg",
+          "name" : "beam"
+        },
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ],
+          "glass" : false,
+          "image-name" : "spot.svg",
+          "name" : "spot",
+          "opacity-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : 0
+            }
+          ]
+        }
+      ],
+      "name" : "Laser",
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.3
+      }
+    },
+    {
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name" : "grooves.svg",
+          "name" : "grooves"
+        },
+        {
+          "glass" : false,
+          "image-name" : "iris.png",
+          "name" : "iris",
+          "opacity" : 0.9
+        },
+        {
+          "glass" : true,
+          "image-name" : "mirror.svg",
+          "name" : "mirror"
+        },
+        {
+          "glass" : true,
+          "image-name" : "hub.svg",
+          "name" : "hub",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0.4
+            }
+          ]
+        }
+      ],
+      "name" : "Disc",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.8
+      },
+      "specular" : "outside",
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.15
+      }
+    },
+    {
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "srgb:0.43529,0.37255,0.29020,1.00000"
+              }
+            }
+          ],
+          "glass" : false,
+          "image-name" : "rings.svg",
+          "name" : "rings",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0.25
+            }
+          ],
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              -20
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.10588,0.07843,0.05882,1.00000",
+                  "srgb:0.04706,0.03529,0.02353,1.00000"
+                ]
+              }
+            }
+          ],
+          "glass" : false,
+          "image-name" : "glow.svg",
+          "name" : "glow"
+        }
+      ],
+      "name" : "Ground",
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.3
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}

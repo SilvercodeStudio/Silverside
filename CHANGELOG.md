@@ -7,6 +7,9 @@ command-line tool.
 
 ### Changed
 
+- The Rip button has the new rip icon. During a rip, level bars hang from the
+  top and bounce behind the arm, the laser's spot pulses, and a line in the
+  progress bar's colors fills around the edge.
 - The "nearly the same TOC" chip opens the MusicBrainz page that adds the
   disc's ID to its release, and its tooltip says what the match means. An
   earlier rip that MusicBrainz matched by its track lengths shows the chip
@@ -14,6 +17,8 @@ command-line tool.
 
 ### Fixed
 
+- The area under the disc graph no longer gets a little shorter while the
+  pointer is over a track.
 - A disc that MusicBrainz knows no longer becomes "Unknown Album" when
   MusicBrainz is busy. If the release's own lookup fails after the disc's
   lookup found it, the disc keeps the release's names, without the writers

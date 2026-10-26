@@ -6,7 +6,8 @@
     /// window to PNG files after the delay (the main window to the path, the others with
     /// -2, -3 added), then quits. It draws the view hierarchy, so it needs no screen
     /// recording permission. `-screenshotWidth 700` makes the main window that wide first, to
-    /// check a narrow layout.
+    /// check a narrow layout. `-appearance light` or `dark` overrides the system's, for a
+    /// capture in each.
     enum DebugScreenshot {
         private static var scheduled = false
 
@@ -15,6 +16,11 @@
                 return
             }
             scheduled = true
+            switch UserDefaults.standard.string(forKey: "appearance") {
+            case "light": NSApp.appearance = NSAppearance(named: .aqua)
+            case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
+            default: break
+            }
             let configured = UserDefaults.standard.double(forKey: "screenshotDelay")
             let delay = configured > 0 ? configured : 4
             let width = UserDefaults.standard.double(forKey: "screenshotWidth")

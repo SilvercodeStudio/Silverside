@@ -27,7 +27,7 @@ XCODEBUILD = xcodebuild -workspace $(WORKSPACE) -scheme $(SCHEME) -configuration
 
 SWIFT_SOURCES = $(PACKAGE)/Package.swift $(PACKAGE)/Sources $(PACKAGE)/Tests App/Silverside
 
-.PHONY: help build run app cli test hwtest core format lint release install install-cli-local install-app uninstall site
+.PHONY: help build run app cli test hwtest core format lint release install install-cli-local install-app uninstall site rip-art
 
 # Where make install puts silverside and its shell completions. /usr/local may need sudo; PREFIX=~/.local does not.
 PREFIX ?= /usr/local
@@ -55,6 +55,7 @@ help:
 	@echo "make install-app    build the app for release (Apple silicon and Intel) and copy it to APP_DIR ($(APP_DIR))"
 	@echo "make uninstall      remove what make install put under PREFIX"
 	@echo "make site           serve the website (docs/site) at http://localhost:8000"
+	@echo "make rip-art        render the Rip button's pictures from SilversideRipIcon.icon (after the icon changes)"
 	@echo "Set CONFIG=Release for a release build (Apple silicon and Intel)."
 
 build:
@@ -122,3 +123,7 @@ uninstall:
 # The website, as GitHub Pages serves it.
 site:
 	python3 -m http.server 8000 --bind 127.0.0.1 --directory docs/site
+
+# Xcode does not build SilversideRipIcon.icon; this renders it with Icon Composer into the asset catalog.
+rip-art:
+	swift App/Icon/make_rip_art.swift

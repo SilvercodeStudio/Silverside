@@ -63,7 +63,10 @@ struct DiscGraph: View {
                 legend("Fixed by CTDB", Theme.fixed)
                 legend("Never agreed, or unreadable", Theme.bad)
                 Spacer()
-                Text(hoverText).lineLimit(1)
+                // An empty Text is a point taller than one with words, so the row would
+                // shrink under the pointer: a hidden word holds the height.
+                Text(hoverText.isEmpty ? "Track" : hoverText).lineLimit(1)
+                    .opacity(hoverText.isEmpty ? 0 : 1)
             }
             .font(.caption)
             .foregroundStyle(.secondary)

@@ -315,3 +315,52 @@ struct RipArt {
         return colors[index].mix(with: colors[(index + 1) % colors.count], by: place - place.rounded(.down))
     }
 }
+
+/// Keeps the track table's scrollers at its edges under the Rip button. The button is a bottom
+/// safe area inset, and AppKit keeps scrollers out of a scroll view's content insets, so
+/// without this the horizontal scroller crosses the rows above the button and the vertical
+/// one stops short.
+struct ScrollersPastInset: NSViewRepresentable {
+    /// Changes when the table is a new one (it gets more columns for a rip), so that its scroll view is found again.
+    var table: Bool
+
+    func makeNSView(context: Context) -> Finder { Finder() }
+    func updateNSView(_ view: Finder, context: Context) {
+        DispatchQueue.main.async { view.apply() }
+    }
+
+    final class Finder: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            DispatchQueue.main.async { self.apply() }
+        }
+
+        override func layout() {
+            super.layout()
+            apply()
+        }
+
+        /// The nearest table's scroll view: the first one found from this view up.
+        func apply() {
+            var ancestor = superview
+            while let view = ancestor {
+                if let scrollView = Self.tableScrollView(in: view) {
+                    let bottom = -scrollView.contentInsets.bottom
+                    if scrollView.scrollerInsets.bottom != bottom {
+                        scrollView.scrollerInsets.bottom = bottom
+                    }
+                    return
+                }
+                ancestor = view.superview
+            }
+        }
+
+        private static func tableScrollView(in view: NSView) -> NSScrollView? {
+            if let scrollView = view as? NSScrollView, scrollView.documentView is NSTableView { return scrollView }
+            for subview in view.subviews {
+                if let found = tableScrollView(in: subview) { return found }
+            }
+            return nil
+        }
+    }
+}

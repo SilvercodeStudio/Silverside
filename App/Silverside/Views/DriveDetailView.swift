@@ -166,6 +166,7 @@ struct DiscView: View {
                         .padding(RipButton.inset)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
+                .background(ScrollersPastInset(table: slot.rip != nil))
             Divider()
             StatusBar(slot: slot)
                 .padding(.horizontal, 16)

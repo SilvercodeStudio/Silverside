@@ -15,11 +15,13 @@ public struct HiddenTrackRip: Sendable {
     public var unreadableSamples: [Int] = []
     public var cacheFlushIncomplete = false
 
-    /// True if sectors could not be read and the recovered samples are silence. Some drives
-    /// cannot read before track 1. Non-silent audio is kept even when offset correction
-    /// recovers only a fragment shorter than a sector.
+    /// True if sectors could not be read and the rest is silence, or less than a sector could
+    /// be read (the part of track 1's first sector that the read offset brings in): some
+    /// drives cannot read before track 1. There is no track to keep then, only the sectors
+    /// to report. A whole sector of audio is kept.
     public var isUnreadable: Bool {
-        !unreadableSamples.isEmpty && peak < Self.silencePeak
+        !unreadableSamples.isEmpty
+            && (peak < Self.silencePeak || Self.readsNothing(unreadableSamples, of: samples.count))
     }
 
     /// True if less than a sector of the samples could be read.

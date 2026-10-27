@@ -70,9 +70,8 @@ command-line tool.
   flush: its own read empties the cache.
 - When sectors before track 1 cannot be read, and the rest is silence, the
   report and the log say so: some drives cannot read there, and another drive
-  may find a hidden track. Recovered non-silent audio is kept even when only
-  a fragment shorter than a sector could be read. A hidden track with unreadable
-  sectors is not verified.
+  may find a hidden track. A hidden track with unreadable sectors is not
+  verified.
 - A drive or USB bridge that refuses the C2 flags or the subchannel with an
   I/O error no longer makes good sectors unreadable: Silverside reads them
   without. A damaged sector does not count as a refusal once the drive has

@@ -274,9 +274,11 @@ struct ReviewRegressionTests {
         #expect(hidden.peak > HiddenTrackRip.silencePeak && !hidden.isUnreadable && !hidden.readsAgree)
     }
 
-    /// Offset correction can recover a fragment through track 1 even when earlier sectors fail.
+    /// A drive that reads nothing before track 1 still reads track 1's first sector, and the
+    /// read offset brings in the last samples before track 1 from it. Those few samples are
+    /// not a hidden track: the area is unreadable.
     @Test(arguments: [1, 103, 587])
-    func recoveredHiddenOffsetFragmentIsKept(offset: Int) throws {
+    func offsetFragmentIsNotAHiddenTrack(offset: Int) throws {
         let toc = try TOC(audioTrackStarts: [10], leadOutLBA: 1000)
         let drive = SimulatedDrive(toc: toc, samples: PreEmphasisTests.sine(440, frames: 1000 * 588))
         drive.readOffset = offset
@@ -285,25 +287,8 @@ struct ReviewRegressionTests {
         reader.unreadableRetries = 0
         let hidden = try #require(try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: 10))
         #expect(hidden.samples.count - hidden.unreadableSamples.count == offset)
-        #expect(Array(hidden.samples.suffix(offset)) == Array(drive.samples[(10 * 588 - offset)..<(10 * 588)]))
-        #expect(hidden.peak > HiddenTrackRip.silencePeak && !hidden.isUnreadable && !hidden.readsAgree)
-        #expect(hidden.reads == 2)
-    }
-
-    @Test func ripSavesRecoveredHiddenFragmentWithUnreadableSectors() async throws {
-        let (result, events, samples, root) = try await DiscRipTests().rip(
-            trackSectors: [300, 800, 900], hidesFirstTrack: true,
-            prepare: { $0.unreadableSectors = Set(0..<300) })
-        defer { try? FileManager.default.removeItem(at: root) }
-        let hidden = try #require(result.report.hiddenTrack)
-        #expect(!hidden.readsAgree && hidden.unreadableSectors?.count == 300)
-        #expect(result.report.hiddenAreaUnreadableSectors == nil)
-        let audio = try WAVFile.read(result.folder.appending(path: "Track 00.wav"))
-        #expect(audio.dropLast(6).allSatisfy { $0 == 0 })
-        #expect(Array(audio.suffix(6)) == Array(samples[(300 * 588 - 6)..<(300 * 588)]))
-        #expect(events.contains { if case .hiddenTrack = $0 { true } else { false } })
-        #expect(!events.contains { if case .hiddenAreaUnreadable = $0 { true } else { false } })
-        #expect(!result.report.markdown.contains("and the rest is silence"))
+        #expect(hidden.peak > HiddenTrackRip.silencePeak)
+        #expect(hidden.isUnreadable && hidden.reads == 2)
     }
 
     /// A drive that refuses C2 but gives the Q subchannel keeps the Q frames.
@@ -321,8 +306,7 @@ struct ReviewRegressionTests {
     @Test func ripReportsAnUnreadableHiddenAreaWithoutATrack() async throws {
         let (result, events, _, root) = try await DiscRipTests().rip(
             trackSectors: [300, 800, 900], hidesFirstTrack: true,
-            // Include track 1's first physical sector: the offset otherwise recovers six hidden samples.
-            prepare: { $0.unreadableSectors = Set(0...300) })
+            prepare: { $0.unreadableSectors = Set(0..<300) })
         defer { try? FileManager.default.removeItem(at: root) }
         #expect(result.report.hiddenTrack == nil)
         #expect(result.report.hiddenAreaUnreadableSectors == 300)

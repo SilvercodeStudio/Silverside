@@ -56,6 +56,34 @@ extension RipReport {
                     + "hidden track there.",
             ]
         }
+        for edge in paddedEdges ?? [] {
+            lines += [
+                "",
+                "The \(edge.atEnd ? "last" : "first") \(edge.samples) samples of track \(edge.track) are silence: the "
+                    + "drive cannot read past the \(edge.atEnd ? "end" : "start") of the disc's audio, where they come "
+                    + "from with its read offset. AccurateRip and CTDB do not check them.",
+            ]
+        }
+        let unknownPregaps = tracks.filter { $0.pregapUnknown == true }.map(\.number)
+        if !unknownPregaps.isEmpty {
+            lines += [
+                "",
+                "Pregap unknown for " + (unknownPregaps.count == 1 ? "track " : "tracks ") + Self.list(unknownPregaps)
+                    + ": the Q subchannel near its start could not be read. The CUE sheet has no INDEX 00 there.",
+            ]
+        }
+        let indexed = tracks.filter { $0.indexes != nil }
+        if !indexed.isEmpty {
+            let points = indexed.map { track in
+                "track \(track.number) ("
+                    + (track.indexes ?? []).map {
+                        String(format: "%02d", $0.number) + " at " + Self.time($0.sectors)
+                    }.joined(separator: ", ") + ")"
+            }
+            lines += [
+                "", "Index points after 01, from the start of the track: " + points.joined(separator: "; ") + ".",
+            ]
+        }
         let tested = tracks.filter { $0.testCRC32 != nil }
         if !tested.isEmpty {
             let differing = tested.filter { $0.testReadMatches == false }.map(\.number)
@@ -106,7 +134,7 @@ extension RipReport {
                 cells.append(Self.escaped(named?.composers.map(\.tagName).joined(separator: ", ") ?? ""))
             }
             cells.append(Self.time(track.sectors))
-            cells.append(track.pregapSectors.map(Self.time) ?? "")
+            cells.append(track.pregapUnknown == true ? "unknown" : track.pregapSectors.map(Self.time) ?? "")
             cells.append(accurateRip)
             cells.append(track.ctdbConfidence.map { $0 > 0 ? String($0) : "no match" } ?? "")
             cells.append(

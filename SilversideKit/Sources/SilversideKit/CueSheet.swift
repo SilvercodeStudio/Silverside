@@ -13,6 +13,8 @@ public struct CueSheet: Sendable {
         public var sectors: Int
         /// The pregap in sectors: index 00 to index 01.
         public var pregapSectors: Int
+        /// The index points after 01 (02, 03, and so on), in sectors after index 01.
+        public var indexes: [RipReport.Index]
         public var title: String?
         public var performer: String?
         public var isrc: String?
@@ -20,13 +22,15 @@ public struct CueSheet: Sendable {
         public var copyPermitted: Bool
 
         public init(
-            number: Int, file: String, sectors: Int, pregapSectors: Int = 0, title: String? = nil,
-            performer: String? = nil, isrc: String? = nil, preEmphasis: Bool = false, copyPermitted: Bool = false
+            number: Int, file: String, sectors: Int, pregapSectors: Int = 0, indexes: [RipReport.Index] = [],
+            title: String? = nil, performer: String? = nil, isrc: String? = nil, preEmphasis: Bool = false,
+            copyPermitted: Bool = false
         ) {
             self.number = number
             self.file = file
             self.sectors = sectors
             self.pregapSectors = pregapSectors
+            self.indexes = indexes
             self.title = title
             self.performer = performer
             self.isrc = isrc
@@ -77,6 +81,7 @@ public struct CueSheet: Sendable {
                     lines.append("    INDEX 00 \(Self.time(start - track.pregapSectors))")
                 }
                 lines.append("    INDEX 01 \(Self.time(start))")
+                lines += indexLines(track, from: start)
                 start += track.sectors
             }
             return lines.joined(separator: "\n") + "\n"
@@ -98,8 +103,14 @@ public struct CueSheet: Sendable {
                 lines.append("FILE \(Self.quoted(track.file)) WAVE")
             }
             lines.append("    INDEX 01 00:00:00")
+            lines += indexLines(track, from: 0)
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// A track's index points after 01, with `start` the time of its index 01 in the file.
+    private func indexLines(_ track: Track, from start: Int) -> [String] {
+        track.indexes.map { String(format: "    INDEX %02d ", $0.number) + Self.time(start + $0.sectors) }
     }
 
     /// A track's first lines: its number, names, ISRC, and flags.

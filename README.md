@@ -90,10 +90,12 @@ to be installed. All other supported formats are handled natively.
 - **Disc images**, if you want them: the whole disc in one lossless file with
   a CUE sheet, beside the library, from which the disc can be burned again.
 - **A rip report**, as Markdown to read and as JSON (`disc.json`), with every
-  track's result, its CRC-32 as EAC and XLD print it, the TOC, pregaps, the
+  track's result, its CRC-32 as EAC and XLD print it, the TOC, pregaps and
+  index points, the
   disc IDs, the ISRCs, MCN, and CD-Text, the media (pressed CD or CD-R), the
   drive and its offset, the release, and the encoding; and a **CUE sheet**,
-  from which the disc can be burned again exactly.
+  with the pregaps and the index points after 01, from which the disc can be
+  burned again exactly.
 - **Hidden track one audio** (a song before track 1) is ripped and encoded as
   track 0.
 - **Names you can change.** The album's title, artist, and date, and each
@@ -193,6 +195,12 @@ should become (Apple Lossless, FLAC, AAC, MP3, or WAV files only).
 `silverside` does everything the app does, from a terminal, with the same
 settings file. See [docs/cli.md](docs/cli.md) for its commands, what a rip
 makes, and the settings.
+
+## How the audio processing was checked
+
+[ReplayGain](docs/ReplayGain.md), [HDCD](docs/HDCD.md), and
+[pre-emphasis](docs/PreEmphasis.md) each have a short page: what Silverside
+does, and how it was compared with independent tools and real discs.
 
 ## TODO or future ideas
 

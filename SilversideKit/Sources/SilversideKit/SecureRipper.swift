@@ -51,6 +51,8 @@ public struct SecureTrackRip: Sendable {
     public var unreadableSamples: [Int] = []
     /// The control bits of the track's Q frames in the first read. Nil if the drive did not read them.
     public var subchannel: SubchannelControl?
+    /// The positions in the valid ADR 1 frames of the first read (see `TrackRip.qPositions`).
+    public var qPositions: [QSubchannel.Position] = []
     /// A requested cache flush could not read enough independent sectors.
     public var cacheFlushIncomplete = false
 
@@ -150,7 +152,7 @@ public struct SecureRipper {
         var result = SecureTrackRip(
             track: track, samples: first.samples, status: .consistent, suspectSectors: [], unresolvedSectors: [],
             rounds: 0, matchingOffsets: first.matchingOffsets, c2Samples: first.c2Samples,
-            unreadableSamples: first.unreadableSamples, subchannel: first.subchannel)
+            unreadableSamples: first.unreadableSamples, subchannel: first.subchannel, qPositions: first.qPositions)
         if case .accurate(let v1, let v2) = first.verification {
             result.status = .accurate(v1Confidence: v1, v2Confidence: v2)
             return result

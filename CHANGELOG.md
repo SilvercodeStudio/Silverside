@@ -3,6 +3,21 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.9 (not released yet)
+
+### Added
+
+- **Index points:** some discs, most often classical ones, mark parts of a
+  track with index 02, 03, and so on. A rip finds them in the subchannel it
+  already reads with the audio, and the CUE sheet, the report, and the log
+  have them, so the disc can be burned again with them.
+- A pregap that cannot be found, because the subchannel near the track's
+  start cannot be read (a scratch can do that), shows as "unknown" in the
+  report and the log, instead of as no pregap.
+- The report says when the first or last few samples of the disc's audio are
+  silence because the drive cannot read past its edge. With the read offset,
+  those samples come from past the edge; AccurateRip and CTDB do not check them.
+
 ## 0.8 (2026-10-27)
 
 ### Added

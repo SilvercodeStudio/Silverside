@@ -447,6 +447,15 @@ public struct DiscRip {
                 summary += ", \(unreadable.count) sectors could not be read"
             }
             summary += report.controlBitsSummary
+            if report.pregapUnknown == true {
+                summary += ", pregap unknown: the Q subchannel near its start could not be read"
+            }
+            if let indexes = report.indexes {
+                summary +=
+                    ", index points "
+                    + indexes.map { String(format: "%02d", $0.number) + " at " + CueSheet.time($0.sectors) }
+                    .joined(separator: ", ")
+            }
             if let hdcd = report.hdcd {
                 summary += hdcd.changesAudio ? ", HDCD codes (\(hdcd.featuresText))" : ", HDCD codes"
             }
@@ -548,6 +557,8 @@ public struct DiscRip {
         report.media = media
         report.hiddenTrack = hiddenTrack
         report.hiddenAreaUnreadableSectors = hiddenAreaUnreadable
+        let padded = Self.paddedEdges(of: toc, readOffset: readOffset, tracks: Set(reports.map(\.number)))
+        report.paddedEdges = padded.isEmpty ? nil : padded
         report.hdcd = HDCDStatus(reports)
         report.cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         report.release = chosen
@@ -632,6 +643,20 @@ public struct DiscRip {
         return result
     }
 
+    /// The edges of the disc's audio that a drive without overread cannot read, in the tracks
+    /// ripped: with an offset of +N, the last N samples before each end of the audio come from
+    /// past it; with -N, the first N after each start. (No drive tested overreads.)
+    static func paddedEdges(of toc: TOC, readOffset: Int, tracks: Set<Int>) -> [RipReport.PaddedEdge] {
+        guard readOffset != 0 else { return [] }
+        return toc.audioAreas.compactMap { area in
+            let sector = readOffset > 0 ? area.upperBound - 1 : area.lowerBound
+            guard let track = toc.audioTracks.first(where: { toc.sectorRange(of: $0).contains(sector) }),
+                tracks.contains(track.number)
+            else { return nil }
+            return RipReport.PaddedEdge(track: track.number, samples: abs(readOffset), atEnd: readOffset > 0)
+        }
+    }
+
     /// A file's path relative to `folder`, such as "Artwork/back.jpg".
     static func relativePath(of file: URL, in folder: URL) -> String {
         let base = folder.standardizedFileURL.pathComponents
@@ -657,7 +682,11 @@ public struct DiscRip {
             sectors: toc.sectorRange(of: track).count, preEmphasis: track.hasPreEmphasis, accurateRip: .notInDatabase)
         report.tocFlags = RipReport.ControlFlags(track)
         report.isrc = try? SubchannelCodes.isrc(of: track, in: toc, drive: drive)
-        report.pregapSectors = try? PregapFinder.pregap(of: track, in: toc, drive: drive)
+        do {
+            report.pregapSectors = try PregapFinder.pregap(of: track, in: toc, drive: drive)
+        } catch {
+            report.pregapUnknown = true
+        }
         // The status when the track matches no checksum: not in AccurateRip, no checksum for it, or not accurate.
         let unmatched = RipReport.AccurateRipStatus.unmatched(
             trackAt: toc.audioTracks.firstIndex(of: track) ?? 0, records: records)
@@ -667,6 +696,7 @@ public struct DiscRip {
             report.c2Sectors = rip.c2Samples.map { Array(Set($0.map { $0 / CDDA.samplesPerSector })).sorted() }
             report.unreadableSectors = Array(Set(rip.unreadableSamples.map { $0 / CDDA.samplesPerSector })).sorted()
             report.recordSubchannel(rip.subchannel)
+            report.recordIndexes(of: track, in: toc, positions: rip.qPositions, drive: drive)
             switch rip.verification {
             case .accurate(let v1, let v2):
                 report.accurateRip = .accurate
@@ -687,6 +717,7 @@ public struct DiscRip {
         report.shiftedReads = rip.shiftedReads
         report.unreadableSectors = rip.unreadableSectors
         report.recordSubchannel(rip.subchannel)
+        report.recordIndexes(of: track, in: toc, positions: rip.qPositions, drive: drive)
         switch rip.status {
         case .accurate(let v1, let v2):
             report.accurateRip = .accurate

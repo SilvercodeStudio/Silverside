@@ -276,7 +276,7 @@ extension DiscEncoder {
             cueTracks.append(
                 CueSheet.Track(
                     number: tocTrack.number, file: url.lastPathComponent, sectors: toc.sectorRange(of: tocTrack).count,
-                    pregapSectors: reported?.pregapSectors ?? 0, title: meta.title,
+                    pregapSectors: reported?.pregapSectors ?? 0, indexes: reported?.indexes ?? [], title: meta.title,
                     performer: meta.vorbisComments.first { $0.key == "ARTIST" }?.value, isrc: reported?.isrc,
                     // The TOC here comes from the report's CTDB TOC string, which has no flags.
                     preEmphasis: (tocTrack.hasPreEmphasis || reported?.preEmphasis == true)

@@ -92,6 +92,9 @@ public final class SimulatedDrive: CDDrive {
     /// pregap runs from LBA 0 to its start.
     public var pregaps: [Int: Int] = [:]
 
+    /// Index points after 01, by track number: the LBAs where its index 02, 03, and so on start.
+    public var indexes: [Int: [Int]] = [:]
+
     /// Sectors whose Q subchannel has a damaged track number and a bad CRC.
     public var corruptQSectors: Set<Int> = []
 
@@ -236,7 +239,9 @@ public final class SimulatedDrive: CDDrive {
             frame = .isrc(isrc)
         } else {
             frame = .position(
-                track: track.number, index: lba < track.startLBA ? 0 : 1, lba: lba,
+                track: track.number,
+                index: lba < track.startLBA ? 0 : 1 + (indexes[track.number] ?? []).filter { $0 <= lba }.count,
+                lba: lba,
                 control: qControl[track.number] ?? 0)
         }
         var bytes = frame.bytes

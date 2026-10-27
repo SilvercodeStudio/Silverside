@@ -25,6 +25,9 @@ public struct TrackRip: Sendable {
     public var unreadableSamples: [Int] = []
     /// The control bits of the track's Q frames in the read. Nil if the drive did not read them.
     public var subchannel: SubchannelControl?
+    /// The positions in the valid ADR 1 frames of the read, the track's and the next pregap's,
+    /// for its index points (`PregapFinder.indexes`). Empty if the drive did not read Q frames.
+    public var qPositions: [QSubchannel.Position] = []
 }
 
 /// Rips tracks with offset correction and checks them against AccurateRip.
@@ -148,6 +151,6 @@ public struct TrackRipper {
             matchingOffsets: matchingOffsets,
             c2Samples: flagged?.map { $0 - margin }.filter { (0..<length).contains($0) },
             unreadableSamples: read.unreadable.map { $0 - margin }.filter { (0..<length).contains($0) },
-            subchannel: subchannel.frames > 0 ? subchannel : nil)
+            subchannel: subchannel.frames > 0 ? subchannel : nil, qPositions: read.q.compactMap(\.position))
     }
 }

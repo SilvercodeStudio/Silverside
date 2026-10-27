@@ -533,6 +533,7 @@ public struct DiscEncoder: Sendable {
                 CueSheet.Track(
                     number: tocTrack.number, file: file.lastPathComponent,
                     sectors: disc.toc.sectorRange(of: tocTrack).count, pregapSectors: reported?.pregapSectors ?? 0,
+                    indexes: reported?.indexes ?? [],
                     title: metadata.title, performer: metadata.vorbisComments.first { $0.key == "ARTIST" }?.value,
                     isrc: ripped.isrc, preEmphasis: preEmphasis,
                     copyPermitted: tocTrack.isCopyPermitted || reported?.isCopyPermitted == true))

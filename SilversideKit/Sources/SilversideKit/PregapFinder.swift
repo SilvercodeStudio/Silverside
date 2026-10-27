@@ -20,24 +20,57 @@ public enum PregapFinder {
         guard index > 0 else { return track.startLBA }
         let previous = toc.tracks[index - 1]
         guard previous.kind == .audio, previous.session == track.session else { return nil }
-        let start = try firstSector(ofTrack: track.number, in: (previous.startLBA + 1)..<track.startLBA, drive: drive)
+        let start = try firstSector(
+            in: (previous.startLBA + 1)..<track.startLBA, tracks: (track.number - 1)...track.number, drive: drive
+        ) { $0.track == track.number }
         return track.startLBA - start
     }
 
-    /// The first sector in `range` whose Q subchannel names `track`, or the end of
-    /// the range if none does. In the range, Q names the previous track until the
-    /// pregap starts, so a binary search finds the change.
-    private static func firstSector(ofTrack track: Int, in range: Range<Int>, drive: any CDDrive) throws -> Int {
+    /// The index points after 01 of an audio track: where its index 02, 03, and so on start,
+    /// in sectors after its index 01. Most discs have none; some classical discs mark
+    /// movements or passages with them. `positions` are the Q frames' positions from the
+    /// track's rip (`TrackRip.qPositions`); where they leave a change unknown by more than a
+    /// sector (a damaged frame there, or an MCN or ISRC frame), the drive's Q subchannel is
+    /// read again. If it cannot be, the index starts at the first frame that names it.
+    public static func indexes(
+        of track: TOC.Track, in toc: TOC, positions: [QSubchannel.Position], drive: any CDDrive
+    ) -> [RipReport.Index] {
+        let range = toc.sectorRange(of: track)
+        let own = positions.filter { $0.track == track.number && $0.index >= 1 && range.contains($0.lba) }
+        // A frame whose CRC passes can still be wrong, so an index that one frame names is not taken.
+        let counts = Dictionary(grouping: own, by: \.index).mapValues(\.count)
+        var indexes = [RipReport.Index]()
+        for number in counts.keys.sorted() where number >= 2 && counts[number]! >= 2 {
+            let before = own.filter { $0.index < number }.map(\.lba).max() ?? range.lowerBound
+            guard let at = own.filter({ $0.index >= number }).map(\.lba).min(), before < at else { continue }
+            let start =
+                at - before == 1
+                ? at
+                : (try? firstSector(in: (before + 1)..<at, tracks: track.number...track.number, drive: drive) {
+                    $0.index >= number
+                }) ?? at
+            indexes.append(RipReport.Index(number: number, sectors: start - range.lowerBound))
+        }
+        return indexes
+    }
+
+    /// The first sector in `range` whose Q frame's position is `isAfter` a change, or the end
+    /// of the range if none is. Before the change, frames name the earlier track or index,
+    /// so a binary search finds it.
+    private static func firstSector(
+        in range: Range<Int>, tracks: ClosedRange<Int>, drive: any CDDrive,
+        where isAfter: (QSubchannel.Position) -> Bool
+    ) throws -> Int {
         var low = range.lowerBound
         var high = range.upperBound
         while low < high {
             // Sectors with only MCN or ISRC frames left between two known positions
-            // belong to the previous track: no position frame says the new track starts there.
+            // belong to the earlier part: no position frame says the change is there.
             guard
                 let (sector, position) = try readPosition(
-                    near: low + (high - low) / 2, in: low..<high, tracks: (track - 1)...track, drive: drive)
+                    near: low + (high - low) / 2, in: low..<high, tracks: tracks, drive: drive)
             else { return high }
-            if position.track == track {
+            if isAfter(position) {
                 high = sector
             } else {
                 low = sector + 1

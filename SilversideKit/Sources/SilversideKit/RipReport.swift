@@ -76,6 +76,12 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// The track's pregap (index 00 to index 01) in sectors, from the Q subchannel. For track 1,
         /// the part of the disc before it. The pregap of a later track is at the end of the track before it.
         public var pregapSectors: Int?
+        /// True if the track should have a pregap, but the Q subchannel near its start could not
+        /// be read (a scratch can damage those frames): its pregap is unknown, not 0.
+        public var pregapUnknown: Bool?
+        /// The track's index points after 01, from its Q frames. Nil if it has none, or the drive
+        /// did not read the Q subchannel (see `subchannel`), and in reports from before 0.9.
+        public var indexes: [Index]?
         /// CRC-32 of the track's audio as it was written, as eight hex digits, as EAC and XLD
         /// print it, so that rips can be compared across programs. Nil in older reports.
         public var crc32: String?
@@ -112,6 +118,14 @@ public struct RipReport: Codable, Equatable, Sendable {
 
         /// Records the control bits of the track's Q frames. The track has pre-emphasis if the
         /// TOC or most of the frames say so.
+        /// Records the track's index points after 01 from its rip's Q frames (none if the drive read none).
+        public mutating func recordIndexes(
+            of track: TOC.Track, in toc: TOC, positions: [QSubchannel.Position], drive: any CDDrive
+        ) {
+            let found = PregapFinder.indexes(of: track, in: toc, positions: positions, drive: drive)
+            indexes = found.isEmpty ? nil : found
+        }
+
         public mutating func recordSubchannel(_ control: SubchannelControl?) {
             subchannel = control
             preEmphasis = (tocFlags?.preEmphasis ?? preEmphasis) || control?.hasPreEmphasis == true
@@ -143,6 +157,36 @@ public struct RipReport: Codable, Equatable, Sendable {
             self.unresolvedSectors = unresolvedSectors
             self.ctdbConfidence = ctdbConfidence
             self.repairedSamples = repairedSamples
+        }
+    }
+
+    /// An index point after 01 in a track: index 02, 03, and so on, which some discs (most
+    /// often classical ones) use to mark parts of a track.
+    public struct Index: Codable, Equatable, Sendable {
+        public var number: Int
+        /// Where the index starts, in sectors after the track's index 01.
+        public var sectors: Int
+
+        public init(number: Int, sectors: Int) {
+            self.number = number
+            self.sectors = sectors
+        }
+    }
+
+    /// Samples at an edge of the disc's audio that the drive could not read, because it does
+    /// not read past the edge (no overread): with a read offset, the samples that belong
+    /// there come from beyond it. They are silence in the file, as in other rippers without
+    /// overread, and AccurateRip and CTDB leave them out of their checks.
+    public struct PaddedEdge: Codable, Equatable, Sendable {
+        public var track: Int
+        public var samples: Int
+        /// True for the end of the track, false for its start.
+        public var atEnd: Bool
+
+        public init(track: Int, samples: Int, atEnd: Bool) {
+            self.track = track
+            self.samples = samples
+            self.atEnd = atEnd
         }
     }
 
@@ -237,6 +281,9 @@ public struct RipReport: Codable, Equatable, Sendable {
     /// Sectors before track 1 that could not be read, when what could be read is silence:
     /// the drive may not read before track 1, so a hidden track there is not ruled out.
     public var hiddenAreaUnreadableSectors: Int?
+    /// The edges of the disc's audio that the drive could not read (`PaddedEdge`). Nil if
+    /// there are none (the read offset is 0, or the drive overreads), and in reports from before 0.9.
+    public var paddedEdges: [PaddedEdge]?
     /// Whether the tracks have HDCD codes, from each track's `hdcd`. Nil in reports from
     /// before Silverside looked for them.
     public var hdcd: HDCDStatus?

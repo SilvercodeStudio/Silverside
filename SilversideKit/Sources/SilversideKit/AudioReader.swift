@@ -19,6 +19,20 @@ public struct AudioReader {
     /// If nil, the read throws.
     public var unreadableRetries: Int?
 
+    /// Sectors after the end of the audio that the drive reads: on an Enhanced CD, the first
+    /// session's lead-out (`sessionLeadOut(of:drive:)`). Reads may go there, so the last track's
+    /// last samples come from the disc, not silence. Nil reads only the audio areas.
+    public var readableLeadOut: Range<Int>?
+
+    /// The first sectors of an Enhanced CD's first-session lead-out, if the drive reads them
+    /// (the MATSHITA does, 2026-10-27): enough for any read offset and a rip's margins. Nil
+    /// for other discs, and for a drive that cannot.
+    public static func sessionLeadOut(of toc: TOC, drive: any CDDrive) -> Range<Int>? {
+        guard toc.isEnhanced else { return nil }
+        let range = toc.audioLeadOutLBA..<(toc.audioLeadOutLBA + 10)
+        return (try? drive.readAudioSectors(at: range.lowerBound, count: range.count)) != nil ? range : nil
+    }
+
     /// If set, a read checks it before each chunk, and throws `CancellationError` once it is stopped.
     public var stop: StopToken?
 
@@ -72,7 +86,10 @@ public struct AudioReader {
         let wanted = firstSector..<endSector
         // Without overread, sectors outside the disc's audio (past its edges, in a data track,
         // or in the session gap of an enhanced CD) are not read: their samples stay silence.
-        let parts = canOverread ? [wanted] : toc.audioAreas.map { wanted.clamped(to: $0) }.filter { !$0.isEmpty }
+        let areas = toc.audioAreas.map { area in
+            readableLeadOut.map { $0.lowerBound == area.upperBound ? area.lowerBound..<$0.upperBound : area } ?? area
+        }
+        let parts = canOverread ? [wanted] : areas.map { wanted.clamped(to: $0) }.filter { !$0.isEmpty }
         let total = parts.reduce(0) { $0 + $1.count }
 
         var sectorsRead = 0

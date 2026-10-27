@@ -101,6 +101,7 @@ extension RipReport {
         if repaired > 0 { lines += ["", "\(repaired) samples were repaired with CTDB's repair data."] }
         if let timing = timingText { lines += ["", timing] }
         if let hdcd = hdcdText { lines += ["", hdcd] }
+        for track in dataTracks ?? [] { lines += ["", Self.dataTrackSummary(track) + "."] }
         lines.append("")
 
         lines.append("## Tracks")
@@ -239,6 +240,10 @@ extension RipReport {
             if let image = encoding.image {
                 lines.append("")
                 lines.append("Disc image: `\((image as NSString).abbreviatingWithTildeInPath)`")
+            }
+            if let files = encoding.dataTrackFiles {
+                lines.append("")
+                lines.append("Data tracks: " + files.map { "`\($0)`" }.joined(separator: ", "))
             }
             lines.append("")
             lines.append("| Track | File |")

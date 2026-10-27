@@ -284,6 +284,8 @@ public struct RipReport: Codable, Equatable, Sendable {
     /// The edges of the disc's audio that the drive could not read (`PaddedEdge`). Nil if
     /// there are none (the read offset is 0, or the drive overreads), and in reports from before 0.9.
     public var paddedEdges: [PaddedEdge]?
+    /// The data tracks saved as ISO images. Nil if none was, and in reports from before 0.9.
+    public var dataTracks: [DataTrack]?
     /// Whether the tracks have HDCD codes, from each track's `hdcd`. Nil in reports from
     /// before Silverside looked for them.
     public var hdcd: HDCDStatus?
@@ -357,6 +359,8 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// The disc image (the whole disc in one file, with its CUE sheet beside it), if one was
         /// written. Nil in older records.
         public var image: String?
+        /// The data tracks' ISO images in the album folder, such as "Data track.iso". Nil if none.
+        public var dataTrackFiles: [String]?
 
         /// The loudness of the album and its tracks, as the ReplayGain tags have them.
         public struct ReplayGainRecord: Codable, Equatable, Sendable {

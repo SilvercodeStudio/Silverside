@@ -161,6 +161,7 @@ silverside config unset aac.mode                     # back to the default
 | `ripOnInsert` | `false` | the app rips a disc when it goes in, if its release is certain and it is not ripped yet |
 | `hdcd` | `ask` | for a disc whose HDCD codes ask for peak extend or a gain: `decode` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--hdcd`) |
 | `preEmphasis` | `ask` | for tracks with pre-emphasis: `deemphasize` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--pre-emphasis`) |
+| `saveDataTracks` | `true` | save an Enhanced CD's data track as an ISO image, copied into the album folder as `Data track.iso` |
 | `writeImages` | `false` | also write a disc image when a disc is encoded (`--image`) |
 | `images` | `~/Music/Silverside Images` | the folder for disc images (`--images`) |
 | `aac.mode`, `aac.bitRate`, `aac.vbrQuality` | `vbr-constrained`, `256`, `127` | Apple's AAC encoder |

@@ -25,6 +25,10 @@ public final class SimulatedDrive: CDDrive {
     /// session gap of an enhanced CD) fails with a read error, as on real drives.
     public var failsOutsideAudio = true
 
+    /// If true, the first session's lead-out of an Enhanced CD reads, as on the MATSHITA: the
+    /// sectors after the audio's end, before the second session's lead-in.
+    public var readsSessionLeadOut = false
+
     /// Physical sectors that return wrong data with no error, the same on every read.
     public var corruptSectors: Set<Int> = []
 
@@ -67,6 +71,29 @@ public final class SimulatedDrive: CDDrive {
     public var mediaType: DiscMediaType? = .pressed
 
     public func readMediaType() throws -> DiscMediaType? { mediaType }
+
+    /// The simulated user data of a data sector: byte `index` of sector `lba`.
+    public static func dataByte(lba: Int, index: Int) -> UInt8 { UInt8(truncatingIfNeeded: lba &* 7 &+ index) }
+
+    public func readDataMode(at lba: Int) throws -> DataSectorMode {
+        guard isData(lba), !unreadableSectors.contains(lba) else { throw DriveError.readFailed(lba: lba) }
+        return .mode1
+    }
+
+    public func readDataSectors(at lba: Int, count: Int, mode: DataSectorMode) throws -> [UInt8] {
+        let sectors = lba..<(lba + count)
+        guard mode != .mode2Form2, sectors.allSatisfy(isData) else { throw DriveError.readFailed(lba: lba) }
+        if let bad = sectors.first(where: unreadableSectors.contains) { throw DriveError.readFailed(lba: bad) }
+        if let bad = sectors.first(where: { (failingReads[$0] ?? 0) > 0 }) {
+            failingReads[bad]! -= 1
+            throw DriveError.readFailed(lba: bad)
+        }
+        return sectors.flatMap { sector in (0..<2048).map { Self.dataByte(lba: sector, index: $0) } }
+    }
+
+    private func isData(_ lba: Int) -> Bool {
+        toc.tracks.contains { $0.kind == .data && toc.sectorRange(of: $0).contains(lba) }
+    }
 
     /// If true, C2 reads flag the bytes of corrupt and unstable sectors that read wrong.
     public var reportsC2 = false
@@ -144,7 +171,10 @@ public final class SimulatedDrive: CDDrive {
             throw DriveError.readFailed(lba: bad)
         }
         if failsOutsideAudio {
-            let areas = toc.audioAreas
+            var areas = toc.audioAreas
+            if readsSessionLeadOut && toc.isEnhanced {
+                areas.append(toc.audioLeadOutLBA..<(toc.audioLeadOutLBA + 6750))
+            }
             let onDisc = sectors.clamped(to: 0..<toc.leadOutLBA)
             if let bad = onDisc.first(where: { lba in !areas.contains { $0.contains(lba) } }) {
                 throw DriveError.readFailed(lba: bad)

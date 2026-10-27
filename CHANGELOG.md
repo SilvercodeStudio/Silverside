@@ -14,6 +14,13 @@ command-line tool.
 - A pregap that cannot be found, because the subchannel near the track's
   start cannot be read (a scratch can do that), shows as "unknown" in the
   report and the log, instead of as no pregap.
+- **Enhanced CDs:** the data track after the music, with extras for a computer,
+  is saved as an ISO disc image and copied into the album folder as
+  `Data track.iso` (Settings › Ripping, `saveDataTracks`; on by default). The
+  report gives its CRC-32 and where it starts on the disc.
+- On an Enhanced CD, a drive that can read past the end of the music (the
+  MATSHITA can) reads the last track to its end, instead of leaving its last
+  few samples silent.
 - The report says when the first or last few samples of the disc's audio are
   silence because the drive cannot read past its edge. With the read offset,
   those samples come from past the edge; AccurateRip and CTDB do not check them.

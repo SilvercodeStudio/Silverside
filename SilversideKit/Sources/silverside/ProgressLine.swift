@@ -68,6 +68,12 @@ final class ProgressLine {
         }
     }
 
+    /// A line of text in place of the read's, at most 10 times a second.
+    func showText(_ text: String) {
+        guard isShown, ContinuousClock.now - lastDraw >= .milliseconds(100) else { return }
+        draw(text)
+    }
+
     /// A time as "1:05".
     static func minutes(_ duration: Duration) -> String {
         let seconds = Int(duration.components.seconds)

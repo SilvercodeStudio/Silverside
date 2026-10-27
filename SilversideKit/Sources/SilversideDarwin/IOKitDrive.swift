@@ -152,6 +152,50 @@ public final class IOKitDrive: CDDrive {
         return read
     }
 
+    /// Reads the whole sector raw, for its mode: byte 15 (the header's last), and for Mode 2
+    /// the Form 2 bit (0x20) of the submode, byte 18. The header alone gives EINVAL (MATSHITA).
+    public func readDataMode(at lba: Int) throws -> DataSectorMode {
+        var bytes = [UInt8](repeating: 0, count: CDDA.bytesPerSector)
+        var request = dk_cd_read_t()
+        request.offset = UInt64(lba * CDDA.bytesPerSector)
+        request.sectorArea = UInt8(
+            kCDSectorAreaSync.rawValue | kCDSectorAreaHeader.rawValue | kCDSectorAreaSubHeader.rawValue
+                | kCDSectorAreaUser.rawValue | kCDSectorAreaAuxiliary.rawValue)
+        request.sectorType = UInt8(kCDSectorTypeUnknown.rawValue)
+        try read(&request, into: &bytes, lba: lba)
+        switch bytes[15] {
+        case 1: return .mode1
+        case 2: return bytes[18] & 0x20 != 0 ? .mode2Form2 : .mode2Form1
+        default: throw DriveError.readFailed(lba: lba)
+        }
+    }
+
+    /// Reads the user data of Mode 1 or Mode 2 Form 1 sectors, which the drive corrects with
+    /// their error correction code.
+    public func readDataSectors(at lba: Int, count: Int, mode: DataSectorMode) throws -> [UInt8] {
+        guard lba >= 0, mode != .mode2Form2 else { throw DriveError.readFailed(lba: lba) }
+        var bytes = [UInt8](repeating: 0, count: count * 2048)
+        var request = dk_cd_read_t()
+        request.offset = UInt64(lba * 2048)
+        request.sectorArea = UInt8(kCDSectorAreaUser.rawValue)
+        request.sectorType = UInt8(mode == .mode1 ? kCDSectorTypeMode1.rawValue : kCDSectorTypeMode2Form1.rawValue)
+        try read(&request, into: &bytes, lba: lba)
+        return bytes
+    }
+
+    private func read(_ request: inout dk_cd_read_t, into bytes: inout [UInt8], lba: Int) throws {
+        do {
+            try bytes.withUnsafeMutableBytes { buffer in
+                request.buffer = buffer.baseAddress
+                request.bufferLength = UInt32(buffer.count)
+                try control(Ioctl.read, &request)
+            }
+        } catch IOKitDriveError.ioctlFailed(errno: EIO) {
+            throw DriveError.readFailed(lba: lba)
+        }
+        guard request.bufferLength == bytes.count else { throw DriveError.readFailed(lba: lba) }
+    }
+
     private func control<Request>(_ code: UInt, _ request: inout Request) throws(IOKitDriveError) {
         let result = withUnsafeMutablePointer(to: &request) { ioctl(descriptor, code, $0) }
         guard result == 0 else { throw .ioctlFailed(errno: errno) }

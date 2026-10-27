@@ -89,6 +89,8 @@ final class RipRun {
     private(set) var ctdbStatus: String?
     /// True while the rip waits for the artwork download at the end.
     private(set) var isSavingArtwork = false
+    /// The data track being saved as an ISO image, after the audio, and how much of it is read.
+    private(set) var dataTrackProgress: (number: Int, fraction: Double)?
     private(set) var folder: URL?
     private(set) var readOffset: Int?
     private(set) var offsetSource: String?
@@ -392,6 +394,9 @@ final class RipRun {
             // Between the last read and the encoding: the cover, the lookups' results, and the report.
             guard let currentTrack else {
                 if isSavingArtwork { return "Saving the cover art…" }
+                if let (number, fraction) = dataTrackProgress {
+                    return "Saving data track \(number) · \(Int(fraction * 100))%"
+                }
                 return fraction >= 1 ? "Finishing the rip…" : "Ripping…"
             }
             var text = "Ripping track \(currentTrack)" + (count > 1 ? " (\(position) of \(count))" : "")
@@ -516,6 +521,15 @@ final class RipRun {
                     + summary)
         case .controlBits(let summary):
             add("Control bits: " + summary)
+        case .savingDataTrack(let number, let fraction):
+            if dataTrackProgress == nil { add("Data track \(number): saving it as an ISO image…") }
+            dataTrackProgress = (number, fraction)
+        case .dataTrackSaved(let track):
+            dataTrackProgress = nil
+            add(RipReport.dataTrackSummary(track))
+        case .dataTrackFailed(let number, let message):
+            dataTrackProgress = nil
+            add("Data track \(number): not saved: \(message)")
         case .checkingCTDB:
             phase = .checkingCTDB
             currentTrack = nil

@@ -623,6 +623,23 @@ public struct DiscEncoder: Sendable {
                 try FileManager.default.copyItem(at: artwork, to: destination)
             }
         }
+        // The data tracks' ISO images (an Enhanced CD's extras) go into the album folder, beside the audio.
+        var dataTrackFiles = [String]()
+        if let albumFolder, albumSuffix == nil, let saved = disc.report?.dataTracks {
+            for track in saved {
+                let name = "Data track" + (saved.count > 1 ? " \(track.number)" : "") + discPart + ".iso"
+                let source = disc.folder.appending(path: track.file)
+                let target = albumFolder.appending(path: name)
+                if FileManager.default.fileExists(atPath: source.path), !Self.sameFile(source, target) {
+                    if FileManager.default.fileExists(atPath: target.path) {
+                        try FileManager.default.removeItem(at: target)
+                    }
+                    try FileManager.default.copyItem(at: source, to: target)
+                    log("\(name)")
+                }
+                if FileManager.default.fileExists(atPath: target.path) { dataTrackFiles.append(name) }
+            }
+        }
         let encoding = albumFolder.map {
             // Whole seconds, as the report's JSON keeps dates, so the record returned equals the one saved.
             RipReport.Encoding(
@@ -635,6 +652,7 @@ public struct DiscEncoder: Sendable {
             encoding.hdcdDecoded = decodes ? true : nil
             encoding.deEmphasizedTracks = deEmphasized.isEmpty ? nil : deEmphasized
             encoding.albumSuffix = albumSuffix
+            encoding.dataTrackFiles = dataTrackFiles.isEmpty ? nil : dataTrackFiles
             return encoding
         }
         if let albumFolder, let encoding {

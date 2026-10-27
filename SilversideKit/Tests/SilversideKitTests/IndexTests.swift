@@ -44,6 +44,20 @@ struct IndexTests {
         #expect(PregapFinder.indexes(of: toc.tracks[1], in: toc, positions: frames, drive: drive) == [])
     }
 
+    /// A stray frame that names index 05 before a real index 02 changes nothing (review, 2026-10-27).
+    @Test func strayFrameDoesNotHideARealIndex() throws {
+        let toc = try TOC(audioTrackStarts: [0, 800], leadOutLBA: 1700)
+        let drive = SimulatedDrive(toc: toc, samples: [UInt32](repeating: 0, count: 1700 * 588))
+        drive.indexes = [2: [1100]]
+        var frames = try positions(drive, 800..<1700)
+        let stray = try #require(frames.firstIndex { $0.lba == 1000 })
+        frames[stray].index = 5
+        #expect(
+            PregapFinder.indexes(of: toc.tracks[1], in: toc, positions: frames, drive: drive) == [
+                .init(number: 2, sectors: 300)
+            ])
+    }
+
     @Test func cueSheetsHaveTheIndexPoints() {
         let tracks: [CueSheet.Track] = [
             .init(number: 1, file: "01.flac", sectors: 800),

@@ -58,6 +58,14 @@ public enum CRC32 {
         }
     }
 
+    /// The checksum of `bytes` after the bytes whose checksum is `crc`.
+    public static func checksum(of bytes: [UInt8], after crc: UInt32) -> UInt32 {
+        bytes.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress, !buffer.isEmpty else { return crc }
+            return UInt32(crc32(uLong(crc), base, uInt(buffer.count)))
+        }
+    }
+
     /// The same, leaving out the samples that are 0 in both channels: EAC's "CRC32 (skip
     /// zero)", which does not change with the silence at a track's edges.
     public static func checksumSkippingZeros(of samples: ArraySlice<UInt32>) -> UInt32 {

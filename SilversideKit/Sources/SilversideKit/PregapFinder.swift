@@ -36,9 +36,11 @@ public enum PregapFinder {
         of track: TOC.Track, in toc: TOC, positions: [QSubchannel.Position], drive: any CDDrive
     ) -> [RipReport.Index] {
         let range = toc.sectorRange(of: track)
-        let own = positions.filter { $0.track == track.number && $0.index >= 1 && range.contains($0.lba) }
-        // A frame whose CRC passes can still be wrong, so an index that one frame names is not taken.
-        let counts = Dictionary(grouping: own, by: \.index).mapValues(\.count)
+        let named = positions.filter { $0.track == track.number && $0.index >= 1 && range.contains($0.lba) }
+        // A frame whose CRC passes can still be wrong, so an index that one frame names is not
+        // taken, and its frame does not move the other indexes' changes either.
+        let counts = Dictionary(grouping: named, by: \.index).mapValues(\.count)
+        let own = named.filter { $0.index == 1 || counts[$0.index]! >= 2 }
         var indexes = [RipReport.Index]()
         for number in counts.keys.sorted() where number >= 2 && counts[number]! >= 2 {
             let before = own.filter { $0.index < number }.map(\.lba).max() ?? range.lowerBound

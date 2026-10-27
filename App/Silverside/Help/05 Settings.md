@@ -17,6 +17,8 @@ C2 error flags are a drive's own report of sectors it had trouble with. Silversi
 
 **Test and copy** reads each track once more after its rip, and keeps the CRC-32 of both reads in the report, as Exact Audio Copy does. It is off by default: the rip already compares reads of every doubtful sector, and the test read takes as long as another read of the disc. Turn it on for a record that EAC's users will recognize.
 
+**Save an Enhanced CD's data track** keeps the extras for a computer that some CDs have after the music, as `Data track.iso` in the album's folder (see Ripping a Disc › Enhanced CDs). It is on by default, and costs about a minute and the track's size, often 50 to 600 MB.
+
 ## Encoding
 
 FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit rate mode, bit rate, and VBR quality.

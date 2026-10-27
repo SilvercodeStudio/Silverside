@@ -66,6 +66,9 @@ public struct Settings: Codable, Equatable, Sendable {
     public var writeImages = false
     /// Where disc images go, each in its album's folder as the library names it.
     public var images = "~/Music/Silverside Images"
+    /// Save each data track (an Enhanced CD's extras for a computer) as an ISO image, which the
+    /// encoding copies into the album's folder.
+    public var saveDataTracks = true
 
     public init() {}
 
@@ -210,6 +213,7 @@ public struct Settings: Codable, Equatable, Sendable {
         preEmphasis = try value(.preEmphasis, defaults.preEmphasis)
         writeImages = try value(.writeImages, defaults.writeImages)
         images = try value(.images, defaults.images)
+        saveDataTracks = try value(.saveDataTracks, defaults.saveDataTracks)
     }
 }
 

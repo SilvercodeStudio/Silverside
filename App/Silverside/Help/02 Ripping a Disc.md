@@ -128,3 +128,9 @@ The rip log and the report list every track's flags, and where each came from: p
 ## Where the files go
 
 Each rip gets a folder in the rips folder (Settings › General), named from the release: the WAV files, `disc.json` and `Rip Report.md` with every detail, and the cover. With "Encode the disc into the library" on, the album is encoded into the library after the rip, with the cover, the report, and a CUE sheet in its folder; the files carry the names and credits from MusicBrainz, and ReplayGain loudness tags unless Settings › Encoding turns them off. Then a rip whose tracks are all verified and encoded is deleted, unless you keep it. Settings › Encoding can also write a disc image of each disc: the whole disc in one file, with a CUE sheet.
+
+### Enhanced CDs
+
+Some CDs from the late 1990s and the 2000s, often marked "Enhanced CD" or "CD Extra", have a data track after the music with extras for a computer: videos, photos, lyrics, links, or a program to show them. Silverside saves that track as an ISO disc image, `Data track.iso` in the album's folder, unless Settings › Ripping turns it off. The image holds the track exactly as it is on the disc. Its file system counts from the start of the disc, not of the track, so most programs cannot open the image by itself: the report says where the track starts. Many of these extras were made for computers of their time, and the Mac's own format on them (HFS) no longer opens in macOS.
+
+On such a disc, a drive that can read past the end of the music reads the last track to its end; otherwise its last few samples are silence, as the report says.

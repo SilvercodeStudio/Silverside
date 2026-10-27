@@ -17,7 +17,8 @@ public struct DriveIdentity: Equatable, Sendable {
 
 /// What a rip should do, beyond the settings.
 public struct DiscRipOptions: Sendable {
-    /// The track numbers to rip. Nil rips every audio track.
+    /// The track numbers to rip. Nil rips every audio track, and every data track if
+    /// `savesDataTracks`. A data track's number saves that track.
     public var tracks: [Int]?
     /// The drive's read offset for this rip only. Nil takes it from the drive's profile.
     public var readOffset: Int?
@@ -58,6 +59,8 @@ public struct DiscRipOptions: Sendable {
     /// For a disc with tracks that have pre-emphasis: de-emphasize them, keep them, or ask
     /// `DiscRip.choosePreEmphasis`.
     public var preEmphasis: PreEmphasisChoice
+    /// Save each data track (an Enhanced CD's extras) as an ISO image beside the audio.
+    public var savesDataTracks: Bool
 
     public init(settings: Settings) {
         artwork = settings.artwork
@@ -67,6 +70,7 @@ public struct DiscRipOptions: Sendable {
         addsToMusic = settings.addToMusic
         hdcd = settings.hdcd
         preEmphasis = settings.preEmphasis
+        savesDataTracks = settings.saveDataTracks
     }
 }
 
@@ -108,6 +112,11 @@ public enum DiscRipEvent: Sendable {
     case trackFinished(RipReport.Track, summary: String, seconds: Int)
     /// The control bits of every track, after the last one: pre-emphasis, digital copy permitted, four-channel audio.
     case controlBits(String)
+    /// A data track is being saved as an ISO image: the fraction read.
+    case savingDataTrack(number: Int, fraction: Double)
+    case dataTrackSaved(RipReport.DataTrack)
+    /// A data track could not be saved. The rip goes on without it.
+    case dataTrackFailed(number: Int, message: String)
     /// The CTDB check (and repair, if it is needed) starts.
     case checkingCTDB
     /// A line from the CTDB repair, for people to read.
@@ -362,6 +371,8 @@ public struct DiscRip {
         // A sector that cannot be read is silence and suspect, so one bad sector does not stop the rip.
         reader.unreadableRetries = 3
         reader.stop = stop
+        // An Enhanced CD's last track can be read to its end where the drive reads the lead-out after it.
+        reader.readableLeadOut = try await blocking { [self] in AudioReader.sessionLeadOut(of: toc, drive: drive) }
         var ripper = TrackRipper(reader: reader, records: records)
         ripper.readsC2 = options.readsC2
         var secure = SecureRipper(ripper: ripper)
@@ -464,6 +475,29 @@ public struct DiscRip {
 
         if let controlBits = RipReport.controlBitsSummary(of: reports) { events(.controlBits(controlBits)) }
 
+        // The data tracks, as ISO images: an Enhanced CD's extras for a computer.
+        var dataTracks = [RipReport.DataTrack]()
+        for track in toc.tracks where track.kind == .data {
+            guard options.tracks.map({ $0.contains(track.number) }) ?? options.savesDataTracks else { continue }
+            try stop.check()
+            let file = RipReport.DataTrack.fileName(track: track.number)
+            do {
+                let saved = try await blocking { [self] in
+                    try DataTrackReader.read(track, in: toc, drive: drive, to: folder.appending(path: file), stop: stop)
+                    {
+                        events(.savingDataTrack(number: track.number, fraction: $0))
+                    }
+                }
+                dataTracks.append(saved)
+                written.insert(file)
+                events(.dataTrackSaved(saved))
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                events(.dataTrackFailed(number: track.number, message: "\(error)"))
+            }
+        }
+
         var ctdb = RipReport.CTDBResult(status: entries.isEmpty && checkedCTDB ? .notInDatabase : .notChecked)
         var ctdbSeconds: Int?
         if checksCTDB {
@@ -557,8 +591,11 @@ public struct DiscRip {
         report.media = media
         report.hiddenTrack = hiddenTrack
         report.hiddenAreaUnreadableSectors = hiddenAreaUnreadable
-        let padded = Self.paddedEdges(of: toc, readOffset: readOffset, tracks: Set(reports.map(\.number)))
+        let padded = Self.paddedEdges(
+            of: toc, readOffset: readOffset, tracks: Set(reports.map(\.number)), readableLeadOut: reader.readableLeadOut
+        )
         report.paddedEdges = padded.isEmpty ? nil : padded
+        report.dataTracks = dataTracks.isEmpty ? nil : dataTracks
         report.hdcd = HDCDStatus(reports)
         report.cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         report.release = chosen
@@ -646,9 +683,13 @@ public struct DiscRip {
     /// The edges of the disc's audio that a drive without overread cannot read, in the tracks
     /// ripped: with an offset of +N, the last N samples before each end of the audio come from
     /// past it; with -N, the first N after each start. (No drive tested overreads.)
-    static func paddedEdges(of toc: TOC, readOffset: Int, tracks: Set<Int>) -> [RipReport.PaddedEdge] {
+    static func paddedEdges(
+        of toc: TOC, readOffset: Int, tracks: Set<Int>, readableLeadOut: Range<Int>? = nil
+    ) -> [RipReport.PaddedEdge] {
         guard readOffset != 0 else { return [] }
         return toc.audioAreas.compactMap { area in
+            // The drive reads on into the lead-out after this area.
+            if readOffset > 0 && readableLeadOut?.lowerBound == area.upperBound { return nil }
             let sector = readOffset > 0 ? area.upperBound - 1 : area.lowerBound
             guard let track = toc.audioTracks.first(where: { toc.sectorRange(of: $0).contains(sector) }),
                 tracks.contains(track.number)
@@ -668,7 +709,7 @@ public struct DiscRip {
     private func selectedTracks(of toc: TOC) throws -> [TOC.Track] {
         guard let numbers = options.tracks else { return toc.audioTracks }
         let tracks = toc.audioTracks.filter { numbers.contains($0.number) }
-        let missing = numbers.filter { number in !tracks.contains { $0.number == number } }
+        let missing = numbers.filter { number in !toc.tracks.contains { $0.number == number } }
         guard missing.isEmpty else { throw DiscRipError.noSuchTracks(missing) }
         return tracks
     }

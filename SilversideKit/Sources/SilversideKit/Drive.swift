@@ -24,6 +24,30 @@ public protocol CDDrive {
 
     /// What the disc is: pressed, or written in a drive (CD-R or CD-RW). Nil if the drive cannot tell.
     func readMediaType() throws -> DiscMediaType?
+
+    /// The mode of the data sector at `lba`, from its header.
+    func readDataMode(at lba: Int) throws -> DataSectorMode
+
+    /// Reads the 2048 bytes of user data of `count` data sectors of `mode` (Mode 1, or Mode 2
+    /// Form 1), as an ISO image holds them. The drive corrects them with their own error
+    /// correction, and fails a sector it cannot correct.
+    func readDataSectors(at lba: Int, count: Int, mode: DataSectorMode) throws -> [UInt8]
+}
+
+/// The kind of a data sector, from its header: Mode 1, or Mode 2 (CD-ROM XA) Form 1 or Form 2.
+/// Mode 1 and Mode 2 Form 1 hold 2048 bytes of user data, with error correction.
+public enum DataSectorMode: String, Codable, Sendable, CustomStringConvertible {
+    case mode1
+    case mode2Form1
+    case mode2Form2
+
+    public var description: String {
+        switch self {
+        case .mode1: "Mode 1"
+        case .mode2Form1: "Mode 2 Form 1"
+        case .mode2Form2: "Mode 2 Form 2"
+        }
+    }
 }
 
 /// Sectors from `CDDrive.readAudioSectors(at:count:c2:q:)`.
@@ -53,6 +77,12 @@ extension CDDrive {
     }
 
     public func readMediaType() throws -> DiscMediaType? { nil }
+
+    /// A drive that cannot read data sectors fails every read of one.
+    public func readDataMode(at lba: Int) throws -> DataSectorMode { throw DriveError.readFailed(lba: lba) }
+    public func readDataSectors(at lba: Int, count: Int, mode: DataSectorMode) throws -> [UInt8] {
+        throw DriveError.readFailed(lba: lba)
+    }
 }
 
 /// What a disc is made of: pressed in a factory, or written by a drive. A pressed disc is

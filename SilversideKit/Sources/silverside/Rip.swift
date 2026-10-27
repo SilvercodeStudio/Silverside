@@ -300,6 +300,14 @@ private final class RipPrinter: @unchecked Sendable {
                     + summary)
         case .controlBits(let summary):
             Swift.print("Control bits: " + summary)
+        case .savingDataTrack(let number, let fraction):
+            progress.showText(String(format: "Data track %d: %3.0f%%", number, fraction * 100))
+        case .dataTrackSaved(let track):
+            progress.clear()
+            Swift.print(RipReport.dataTrackSummary(track))
+        case .dataTrackFailed(let number, let message):
+            progress.clear()
+            Swift.print("Data track \(number): not saved: \(message)")
         case .checkingCTDB:
             Swift.print()
         case .repairLog(let line):

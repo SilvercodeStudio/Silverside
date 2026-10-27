@@ -65,7 +65,7 @@ struct GeneralSettings: View {
                     "Otherwise a rip whose tracks are all verified and encoded is deleted, and its report goes in the album folder."
                 )
                 .font(.caption).foregroundStyle(.secondary)
-                Toggle("Add the files to the Music app", isOn: $model.settings.addToMusic)
+                Toggle("Add the files to Apple's Music app", isOn: $model.settings.addToMusic)
                     .disabled(!model.settings.encodeAfterRip || !MusicApp.reads(model.settings.format))
                 Text(
                     MusicApp.reads(model.settings.format)
@@ -386,7 +386,7 @@ struct EncodingSettings: View {
             Section("Tags") {
                 Toggle("ReplayGain: volume normalization tags", isOn: $model.settings.replayGain)
                 Text(
-                    "Measured as EBU R 128 does, so a player that reads the tags plays albums at one level. For a set of several discs, the album is the whole set once every disc is in the library. The audio is not changed. The Music app uses its own Sound Check instead."
+                    "Adds tags that compatible players use to play entire albums at a consistent volume level. The audio samples themselves are not changed. Ignored by Apple's Music app, which uses its own Sound Check instead."
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
@@ -397,7 +397,7 @@ struct EncodingSettings: View {
                     Text("Keep as pressed").tag(HDCDChoice.keep)
                 }
                 Text(
-                    "Some HDCD discs have codes that ask a decoder to expand the loudest peaks or lower the level, and few players decode them. Decode gives the audio as an HDCD player plays it: 20-bit FLAC and Apple Lossless (24-bit AIFF and WAV), about 6 dB quieter (ReplayGain makes up the level), and larger: about 5% for FLAC, a third for Apple Lossless. Keep as pressed gives files bit for bit the disc, which can be decoded later; AAC and MP3 files lose the codes. A disc whose codes ask for nothing is always kept as pressed."
+                    "A few HDCD discs have codes that ask a player to expand the loudest peaks or lower the level. Decode gives the adjusted audio as an HDCD player would. This gives 20-bit FLAC (about 5% larger) and Apple Lossless (~30% larger) files. Decode makes the audio ~6 dB quieter, but ReplayGain makes up the difference. Keep as pressed keeps the original data (peaks compressed). An HDCD disc whose codes ask for nothing is always kept as pressed."
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
@@ -408,7 +408,7 @@ struct EncodingSettings: View {
                     Text("Keep as pressed").tag(PreEmphasisChoice.keep)
                 }
                 Text(
-                    "A few CDs were mastered with pre-emphasis, a treble boost that a CD player takes out again; few other players do. De-emphasize takes it out, as a CD player does, into 20-bit FLAC and Apple Lossless files (24-bit AIFF and WAV), tagged DE_EMPHASIZED=yes. Keep as pressed gives files bit for bit the disc, tagged PRE_EMPHASIS=yes. A disc image always keeps the disc as pressed."
+                    "A few old CDs were mastered with pre-emphasis, a treble boost that a CD player reverses on playback. De-emphasize removes the treble boost, as a CD player does, so the recording sounds as the artist intended. Many ripping or player apps ignore this. The de-emphasized files are 20-bit FLAC and Apple Lossless, tagged DE_EMPHASIZED=yes. Keep as pressed gives bit-for-bit copies of the disc (treble boosted), tagged PRE_EMPHASIS=yes.\n\nA disc image always keeps the disc as pressed."
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }

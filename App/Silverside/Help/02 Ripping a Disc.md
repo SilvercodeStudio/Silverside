@@ -121,7 +121,7 @@ Before it encodes such a disc, Silverside asks what to do with those tracks, and
 - **De-emphasize:** the audio as a CD player plays it, in 20-bit FLAC or Apple Lossless files (24-bit AIFF and WAV), tagged `DE_EMPHASIZED=yes`. The rounding at 20 bits is far below the disc's own noise. ReplayGain is measured on the result, and the disc's other tracks stay bit for bit as pressed.
 - **Keep as pressed:** files bit for bit the disc, tagged `PRE_EMPHASIS=yes`, for a player that takes it out itself.
 
-Settings › Encoding can give one answer for every disc. Either way, the CUE sheet marks the tracks (`FLAGS PRE`), and a disc image keeps the disc as pressed. The filter follows the curve of the CD standard (IEC 60908) within 0.1 dB from 20 Hz to 20 kHz.
+Settings › Encoding can give one answer for every disc. The CUE sheet marks the tracks kept as pressed (`FLAGS PRE`), and not the de-emphasized ones, so that a player does not take the boost out twice. A disc image keeps the disc as pressed, with its marks. The filter follows the curve of the CD standard (IEC 60908) within 0.1 dB from 20 Hz to 20 kHz.
 
 The rip log and the report list every track's flags, and where each came from: pre-emphasis, **digital copy permitted** (a flag from the 1980s that copying software was meant to obey), and **four-channel audio**, which early versions of the CD standard describe but no released disc is known to use (the 1999 edition assigns that flag to broadcasting use). If a disc has the four-channel flag, the result shows a chip. If you find one of these, please let us know.
 

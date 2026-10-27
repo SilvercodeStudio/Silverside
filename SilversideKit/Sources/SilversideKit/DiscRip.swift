@@ -95,6 +95,9 @@ public enum DiscRipEvent: Sendable {
     /// The rip's folder, and the folder it would have used if another disc's rip did not hold it.
     case folder(URL, insteadOf: URL?)
     case hiddenTrack(RipReport.HiddenTrack)
+    /// Sectors before track 1 could not be read, and what could be read is silence: no
+    /// hidden track is kept. Some drives cannot read before track 1.
+    case hiddenAreaUnreadable(sectors: Int, of: Int)
     /// A track file in a pooled folder (the `pool` option) could not be used.
     case poolFileSkipped(RipPool.SkippedFile)
     /// A track starts: its position among the tracks to rip, from 1.
@@ -371,10 +374,17 @@ public struct DiscRip {
 
         // Audio before track 1, if the disc hides a track there; silence is not kept.
         var hiddenTrack: RipReport.HiddenTrack?
+        var hiddenAreaUnreadable: Int?
         let flushSectors = profile.cacheFlushSectors
-        if selected.first == toc.audioTracks.first,
-            let hidden = try await blocking({ try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: flushSectors) })
-        {
+        let hidden =
+            selected.first == toc.audioTracks.first
+            ? try await blocking({ try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: flushSectors) }) : nil
+        if let hidden, hidden.isUnreadable {
+            // No track to keep, but the report says what could not be read.
+            let sectors = Set(hidden.unreadableSamples.map { $0 / CDDA.samplesPerSector }).count
+            hiddenAreaUnreadable = sectors
+            events(.hiddenAreaUnreadable(sectors: sectors, of: toc.audioTracks[0].startLBA))
+        } else if let hidden {
             try WAVFile.write(hidden.samples, to: folder.appending(path: "Track 00.wav"))
             written.insert("Track 00.wav")
             hiddenTrack = .init(
@@ -413,7 +423,7 @@ public struct DiscRip {
                     if !test.independent { report.cacheFlushIncomplete = true }
                     summary +=
                         !test.independent
-                        ? ", test read independence could not be established"
+                        ? ", test read not confirmed: it may have come from the cache"
                         : report.testReadMatches == true ? ", test read matches" : ", TEST READ DIFFERS"
                 }
                 // Keep the other versions of suspect samples, so that a later repair can use them.
@@ -537,6 +547,7 @@ public struct DiscRip {
         report.mcn = mcn
         report.media = media
         report.hiddenTrack = hiddenTrack
+        report.hiddenAreaUnreadableSectors = hiddenAreaUnreadable
         report.hdcd = HDCDStatus(reports)
         report.cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         report.release = chosen
@@ -695,7 +706,9 @@ public struct DiscRip {
         crc: UInt32, independent: Bool
     ) {
         let sectors = toc.sectorRange(of: track)
-        let independent = try reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
+        let flushed = try reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
+        let independent =
+            flushed || AudioReader.readEvictsItself(sectors: sectors.count, cacheFlushSectors: cacheFlushSectors)
         let start = sectors.lowerBound * CDDA.samplesPerSector
         let readOffset = reader.readOffset
         let events = self.events

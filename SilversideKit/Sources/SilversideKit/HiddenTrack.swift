@@ -11,15 +11,25 @@ public struct HiddenTrackRip: Sendable {
     /// True if two reads gave the same data.
     public var readsAgree: Bool
     public var reads: Int
+    /// Samples from sectors that no read could read. They are silence.
     public var unreadableSamples: [Int] = []
     public var cacheFlushIncomplete = false
+
+    /// True if sectors could not be read and the rest is silence, or almost nothing could be
+    /// read: some drives cannot read before track 1. There is no track to keep then, only
+    /// the sectors to report.
+    public var isUnreadable: Bool {
+        !unreadableSamples.isEmpty
+            && (peak < Self.silencePeak || unreadableSamples.count >= samples.count - CDDA.samplesPerSector)
+    }
 
     /// Below this peak, the gap is silence (or dither), not a hidden track.
     public static let silencePeak = 32
 
     /// Reads the part of the disc before track 1, and returns it if it is audio, not
-    /// silence. Nil if track 1 starts at LBA 0, or the gap is silent, or track 1 is a data
-    /// track (a mixed-mode disc), which no drive reads as audio.
+    /// silence, or if sectors could not be read (`isUnreadable` tells which). Nil if track 1
+    /// starts at LBA 0, or the gap is silent, or track 1 is a data track (a mixed-mode disc),
+    /// which no drive reads as audio.
     public static func rip(reader: AudioReader, cacheFlushSectors: Int = 4000, maximumReads: Int = 4) throws
         -> HiddenTrackRip?
     {
@@ -31,10 +41,19 @@ public struct HiddenTrackRip: Sendable {
         func peak(_ read: AudioReader.Read) -> Int { read.samples.reduce(0) { max($0, magnitude(of: $1)) } }
         // A failed read that was replaced by zero is not evidence of a silent gap.
         if firstRead.unreadable.isEmpty && peak(firstRead) < silencePeak { return nil }
+        // A drive that reads nothing here (at most the edge sector, which the offset brings in)
+        // will not read it on another pass either: each pass would retry every sector.
+        if !firstRead.unreadable.isEmpty && firstRead.unreadable.count >= positions.count - CDDA.samplesPerSector {
+            return HiddenTrackRip(
+                samples: firstRead.samples, peak: peak(firstRead), readsAgree: false, reads: 1,
+                unreadableSamples: firstRead.unreadable)
+        }
         var reads = [firstRead]
         var incomplete = false
         while reads.count < max(1, maximumReads) {
-            let independent = try reader.flushCache(awayFrom: 0..<first.startLBA, count: cacheFlushSectors)
+            let flushed = try reader.flushCache(awayFrom: 0..<first.startLBA, count: cacheFlushSectors)
+            let independent =
+                flushed || AudioReader.readEvictsItself(sectors: first.startLBA, cacheFlushSectors: cacheFlushSectors)
             incomplete = incomplete || !independent
             let next = try reader.read(positions, withC2: false)
             if independent, next.unreadable.isEmpty,
@@ -47,6 +66,8 @@ public struct HiddenTrackRip: Sendable {
         }
         // Keep the best available audio, with the failures explicit, until a later rip can confirm it.
         let best = reads.min { $0.unreadable.count < $1.unreadable.count }!
+        // A whole read of silence is silence, as for the first read.
+        if best.unreadable.isEmpty && peak(best) < silencePeak { return nil }
         return HiddenTrackRip(
             samples: best.samples, peak: peak(best), readsAgree: false, reads: reads.count,
             unreadableSamples: best.unreadable, cacheFlushIncomplete: incomplete)

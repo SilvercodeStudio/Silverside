@@ -483,7 +483,13 @@ final class RipRun {
             add(
                 "Hidden track before track 1: \(Format.duration(sectors: hidden.sectors)), "
                     + (hidden.readsAgree ? "\(hidden.reads) reads agree" : "NOT verified: \(hidden.reads) reads differ")
+                    + ((hidden.unreadableSectors ?? []).isEmpty
+                        ? "" : ", \(hidden.unreadableSectors!.count) sectors unreadable")
             )
+        case .hiddenAreaUnreadable(let sectors, let total):
+            add(
+                "Before track 1: \(sectors) of \(total) sectors could not be read, and the rest is silence. "
+                    + "This drive may not read before track 1; another drive may find a hidden track there.")
         case .poolFileSkipped(let file):
             add("Pool: \(file.url.lastPathComponent) was not used: \(file.reason).")
         case .trackStarted(let track, let position, let count):

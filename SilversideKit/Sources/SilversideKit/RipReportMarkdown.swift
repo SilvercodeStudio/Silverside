@@ -35,17 +35,26 @@ extension RipReport {
         if tracks.contains(where: { $0.cacheFlushIncomplete == true }) {
             lines += [
                 "",
-                "Cache eviction could not be established for every re-read. Repeated data alone is not proof of independent agreement.",
+                "Some re-reads may have come from the drive's cache, not the disc: no cache flush could be made "
+                    + "away from them. Reads that agree there prove less.",
             ]
         }
         if let hiddenTrack {
-            let agreement = hiddenTrack.readsAgree ? "independent reads agree" : "not confirmed by independent reads"
-            lines += ["", "Hidden track before track 1: " + agreement + "."]
+            let agreement = hiddenTrack.readsAgree ? "two reads agree." : "NOT verified: no two reads agree."
+            lines += ["", "Hidden track before track 1: " + agreement]
             if let unreadable = hiddenTrack.unreadableSectors, !unreadable.isEmpty {
                 lines += [
-                    "", "Hidden track: \(unreadable.count) sectors could not be read and were replaced with silence.",
+                    "", "Hidden track: \(unreadable.count) sectors could not be read. They are silence in the file.",
                 ]
             }
+        }
+        if let unreadable = hiddenAreaUnreadableSectors {
+            lines += [
+                "",
+                "Before track 1: \(unreadable) sectors could not be read, "
+                    + "and the rest is silence. This drive may not read before track 1; another drive may find a "
+                    + "hidden track there.",
+            ]
         }
         let tested = tracks.filter { $0.testCRC32 != nil }
         if !tested.isEmpty {
@@ -54,7 +63,7 @@ extension RipReport {
             let unconfirmed = tested.filter { $0.testReadMatches == nil }
             lines.append(
                 !unconfirmed.isEmpty
-                    ? "Test and copy: independent agreement could not be established for every track."
+                    ? "Test and copy: some test reads may have come from the drive's cache, so they confirm nothing."
                     : differing.isEmpty
                         ? "Test and copy: a second read of every track gave the same audio."
                         : "**Test and copy: the second read of \(differing.count == 1 ? "track" : "tracks") "

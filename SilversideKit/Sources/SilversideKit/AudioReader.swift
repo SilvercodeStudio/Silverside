@@ -78,8 +78,7 @@ public struct AudioReader {
         var sectorsRead = 0
         var flaggedSectors = Set<Int>()
         var unreadableSectors = Set<Int>()
-        var withQ = withQ
-        var c2 = withC2
+        var extras = Extras(c2: withC2, q: withQ)
         // Include optional payloads in the USB transfer limit, not just the audio.
         let sectorBytes = CDDA.bytesPerSector + (withC2 ? CDDA.errorFlagBytesPerSector : 0) + (withQ ? 16 : 0)
         let chunkSize = max(1, min(sectorsPerRead, 65_536 / sectorBytes))
@@ -87,8 +86,8 @@ public struct AudioReader {
             for lba in stride(from: part.lowerBound, to: part.upperBound, by: chunkSize) {
                 try stop?.check()
                 let count = min(chunkSize, part.upperBound - lba)
-                let (sectors, unreadable) = try readChunk(at: lba, count: count, withC2: &c2, withQ: &withQ)
-                if !c2 { result.c2Available = false }
+                let (sectors, unreadable, hasFlags) = try readChunk(at: lba, count: count, extras: &extras)
+                if withC2 && !hasFlags { result.c2Available = false }
                 let (bytes, flags) = (sectors.audio, sectors.errorFlags)
                 result.q += sectors.q
                 sectorsRead += count
@@ -130,60 +129,90 @@ public struct AudioReader {
         return result
     }
 
-    /// Try optional read areas before classifying an audio sector as unreadable. Some bridges
-    /// report unsupported Q/C2 combinations as EIO, the same error as damaged audio.
+    /// What a read asks of the drive besides the audio, and what the drive has shown that it
+    /// gives. Some drives and USB bridges refuse the C2 flags or the Q subchannel, and some
+    /// report a refusal as EIO, as they report damaged audio. So a read that asks for a part
+    /// and fails is tried without it, until a read with it works: from then on, a failure is
+    /// the disc's. Only a second refusal stops the requests, so that a damaged sector early in
+    /// a track does not cost the rest of the track its flags or its Q frames.
+    private struct Extras {
+        var c2: Bool
+        var q: Bool
+        var c2Works = false
+        var qWorks = false
+        var c2Refusals = 0
+        var qRefusals = 0
+        static let refusalsToStop = 2
+    }
+
+    /// Reads one chunk. If it fails, and `unreadableRetries` is set, reads it sector by
+    /// sector. `hasFlags` is false if a sector that was read came without its C2 flags.
     private func readChunk(
-        at lba: Int, count: Int, withC2: inout Bool, withQ: inout Bool
-    ) throws -> (sectors: SectorRead, unreadable: [Int]) {
+        at lba: Int, count: Int, extras: inout Extras
+    ) throws -> (sectors: SectorRead, unreadable: [Int], hasFlags: Bool) {
+        let flagBytes = CDDA.errorFlagBytesPerSector
         do {
-            return (try readRaw(at: lba, count: count, withC2: &withC2, withQ: &withQ), [])
+            let sectors = try readRaw(at: lba, count: count, extras: &extras)
+            return (sectors, [], sectors.errorFlags.count == count * flagBytes)
         } catch DriveError.readFailed where unreadableRetries != nil {
             var sectors = SectorRead(audio: [])
-            let wantsFlags = withC2
+            let wantsFlags = extras.c2
+            var hasFlags = true
             var unreadable = [Int]()
             for sector in lba..<(lba + count) {
                 var data: SectorRead?
                 for _ in 0...max(0, unreadableRetries!) where data == nil {
                     try stop?.check()
-                    do { data = try readRaw(at: sector, count: 1, withC2: &withC2, withQ: &withQ) } catch DriveError
-                        .readFailed
-                    { continue }
+                    do {
+                        data = try readRaw(at: sector, count: 1, extras: &extras)
+                    } catch DriveError.readFailed {
+                        continue
+                    }
                 }
                 if data == nil { unreadable.append(sector) }
                 sectors.audio += data?.audio ?? [UInt8](repeating: 0, count: CDDA.bytesPerSector)
                 if wantsFlags {
-                    let flags = data?.errorFlags ?? []
+                    // An unreadable sector has no flags: `unreadable` lists it instead.
+                    if let data, data.errorFlags.count != flagBytes { hasFlags = false }
                     sectors.errorFlags +=
-                        flags.count == CDDA.errorFlagBytesPerSector
-                        ? flags : [UInt8](repeating: 0, count: CDDA.errorFlagBytesPerSector)
+                        data?.errorFlags.count == flagBytes
+                        ? data!.errorFlags : [UInt8](repeating: 0, count: flagBytes)
                 }
                 sectors.q += data?.q ?? []
             }
-            return (sectors, unreadable)
+            return (sectors, unreadable, hasFlags)
         }
     }
 
-    private func readRaw(at lba: Int, count: Int, withC2: inout Bool, withQ: inout Bool) throws -> SectorRead {
-        if withQ {
+    /// Reads sectors with the parts that `extras` asks for. If that fails, tries again
+    /// without each part that the drive has not given yet, and counts a read that then
+    /// works as a refusal of the part left out.
+    private func readRaw(at lba: Int, count: Int, extras: inout Extras) throws -> SectorRead {
+        var attempts = [(c2: extras.c2, q: extras.q)]
+        if extras.q && !extras.qWorks { attempts.append((extras.c2, false)) }
+        if extras.c2 && !extras.c2Works { attempts.append((false, attempts.last!.q)) }
+        var failure: any Error = DriveError.readFailed(lba: lba)
+        for attempt in attempts {
             do {
-                return try drive.readAudioSectors(at: lba, count: count, c2: withC2, q: true)
-            } catch is CancellationError { throw CancellationError() } catch {
-                // Establish whether the audio reads without Q before substituting silence.
-            }
-        }
-        if withC2 {
-            do {
-                let read = try drive.readAudioSectors(at: lba, count: count, c2: true, q: false)
-                withQ = false
+                let read = try drive.readAudioSectors(at: lba, count: count, c2: attempt.c2, q: attempt.q)
+                if attempt.q { extras.qWorks = true }
+                if attempt.c2 { extras.c2Works = true }
+                if extras.q && !attempt.q {
+                    extras.qRefusals += 1
+                    if extras.qRefusals >= Extras.refusalsToStop { extras.q = false }
+                }
+                if extras.c2 && !attempt.c2 {
+                    extras.c2Refusals += 1
+                    if extras.c2Refusals >= Extras.refusalsToStop { extras.c2 = false }
+                }
                 return read
-            } catch is CancellationError { throw CancellationError() } catch {
-                // A plain audio read distinguishes C2 capability failures from damaged audio.
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                failure = error
             }
         }
-        let read = try drive.readAudioSectors(at: lba, count: count, c2: false, q: false)
-        withQ = false
-        withC2 = false
-        return read
+        throw failure
     }
 
     public func readTrack(_ track: TOC.Track) throws -> [UInt32] {

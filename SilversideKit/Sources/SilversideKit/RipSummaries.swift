@@ -66,11 +66,11 @@ extension SecureTrackRip {
             let most = versionCounts.values.max() ?? 0
             text =
                 cacheFlushIncomplete && suspectSectors.isEmpty
-                ? "not confirmed: independent re-reads could not be established" + rereads
+                ? "not confirmed: no cache flush could be made, so the re-reads may have come from the cache" + rereads
                 : "NOT accurate: \(unresolvedSectors.count) of \(suspectSectors.count) suspect sectors unresolved"
                     + rereads + "; up to \(most) versions of a sector"
         }
-        return text + shifted + (cacheFlushIncomplete ? "; cache eviction could not be established" : "")
+        return text + shifted + (cacheFlushIncomplete ? "; some re-reads may have come from the cache" : "")
     }
 }
 
@@ -201,11 +201,13 @@ extension RipReport {
     /// The next step that is most likely to help, when the rip is not verified: for the
     /// app's result banner and the CLI. Nil when the rip is verified.
     public var advice: String? {
-        guard !isVerified else { return nil }
-        if tracks.contains(where: { $0.cacheFlushIncomplete == true }) {
-            return
-                "The drive's cache could not be evicted completely, so repeated data does not prove independent reads. Try another drive or check against AccurateRip and CTDB later."
-        }
+        guard !isVerified, let text = adviceText else { return nil }
+        guard tracks.contains(where: { $0.cacheFlushIncomplete == true }) else { return text }
+        return text
+            + " Some re-reads may have come from the drive's cache, not the disc, so reads that agree prove less there."
+    }
+
+    private var adviceText: String? {
         let notInAccurateRip = tracks.allSatisfy { $0.accurateRip == .notInDatabase }
         let unresolved = tracks.filter { !$0.unresolvedSectors.isEmpty }
         if notInAccurateRip && ctdb.status == .notInDatabase {

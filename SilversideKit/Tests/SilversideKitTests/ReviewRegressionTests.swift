@@ -238,7 +238,9 @@ struct ReviewRegressionTests {
         RipFolder.release(resumed)
     }
 
-    @Test func hiddenAudioIsNotOmittedWhenItsEntireFirstReadFails() throws {
+    /// A drive that cannot read before track 1 reads it once: the area is reported as
+    /// unreadable, not kept as a silent hidden track.
+    @Test func hiddenAreaThatCannotBeReadIsReadOnce() throws {
         let toc = try TOC(audioTrackStarts: [200], leadOutLBA: 400)
         let drive = SimulatedDrive(toc: toc, samples: PreEmphasisTests.sine(440, frames: 400 * 588))
         drive.unreadableSectors = Set(0..<200)
@@ -246,6 +248,61 @@ struct ReviewRegressionTests {
         reader.unreadableRetries = 0
         let hidden = try #require(try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: 50))
         #expect(!hidden.readsAgree && hidden.unreadableSamples.count == 200 * 588)
+        #expect(hidden.reads == 1 && hidden.isUnreadable)
+    }
+
+    /// A rip in a drive that cannot read before track 1 keeps no hidden track, and says so.
+    @Test func ripReportsAnUnreadableHiddenAreaWithoutATrack() async throws {
+        let (result, events, _, root) = try await DiscRipTests().rip(
+            trackSectors: [300, 800, 900], hidesFirstTrack: true,
+            prepare: { $0.unreadableSectors = Set(0..<300) })
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(result.report.hiddenTrack == nil)
+        #expect(result.report.hiddenAreaUnreadableSectors == 300)
+        #expect(!FileManager.default.fileExists(atPath: result.folder.appending(path: "Track 00.wav").path))
+        #expect(events.contains { if case .hiddenAreaUnreadable(300, 300) = $0 { true } else { false } })
+        #expect(result.report.markdown.contains("Before track 1: 300 sectors could not be read"))
+    }
+
+    /// A damaged sector that reads on a later try does not cost the track its Q frames or
+    /// its C2 flags, once the drive has given them.
+    @Test(arguments: [1, 2])
+    func damagedSectorKeepsTheQFramesAndC2Flags(failures: Int) throws {
+        let toc = try TOC(audioTrackStarts: [0, 1000], leadOutLBA: 2000)
+        let drive = SimulatedDrive(toc: toc, samples: PreEmphasisTests.sine(440, frames: 2000 * 588))
+        drive.qControl = [1: 1]
+        drive.failingReads = [300: failures]
+        var reader = AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)
+        reader.unreadableRetries = 3
+        var ripper = TrackRipper(reader: reader, records: [])
+        ripper.readsC2 = true
+        let rip = try ripper.rip(toc.tracks[0])
+        #expect(rip.subchannel?.frames == 1000)
+        #expect(rip.subchannel?.hasPreEmphasis == true)
+        #expect(rip.c2Samples != nil && rip.unreadableSamples.isEmpty)
+    }
+
+    /// A drive that refuses the Q subchannel is asked twice, then reads without it.
+    @Test func refusedQStopsAfterTwoRefusals() throws {
+        let toc = try TOC(audioTrackStarts: [0], leadOutLBA: 200)
+        let drive = QRefusingDrive(
+            base: SimulatedDrive(toc: toc, samples: PreEmphasisTests.sine(440, frames: 200 * 588)))
+        let reader = AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)
+        let read = try reader.read(0..<(200 * 588), withC2: true, withQ: true)
+        #expect(read.samples == drive.base.samples && read.q.isEmpty && read.c2Available)
+    }
+
+    /// A whole track longer than the drive's cache is read from the disc again even when no
+    /// flush can be made away from it (one track fills the disc): its reads confirm it.
+    @Test func longTrackConfirmsItselfWithoutAFlush() throws {
+        let toc = try TOC(audioTrackStarts: [0], leadOutLBA: 3000)
+        let drive = SimulatedDrive(toc: toc, samples: PreEmphasisTests.sine(440, frames: 3000 * 588))
+        drive.cacheSectors = 100
+        let reader = AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)
+        var secure = SecureRipper(ripper: TrackRipper(reader: reader, records: []))
+        secure.cacheFlushSectors = 256
+        let rip = try secure.rip(toc.tracks[0])
+        #expect(rip.status == .consistent && !rip.cacheFlushIncomplete)
     }
 
     @Test func hiddenAudioNeedsTwoSuccessfulIndependentReads() throws {

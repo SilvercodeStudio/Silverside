@@ -279,7 +279,13 @@ private final class RipPrinter: @unchecked Sendable {
                 String(format: "Track  0  %@         hidden track before track 1: ", Info.duration(hidden.sectors))
                     + (hidden.readsAgree
                         ? "\(hidden.reads) reads agree (AccurateRip and CTDB do not cover it)"
-                        : "NOT verified: \(hidden.reads) reads all differ"))
+                        : "NOT verified: \(hidden.reads) reads all differ")
+                    + ((hidden.unreadableSectors ?? []).isEmpty
+                        ? "" : ", \(hidden.unreadableSectors!.count) sectors unreadable"))
+        case .hiddenAreaUnreadable(let sectors, let total):
+            Swift.print(
+                "Before track 1: \(sectors) of \(total) sectors could not be read, and the rest is silence. "
+                    + "This drive may not read before track 1; another drive may find a hidden track there.")
         case .poolFileSkipped(let file):
             Swift.print("Pool: \(file.url.path) was not used: \(file.reason).")
         case .trackStarted(let track, let position, let count):

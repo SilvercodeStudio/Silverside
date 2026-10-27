@@ -77,7 +77,7 @@ AIFF and WAV) tagged `DE_EMPHASIZED=yes`, with ReplayGain measured on the result
 the disc's other tracks are encoded as they are. `--pre-emphasis keep` encodes
 them as pressed, tagged `PRE_EMPHASIS=yes`. With `ask`, the default, `rip` asks
 at a terminal (yes by default), and `encode` de-emphasizes. The CUE sheet marks
-the tracks (`FLAGS PRE`) either way.
+the tracks kept as pressed (`FLAGS PRE`), not the de-emphasized ones.
 
 `encode -i` also takes an album folder in the library: the album is encoded
 again from its lossless files, each checked against the rip's CRC-32 first.

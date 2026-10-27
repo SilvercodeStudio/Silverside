@@ -234,6 +234,9 @@ public struct RipReport: Codable, Equatable, Sendable {
     public var cdText: CDText?
     /// Audio before track 1 (hidden track one audio), if the disc has it.
     public var hiddenTrack: HiddenTrack?
+    /// Sectors before track 1 that could not be read, when what could be read is silence:
+    /// the drive may not read before track 1, so a hidden track there is not ruled out.
+    public var hiddenAreaUnreadableSectors: Int?
     /// Whether the tracks have HDCD codes, from each track's `hdcd`. Nil in reports from
     /// before Silverside looked for them.
     public var hdcd: HDCDStatus?

@@ -14,14 +14,16 @@ command-line tool.
   tracks of the disc stay bit for bit as pressed. The app asks before it
   encodes such a disc and advises De-emphasize; Settings › Encoding can give
   one answer for every disc. Kept as pressed, the tracks are tagged
-  PRE_EMPHASIS=yes. `silverside` has `--pre-emphasis` and the `preEmphasis`
-  setting. A disc image always keeps the disc as pressed.
+  PRE_EMPHASIS=yes. The tags are written in every format. The CUE sheet marks
+  the tracks kept as pressed (`FLAGS PRE`), not the de-emphasized ones, so that
+  a player does not take the boost out twice. `silverside` has
+  `--pre-emphasis` and the `preEmphasis` setting. A disc image always keeps
+  the disc as pressed, with its CUE sheet's marks.
 - Pre-emphasis is found in the disc's subchannel as well as its table of
   contents. Some discs set it in one place only: the Denon Audio Technical CD
   marks 23 tracks in the subchannel and none in the table of contents. The
   rip reads the subchannel with the audio, at no cost in time on the drives
-  tested. A rip with pre-emphasis shows a chip, and the CUE sheet marks the
-  tracks.
+  tested. A rip with pre-emphasis shows a chip.
 - The rip log and the report list each track's control bits: pre-emphasis,
   digital copy permitted, and four-channel audio, and say whether each came
   from the table of contents, the subchannel, or both. Four-channel audio is
@@ -46,27 +48,37 @@ command-line tool.
 
 ### Fixed
 
-- Library updates preserve both copies when album folders contain conflicting
-  files. Encoding rejects track names that would overwrite one another,
-  including case and Unicode variants. Concurrent rips cannot share a folder,
-  and abandoned folder claims can still be resumed after a crash.
-- Repair saves verified audio selected from earlier rips into the repaired
-  folder before marking it verified. Its report now keeps the checksums of
-  the audio actually saved. WAV sources are checked against their saved
-  checksums and lengths before encoding or Check Again.
-- CUE sheets for de-emphasized listening files no longer request de-emphasis
-  again; original-audio images keep the original flags. Pre-emphasis and
-  de-emphasis tags are also written into Apple Lossless, AAC, MP3, AIFF, and WAV.
-- Unreadable hidden audio is kept as unconfirmed, rather than mistaken for
-  silence or confirmed by repeated substituted zeros. Repeated reads cannot
-  establish agreement when the drive's cache could not be evicted, and the
-  reports explain that limitation.
-- Drives that reject optional Q subchannel or C2 reads fall back to plain
-  audio before sectors are reported unreadable. Read sizes include those
-  optional bytes when fitting a USB bridge's transfer limit.
-- Damaged CD-Text packs no longer shift later titles onto the wrong tracks.
-
-
+- An album renamed into a folder that already held it lost its own copy of
+  each file that the other folder also had. Now the files move only when no
+  two of them differ; otherwise the update stops and names the file in the way.
+- Encoding stops when two tracks would get the same file name, also names
+  that differ only in case or accents, instead of one file replacing the other.
+- Rips of the same disc in two drives at once wrote into one folder. Now the
+  second rip gets a folder of its own. A rip that stopped in a crash can still
+  go on in its folder.
+- A repair that verified the disc with tracks from an earlier rip marked the
+  first rip's folder as verified, though its files were not the verified
+  audio. Now it writes the "… repaired" folder. A repair's report also has the
+  checksums and AccurateRip results of the repaired audio.
+- Encoding and Check Again check each WAV file against the rip's length and
+  checksum, as they already did for FLAC and Apple Lossless files, so a WAV
+  file changed after the rip is not taken as verified.
+- A re-read that could have come from the drive's cache no longer counts as a
+  read that agrees. This happens only when no cache flush can be made away
+  from the sectors, as with a short track on a disc with little other audio.
+  The report and the log say so. A track longer than the cache needs no
+  flush: its own read empties the cache.
+- When sectors before track 1 cannot be read, and the rest is silence, the
+  report and the log say so: some drives cannot read there, and another drive
+  may find a hidden track. A hidden track with unreadable sectors is not
+  verified.
+- A drive or USB bridge that refuses the C2 flags or the subchannel with an
+  I/O error no longer makes good sectors unreadable: Silverside reads them
+  without. A damaged sector does not count as a refusal once the drive has
+  given the flags or the subchannel. Reads with them fit a USB bridge's 64 KB
+  limit.
+- Damaged CD-Text no longer moves the titles after the damage onto the wrong
+  tracks.
 - Encoding a rip of only some tracks lost every track but one from the CUE
   sheet and the report's list of files. Decoding HDCD in place of such an
   album, or of one with a hidden track before track 1, could put one track's

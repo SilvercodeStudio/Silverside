@@ -196,7 +196,10 @@ public struct SecureRipper {
             var shiftedRead: [UInt32]?
             var shiftedReadIndependent = false
             for _ in 0...maximumShiftedReads {
-                let independent = try reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
+                let flushed = try reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
+                let independent =
+                    flushed
+                    || AudioReader.readEvictsItself(sectors: sectors.count, cacheFlushSectors: cacheFlushSectors)
                 if !independent { result.cacheFlushIncomplete = true }
                 let pass = fullReads + 1
                 let readOffset = reader.readOffset
@@ -463,6 +466,13 @@ public struct SecureRipper {
 }
 
 extension AudioReader {
+    /// True if a read of `sectors` sectors in a row pushes its own start out of the drive's
+    /// cache: `cacheFlushSectors` is at least twice the cache. Such a read comes from the disc
+    /// even when no flush could be made, as on a disc with one long track.
+    public static func readEvictsItself(sectors: Int, cacheFlushSectors: Int) -> Bool {
+        cacheFlushSectors > 0 && sectors > cacheFlushSectors
+    }
+
     /// Reads `count` sectors away from `sectors`, so the drive's cache holds none of them.
     @discardableResult
     public func flushCache(awayFrom sectors: Range<Int>, count: Int = 4000) throws -> Bool {

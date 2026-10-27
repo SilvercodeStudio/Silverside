@@ -3,7 +3,7 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
-## 0.8 (not released yet)
+## 0.8 (2026-10-27)
 
 ### Added
 
@@ -33,12 +33,16 @@ command-line tool.
   flags too.
 - The About window, the rip log, and the reports name the Git commit that
   Silverside was built from, with "-dirty" when the build had changes that were
-  not committed: "Silverside 0.7 (536e697-dirty)". The About window shows the
+  not committed: "Silverside 0.8 (536e697-dirty)". The About window shows the
   build number too, and leaves out the commit in a release, which its Git tag
   names. `silverside --version` shows the commit when `make` built it.
 
 ### Changed
 
+- A new app icon: a disc and the arm of its reader, on warm paper, with a
+  dark brown version for the dark icon style.
+- Settings › Encoding explains ReplayGain, HDCD, and pre-emphasis in fewer
+  words; Help has the details.
 - The Rip button has the new rip icon. During a rip, level bars hang from the
   top and bounce behind the arm, the laser's spot pulses, and a line in the
   progress bar's colors fills around the edge. It floats over the lower right

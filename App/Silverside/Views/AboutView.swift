@@ -44,7 +44,7 @@ struct AboutView: View {
         #endif
     }
 
-    /// "0.7 (1) · 536e697-dirty": the version, the build, and the Git commit, with "-dirty" if the
+    /// "0.8 (1) · 536e697-dirty": the version, the build, and the Git commit, with "-dirty" if the
     /// build had changes that were not committed.
     private var version: String {
         let info = Bundle.main.infoDictionary

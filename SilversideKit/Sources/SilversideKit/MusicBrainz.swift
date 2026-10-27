@@ -228,17 +228,18 @@ public struct MusicBrainzClient: Sendable {
     }
 
     /// The releases with a disc that has this TOC. If MusicBrainz does not know the disc ID,
-    /// the same request finds releases with nearly the same TOC.
-    public func lookup(_ toc: TOC) async throws -> MusicBrainzLookup {
-        guard let data = try await client.data(from: Self.lookupURL(for: toc)) else {
+    /// the same request finds releases with nearly the same TOC. `useCache: false` asks again,
+    /// for a disc just added to MusicBrainz: the cache keeps a "not found" for a day.
+    public func lookup(_ toc: TOC, useCache: Bool = true) async throws -> MusicBrainzLookup {
+        guard let data = try await client.data(from: Self.lookupURL(for: toc), useCache: useCache) else {
             return MusicBrainzLookup(releases: [], isExact: false)
         }
         return try Self.lookup(fromJSON: data)
     }
 
     /// One release, by its MusicBrainz ID, with its recordings' relationships: the composers.
-    public func release(id: String) async throws -> MusicBrainzRelease? {
-        guard let data = try await client.data(from: Self.releaseURL(id: id)) else { return nil }
+    public func release(id: String, useCache: Bool = true) async throws -> MusicBrainzRelease? {
+        guard let data = try await client.data(from: Self.releaseURL(id: id), useCache: useCache) else { return nil }
         return try Self.release(fromJSON: data)
     }
 

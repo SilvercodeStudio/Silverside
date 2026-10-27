@@ -465,6 +465,7 @@ struct AlbumHeader: View {
                 tone: .warning, systemImage: "xmark"
             )
             .help("The files get no MusicBrainz IDs. Edit the names here; they are kept with the rip.")
+            if let release = disc.shownRelease { ResultChips.addToMusicBrainz(release, toc: disc.toc) }
         case .failed:
             Chip(text: "MusicBrainz · lookup failed", tone: .bad, systemImage: "wifi.slash")
         }
@@ -840,6 +841,19 @@ enum ResultChips {
         return Chip(
             text: features.isEmpty ? "codes only" : features.joined(separator: ", "), logo: "HDCD",
             help: HDCDStatus.text(for: tracks))
+    }
+
+    /// For a disc that MusicBrainz does not know: a click opens MusicBrainz's release editor with
+    /// the disc's names, track lengths, and TOC filled in, for the user to check and submit.
+    static func addToMusicBrainz(_ release: MusicBrainzRelease, toc: TOC) -> Chip {
+        Chip(
+            text: "Add to MusicBrainz…", systemImage: "plus",
+            help: "Opens MusicBrainz's release editor in your browser with this disc's names, track lengths, and "
+                + "disc ID filled in. Check and complete it there, and submit it (you need an account, and to be "
+                + "signed in). Then every ripper finds the disc by its ID.",
+            action: {
+                if let page = try? MusicBrainzSeed.writePage(for: release, toc: toc) { NSWorkspace.shared.open(page) }
+            })
     }
 
     /// For a release that MusicBrainz matched by its track lengths: a click opens the page

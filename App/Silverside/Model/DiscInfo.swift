@@ -214,12 +214,14 @@ struct DiscInfo {
 
     /// Asks MusicBrainz for the disc's releases, and for the chosen one's details (the
     /// composers, the genre): two requests, kept in the web cache, so the rip sends none.
-    mutating func lookUpRelease() async {
+    /// `fresh` asks MusicBrainz again, not the cache (Look Up Metadata): the cache keeps a disc
+    /// that MusicBrainz did not know for a day, and a release that was just added should show.
+    mutating func lookUpRelease(fresh: Bool = false) async {
         guard !toc.audioTracks.isEmpty else { return }
         lookup = .lookingUp
         let result: ReleaseLookupResult
         do {
-            result = try await ReleaseLookup.find(toc: toc, mcn: mcn, details: true)
+            result = try await ReleaseLookup.find(toc: toc, mcn: mcn, details: true, useCache: !fresh)
         } catch {
             lookup = .failed("\(error)")
             if release == nil { useManualRelease() }

@@ -52,10 +52,14 @@ struct Chip: View {
     var help: String?
     /// A web page that a click opens.
     var link: URL?
+    /// What a click does, for a chip that is not a link.
+    var action: (() -> Void)?
 
     var body: some View {
         if let link {
             Link(destination: link) { content }.buttonStyle(.plain)
+        } else if let action {
+            Button(action: action) { content }.buttonStyle(.plain)
         } else {
             content
         }

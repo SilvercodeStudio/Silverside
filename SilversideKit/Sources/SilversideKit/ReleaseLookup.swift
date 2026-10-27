@@ -37,12 +37,14 @@ public enum ReleaseLookup {
     /// discs of the release. With `details`, the chosen release is looked up by its ID too,
     /// for what a disc lookup cannot give: the composers of each track. If that lookup fails
     /// (MusicBrainz is busy), the disc lookup's release is used without them, rather than none.
+    /// `useCache: false` asks MusicBrainz again, not the cache: for Look Up Metadata, after an edit there.
     public static func find(
         toc: TOC, mcn: String?, releaseID: String? = nil, details: Bool = false,
         choose: (([MusicBrainzRelease]) -> MusicBrainzRelease?)? = nil,
-        client: MusicBrainzClient = MusicBrainzClient(), store: ReleaseChoiceStore = ReleaseChoiceStore()
+        client: MusicBrainzClient = MusicBrainzClient(), store: ReleaseChoiceStore = ReleaseChoiceStore(),
+        useCache: Bool = true
     ) async throws -> ReleaseLookupResult {
-        let lookup = try await client.lookup(toc)
+        let lookup = try await client.lookup(toc, useCache: useCache)
         let discID = toc.musicBrainzDiscID
         let remembered = store.choices(forDiscID: discID)
         let others = store.allChoices()
@@ -58,7 +60,7 @@ public enum ReleaseLookup {
             }
             var failure: String?
             if details, let summary = chosen {
-                (chosen, failure) = try await detailed(summary, client: client)
+                (chosen, failure) = try await detailed(summary, client: client, useCache: useCache)
             }
             return ReleaseLookupResult(
                 ranked: ranked, chosen: chosen, isExact: lookup.isExact, detailsFailure: failure)
@@ -66,9 +68,9 @@ public enum ReleaseLookup {
         var chosen = ranked.first { $0.id == releaseID }
         var failure: String?
         if let summary = chosen, details {
-            (chosen, failure) = try await detailed(summary, client: client)
+            (chosen, failure) = try await detailed(summary, client: client, useCache: useCache)
         } else if chosen == nil {
-            chosen = try await client.release(id: releaseID)
+            chosen = try await client.release(id: releaseID, useCache: useCache)
         }
         guard let chosen else { throw ReleaseLookupError.noSuchRelease(releaseID) }
         try store.remember(chosen)
@@ -77,10 +79,10 @@ public enum ReleaseLookup {
 
     /// The release looked up by its ID, or the summary and why that lookup failed.
     private static func detailed(
-        _ summary: MusicBrainzRelease, client: MusicBrainzClient
+        _ summary: MusicBrainzRelease, client: MusicBrainzClient, useCache: Bool
     ) async throws -> (MusicBrainzRelease, String?) {
         do {
-            return (try await client.release(id: summary.id) ?? summary, nil)
+            return (try await client.release(id: summary.id, useCache: useCache) ?? summary, nil)
         } catch is CancellationError {
             throw CancellationError()
         } catch {

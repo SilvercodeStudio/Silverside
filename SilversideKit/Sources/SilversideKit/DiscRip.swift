@@ -372,7 +372,7 @@ public struct DiscRip {
         reader.unreadableRetries = 3
         reader.stop = stop
         // An Enhanced CD's last track can be read to its end where the drive reads the lead-out after it.
-        reader.readableLeadOut = try await blocking { [self] in AudioReader.sessionLeadOut(of: toc, drive: drive) }
+        reader.readableLeadOut = try await blocking { AudioReader.sessionLeadOut(of: toc, drive: drive) }
         var ripper = TrackRipper(reader: reader, records: records)
         ripper.readsC2 = options.readsC2
         var secure = SecureRipper(ripper: ripper)

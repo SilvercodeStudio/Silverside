@@ -155,7 +155,7 @@ final class DriveSlot: Identifiable {
         guard var info = disc else { return }
         disc?.lookup = .lookingUp
         Task { @MainActor in
-            await info.lookUpRelease()
+            await info.lookUpRelease(fresh: true)
             disc = info
         }
     }

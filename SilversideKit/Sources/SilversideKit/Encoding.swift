@@ -372,6 +372,21 @@ public struct DiscEncoder: Sendable {
         }
     }
 
+    /// The same destination through a symlink, or the same existing file through another
+    /// spelling (including case aliases on case-insensitive volumes and hard links).
+    static func sameFile(_ first: URL, _ second: URL) -> Bool {
+        let first = first.standardizedFileURL.resolvingSymlinksInPath()
+        let second = second.standardizedFileURL.resolvingSymlinksInPath()
+        if first == second { return true }
+        guard
+            let firstID = (try? first.resourceValues(forKeys: [.fileResourceIdentifierKey]))?
+                .fileResourceIdentifier as? NSObject,
+            let secondID = (try? second.resourceValues(forKeys: [.fileResourceIdentifierKey]))?
+                .fileResourceIdentifier as? NSObject
+        else { return false }
+        return firstID.isEqual(secondID)
+    }
+
     /// Encodes the disc's tracks into `library`, and returns the files written.
     @discardableResult
     public func encode(_ disc: RippedDisc, into library: URL) throws -> [URL] {
@@ -465,10 +480,10 @@ public struct DiscEncoder: Sendable {
         // every track is written and checked before the first original goes, so a failure
         // leaves the album as it was, and a later try can read it again; and no track reads
         // the track before (for the HDCD decoder or the de-emphasis filter) after it changed.
-        let sources = disc.tracks.map(\.file.standardizedFileURL)
+        let sources = disc.tracks.map { $0.file.standardizedFileURL.resolvingSymlinksInPath() }
         let replacesSource =
-            (disc.isAlbum && jobs.first?.folder.standardizedFileURL == disc.folder.standardizedFileURL)
-            || jobs.contains { sources.contains($0.file.standardizedFileURL) }
+            (disc.isAlbum && jobs.first.map { Self.sameFile($0.folder, disc.folder) } == true)
+            || jobs.contains { job in sources.contains { Self.sameFile(job.file, $0) } }
 
         // Each lane takes every n-th job, in order, so the lanes keep in step and no more than
         // that many tracks are in memory. A failure stops the lanes after the tracks under
@@ -489,52 +504,12 @@ public struct DiscEncoder: Sendable {
                 }
             }
         }
-        if let error = outcomes.firstError {
+        defer {
             for staged in outcomes.staged.values { try? FileManager.default.removeItem(at: staged) }
+        }
+        if let error = outcomes.firstError {
             throw error
         }
-        // The disc as it is, for the disc image: the sources, or once new files replace them,
-        // the originals, set aside until the image is written. An album keeps only the new
-        // files; a rip keeps the files that no new file replaces.
-        var original = disc
-        let aside = disc.folder.appending(path: ".silverside-originals", directoryHint: .isDirectory)
-        if replacesSource {
-            try? FileManager.default.removeItem(at: aside)
-            try FileManager.default.createDirectory(at: aside, withIntermediateDirectories: true)
-            var placed = [URL]()
-            do {
-                for index in original.tracks.indices
-                where disc.isAlbum || jobs.contains(where: { $0.file.standardizedFileURL == sources[index] }) {
-                    let moved = aside.appending(path: original.tracks[index].file.lastPathComponent)
-                    try FileManager.default.moveItem(at: original.tracks[index].file, to: moved)
-                    original.tracks[index].file = moved
-                }
-                // Outcomes are kept by the job's place in `jobs`, not by `job.index` (its audio
-                // track's index), which differs for a hidden track and for a rip of some tracks only.
-                for (position, job) in jobs.enumerated() {
-                    guard let staged = outcomes.staged[position] else { continue }
-                    if FileManager.default.fileExists(atPath: job.file.path) {
-                        try FileManager.default.removeItem(at: job.file)
-                    }
-                    try FileManager.default.moveItem(at: staged, to: job.file)
-                    placed.append(job.file)
-                }
-            } catch {
-                // The originals go back, so that a later try can read the album again.
-                for file in placed { try? FileManager.default.removeItem(at: file) }
-                for (index, track) in original.tracks.enumerated() where track.file != disc.tracks[index].file {
-                    try? FileManager.default.moveItem(at: track.file, to: disc.tracks[index].file)
-                }
-                for staged in outcomes.staged.values { try? FileManager.default.removeItem(at: staged) }
-                try? FileManager.default.removeItem(at: aside)
-                throw error
-            }
-            for job in jobs where placed.contains(job.file) {
-                log("\(job.file.lastPathComponent)")
-                trackEncoded(job.ripped.number, job.file)
-            }
-        }
-        defer { if replacesSource { try? FileManager.default.removeItem(at: aside) } }
 
         var written = [URL]()
         var encodedFiles = [RipReport.Encoding.File]()
@@ -568,13 +543,71 @@ public struct DiscEncoder: Sendable {
                         + " (FLAGS PRE).")
             }
         }
+        let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
+        func writeDiscImage() throws -> URL? {
+            guard let images, albumSuffix == nil, let albumFolder else { return nil }
+            let sheet = cueSheet(
+                cueTracks, hiddenTrackFile: nil, release: release, medium: medium, toc: disc.toc,
+                mcn: disc.report?.mcn)
+            return try writeImage(
+                of: disc, sheet: sheet, name: NameTemplate.safeComponent(sheet.title ?? "Disc") + discPart,
+                folder: imageFolder(for: albumFolder, library: library, images: images),
+                tags: imageTags(sheet: sheet, release: release, medium: medium, hdcd: disc.report?.hdcd),
+                cover: cover)
+        }
+        // An image needs the original PCM. If its write fails, leave the album and its report
+        // untouched, so the user can fix the destination and retry from the same sources.
+        let preparedImage = try replacesSource ? writeDiscImage() : nil
+
+        // Keep the originals during the swap so that a failed move can be undone. The image
+        // is already checked. An album keeps only the new files; a rip keeps untouched sources.
+        var originals = sources
+        let aside = disc.folder.appending(
+            path: ".silverside-originals-\(UUID().uuidString)", directoryHint: .isDirectory)
+        if replacesSource {
+            try FileManager.default.createDirectory(at: aside, withIntermediateDirectories: true)
+            var placed = [URL]()
+            do {
+                for index in originals.indices
+                where disc.isAlbum || jobs.contains(where: { Self.sameFile($0.file, sources[index]) }) {
+                    let moved = aside.appending(path: "\(index)-\(originals[index].lastPathComponent)")
+                    try FileManager.default.moveItem(at: originals[index], to: moved)
+                    originals[index] = moved
+                }
+                // Outcomes are kept by the job's place in `jobs`, not by `job.index` (its audio
+                // track's index), which differs for a hidden track and for a rip of some tracks only.
+                for (position, job) in jobs.enumerated() {
+                    guard let staged = outcomes.staged[position] else { continue }
+                    if FileManager.default.fileExists(atPath: job.file.path) {
+                        try FileManager.default.removeItem(at: job.file)
+                    }
+                    try FileManager.default.moveItem(at: staged, to: job.file)
+                    placed.append(job.file)
+                }
+            } catch {
+                // The originals go back, so that a later try can read the album again.
+                for file in placed { try? FileManager.default.removeItem(at: file) }
+                for (index, file) in originals.enumerated() where file != sources[index] {
+                    try? FileManager.default.moveItem(at: file, to: sources[index])
+                }
+                // If a restore failed, leave its backup available for recovery.
+                _ = rmdir(aside.path)
+                throw error
+            }
+            for job in jobs where placed.contains(job.file) {
+                log("\(job.file.lastPathComponent)")
+                trackEncoded(job.ripped.number, job.file)
+            }
+        }
+        defer { if replacesSource { try? FileManager.default.removeItem(at: aside) } }
+
         // The album folder keeps the cover at full size, the other artwork, and the rip's report.
         // A disc with its own cover (a box set's sleeve) keeps it there too, by its number.
         if let albumFolder, let coverFile = disc.albumCoverFile, CoverFiles.album(in: albumFolder) == nil {
             try FileManager.default.copyItem(
                 at: coverFile, to: albumFolder.appending(path: coverFile.lastPathComponent))
         }
-        if let albumFolder, albumFolder.standardizedFileURL != disc.folder.standardizedFileURL {
+        if let albumFolder, !Self.sameFile(albumFolder, disc.folder) {
             try CoverFiles.removeDisc(medium.position, in: albumFolder)
             if let own = CoverFiles.disc(medium.position, in: disc.folder) {
                 try FileManager.default.copyItem(at: own, to: albumFolder.appending(path: own.lastPathComponent))
@@ -604,10 +637,9 @@ public struct DiscEncoder: Sendable {
             return encoding
         }
         if let albumFolder, let encoding {
-            let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
             let destination = albumFolder.appending(path: "Rip Report\(discPart).json")
             // An album encoded again from its own files keeps its report, with the new encoding.
-            if destination.standardizedFileURL != disc.reportFile.standardizedFileURL {
+            if !Self.sameFile(destination, disc.reportFile) {
                 if FileManager.default.fileExists(atPath: destination.path) {
                     try FileManager.default.removeItem(at: destination)
                 }
@@ -630,17 +662,9 @@ public struct DiscEncoder: Sendable {
             if let whole = replayGainRecord?.release {
                 updateReleaseGain(whole, of: release, in: albumFolder, except: medium.position, library: library)
             }
-            // Last, so that the album and its report are done even if the image fails. A decoded
-            // copy beside the album gets none: the image is the disc as it is.
-            if let images, albumSuffix == nil {
-                let sheet = cueSheet(
-                    cueTracks, hiddenTrackFile: nil, release: release, medium: medium, toc: disc.toc,
-                    mcn: disc.report?.mcn)
-                let image = try writeImage(
-                    of: original, sheet: sheet, name: NameTemplate.safeComponent(sheet.title ?? "Disc") + discPart,
-                    folder: imageFolder(for: albumFolder, library: library, images: images),
-                    tags: imageTags(sheet: sheet, release: release, medium: medium, hdcd: disc.report?.hdcd),
-                    cover: cover)
+            // With separate sources, image failure can leave the finished album in place:
+            // those sources are still available for retry. Replacements prepared the image first.
+            if let image = try replacesSource ? preparedImage : writeDiscImage() {
                 var record = encoding
                 record.image = image.path
                 try record.save(inReportAt: destination)

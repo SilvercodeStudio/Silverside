@@ -97,6 +97,9 @@ command-line tool.
   and then failed: the image was made from the decoded files. The originals
   now stay until the image is written. A WAV album, too, keeps every original
   until all its new files are written, so a failure leaves it as it was.
+- Encoding an album in place through a symbolic link now protects its source
+  tracks and report. If its disc image cannot be written, the original album
+  stays unchanged and can be tried again after fixing the image destination.
 - An album renamed or retagged after the rip lost the pre-emphasis and
   copy-permitted marks from its CUE sheet.
 - A track that AccurateRip keeps no checksum for, such as a silent one, shows

@@ -207,7 +207,7 @@ public struct RipReport: Codable, Equatable, Sendable {
         }
     }
 
-    public var program = "Silverside \(SilversideVersion.string)"
+    public var program = SilversideVersion.program
     /// When the rip ended and the report was written.
     public var date: Date
     /// When the rip started, before the lookups. Nil in older reports.

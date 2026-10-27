@@ -27,7 +27,14 @@ XCODEBUILD = xcodebuild -workspace $(WORKSPACE) -scheme $(SCHEME) -configuration
 
 SWIFT_SOURCES = $(PACKAGE)/Package.swift $(PACKAGE)/Sources $(PACKAGE)/Tests App/Silverside
 
-.PHONY: help build run app cli test hwtest core format lint release install install-cli-local install-app uninstall site rip-art
+# The Git commit of the build ("-dirty" with changes not committed), linked into the CLI as its
+# Info.plist, where SilversideVersion.commit reads it. The file is named after the commit, so a
+# new commit changes the linker's arguments, and SwiftPM links again.
+COMMIT := $(shell scripts/commit-id.sh)
+COMMIT_PLIST = $(PACKAGE)/.build/commit/Info-$(COMMIT).plist
+COMMIT_FLAGS = $(if $(COMMIT),-Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker $(abspath $(COMMIT_PLIST)))
+
+.PHONY: help build run app cli test hwtest core format lint release commit-plist install install-cli-local install-app uninstall site rip-art
 
 # Where make install puts silverside and its shell completions. /usr/local may need sudo; PREFIX=~/.local does not.
 PREFIX ?= /usr/local
@@ -69,8 +76,8 @@ run: build
 app:
 	@$(XCODEBUILD) -showBuildSettings 2>/dev/null | awk -F' = ' '/^ *BUILT_PRODUCTS_DIR =/ {dir=$$2} /^ *FULL_PRODUCT_NAME =/ {name=$$2} END {print dir "/" name}'
 
-cli:
-	@swift build --package-path $(PACKAGE) --product silverside -q
+cli: commit-plist
+	@swift build --package-path $(PACKAGE) --product silverside -q $(COMMIT_FLAGS)
 	@"$$(swift build --package-path $(PACKAGE) --show-bin-path)/silverside" $(ARGS)
 
 test:
@@ -90,8 +97,15 @@ format:
 lint:
 	xcrun swift-format lint --strict --recursive $(SWIFT_SOURCES)
 
-release:
-	swift build --package-path $(PACKAGE) -c release --arch arm64 --arch x86_64 --product silverside
+release: commit-plist
+	swift build --package-path $(PACKAGE) -c release --arch arm64 --arch x86_64 --product silverside $(COMMIT_FLAGS)
+
+commit-plist:
+	@mkdir -p "$(dir $(COMMIT_PLIST))"
+	@printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
+		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+		'<plist version="1.0"><dict><key>SilversideCommit</key><string>$(COMMIT)</string></dict></plist>' \
+		> "$(COMMIT_PLIST)"
 
 install: release
 	install -d "$(PREFIX)/bin" "$(PREFIX)/share/zsh/site-functions" "$(PREFIX)/etc/bash_completion.d" \

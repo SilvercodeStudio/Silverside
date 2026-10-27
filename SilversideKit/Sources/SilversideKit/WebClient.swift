@@ -181,4 +181,17 @@ public actor WebClient {
 /// The version that Silverside reports, as in its User-Agent.
 public enum SilversideVersion {
     public static let string = "0.7"
+
+    /// The Git commit of the build, abbreviated, with "-dirty" if the build had changes that were
+    /// not committed (`scripts/commit-id.sh`): from the app's Info.plist, where a build phase
+    /// puts it, or from the one that `make` links into the CLI. Nil for a build without it,
+    /// such as `swift build` or the tests.
+    public static let commit = Bundle.main.object(forInfoDictionaryKey: "SilversideCommit") as? String
+
+    /// "0.7 (536e697-dirty)", or "0.7" without a commit.
+    public static var described: String { commit.map { "\(string) (\($0))" } ?? string }
+
+    /// "Silverside 0.7 (536e697-dirty)": the program in reports and logs. The files' tags and the
+    /// User-Agent keep the plain version.
+    public static var program: String { "Silverside \(described)" }
 }

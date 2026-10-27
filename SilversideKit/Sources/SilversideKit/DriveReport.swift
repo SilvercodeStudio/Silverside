@@ -14,7 +14,7 @@ public struct DriveReport: Codable, Sendable {
         public var milliseconds: Int
     }
 
-    public var program = "Silverside \(SilversideVersion.string)"
+    public var program = SilversideVersion.program
     public var date = Date()
     public var macOS = ProcessInfo.processInfo.operatingSystemVersionString
     /// The Mac's model identifier, such as "Mac14,13".

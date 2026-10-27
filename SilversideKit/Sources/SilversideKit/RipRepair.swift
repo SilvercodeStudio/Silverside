@@ -271,7 +271,7 @@ public struct RipRepair {
             }
         }
         report.hdcd = HDCDStatus(report.tracks)
-        report.program = "Silverside \(SilversideVersion.string)"
+        report.program = SilversideVersion.program
         if folder.standardizedFileURL != firstFolder {
             report.encoding = nil
             var files = Set(report.tracks.map(\.file))

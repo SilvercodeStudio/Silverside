@@ -445,6 +445,7 @@ final class RipRun {
         case .drive(let drive, let offset, let source):
             readOffset = offset
             offsetSource = source
+            add(SilversideVersion.program)
             add(
                 "Drive: \(drive.name) (firmware \(drive.revision)), read offset \(offset.signedDescription) (\(source))"
             )

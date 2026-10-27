@@ -18,7 +18,7 @@ struct AboutView: View {
             VStack(spacing: 18) {
                 VStack(spacing: 4) {
                     Text("Silverside").font(.system(size: 34, weight: .bold))
-                    Text("Version \(version)").font(.title3).foregroundStyle(.secondary)
+                    Text("Version \(version)").font(.title3).foregroundStyle(.secondary).textSelection(.enabled)
                 }
                 Text("Accurate CD ripping for the Mac.").font(.title3)
                 stats
@@ -44,8 +44,17 @@ struct AboutView: View {
         #endif
     }
 
+    /// "0.7 (1) · 536e697-dirty": the version, the build, and the Git commit, with "-dirty" if the
+    /// build had changes that were not committed.
     private var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? SilversideVersion.string
+        let info = Bundle.main.infoDictionary
+        var text = info?["CFBundleShortVersionString"] as? String ?? SilversideVersion.string
+        if let build = info?["CFBundleVersion"] as? String { text += " (\(build))" }
+        // A release (an archive) leaves out the commit, which its Git tag names, unless it had
+        // changes that were not committed. The reports and the log name it either way.
+        let archive = info?["SilversideArchive"] as? Bool == true
+        if let commit = SilversideVersion.commit, !archive || commit.hasSuffix("-dirty") { text += " · \(commit)" }
+        return text
     }
 
     private var copyright: String {

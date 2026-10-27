@@ -234,6 +234,7 @@ private final class RipPrinter: @unchecked Sendable {
             self.toc = toc
         case .drive(let drive, let offset, let source):
             readOffset = offset
+            Swift.print(SilversideVersion.program)
             Swift.print(
                 "Drive: \(drive.name) (firmware \(drive.revision)), read offset \(offset.signedDescription) (\(source))"
             )

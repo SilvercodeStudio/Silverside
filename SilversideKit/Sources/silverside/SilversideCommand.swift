@@ -19,7 +19,7 @@ struct SilversideCommand: AsyncParsableCommand {
               silverside encode -i <rip folder>      encode a rip later
               silverside config                      the settings (library, format, names)
             """,
-        version: SilversideVersion.string,
+        version: SilversideVersion.described,
         subcommands: [
             Drives.self, Info.self, CDTextCommand.self, Rip.self, Repair.self, Check.self, Metadata.self, Encode.self,
             HDCDCommand.self,

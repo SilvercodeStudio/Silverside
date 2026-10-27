@@ -31,6 +31,11 @@ command-line tool.
   it (the 1999 edition gives the bit to broadcasting); a disc that
   sets it gets a chip of its own. `silverside info` shows the subchannel's
   flags too.
+- The About window, the rip log, and the reports name the Git commit that
+  Silverside was built from, with "-dirty" when the build had changes that were
+  not committed: "Silverside 0.7 (536e697-dirty)". The About window shows the
+  build number too, and leaves out the commit in a release, which its Git tag
+  names. `silverside --version` shows the commit when `make` built it.
 
 ### Changed
 

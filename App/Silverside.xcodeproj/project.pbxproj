@@ -76,6 +76,7 @@
 				000000000000000120000000 /* Sources */,
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
+				000000000000000150000000 /* Record the Git commit */,
 			);
 			buildRules = (
 			);
@@ -136,6 +137,29 @@
 			);
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		000000000000000150000000 /* Record the Git commit */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "Record the Git commit";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# The Git commit of the build, for the About window and the reports (SilversideVersion.commit).\ncommit=$(\"$SRCROOT/../scripts/commit-id.sh\")\nplist=\"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\n/usr/libexec/PlistBuddy -c \"Delete :SilversideCommit\" \"$plist\" 2>/dev/null || true\nif [ -n \"$commit\" ]; then\n    /usr/libexec/PlistBuddy -c \"Add :SilversideCommit string $commit\" \"$plist\"\nfi\n# An archive (Product › Archive, xcodebuild archive) is a build for release: its About window leaves the commit out.\n/usr/libexec/PlistBuddy -c \"Delete :SilversideArchive\" \"$plist\" 2>/dev/null || true\nif [ \"$ACTION\" = install ]; then\n    /usr/libexec/PlistBuddy -c \"Add :SilversideArchive bool true\" \"$plist\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		000000000000000120000000 /* Sources */ = {
@@ -287,6 +311,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Silverside/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
@@ -329,6 +354,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Silverside/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";

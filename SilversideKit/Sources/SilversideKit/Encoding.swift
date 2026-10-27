@@ -62,6 +62,9 @@ public struct RippedDisc: Sendable {
     /// The album's cover in the folder (cover.jpg or cover.png), for the album folder.
     public var albumCoverFile: URL? { CoverFiles.album(in: folder) }
 
+    /// True for an album in the library as the source (its report is not a rip's disc.json).
+    public var isAlbum: Bool { reportFile.lastPathComponent != "disc.json" }
+
     public init(folder: URL) throws {
         self.folder = folder
         reportFile = folder.appending(path: "disc.json")
@@ -457,12 +460,15 @@ public struct DiscEncoder: Sendable {
                 album: album, tracks: tracks, histogram: histogram, release: whole?.values, releaseDiscs: whole?.discs)
         }
 
-        // An album encoded from its own files into its own folder replaces its source. Then
+        // An album encoded from its own files into its own folder replaces its source, in any
+        // format, WAV too; so does any encoding that would write over a source file. Then
         // every track is written and checked before the first original goes, so a failure
-        // leaves the album as it was, and a later try can read it again.
+        // leaves the album as it was, and a later try can read it again; and no track reads
+        // the track before (for the HDCD decoder or the de-emphasis filter) after it changed.
+        let sources = disc.tracks.map(\.file.standardizedFileURL)
         let replacesSource =
-            disc.tracks.contains { $0.file.pathExtension.lowercased() != "wav" }
-            && jobs.first?.folder.standardizedFileURL == disc.folder.standardizedFileURL
+            (disc.isAlbum && jobs.first?.folder.standardizedFileURL == disc.folder.standardizedFileURL)
+            || jobs.contains { sources.contains($0.file.standardizedFileURL) }
 
         // Each lane takes every n-th job, in order, so the lanes keep in step and no more than
         // that many tracks are in memory. A failure stops the lanes after the tracks under
@@ -487,24 +493,48 @@ public struct DiscEncoder: Sendable {
             for staged in outcomes.staged.values { try? FileManager.default.removeItem(at: staged) }
             throw error
         }
-        // Outcomes are kept by the job's place in `jobs`, not by `job.index` (its audio track's
-        // index), which differs for a hidden track and for a rip of some tracks only.
+        // The disc as it is, for the disc image: the sources, or once new files replace them,
+        // the originals, set aside until the image is written. An album keeps only the new
+        // files; a rip keeps the files that no new file replaces.
+        var original = disc
+        let aside = disc.folder.appending(path: ".silverside-originals", directoryHint: .isDirectory)
         if replacesSource {
-            for (position, job) in jobs.enumerated() {
-                guard let staged = outcomes.staged[position] else { continue }
-                if FileManager.default.fileExists(atPath: job.file.path) {
-                    try FileManager.default.removeItem(at: job.file)
+            try? FileManager.default.removeItem(at: aside)
+            try FileManager.default.createDirectory(at: aside, withIntermediateDirectories: true)
+            var placed = [URL]()
+            do {
+                for index in original.tracks.indices
+                where disc.isAlbum || jobs.contains(where: { $0.file.standardizedFileURL == sources[index] }) {
+                    let moved = aside.appending(path: original.tracks[index].file.lastPathComponent)
+                    try FileManager.default.moveItem(at: original.tracks[index].file, to: moved)
+                    original.tracks[index].file = moved
                 }
-                try FileManager.default.moveItem(at: staged, to: job.file)
+                // Outcomes are kept by the job's place in `jobs`, not by `job.index` (its audio
+                // track's index), which differs for a hidden track and for a rip of some tracks only.
+                for (position, job) in jobs.enumerated() {
+                    guard let staged = outcomes.staged[position] else { continue }
+                    if FileManager.default.fileExists(atPath: job.file.path) {
+                        try FileManager.default.removeItem(at: job.file)
+                    }
+                    try FileManager.default.moveItem(at: staged, to: job.file)
+                    placed.append(job.file)
+                }
+            } catch {
+                // The originals go back, so that a later try can read the album again.
+                for file in placed { try? FileManager.default.removeItem(at: file) }
+                for (index, track) in original.tracks.enumerated() where track.file != disc.tracks[index].file {
+                    try? FileManager.default.moveItem(at: track.file, to: disc.tracks[index].file)
+                }
+                for staged in outcomes.staged.values { try? FileManager.default.removeItem(at: staged) }
+                try? FileManager.default.removeItem(at: aside)
+                throw error
+            }
+            for job in jobs where placed.contains(job.file) {
                 log("\(job.file.lastPathComponent)")
                 trackEncoded(job.ripped.number, job.file)
             }
-            // Files the naming gave other names since: the album keeps only the new ones.
-            let written = Set(jobs.map(\.file.standardizedFileURL))
-            for track in disc.tracks where !written.contains(track.file.standardizedFileURL) {
-                try? FileManager.default.removeItem(at: track.file)
-            }
         }
+        defer { if replacesSource { try? FileManager.default.removeItem(at: aside) } }
 
         var written = [URL]()
         var encodedFiles = [RipReport.Encoding.File]()
@@ -607,7 +637,7 @@ public struct DiscEncoder: Sendable {
                     cueTracks, hiddenTrackFile: nil, release: release, medium: medium, toc: disc.toc,
                     mcn: disc.report?.mcn)
                 let image = try writeImage(
-                    of: disc, sheet: sheet, name: NameTemplate.safeComponent(sheet.title ?? "Disc") + discPart,
+                    of: original, sheet: sheet, name: NameTemplate.safeComponent(sheet.title ?? "Disc") + discPart,
                     folder: imageFolder(for: albumFolder, library: library, images: images),
                     tags: imageTags(sheet: sheet, release: release, medium: medium, hdcd: disc.report?.hdcd),
                     cover: cover)

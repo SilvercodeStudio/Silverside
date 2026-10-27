@@ -76,7 +76,8 @@ command-line tool.
   I/O error no longer makes good sectors unreadable: Silverside reads them
   without. A damaged sector does not count as a refusal once the drive has
   given the flags or the subchannel. Reads with them fit a USB bridge's 64 KB
-  limit.
+  limit. A part of a track read without the flags does not lose the flags that
+  the drive gave for the rest of it.
 - Damaged CD-Text no longer moves the titles after the damage onto the wrong
   tracks.
 - A decoded HDCD track started with the decoder reset, so until the track's
@@ -89,6 +90,13 @@ command-line tool.
   sheet and the report's list of files. Decoding HDCD in place of such an
   album, or of one with a hidden track before track 1, could put one track's
   audio in another track's file.
+- A rip pooled with earlier rips could be verified by CTDB while its files
+  kept the drive's own read, which differed. CTDB checks the version that most
+  rips agree on, and now that version is what the rip saves, with its checksums.
+- Decoding HDCD in place of an album, with disc images on, decoded the album
+  and then failed: the image was made from the decoded files. The originals
+  now stay until the image is written. A WAV album, too, keeps every original
+  until all its new files are written, so a failure leaves it as it was.
 - An album renamed or retagged after the rip lost the pre-emphasis and
   copy-permitted marks from its CUE sheet.
 - A track that AccurateRip keeps no checksum for, such as a silent one, shows

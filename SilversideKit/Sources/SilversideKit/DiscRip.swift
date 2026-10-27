@@ -749,6 +749,18 @@ public struct DiscRip {
         audio.add(own.alternatives)
         for alternatives in pooled.alternatives { audio.add(alternatives) }
         summary += "; pooled with \(pooled.versions.count) earlier versions"
+        // The majority of the versions is what CTDB checks, so it is what the WAV file keeps:
+        // a repair that changes nothing writes nothing.
+        guard audio.samples != samples else { return }
+        samples = audio.samples
+        if case .accurate(let v1, let v2) = RipPool.verification(
+            of: samples, track: track, toc: toc, records: records)
+        {
+            report.accurateRip = .accurate
+            report.accurateRipConfidence = [v1, v2]
+            audio = TrackAudio(samples: samples)
+            summary += "; the majority of the versions is accurate (v1 \(v1), v2 \(v2) submissions)"
+        }
     }
 
     /// Writes the tracks that the repair changed, and checks them against AccurateRip again,

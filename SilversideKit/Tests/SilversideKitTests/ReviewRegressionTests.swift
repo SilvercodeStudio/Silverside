@@ -499,4 +499,124 @@ struct ReviewRegressionTests {
         #expect(try Data(contentsOf: destination.appending(path: "Artwork/destination.txt")) == Data("theirs".utf8))
     }
 
+    /// Pooled versions whose majority CTDB verifies: the WAV file keeps that majority, not
+    /// the drive's read, so the files are the audio that was verified.
+    @Test func pooledMajorityIsTheAudioWritten() async throws {
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900])
+        let earlier = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: earlier) }
+        var pool = [URL]()
+        // Each earlier rip has a different error in track 2; the majority of three has none.
+        for (name, sample) in [("a", 100 * 588 + 5), ("b", 300 * 588 + 7)] {
+            let folder = earlier.appending(path: name)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for track in toc.audioTracks {
+                let range = toc.sectorRange(of: track)
+                var audio = Array(samples[(range.lowerBound * 588)..<(range.upperBound * 588)])
+                if track.number == 2 { audio[sample] ^= 0x0101 }
+                try WAVFile.write(audio, to: folder.appending(path: String(format: "Track %02d.wav", track.number)))
+            }
+            pool.append(folder)
+        }
+        let (rip, _, _, root) = try await DiscRipTests().rip(web: DiscRipTests.web(toc: toc, samples: samples)) {
+            $0.corruptSectors = [1000]
+        } configure: {
+            $0.pool = pool
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+        let range = toc.sectorRange(of: toc.audioTracks[1])
+        let written = try WAVFile.read(rip.folder.appending(path: "Track 02.wav"))
+        #expect(written == Array(samples[(range.lowerBound * 588)..<(range.upperBound * 588)]))
+        let report = try RipReport.read(from: rip.folder.appending(path: "disc.json"))
+        #expect(report.isVerified)
+        #expect(report.tracks[1].crc32 == CRC32.hex(CRC32.checksum(of: written[...])))
+    }
+
+    /// A drive whose first two C2 reads fail (with Q, then without), then gives the flags.
+    final class FlakyC2Drive: CDDrive, @unchecked Sendable {
+        let base: SimulatedDrive
+        var failures = 2
+        init(base: SimulatedDrive) { self.base = base }
+        func readTOC() throws -> TOC { base.toc }
+        func readAudioSectors(at lba: Int, count: Int) throws -> [UInt8] {
+            try base.readAudioSectors(at: lba, count: count)
+        }
+        func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8]) {
+            if failures > 0 {
+                failures -= 1
+                throw DriveError.readFailed(lba: lba)
+            }
+            return try base.readAudioSectorsWithC2(at: lba, count: count)
+        }
+        func readQSubchannel(at lba: Int, count: Int) throws -> [QSubchannel] {
+            try base.readQSubchannel(at: lba, count: count)
+        }
+        func readAudioSectors(at lba: Int, count: Int, c2: Bool, q: Bool) throws -> SectorRead {
+            let (audio, flags) =
+                c2
+                ? try readAudioSectorsWithC2(at: lba, count: count)
+                : (try readAudioSectors(at: lba, count: count), [])
+            return SectorRead(audio: audio, errorFlags: flags, q: q ? try readQSubchannel(at: lba, count: count) : [])
+        }
+        func readCDText() throws -> [UInt8]? { nil }
+    }
+
+    /// One chunk read without C2 does not throw away the flags of the chunks after it.
+    @Test func earlyC2FailureKeepsTheLaterFlags() throws {
+        let toc = try TOC(audioTrackStarts: [0], leadOutLBA: 200)
+        let base = SimulatedDrive(toc: toc, samples: PreEmphasisTests.sine(440, frames: 200 * 588))
+        base.reportsC2 = true
+        base.corruptSectors = [150]
+        let drive = FlakyC2Drive(base: base)
+        let reader = AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)
+        var ripper = TrackRipper(reader: reader, records: [])
+        ripper.readsC2 = true
+        let rip = try ripper.rip(toc.tracks[0])
+        let flagged = try #require(rip.c2Samples)
+        #expect(!flagged.isEmpty && flagged.allSatisfy { $0 / CDDA.samplesPerSector == 150 })
+    }
+
+    /// A WAV album de-emphasized in place: every track reads the original track before it,
+    /// because no new file replaces an original until all are written.
+    @Test func deEmphasizesAWAVAlbumInPlace() throws {
+        let (folder, library) = try PreEmphasisTests().makeRip(emphasized: [1, 2, 3])
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        var keep = DiscEncoder(format: .wav)
+        keep.deEmphasizes = false
+        let (files, _) = try keep.encodeWithRecord(try RippedDisc(folder: folder), into: library)
+        let report = files[0].deletingLastPathComponent().appending(path: "Rip Report.json")
+        var encoder = DiscEncoder(format: .wav)
+        encoder.overwrites = true
+        encoder.parallelTracks = 1  // so that track 1 is done before track 2 starts
+        let (decoded, record) = try encoder.encodeWithRecord(try RippedDisc(albumReportAt: report), into: library)
+        #expect(decoded == files && record?.deEmphasizedTracks == [1, 2, 3])
+        let ripped = try (1...3).map { try WAVFile.read(folder.appending(path: "Track 0\($0).wav")) }
+        #expect(try AudioEncoder.decodeWide(files[0]) == DeEmphasis.apply(.cd(ripped[0]), bits: 24))
+        #expect(
+            try AudioEncoder.decodeWide(files[1])
+                == DeEmphasis.apply(.cd(ripped[1]), bits: 24, previous: .cd(ripped[0])))
+        let album = files[0].deletingLastPathComponent()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: album.path).allSatisfy { !$0.hasPrefix(".") })
+    }
+
+    /// An album decoded in place still gets a disc image of the disc as it is, made from the
+    /// original files set aside until the image is written.
+    @Test func decodesInPlaceWithADiscImageOfTheOriginals() throws {
+        let (folder, library) = try HDCDTests().makeRip(.a(0x10))
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (files, _) = try DiscEncoder(format: .flac).encodeWithRecord(try RippedDisc(folder: folder), into: library)
+        let report = files[0].deletingLastPathComponent().appending(path: "Rip Report.json")
+        var encoder = DiscEncoder(format: .flac)
+        encoder.decodesHDCD = true
+        encoder.overwrites = true
+        encoder.replayGain = false
+        encoder.images = root.appending(path: "images")
+        let (_, record) = try encoder.encodeWithRecord(try RippedDisc(albumReportAt: report), into: library)
+        #expect(record?.hdcdDecoded == true)
+        let image = try #require(record?.image.map { URL(fileURLWithPath: $0) })
+        let disc = try RippedDisc(folder: folder)
+        #expect(try AudioEncoder.decode(image) == disc.tracks.flatMap { try WAVFile.read($0.file) })
+    }
+
 }

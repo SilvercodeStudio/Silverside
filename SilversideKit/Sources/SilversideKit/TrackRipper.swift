@@ -99,7 +99,8 @@ public struct TrackRipper {
             }
         }
         if readsC2, let withC2 = try? reader.read(positions, withC2: true, withQ: readsQ, progress: report) {
-            (read, flagged) = (withC2, withC2.c2Available ? withC2.flagged : nil)
+            // Flags that the drive gave count even if some chunks came without them.
+            (read, flagged) = (withC2, withC2.c2Available || !withC2.flagged.isEmpty ? withC2.flagged : nil)
         } else {
             read = try reader.read(positions, withC2: false, withQ: readsQ, progress: report)
         }

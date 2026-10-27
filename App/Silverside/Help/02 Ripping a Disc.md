@@ -66,23 +66,25 @@ Stop ends the rip after the read under way. The tracks ripped so far stay in the
 
 ## HDCD
 
-HDCD (High Definition Compatible Digital) discs were mastered to hold more than a 16-bit CD can, and still play in every CD player. The mastering hides control codes in the lowest bit of the audio. Only a player with an HDCD decoder reads them, and they can ask it for two changes:
+HDCD (High Definition Compatible Digital) discs were mastered to hold more dynamic range than a standard 16-bit CD can, yet they can still play in every CD player. Dynamic range is the difference between the quietest sounds and the loudest sounds that the disc can reproduce, usually expressed in decibels (dB). 
+
+The HDCD mastering process hides inaudible control codes in the lowest bit of the audio samples. A decoder that understands these can restore more dynamic range, up to approximately 20 bits worth of resolution. Only a player with an HDCD decoder reads these codes, and there are two types of changes they can ask for:
 
 - **Peak extend:** the loudest peaks were compressed by up to 9 dB to fit on the disc. The decoder expands them again.
 - **Gain:** passages were raised by up to 7.5 dB to fit on the disc. The decoder lowers them again, and their finest detail goes below the 16 bits that a CD holds.
 
-Without a decoder, you hear the disc as pressed: the peaks stay compressed, and the raised passages stay raised. Few players have a decoder.
+On a standalone CD player that doesn't support HDCD, which is most of them, or in a typical CD ripping app, you hear the standard 16-bit version of the disc, which is slightly compressed in dynamic range if the disc uses peak extend. HDCD decoding unlocks the full 20-bit dynamic range when applicable. However, it's important to note that HDCD is a proprietary mastering process that includes more than just the dynamic range extension; it includes psychoacoustic noise-shaping and specialized dithering algorithms that improve the sound even on standard 16-bit playback, generally by reducing audible noise. Technically, it increases the total noise slightly, but moves most of it to inaudible regions of the spectrum. Often, CD releases that carry the HDCD logo have been through this mastering process but don't necessarily enable the peak extend or gain features discussed above. In these cases, Silverside encodes the files as standard 16-bit audio that still benefits from the HDCD mastering process.
 
 ### What Silverside finds
 
-The HDCD logo on a disc, or HDCD codes in its audio, does not mean that the disc uses peak extend or gain. Many discs were mastered with HDCD equipment, which puts the codes in the audio, but on most of them the codes ask for nothing. A decoder then plays the disc exactly as a player without one does. So Silverside offers to decode only a disc whose codes ask for peak extend or gain, and never one with the logo alone.
+The HDCD logo on a disc, or HDCD codes in its audio, does not mean that the disc uses peak extend or gain. Many discs were mastered with HDCD equipment or processes that put the codes in the audio, but on most releases, the codes do not enable the peak extend or gain features on playback. An HDCD-enabled player then plays the disc exactly as a player without one does. Therefore, Silverside only offers to decode a disc whose codes ask for peak extend or gain, and never one with the logo alone. As mentioned above, even when peak extend or gain features are not enabled, the HDCD mastering process can still benefit the overall sound quality.
 
-Silverside looks for the codes in every track it rips, and the header and the result show the HDCD logo with what it found:
+Silverside looks for these codes in every track it rips, and the header (or the results of an earlier rip) shows what it found, with the HDCD logo:
 
-- **codes only:** the codes ask for nothing, so a decoder plays the same audio, and there is nothing to decode. Most discs with the logo are like this.
-- **peak extend** or **gain:** a decoder changes the audio. These discs are worth decoding.
+- **codes only:** the codes ask for nothing, so you get a standard 16-bit rip with the samples exactly as written, and nothing to decode. Most discs with the HDCD logo are like this.
+- **peak extend** or **gain:** a decoder changes the audio. These discs are worth decoding to 20-bit lossless.
 
-Before the rip, the logo with "per MusicBrainz" means that MusicBrainz lists the disc as HDCD. The rip decides: some discs with the logo have no codes, and some without it have them. The report lists the codes of each track. For rips from before, `silverside hdcd` looks for the codes in WAV, FLAC, AIFF, and Apple Lossless files.
+Before the rip, the logo with "per MusicBrainz" means that MusicBrainz lists the disc as HDCD. The rip determines it: some discs with the logo have no codes, and some without it have them. The report lists the codes of each track. For rips from before, `silverside hdcd` looks for the codes in WAV, FLAC, AIFF, and Apple Lossless files.
 
 ### Decode, or keep as pressed
 
@@ -93,13 +95,11 @@ When a disc's codes ask for peak extend or gain, Silverside asks before it encod
 
 Decoded files:
 
-- **are about 6 dB quieter** than the disc, because the decoder leaves room for the peaks that it expands. ReplayGain, measured on the decoded audio, sets the level again in players that read it.
+- **are about 6 dB quieter** than the disc, because the decoder leaves room for the peaks that it expands. ReplayGain, measured on the decoded audio, sets the level again in players that read it and should even out this effect.
 - **are larger** in lossless formats: about 5% for FLAC, a third for Apple Lossless, and half again for AIFF and WAV. AAC and MP3 files are no larger.
 - **are tagged** `HDCD=decoded`. Every file of a disc with HDCD codes, decoded or not, is tagged `MEDIA=HDCD`.
 
-In a set, a disc whose codes ask for nothing is decoded too when another disc of the set is, so that every disc plays at one level. Its decode is the same audio, 6 dB quieter.
-
-HDCD was made to carry 20 bits. In tests, 24-bit files held almost nothing more, far below what you can hear, and were larger: 8% for FLAC, 30% for Apple Lossless. The decoder is the one in FFmpeg (`ffmpeg -af hdcd`).
+In a set, a disc whose codes ask for nothing is decoded too when another disc of the set is, so that every disc plays at one level. Its decode is the same audio, 6 dB quieter; ReplayGain evens out the level.
 
 ### Decode an earlier rip
 
@@ -112,16 +112,18 @@ Silverside decodes from the rip's WAV files. If they are gone, it uses the album
 
 ## Pre-emphasis and other flags
 
-A few early CDs were mastered with **pre-emphasis**: a treble boost, up to about 10 dB in the highest frequencies, that a CD player takes out again (de-emphasis). Few other players take it out, so they play such tracks too bright. A disc marks it for each track, in its table of contents, in its subchannel (data beside the audio), or in both; some discs mark it in one place only. Silverside reads both while it rips, at no cost in time, and a rip with pre-emphasis shows a chip.
+**Pre-emphasis** is a type of noise reduction from the first years of the Compact Disc. The mastering boosts the treble, up to about 10 dB in the highest frequencies, and a compliant CD player is supposed to cut the treble by the same amount when it plays (de-emphasis). The cut also lowers the hiss that the conversion adds, which mattered because the earliest converters were noisy; some players' converters were only 14-bit. Better recorders, converters and mastering soon made pre-emphasis unnecessary, so it is rare, and almost no disc made after the mid-1980s uses it.
 
-Before it encodes such a disc, Silverside asks what to do with those tracks, and advises De-emphasize:
+A flag or indicator can be embedded in each track at the factory that tells the CD player to de-emphasize the track upon playback, but this flag will not be present in the raw samples in the CD audio, and that information is usually lost by rippers. A ripper that ignores the flag makes files that still have the boost, and music apps play them too bright and harsh. A disc marks it for each track, either in its table of contents or in its subchannel (data beside the audio), or in both; some discs mark it in one place only. Silverside reads both while it rips and a rip with pre-emphasis shows a chip in the header.
+
+Before it encodes such a disc, Silverside asks what to do with those tracks, and advises De-emphasize. If a disc really has pre-emphasis, this is almost always what you want: the files then sound as the disc should in a proper CD player.
 
 - **De-emphasize:** the audio as a CD player plays it, in 20-bit FLAC or Apple Lossless files (24-bit AIFF and WAV), tagged `DE_EMPHASIZED=yes`. The rounding at 20 bits is far below the disc's own noise. ReplayGain is measured on the result, and the disc's other tracks stay bit for bit as pressed.
 - **Keep as pressed:** files bit for bit the disc, tagged `PRE_EMPHASIS=yes`, for a player that takes it out itself.
 
 Settings › Encoding can give one answer for every disc. Either way, the CUE sheet marks the tracks (`FLAGS PRE`), and a disc image keeps the disc as pressed. The filter follows the curve of the CD standard (IEC 60908) within 0.1 dB from 20 Hz to 20 kHz.
 
-The rip log and the report list every track's flags, and where each came from: pre-emphasis, **digital copy permitted** (a flag from the 1980s that copying software was meant to obey), and **four-channel audio**, which early versions of the CD standard describe but no released disc is known to use (the 1999 edition gives that bit to broadcasting). If your disc has it, the result shows a chip for it.
+The rip log and the report list every track's flags, and where each came from: pre-emphasis, **digital copy permitted** (a flag from the 1980s that copying software was meant to obey), and **four-channel audio**, which early versions of the CD standard describe but no released disc is known to use (the 1999 edition assigns that flag to broadcasting use). If a disc has the four-channel flag, the result shows a chip. If you find one of these, please let us know.
 
 ## Where the files go
 

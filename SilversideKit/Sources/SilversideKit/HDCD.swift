@@ -64,19 +64,35 @@ public struct HDCDCodes: Codable, Equatable, Sendable {
         return codes(found: hdcd_decoder_summary(decoder))
     }
 
+    /// Frames of the audio before a track that settle the decoder: 5 seconds, longer than
+    /// its 2-second code timer, and about 100 codes in the masters seen so far.
+    static let warmUpFrames = 5 * 44100
+
     /// Decodes the track as an HDCD decoder plays it: audio of `bits` bits (`TrackPCM.wide`),
     /// 20 for FLAC and Apple Lossless, 24 otherwise (`AudioFormat.wideBits`). The decoder
     /// leaves room for the peaks that peak extend restores, so audio that the codes do not
     /// change comes out as it went in, 6.02 dB lower; audio without codes too.
-    public static func decode(_ samples: [UInt32], bits: Int = 24, sampleRate: Int = 44100) -> [Int32] {
+    ///
+    /// `previous` is the audio just before the track on the disc. A decoder starts with no
+    /// code, so until the track's first code (often 50 ms in) it would not extend peaks or
+    /// apply a gain. The end of `previous` sets the decoder as a player that plays the disc
+    /// straight through has it, so gapless audio has no change at the track's start.
+    public static func decode(
+        _ samples: [UInt32], bits: Int = 24, previous: ArraySlice<UInt32>? = nil, sampleRate: Int = 44100
+    ) -> [Int32] {
         let decoder = newDecoder(sampleRate)
         defer { hdcd_decoder_free(decoder) }
+        let warmUp = previous.map { Array($0.suffix(warmUpFrames)) } ?? []
         var decoded = [Int32]()
         decoded.reserveCapacity(samples.count * 2)
         // The decoder's 32-bit values, cut to `bits` (truncated, as Apple's encoders cut them).
         let mask = ~Int32((1 << (32 - bits)) - 1)
-        run(decoder, over: samples) { buffer, count in
-            for index in 0..<(2 * count) { decoded.append(buffer[index] & mask) }
+        // The warm-up's values are left out.
+        var skip = 2 * warmUp.count
+        run(decoder, over: warmUp.isEmpty ? samples : warmUp + samples) { buffer, count in
+            let start = min(skip, 2 * count)
+            skip -= start
+            for index in start..<(2 * count) { decoded.append(buffer[index] & mask) }
         }
         return decoded
     }

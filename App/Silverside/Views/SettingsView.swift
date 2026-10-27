@@ -384,7 +384,7 @@ struct EncodingSettings: View {
         @Bindable var model = model
         Form {
             Section("Tags") {
-                Toggle("ReplayGain: each track's loudness, and the album's", isOn: $model.settings.replayGain)
+                Toggle("ReplayGain: volume normalization tags", isOn: $model.settings.replayGain)
                 Text(
                     "Measured as EBU R 128 does, so a player that reads the tags plays albums at one level. For a set of several discs, the album is the whole set once every disc is in the library. The audio is not changed. The Music app uses its own Sound Check instead."
                 )

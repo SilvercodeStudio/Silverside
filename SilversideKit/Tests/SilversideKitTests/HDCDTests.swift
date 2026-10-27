@@ -169,6 +169,23 @@ struct HDCDTests {
         #expect(HDCDCodes.decode(quiet) == shifted(quiet))
     }
 
+    /// A track decoded after the end of the track before is the same audio as the disc
+    /// decoded straight through. Decoded on its own, it starts with no code, so its peaks are
+    /// not extended until the first code, 0.3 seconds in here.
+    @Test func continuesFromTheTrackBefore() {
+        var encoder = Encoder()
+        for second in 0..<200 {
+            encoder.pause(4410 - 40)
+            encoder.add(.a(second < 100 ? 0x18 : 0x14))
+        }
+        let disc = encoder.samples(amplitude: 30000)
+        let start = 10 * 44100 + 3 * 4410 + 17
+        let whole = Array(HDCDCodes.decode(disc)[(2 * start)...])
+        let track = Array(disc[start...])
+        #expect(HDCDCodes.decode(track, previous: disc[..<start]) == whole)
+        #expect(HDCDCodes.decode(track) != whole)
+    }
+
     /// FLAC and Apple Lossless keep 20 bits of a decode, AIFF and WAV 24.
     @Test func writesAndReadsWideFiles() throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
@@ -260,8 +277,13 @@ struct HDCDTests {
         encoder.decodesHDCD = true
         let (files, record) = try encoder.encodeWithRecord(disc, into: library)
         #expect(record?.hdcdDecoded == true && record?.checkText.contains("HDCD decoded, at 20 bits") == true)
-        #expect(
-            try AudioEncoder.decodeWide(files[0]) == HDCDCodes.decode(try WAVFile.read(disc.tracks[0].file), bits: 20))
+        let first = try WAVFile.read(disc.tracks[0].file)
+        #expect(try AudioEncoder.decodeWide(files[0]) == HDCDCodes.decode(first, bits: 20))
+        // Track 2 follows track 1 on the disc, so track 1's end sets the decoder.
+        let second = try WAVFile.read(disc.tracks[1].file)
+        let decoded = try AudioEncoder.decodeWide(files[1])
+        #expect(decoded == HDCDCodes.decode(second, bits: 20, previous: first[...]))
+        #expect(decoded != HDCDCodes.decode(second, bits: 20))
         let tags = try FLACTags.read(files[0])
         #expect(tags.contains { $0.key == "HDCD" && $0.value == "decoded" })
         #expect(tags.contains { $0.key == "MEDIA" && $0.value == "HDCD" })

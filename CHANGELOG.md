@@ -79,6 +79,12 @@ command-line tool.
   limit.
 - Damaged CD-Text no longer moves the titles after the damage onto the wrong
   tracks.
+- A decoded HDCD track started with the decoder reset, so until the track's
+  first code, often 50 ms in, its peaks were not extended and the disc's gain
+  adjustment was not applied. Now the end of the track before sets the
+  decoder, as in a player that plays the disc straight through, so gapless
+  albums have no change at the track boundaries. Albums decoded before keep
+  the error until they are decoded again from the rip.
 - Encoding a rip of only some tracks lost every track but one from the CUE
   sheet and the report's list of files. Decoding HDCD in place of such an
   album, or of one with a hidden track before track 1, could put one track's

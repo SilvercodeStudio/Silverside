@@ -297,8 +297,10 @@ public struct DiscEncoder: Sendable {
         var hasPreEmphasis = false
         /// True if the encoding takes the pre-emphasis out.
         var deEmphasizes = false
-        /// The track before it on the disc, when it is de-emphasized too: its end settles the filter.
+        /// The track before it on the disc, if this encoding has it: its end settles the HDCD
+        /// decoder, and the de-emphasis filter when `previousDeEmphasizes`.
         var previous: RippedDisc.Track?
+        var previousDeEmphasizes = false
         /// Tags beyond the metadata's: the ReplayGain values, once every track is measured.
         var extraComments: [(key: String, value: String)] = []
     }
@@ -345,9 +347,13 @@ public struct DiscEncoder: Sendable {
             let number = jobs[position].ripped.number
             jobs[position].hasPreEmphasis = emphasized.contains(number == 0 ? audioTracks.first?.number ?? 1 : number)
             jobs[position].deEmphasizes = deEmphasizes && jobs[position].hasPreEmphasis
-            guard jobs[position].deEmphasizes, position > 0, jobs[position - 1].deEmphasizes else { continue }
-            let before = jobs[position - 1].ripped.number
-            if before == 0 || before == number - 1 { jobs[position].previous = jobs[position - 1].ripped }
+        }
+        // The track before each one on the disc, when it is in this encoding too.
+        for position in jobs.indices.dropFirst() {
+            let (before, number) = (jobs[position - 1].ripped.number, jobs[position].ripped.number)
+            guard before == 0 || before == number - 1 else { continue }
+            jobs[position].previous = jobs[position - 1].ripped
+            jobs[position].previousDeEmphasizes = jobs[position - 1].deEmphasizes
         }
         return (release, medium, jobs)
     }
@@ -681,22 +687,30 @@ public struct DiscEncoder: Sendable {
         }
     }
 
-    /// A track's audio to encode: as ripped, or its HDCD decode, at the format's bits.
-    func audio(of track: RippedDisc.Track, in disc: RippedDisc, decodes: Bool) throws -> TrackPCM {
-        let samples = try disc.audio(of: track)
-        return decodes ? .wide(HDCDCodes.decode(samples, bits: format.wideBits)) : .cd(samples)
-    }
-
     /// A job's audio to encode: as ripped, HDCD decoded, de-emphasized, or both, at the
     /// format's bits. HDCD is decoded first, at 24 bits, and de-emphasis rounds to the format's.
+    /// The end of the track before, if the encoding has it, settles the decoder and the filter,
+    /// as in a player that plays the disc straight through.
     private func audio(of job: Job, in disc: RippedDisc, decodes: Bool) throws -> TrackPCM {
-        guard job.deEmphasizes else { return try audio(of: job.ripped, in: disc, decodes: decodes) }
-        func source(_ track: RippedDisc.Track) throws -> TrackPCM {
-            let samples = try disc.audio(of: track)
-            return decodes ? .wide(HDCDCodes.decode(samples, bits: 24)) : .cd(samples)
+        let samples = try disc.audio(of: job.ripped)
+        let usesPrevious = decodes || (job.deEmphasizes && job.previousDeEmphasizes)
+        let previous = usesPrevious ? try job.previous.map { try disc.audio(of: $0) } : nil
+        guard job.deEmphasizes else {
+            return decodes
+                ? .wide(HDCDCodes.decode(samples, bits: format.wideBits, previous: previous?[...])) : .cd(samples)
         }
-        let previous = try job.previous.map(source)
-        return .wide(DeEmphasis.apply(try source(job.ripped), bits: format.wideBits, previous: previous))
+        func source(_ samples: ArraySlice<UInt32>, before: ArraySlice<UInt32>?) -> TrackPCM {
+            decodes ? .wide(HDCDCodes.decode(Array(samples), bits: 24, previous: before)) : .cd(Array(samples))
+        }
+        // The filter needs only the last frames of the track before, decoded as they play.
+        let settling =
+            job.previousDeEmphasizes
+            ? previous.map { previous in
+                let split = previous.count - min(previous.count, DeEmphasis.settlingFrames)
+                return source(previous[split...], before: previous[..<split])
+            } : nil
+        return .wide(
+            DeEmphasis.apply(source(samples[...], before: previous?[...]), bits: format.wideBits, previous: settling))
     }
 
     /// Whether the disc's HDCD codes ask for anything: from its report, or for a rip from

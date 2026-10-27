@@ -98,6 +98,8 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// Whether the test read gave the same audio as the copy, as read: a repair can change
         /// the copy after the test. Nil without a test read.
         public var testReadMatches: Bool?
+        /// The reading could not establish independence from the drive's cache.
+        public var cacheFlushIncomplete: Bool?
 
         /// Records the checksums of the track's audio: its CRC-32s, and its AccurateRip checksums.
         public mutating func recordChecksums(of samples: [UInt32], isFirstTrack: Bool, isLastTrack: Bool) {
@@ -244,6 +246,9 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// True if two reads agreed. AccurateRip and CTDB do not cover this audio.
         public var readsAgree: Bool
         public var reads: Int
+        public var unreadableSectors: [Int]?
+        public var cacheFlushIncomplete: Bool?
+        public var crc32: String?
 
         public init(file: String, sectors: Int, peak: Int, readsAgree: Bool, reads: Int) {
             self.file = file

@@ -11,6 +11,8 @@ public struct HiddenTrackRip: Sendable {
     /// True if two reads gave the same data.
     public var readsAgree: Bool
     public var reads: Int
+    public var unreadableSamples: [Int] = []
+    public var cacheFlushIncomplete = false
 
     /// Below this peak, the gap is silence (or dither), not a hidden track.
     public static let silencePeak = 32
@@ -25,21 +27,29 @@ public struct HiddenTrackRip: Sendable {
             return nil
         }
         let positions = 0..<(first.startLBA * CDDA.samplesPerSector)
-        let read = try reader.readSamples(positions)
-        let peak = read.reduce(0) { max($0, magnitude(of: $1)) }
-        guard peak >= silencePeak else { return nil }
-
-        // Read again, after a cache flush, until two reads agree.
-        var reads = [read]
-        while reads.count < maximumReads {
-            try reader.flushCache(awayFrom: 0..<first.startLBA, count: cacheFlushSectors)
-            let next = try reader.readSamples(positions)
-            if let match = reads.first(where: { $0 == next }) {
-                return HiddenTrackRip(samples: match, peak: peak, readsAgree: true, reads: reads.count + 1)
+        let firstRead = try reader.read(positions, withC2: false)
+        func peak(_ read: AudioReader.Read) -> Int { read.samples.reduce(0) { max($0, magnitude(of: $1)) } }
+        // A failed read that was replaced by zero is not evidence of a silent gap.
+        if firstRead.unreadable.isEmpty && peak(firstRead) < silencePeak { return nil }
+        var reads = [firstRead]
+        var incomplete = false
+        while reads.count < max(1, maximumReads) {
+            let independent = try reader.flushCache(awayFrom: 0..<first.startLBA, count: cacheFlushSectors)
+            incomplete = incomplete || !independent
+            let next = try reader.read(positions, withC2: false)
+            if independent, next.unreadable.isEmpty,
+                reads.contains(where: { $0.unreadable.isEmpty && $0.samples == next.samples })
+            {
+                if peak(next) < silencePeak { return nil }
+                return HiddenTrackRip(samples: next.samples, peak: peak(next), readsAgree: true, reads: reads.count + 1)
             }
             reads.append(next)
         }
-        return HiddenTrackRip(samples: read, peak: peak, readsAgree: false, reads: reads.count)
+        // Keep the best available audio, with the failures explicit, until a later rip can confirm it.
+        let best = reads.min { $0.unreadable.count < $1.unreadable.count }!
+        return HiddenTrackRip(
+            samples: best.samples, peak: peak(best), readsAgree: false, reads: reads.count,
+            unreadableSamples: best.unreadable, cacheFlushIncomplete: incomplete)
     }
 
     /// The larger of a sample's two 16-bit magnitudes.

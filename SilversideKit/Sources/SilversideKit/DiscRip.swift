@@ -380,6 +380,10 @@ public struct DiscRip {
             hiddenTrack = .init(
                 file: "Track 00.wav", sectors: toc.audioTracks[0].startLBA, peak: hidden.peak,
                 readsAgree: hidden.readsAgree, reads: hidden.reads)
+            hiddenTrack?.unreadableSectors = Array(Set(hidden.unreadableSamples.map { $0 / CDDA.samplesPerSector }))
+                .sorted()
+            hiddenTrack?.cacheFlushIncomplete = hidden.cacheFlushIncomplete ? true : nil
+            hiddenTrack?.crc32 = CRC32.hex(CRC32.checksum(of: hidden.samples[...]))
             events(.hiddenTrack(hiddenTrack!))
         }
 
@@ -404,9 +408,13 @@ public struct DiscRip {
                 report.hdcd = HDCDCodes.scan(samples)
                 if options.testAndCopy {
                     let test = try testRead(track, toc: toc, reader: reader, cacheFlushSectors: flushSectors)
-                    report.testCRC32 = CRC32.hex(test)
-                    report.testReadMatches = report.testCRC32 == report.crc32
-                    summary += report.testReadMatches == true ? ", test read matches" : ", TEST READ DIFFERS"
+                    report.testCRC32 = CRC32.hex(test.crc)
+                    report.testReadMatches = test.independent ? report.testCRC32 == report.crc32 : nil
+                    if !test.independent { report.cacheFlushIncomplete = true }
+                    summary +=
+                        !test.independent
+                        ? ", test read independence could not be established"
+                        : report.testReadMatches == true ? ", test read matches" : ", TEST READ DIFFERS"
                 }
                 // Keep the other versions of suspect samples, so that a later repair can use them.
                 if !audio.alternatives.isEmpty {
@@ -659,6 +667,7 @@ public struct DiscRip {
         }
         let rip = try secure.rip(track)
         report.matchingOffsets = rip.matchingOffsets
+        report.cacheFlushIncomplete = rip.cacheFlushIncomplete ? true : nil
         report.fullReads = rip.fullReads
         report.rereadRounds = rip.rounds
         report.suspectSectors = rip.suspectSectors
@@ -682,9 +691,11 @@ public struct DiscRip {
     /// Test and copy: one more read of the whole track, after a cache flush so that it comes
     /// from the disc, for a CRC-32 to compare with the copy's. The rip's own reads already
     /// compare sectors; this is the check that EAC's users know.
-    private func testRead(_ track: TOC.Track, toc: TOC, reader: AudioReader, cacheFlushSectors: Int) throws -> UInt32 {
+    private func testRead(_ track: TOC.Track, toc: TOC, reader: AudioReader, cacheFlushSectors: Int) throws -> (
+        crc: UInt32, independent: Bool
+    ) {
         let sectors = toc.sectorRange(of: track)
-        try reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
+        let independent = try reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
         let start = sectors.lowerBound * CDDA.samplesPerSector
         let readOffset = reader.readOffset
         let events = self.events
@@ -693,7 +704,7 @@ public struct DiscRip {
                 .reading(.testing(track: track.number, progress: $0.inTrack(startingAt: start, readOffset: readOffset)))
             )
         }
-        return CRC32.checksum(of: read.samples[...])
+        return (CRC32.checksum(of: read.samples[...]), independent && read.unreadable.isEmpty)
     }
 
     /// Earlier rips (the `pool` option): an accurate version replaces this read; otherwise

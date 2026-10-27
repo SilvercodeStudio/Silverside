@@ -199,8 +199,22 @@ public struct RipRepair {
                 try writeReport(result, records: records, in: output)
             }
         case .verified:
-            // The rip was right all along: its own report says so from now on.
-            try writeReport(result, records: records, in: firstFolder)
+            // CTDB verified the assembled pool, which need not be the first folder's audio.
+            let unchanged = try await blocking { [toc] in
+                toc.audioTracks.enumerated().allSatisfy { index, track in
+                    let file = firstFolder.appending(path: String(format: "Track %02d.wav", track.number))
+                    guard let original = try? WAVFile.read(file) else { return false }
+                    return original == result.samples(ofTrack: index)
+                }
+            }
+            if unchanged {
+                try writeReport(result, records: records, in: firstFolder)
+            } else {
+                try await blocking { [self] in
+                    try write(result, records: records)
+                    try writeReport(result, records: records, in: output)
+                }
+            }
         case .notVerified:
             break
         }
@@ -227,6 +241,8 @@ public struct RipRepair {
             report.tracks[position].repairedSamples += result.changedSamples(inTrack: index)
             // Every track is checked against AccurateRip again: a rip made offline has no result yet.
             let samples = result.samples(ofTrack: index)
+            report.tracks[position].recordChecksums(
+                of: samples, isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
             report.tracks[position].hdcd = HDCDCodes.scan(samples)
             let checksum = AccurateRipAccumulator.checksum(
                 of: samples[...], isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
@@ -235,17 +251,29 @@ public struct RipRepair {
             case .accurate(let v1, let v2):
                 report.tracks[position].accurateRip = .accurate
                 report.tracks[position].accurateRipConfidence = [v1, v2]
-            case .notAccurate where report.tracks[position].accurateRip != .otherPressings:
-                report.tracks[position].accurateRip = .notAccurate
-            case .notChecked where !records.isEmpty:
-                report.tracks[position].accurateRip = .noChecksum
-            case .notAccurate, .notChecked:
-                break
+                report.tracks[position].matchingOffsets = [report.drive.readOffset]
+            case .notAccurate:
+                report.tracks[position].accurateRipConfidence = nil
+                if let shift = DiscRepairer.otherPressingShift(
+                    of: result.audio, start: result.trackStarts[index], length: samples.count,
+                    edges: (index == 0, index == audioTracks.count - 1), known: known)
+                {
+                    report.tracks[position].accurateRip = .otherPressings
+                    report.tracks[position].matchingOffsets = [report.drive.readOffset + shift]
+                } else {
+                    report.tracks[position].accurateRip = .notAccurate
+                    report.tracks[position].matchingOffsets = []
+                }
+            case .notChecked:
+                report.tracks[position].accurateRip = records.isEmpty ? .notInDatabase : .noChecksum
+                report.tracks[position].accurateRipConfidence = nil
+                report.tracks[position].matchingOffsets = []
             }
         }
         report.hdcd = HDCDStatus(report.tracks)
         report.program = "Silverside \(SilversideVersion.string)"
         if folder.standardizedFileURL != firstFolder {
+            report.encoding = nil
             var files = Set(report.tracks.map(\.file))
             let others = (report.files ?? []).filter {
                 !files.contains($0) && $0 != "disc.json" && $0 != "Rip Report.md" && !$0.hasSuffix(".suspects")

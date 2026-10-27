@@ -186,14 +186,7 @@ extension DiscEncoder {
                 FileManager.default.fileExists(atPath: current.path)
             {
                 if FileManager.default.fileExists(atPath: planned.path) {
-                    for name in try FileManager.default.contentsOfDirectory(atPath: current.path)
-                    where name != ".DS_Store" {
-                        let destination = planned.appending(path: name)
-                        if !FileManager.default.fileExists(atPath: destination.path) {
-                            try FileManager.default.moveItem(at: current.appending(path: name), to: destination)
-                        }
-                    }
-                    try? FileManager.default.removeItem(at: current)
+                    try Self.mergeAlbum(from: current, into: planned)
                 } else {
                     try FileManager.default.createDirectory(
                         at: planned.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -286,7 +279,8 @@ extension DiscEncoder {
                     pregapSectors: reported?.pregapSectors ?? 0, title: meta.title,
                     performer: meta.vorbisComments.first { $0.key == "ARTIST" }?.value, isrc: reported?.isrc,
                     // The TOC here comes from the report's CTDB TOC string, which has no flags.
-                    preEmphasis: tocTrack.hasPreEmphasis || reported?.preEmphasis == true,
+                    preEmphasis: (tocTrack.hasPreEmphasis || reported?.preEmphasis == true)
+                        && encoding.deEmphasizedTracks?.contains(entry.track) != true,
                     copyPermitted: tocTrack.isCopyPermitted || reported?.isCopyPermitted == true))
         }
         encoding.folder = album.path
@@ -312,6 +306,56 @@ extension DiscEncoder {
         }
         if isRipFolder, report.encoding != nil { try encoding.save(inReportAt: file) }
         return LibraryUpdate(files: files, renamed: renamed, albumFolder: album)
+    }
+
+    /// Check every collision before moving anything. Only byte-identical files can be deduplicated.
+    private static func mergeAlbum(from source: URL, into destination: URL) throws {
+        let manager = FileManager.default
+        func children(_ folder: URL) throws -> [URL] {
+            try manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey])
+                .filter { $0.lastPathComponent != ".DS_Store" }
+        }
+        func isDirectory(_ file: URL) throws -> Bool {
+            try file.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+        }
+        func check(_ source: URL, _ destination: URL) throws {
+            for child in try children(source) {
+                let target = destination.appending(path: child.lastPathComponent)
+                guard manager.fileExists(atPath: target.path) else { continue }
+                if try isDirectory(child) && isDirectory(target) {
+                    try check(child, target)
+                } else if try isDirectory(child) || isDirectory(target)
+                    || !manager.contentsEqual(atPath: child.path, andPath: target.path)
+                {
+                    throw EncodingError.exists(target)
+                }
+            }
+        }
+        func move(_ source: URL, _ destination: URL) throws {
+            for child in try children(source) {
+                let target = destination.appending(path: child.lastPathComponent)
+                if !manager.fileExists(atPath: target.path) {
+                    try manager.moveItem(at: child, to: target)
+                } else if try isDirectory(child) && isDirectory(target) {
+                    try move(child, target)
+                } else {
+                    // Recheck after preflight: another writer may have changed the destination.
+                    guard manager.contentsEqual(atPath: child.path, andPath: target.path) else {
+                        throw EncodingError.exists(target)
+                    }
+                    try manager.removeItem(at: child)
+                }
+            }
+            // Never recursively delete a directory that still holds a skipped or newly created file.
+            if try children(source).isEmpty {
+                try? manager.removeItem(at: source.appending(path: ".DS_Store"))
+                guard rmdir(source.path) == 0 else {
+                    throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: source.path])
+                }
+            }
+        }
+        try check(source, destination)
+        try move(source, destination)
     }
 
     /// The tags of a FLAC or MP4 file, as the writer would give them; nil for other formats or a file that cannot be read.

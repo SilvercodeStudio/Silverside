@@ -46,6 +46,27 @@ command-line tool.
 
 ### Fixed
 
+- Library updates preserve both copies when album folders contain conflicting
+  files. Encoding rejects track names that would overwrite one another,
+  including case and Unicode variants. Concurrent rips cannot share a folder,
+  and abandoned folder claims can still be resumed after a crash.
+- Repair saves verified audio selected from earlier rips into the repaired
+  folder before marking it verified. Its report now keeps the checksums of
+  the audio actually saved. WAV sources are checked against their saved
+  checksums and lengths before encoding or Check Again.
+- CUE sheets for de-emphasized listening files no longer request de-emphasis
+  again; original-audio images keep the original flags. Pre-emphasis and
+  de-emphasis tags are also written into Apple Lossless, AAC, MP3, AIFF, and WAV.
+- Unreadable hidden audio is kept as unconfirmed, rather than mistaken for
+  silence or confirmed by repeated substituted zeros. Repeated reads cannot
+  establish agreement when the drive's cache could not be evicted, and the
+  reports explain that limitation.
+- Drives that reject optional Q subchannel or C2 reads fall back to plain
+  audio before sectors are reported unreadable. Read sizes include those
+  optional bytes when fitting a USB bridge's transfer limit.
+- Damaged CD-Text packs no longer shift later titles onto the wrong tracks.
+
+
 - Encoding a rip of only some tracks lost every track but one from the CUE
   sheet and the report's list of files. Decoding HDCD in place of such an
   album, or of one with a hidden track before track 1, could put one track's

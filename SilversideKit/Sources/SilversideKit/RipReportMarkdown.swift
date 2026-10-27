@@ -32,15 +32,33 @@ extension RipReport {
                 "", "Checked again in AccurateRip and CTDB \(ISO8601DateFormatter().string(from: checkedAgain)).",
             ]
         }
+        if tracks.contains(where: { $0.cacheFlushIncomplete == true }) {
+            lines += [
+                "",
+                "Cache eviction could not be established for every re-read. Repeated data alone is not proof of independent agreement.",
+            ]
+        }
+        if let hiddenTrack {
+            let agreement = hiddenTrack.readsAgree ? "independent reads agree" : "not confirmed by independent reads"
+            lines += ["", "Hidden track before track 1: " + agreement + "."]
+            if let unreadable = hiddenTrack.unreadableSectors, !unreadable.isEmpty {
+                lines += [
+                    "", "Hidden track: \(unreadable.count) sectors could not be read and were replaced with silence.",
+                ]
+            }
+        }
         let tested = tracks.filter { $0.testCRC32 != nil }
         if !tested.isEmpty {
             let differing = tested.filter { $0.testReadMatches == false }.map(\.number)
             lines.append("")
+            let unconfirmed = tested.filter { $0.testReadMatches == nil }
             lines.append(
-                differing.isEmpty
-                    ? "Test and copy: a second read of every track gave the same audio."
-                    : "**Test and copy: the second read of \(differing.count == 1 ? "track" : "tracks") "
-                        + "\(differing.map(String.init).joined(separator: ", ")) differed from the copy.**")
+                !unconfirmed.isEmpty
+                    ? "Test and copy: independent agreement could not be established for every track."
+                    : differing.isEmpty
+                        ? "Test and copy: a second read of every track gave the same audio."
+                        : "**Test and copy: the second read of \(differing.count == 1 ? "track" : "tracks") "
+                            + "\(differing.map(String.init).joined(separator: ", ")) differed from the copy.**")
         }
         let repaired = tracks.reduce(0) { $0 + $1.repairedSamples }
         if repaired > 0 { lines += ["", "\(repaired) samples were repaired with CTDB's repair data."] }

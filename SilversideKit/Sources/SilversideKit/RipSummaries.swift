@@ -65,10 +65,12 @@ extension SecureTrackRip {
         case .suspect:
             let most = versionCounts.values.max() ?? 0
             text =
-                "NOT accurate: \(unresolvedSectors.count) of \(suspectSectors.count) suspect sectors unresolved"
-                + rereads + "; up to \(most) versions of a sector"
+                cacheFlushIncomplete && suspectSectors.isEmpty
+                ? "not confirmed: independent re-reads could not be established" + rereads
+                : "NOT accurate: \(unresolvedSectors.count) of \(suspectSectors.count) suspect sectors unresolved"
+                    + rereads + "; up to \(most) versions of a sector"
         }
-        return text + shifted
+        return text + shifted + (cacheFlushIncomplete ? "; cache eviction could not be established" : "")
     }
 }
 
@@ -200,6 +202,10 @@ extension RipReport {
     /// app's result banner and the CLI. Nil when the rip is verified.
     public var advice: String? {
         guard !isVerified else { return nil }
+        if tracks.contains(where: { $0.cacheFlushIncomplete == true }) {
+            return
+                "The drive's cache could not be evicted completely, so repeated data does not prove independent reads. Try another drive or check against AccurateRip and CTDB later."
+        }
         let notInAccurateRip = tracks.allSatisfy { $0.accurateRip == .notInDatabase }
         let unresolved = tracks.filter { !$0.unresolvedSectors.isEmpty }
         if notInAccurateRip && ctdb.status == .notInDatabase {

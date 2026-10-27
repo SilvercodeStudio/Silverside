@@ -40,7 +40,10 @@ struct DiscRipTests {
         options.tracks = tracks
         options.cover = cover
         configure(&options)
-        let profiles = try DriveProfileStore(url: root.appending(path: "DriveProfiles.json"))
+        var profiles = try DriveProfileStore(url: root.appending(path: "DriveProfiles.json"))
+        var profile = DriveProfile(vendor: "SIM", product: "DRIVE", revision: "1.0")
+        profile.cacheSectors = drive.cacheSectors
+        try profiles.save(profile)
         var rip = DiscRip(
             drive: drive, identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"),
             settings: settings, options: options, profiles: profiles)

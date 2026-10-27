@@ -18,7 +18,7 @@ struct SecureRipperTests {
         drive.cacheSectors = cacheSectors
         let reader = AudioReader(drive: drive, toc: toc, readOffset: Self.driveOffset, canOverread: false)
         var secure = SecureRipper(ripper: TrackRipper(reader: reader, records: withRecords ? [record] : []))
-        secure.cacheFlushSectors = toc.leadOutLBA
+        secure.cacheFlushSectors = 300
         return (secure, toc, samples, drive)
     }
 
@@ -54,7 +54,8 @@ struct SecureRipperTests {
         var (secure, toc, _, _) = try setUp(unstable: Set(500..<510), cacheSectors: 600)
         secure.cacheFlushSectors = 0
         let rip = try secure.rip(toc.tracks[1])
-        #expect(rip.status == .consistentButNotAccurate)
+        #expect(rip.status == .suspect)
+        #expect(rip.cacheFlushIncomplete)
         #expect(rip.suspectSectors.isEmpty)
     }
 
@@ -141,8 +142,10 @@ struct SecureRipperTests {
         drive.failingReads = [600: 3]
         var reader = AudioReader(drive: drive, toc: toc, readOffset: Self.driveOffset, canOverread: false)
         reader.unreadableRetries = 1
-        var secure = SecureRipper(ripper: TrackRipper(reader: reader, records: withRecords ? [record] : []))
-        secure.cacheFlushSectors = toc.leadOutLBA
+        var ripper = TrackRipper(reader: reader, records: withRecords ? [record] : [])
+        ripper.readsQ = false  // Isolate audio retries from optional Q negotiation.
+        var secure = SecureRipper(ripper: ripper)
+        secure.cacheFlushSectors = 300
         let track = toc.tracks[1]
         let rip = try secure.rip(track)
         // Drive sector 600, at offset +667, holds the end of sector 138 and most of 139.

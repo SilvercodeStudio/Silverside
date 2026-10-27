@@ -41,7 +41,7 @@ public struct RippedDisc: Sendable {
                 folder.appending(path: $0)
             }
         }
-        files += [RipFolder.claimFile, RipFolder.oldClaimFile].map { folder.appending(path: $0) }
+        // The active claim stays locked until DiscRip releases it.
         // The disc's own cover, which a later change of covers can write after the report.
         if let position = report?.discPosition {
             files += CoverFiles.extensions.map { folder.appending(path: "\(CoverFiles.discName(position)).\($0)") }
@@ -154,9 +154,19 @@ extension RippedDisc {
     /// the CRC-32 the report has for the track. A report too old to have the CRC-32 cannot
     /// check the file, and its audio is taken as it is.
     func audio(of track: Track) throws -> [UInt32] {
-        if track.file.pathExtension.lowercased() == "wav" { return try WAVFile.read(track.file) }
-        let samples = try AudioEncoder.decode(track.file)
-        if let expected = report?.tracks.first(where: { $0.number == track.number })?.crc32,
+        let samples =
+            try track.file.pathExtension.lowercased() == "wav"
+            ? WAVFile.read(track.file) : AudioEncoder.decode(track.file)
+        let expectedFrames =
+            track.number == 0
+            ? report?.hiddenTrack.map { $0.sectors * CDDA.samplesPerSector }
+            : toc.track(track.number).map { toc.sectorRange(of: $0).count * CDDA.samplesPerSector }
+        if let expectedFrames, samples.count != expectedFrames { throw EncodingError.sourceChanged(track.file) }
+        let expected =
+            track.number == 0
+            ? report?.hiddenTrack?.crc32
+            : report?.tracks.first(where: { $0.number == track.number })?.crc32
+        if let expected,
             CRC32.hex(CRC32.checksum(of: samples[...])) != expected
         {
             throw EncodingError.sourceChanged(track.file)
@@ -176,6 +186,7 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
     case alreadyDecoded(URL)
     case deEmphasized(URL)
     case sourceChanged(URL)
+    case duplicateDestination(URL)
 
     public var description: String {
         switch self {
@@ -193,6 +204,8 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
             "\(folder.path) holds an HDCD decode, which is no longer the ripped audio to encode from."
         case .deEmphasized(let folder):
             "\(folder.path) holds de-emphasized tracks, which are no longer the ripped audio to encode from."
+        case .duplicateDestination(let file):
+            "Several tracks would write to \(file.path). Choose a template with unique track names."
         case .sourceChanged(let file): "\(file.path) no longer decodes to the audio that was ripped and verified."
         }
     }
@@ -324,6 +337,7 @@ public struct DiscEncoder: Sendable {
             let file = folder.appending(path: trackTemplate.name(values) + "." + format.fileExtension)
             jobs.append(Job(ripped: ripped, index: index, metadata: metadata, folder: folder, file: file))
         }
+        try Self.checkUniqueDestinations(jobs.map(\.file))
         // Pre-emphasis, from the report's flags (the TOC's or the Q subchannel's). The audio
         // before track 1 follows track 1's flag.
         let emphasized = Set(disc.report?.tracks.filter(\.preEmphasis).map(\.number) ?? [])
@@ -336,6 +350,17 @@ public struct DiscEncoder: Sendable {
             if before == 0 || before == number - 1 { jobs[position].previous = jobs[position - 1].ripped }
         }
         return (release, medium, jobs)
+    }
+
+    /// Conservative across case-sensitive and case-insensitive libraries, including canonical Unicode aliases.
+    static func checkUniqueDestinations(_ files: [URL]) throws {
+        var seen = Set<String>()
+        for file in files {
+            let key = file.standardizedFileURL.resolvingSymlinksInPath().path
+                .precomposedStringWithCanonicalMapping.folding(
+                    options: .caseInsensitive, locale: Locale(identifier: "en_US_POSIX"))
+            guard seen.insert(key).inserted else { throw EncodingError.duplicateDestination(file) }
+        }
     }
 
     /// Encodes the disc's tracks into `library`, and returns the files written.
@@ -558,8 +583,13 @@ public struct DiscEncoder: Sendable {
                 report.encoding = encoding
                 try Data(report.markdown.utf8).write(to: albumFolder.appending(path: "Rip Report\(discPart).md"))
             }
+            let listeningTracks = cueTracks.map { track in
+                var track = track
+                if deEmphasized.contains(track.number) { track.preEmphasis = false }
+                return track
+            }
             try writeCueSheet(
-                cueTracks, hiddenTrackFile: hiddenTrackFile, release: release, medium: medium, toc: disc.toc,
+                listeningTracks, hiddenTrackFile: hiddenTrackFile, release: release, medium: medium, toc: disc.toc,
                 mcn: disc.report?.mcn, to: albumFolder, discPart: discPart)
             if let whole = replayGainRecord?.release {
                 updateReleaseGain(whole, of: release, in: albumFolder, except: medium.position, library: library)

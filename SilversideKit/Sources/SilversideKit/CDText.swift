@@ -84,7 +84,7 @@ public struct CDText: Codable, Equatable, Sendable {
     /// Reads CD-Text, with the fields from the block in the first of `languages` (such as
     /// "ja-JP") that the disc has, else from block 0.
     public init?(bytes: [UInt8], preferring languages: [String]) {
-        let packs = Self.packs(in: bytes)
+        let packs = Self.packs(in: bytes).filter { $0[1] & 0x80 == 0 }
         var blocks = [Int: CDText]()
         for number in Set(packs.map(Self.blockNumber)) {
             let block = CDText(packs: packs.filter { Self.blockNumber($0) == number })
@@ -138,10 +138,10 @@ public struct CDText: Codable, Equatable, Sendable {
     private init(packs: [[UInt8]]) {
         // The text of each type, in order of the packs' sequence numbers, and whether any of
         // its packs says that it has two bytes a character.
-        var texts = [UInt8: (track: Int, bytes: [UInt8], doubleByte: Bool)]()
+        var texts = [UInt8: (bytes: [UInt8], doubleByte: Bool)]()
         for pack in packs.sorted(by: { $0[2] < $1[2] }) {
             let type = pack[0]
-            if texts[type] == nil { texts[type] = (Int(pack[1] & 0x7F), [], false) }
+            if texts[type] == nil { texts[type] = ([], false) }
             texts[type]!.bytes += pack[4..<16]
             if pack[3] & 0x80 != 0 { texts[type]!.doubleByte = true }
         }
@@ -176,15 +176,8 @@ public struct CDText: Codable, Equatable, Sendable {
             // Titles and names (0x80-0x85) are in the block's character set; the disc ID and
             // the codes are always ASCII.
             let msJIS = (0x80...0x85).contains(type) && (set == 0x80 || text.doubleByte)
-            let strings = Self.strings(in: text.bytes, doubleByte: msJIS || text.doubleByte).map {
-                msJIS ? String(bytes: $0, encoding: .shiftJIS) ?? "" : Self.latin1($0)
-            }
-            var values = [Int: String]()
-            for (offset, string) in strings.enumerated() {
-                let track = text.track + offset
-                let value = string == "\t" || string == "\t\t" ? values[track - 1] ?? "" : string
-                if !value.isEmpty { values[track] = value }
-            }
+            let values = Self.textValues(
+                packs.filter { $0[0] == type }, doubleByte: msJIS || text.doubleByte, msJIS: msJIS)
             switch type {
             case 0x80: titles = values
             case 0x81: performers = values
@@ -197,6 +190,54 @@ public struct CDText: Codable, Equatable, Sendable {
             default: break
             }
         }
+    }
+
+    /// Assemble strings using each pack's track and character position. After a missing pack,
+    /// discard the partial string and resume at the next known string boundary.
+    private static func textValues(_ packs: [[UInt8]], doubleByte: Bool, msJIS: Bool) -> [Int: String] {
+        var values = [Int: String]()
+        var track = -1
+        var lastSequence: Int?
+        var current = [UInt8]()
+        var complete = false
+        var pendingNull = false
+        for pack in packs.sorted(by: { $0[2] < $1[2] }) {
+            let sequence = Int(pack[2])
+            if lastSequence == sequence { continue }  // Repeated lead-in packs carry the same data.
+            let headerTrack = Int(pack[1] & 0x7F)
+            if (lastSequence.map({ $0 + 1 != sequence }) ?? true) || headerTrack != track {
+                current = []
+                pendingNull = false
+                track = headerTrack
+                complete = pack[3] & 0x0F == 0
+            }
+            lastSequence = sequence
+            for byte in pack[4..<16] {
+                if byte == 0 && doubleByte && !pendingNull {
+                    pendingNull = true
+                    continue
+                }
+                if byte == 0 {
+                    if complete, (0...99).contains(track) {
+                        let text = msJIS ? String(bytes: current, encoding: .shiftJIS) ?? "" : latin1(current)
+                        let value = text == "\t" || text == "\t\t" ? values[track - 1] ?? "" : text
+                        if !value.isEmpty { values[track] = value }
+                    }
+                    current = []
+                    pendingNull = false
+                    complete = true
+                    track += 1
+                } else {
+                    if pendingNull {
+                        complete = false
+                        current = []
+                    }
+                    pendingNull = false
+                    if complete { current.append(byte) }
+                }
+            }
+        }
+        return values
     }
 
     /// The strings in a type's text, each ending in a null, or in two in double-byte text. No

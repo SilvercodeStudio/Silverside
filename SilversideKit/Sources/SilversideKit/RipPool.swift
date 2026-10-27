@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Earlier rips of a disc, for pooling (`rip --pool` and `repair`): their WAV files, and the
@@ -87,6 +88,12 @@ public enum RipFolderError: Error, Equatable, CustomStringConvertible {
 /// The claim is a file that holds the disc's TOC, created atomically, and removed at the end.
 public enum RipFolder {
     static let claimFile = ".silverside-rip"
+    private static let claims = Claims()
+
+    private final class Claims: @unchecked Sendable {
+        let lock = NSLock()
+        var descriptors: [String: Int32] = [:]
+    }
     /// The claim's name before the app was called Silverside, removed with the claim.
     static let oldClaimFile = ".cdrip-rip"
 
@@ -101,21 +108,47 @@ public enum RipFolder {
     }
 
     public static func release(_ folder: URL) {
+        let key = claimKey(folder)
+        guard let descriptor = claims.lock.withLock({ claims.descriptors.removeValue(forKey: key) }) else { return }
+        // Unlink only our own claim, while still holding its lock. Never remove somebody else's claim.
         for name in [claimFile, oldClaimFile] { try? FileManager.default.removeItem(at: folder.appending(path: name)) }
+        // rmdir is atomic and refuses to remove a directory containing newly arrived files.
+        _ = rmdir(folder.path)
+        close(descriptor)
+    }
+
+    private static func claimKey(_ folder: URL) -> String {
+        folder.standardizedFileURL.resolvingSymlinksInPath().path.precomposedStringWithCanonicalMapping
+            .folding(options: .caseInsensitive, locale: Locale(identifier: "en_US_POSIX"))
     }
 
     private static func claimIfFree(_ folder: URL, toc: TOC) throws -> Bool {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         if let saved = RipPool.savedTOC(in: folder), saved != toc.ctdbTOCString { return false }
+        let key = claimKey(folder)
+        // Keep lock inodes outside the rip folder and never unlink them. Unlinking a locked
+        // file lets a concurrent opener acquire a different inode for the same folder.
+        let locks = folder.standardizedFileURL.resolvingSymlinksInPath().deletingLastPathComponent()
+            .appending(path: ".silverside-rip-locks")
+        try FileManager.default.createDirectory(at: locks, withIntermediateDirectories: true)
+        let digest = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+        let file = open(locks.appending(path: digest).path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
         let path = folder.appending(path: claimFile).path
-        let file = open(path, O_WRONLY | O_CREAT | O_EXCL, 0o644)
-        if file >= 0 {
-            defer { close(file) }
-            _ = toc.ctdbTOCString.withCString { write(file, $0, strlen($0)) }
-            return true
+        guard file >= 0 else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: path]) }
+        guard flock(file, LOCK_EX | LOCK_NB) == 0 else {
+            close(file)
+            return false
         }
-        // A claim from an earlier rip of this same disc (one that stopped) can be taken over.
-        guard errno == EEXIST, let held = try? String(contentsOfFile: path, encoding: .utf8) else { return false }
-        return held == toc.ctdbTOCString
+        var keep = false
+        defer { if !keep { close(file) } }
+        // Check again under the lock: another rip may have finished since the first check.
+        if let saved = RipPool.savedTOC(in: folder), saved != toc.ctdbTOCString { return false }
+        // Crashes release the OS lock. An abandoned same-disc claim can therefore be resumed.
+        let held = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        guard held.isEmpty || held == toc.ctdbTOCString else { return false }
+        try Data(toc.ctdbTOCString.utf8).write(to: URL(filePath: path), options: .atomic)
+        claims.lock.withLock { claims.descriptors[key] = file }
+        keep = true
+        return true
     }
 }

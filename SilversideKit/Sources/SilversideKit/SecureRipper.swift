@@ -14,7 +14,8 @@ public struct SecureTrackRip: Sendable {
         /// Some sectors read differently each time, or could not be read, and no choice of
         /// their data matches AccurateRip. `unresolvedSectors` lists them. Also when every
         /// read after the first lost its place, so no read confirms the first: then
-        /// `unresolvedSectors` is empty and `shiftedReads` is not.
+        /// `unresolvedSectors` is empty and `shiftedReads` is not. Also when cache eviction
+        /// could not be established, so matching repeated data is not independent confirmation.
         case suspect
     }
 
@@ -50,6 +51,8 @@ public struct SecureTrackRip: Sendable {
     public var unreadableSamples: [Int] = []
     /// The control bits of the track's Q frames in the first read. Nil if the drive did not read them.
     public var subchannel: SubchannelControl?
+    /// A requested cache flush could not read enough independent sectors.
+    public var cacheFlushIncomplete = false
 
     /// The sectors, counted from the track's start, that the first read could not read. A
     /// later read may have read some of them; `versionCounts` is 0 for one that none could.
@@ -113,9 +116,9 @@ public struct SecureRipper {
         var counts: [[UInt32]: Int] = [:]
         var order: [[UInt32]] = []
 
-        mutating func add(_ samples: [UInt32]) {
+        mutating func add(_ samples: [UInt32], independent: Bool = true) {
             if counts[samples] == nil { order.append(samples) }
-            counts[samples, default: 0] += 1
+            counts[samples, default: 0] += independent ? 1 : 0
         }
 
         /// The versions, most often read first. Ties keep the order of the first read.
@@ -191,8 +194,10 @@ public struct SecureRipper {
         // out and read again; two such reads that agree show that the base read lost its place.
         func readWholeTrack() throws -> Bool {
             var shiftedRead: [UInt32]?
+            var shiftedReadIndependent = false
             for _ in 0...maximumShiftedReads {
-                try reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
+                let independent = try reader.flushCache(awayFrom: sectors, count: cacheFlushSectors)
+                if !independent { result.cacheFlushIncomplete = true }
                 let pass = fullReads + 1
                 let readOffset = reader.readOffset
                 let whole = try reader.read(
@@ -214,7 +219,7 @@ public struct SecureRipper {
                     of: read, against: base, differing: differing, minimumRun: shiftCheckSectors,
                     maximum: maximumShift)
                 {
-                    if let previous = shiftedRead {
+                    if let previous = shiftedRead, shiftedReadIndependent, independent, whole.unreadable.isEmpty {
                         let differingFromPrevious = differingSectors(read, previous)
                         if Self.agree(differing: differingFromPrevious, minimumRun: shiftCheckSectors) {
                             // Two reads agree with each other, and not with the base: replace it.
@@ -235,17 +240,24 @@ public struct SecureRipper {
                     }
                     result.shiftedReads.append(shift)
                     shiftedRead = read
+                    shiftedReadIndependent = independent && unreadable.isEmpty
                     continue
                 }
-                agreeingReads += 1
+                if independent && unreadable.isEmpty { agreeingReads += 1 }
                 var foundNew = false
+                // A failed confirmation is not evidence of agreement with the base.
+                for index in unreadable where versions[index] == nil {
+                    versions[index] = Versions()
+                    if !result.unreadableSectors.contains(index) { versions[index]!.add(block(base, index)) }
+                    foundNew = true
+                }
                 for index in differing where versions[index] == nil && !unreadable.contains(index) {
                     versions[index] = Versions()
                     versions[index]!.add(block(base, index))
                     foundNew = true
                 }
                 for (index, _) in versions where !unreadable.contains(index) {
-                    versions[index]!.add(block(read, index))
+                    versions[index]!.add(block(read, index), independent: independent)
                 }
                 return foundNew
             }
@@ -316,15 +328,16 @@ public struct SecureRipper {
                     suspectSectors: suspects, versions: versionCount))
             // The flush avoids the suspect sectors only, so a disc with one track still gets one.
             let runs = Self.runs(of: suspects)
-            try reader.flushCache(
+            let independent = try reader.flushCache(
                 awayFrom: runs.map { (sectors.lowerBound + $0.lowerBound)..<(sectors.lowerBound + $0.upperBound) },
                 count: cacheFlushSectors)
+            if !independent { result.cacheFlushIncomplete = true }
             for run in runs {
                 let read = try reader.read(
                     (start + run.lowerBound * size)..<(start + run.upperBound * size), withC2: false)
                 let unreadable = Set(read.unreadable.map { $0 / size + run.lowerBound })
                 for index in run where versions[index] != nil && !unreadable.contains(index) {
-                    versions[index]!.add(block(read.samples, index - run.lowerBound))
+                    versions[index]!.add(block(read.samples, index - run.lowerBound), independent: independent)
                 }
             }
             quietRounds = versions.values.reduce(0) { $0 + $1.order.count } == versionCount ? quietRounds + 1 : 0
@@ -451,7 +464,8 @@ public struct SecureRipper {
 
 extension AudioReader {
     /// Reads `count` sectors away from `sectors`, so the drive's cache holds none of them.
-    public func flushCache(awayFrom sectors: Range<Int>, count: Int = 4000) throws {
+    @discardableResult
+    public func flushCache(awayFrom sectors: Range<Int>, count: Int = 4000) throws -> Bool {
         try flushCache(awayFrom: [sectors], count: count)
     }
 
@@ -465,9 +479,11 @@ extension AudioReader {
     /// `readAheadMargin` next to them: a read of a damaged sector there would count as one
     /// of its re-reads. The largest free part comes first, read from its end farthest from
     /// `ranges`. With one track that spans the disc, the free parts are inside the track,
-    /// away from its suspect sectors. A read that fails still moves the drive, so its error
-    /// does not matter. Throws only when `stop` is stopped.
-    public func flushCache(awayFrom ranges: [Range<Int>], count: Int = 4000) throws {
+    /// away from its suspect sectors. Only successful reads count towards eviction. Returns false if there is not enough
+    /// readable audio outside the avoided ranges. Throws only when `stop` is stopped.
+    @discardableResult
+    public func flushCache(awayFrom ranges: [Range<Int>], count: Int = 4000) throws -> Bool {
+        guard count > 0 else { return false }
         let avoided = ranges.filter { !$0.isEmpty }
         var remaining = count
         for gap in Self.gaps(in: toc.audioAreas, around: avoided, margin: Self.readAheadMargin) where remaining > 0 {
@@ -482,10 +498,11 @@ extension AudioReader {
                 }
             for lba in stride(from: start, to: start + size, by: sectorsPerRead) {
                 try stop?.check()
-                _ = try? drive.readAudioSectors(at: lba, count: min(sectorsPerRead, start + size - lba))
+                let chunk = min(sectorsPerRead, start + size - lba)
+                if (try? drive.readAudioSectors(at: lba, count: chunk)) != nil { remaining -= chunk }
             }
-            remaining -= size
         }
+        return remaining <= 0
     }
 
     /// The parts of `areas` that are not in `avoided`, less `margin` sectors on each side that

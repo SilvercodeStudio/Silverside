@@ -185,12 +185,14 @@ public struct AudioReader {
     }
 
     /// Reads sectors with the parts that `extras` asks for. If that fails, tries again
-    /// without each part that the drive has not given yet, and counts a read that then
-    /// works as a refusal of the part left out.
+    /// without the parts that the drive has not given yet, one at a time and then together,
+    /// and counts a read that then works as a refusal of each part left out.
     private func readRaw(at lba: Int, count: Int, extras: inout Extras) throws -> SectorRead {
-        var attempts = [(c2: extras.c2, q: extras.q)]
-        if extras.q && !extras.qWorks { attempts.append((extras.c2, false)) }
-        if extras.c2 && !extras.c2Works { attempts.append((false, attempts.last!.q)) }
+        // As asked, then without Q, without C2, and without both, for each part not yet given:
+        // a drive that refuses one part keeps the other.
+        let c2Choices = extras.c2 && !extras.c2Works ? [true, false] : [extras.c2]
+        let qChoices = extras.q && !extras.qWorks ? [true, false] : [extras.q]
+        let attempts = c2Choices.flatMap { c2 in qChoices.map { q in (c2: c2, q: q) } }
         var failure: any Error = DriveError.readFailed(lba: lba)
         for attempt in attempts {
             do {

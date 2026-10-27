@@ -15,12 +15,18 @@ public struct HiddenTrackRip: Sendable {
     public var unreadableSamples: [Int] = []
     public var cacheFlushIncomplete = false
 
-    /// True if sectors could not be read and the rest is silence, or almost nothing could be
-    /// read: some drives cannot read before track 1. There is no track to keep then, only
-    /// the sectors to report.
+    /// True if sectors could not be read and the rest is silence, or less than a sector could
+    /// be read (the part of track 1's first sector that the read offset brings in): some
+    /// drives cannot read before track 1. There is no track to keep then, only the sectors
+    /// to report. A whole sector of audio is kept.
     public var isUnreadable: Bool {
         !unreadableSamples.isEmpty
-            && (peak < Self.silencePeak || unreadableSamples.count >= samples.count - CDDA.samplesPerSector)
+            && (peak < Self.silencePeak || Self.readsNothing(unreadableSamples, of: samples.count))
+    }
+
+    /// True if less than a sector of the samples could be read.
+    static func readsNothing(_ unreadable: [Int], of count: Int) -> Bool {
+        !unreadable.isEmpty && unreadable.count > count - CDDA.samplesPerSector
     }
 
     /// Below this peak, the gap is silence (or dither), not a hidden track.
@@ -41,16 +47,14 @@ public struct HiddenTrackRip: Sendable {
         func peak(_ read: AudioReader.Read) -> Int { read.samples.reduce(0) { max($0, magnitude(of: $1)) } }
         // A failed read that was replaced by zero is not evidence of a silent gap.
         if firstRead.unreadable.isEmpty && peak(firstRead) < silencePeak { return nil }
-        // A drive that reads nothing here (at most the edge sector, which the offset brings in)
-        // will not read it on another pass either: each pass would retry every sector.
-        if !firstRead.unreadable.isEmpty && firstRead.unreadable.count >= positions.count - CDDA.samplesPerSector {
-            return HiddenTrackRip(
-                samples: firstRead.samples, peak: peak(firstRead), readsAgree: false, reads: 1,
-                unreadableSamples: firstRead.unreadable)
-        }
         var reads = [firstRead]
         var incomplete = false
         while reads.count < max(1, maximumReads) {
+            // A drive that cannot read here reads nothing on each pass, and each pass retries
+            // every sector: two such passes are enough. One can be a run of bad reads.
+            if reads.count >= 2, reads.suffix(2).allSatisfy({ readsNothing($0.unreadable, of: positions.count) }) {
+                break
+            }
             let flushed = try reader.flushCache(awayFrom: 0..<first.startLBA, count: cacheFlushSectors)
             let independent =
                 flushed || AudioReader.readEvictsItself(sectors: first.startLBA, cacheFlushSectors: cacheFlushSectors)

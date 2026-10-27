@@ -238,9 +238,9 @@ struct ReviewRegressionTests {
         RipFolder.release(resumed)
     }
 
-    /// A drive that cannot read before track 1 reads it once: the area is reported as
-    /// unreadable, not kept as a silent hidden track.
-    @Test func hiddenAreaThatCannotBeReadIsReadOnce() throws {
+    /// A drive that cannot read before track 1 reads it twice, not four times: the area is
+    /// reported as unreadable, not kept as a silent hidden track.
+    @Test func hiddenAreaThatCannotBeReadIsReadTwice() throws {
         let toc = try TOC(audioTrackStarts: [200], leadOutLBA: 400)
         let drive = SimulatedDrive(toc: toc, samples: PreEmphasisTests.sine(440, frames: 400 * 588))
         drive.unreadableSectors = Set(0..<200)
@@ -248,7 +248,41 @@ struct ReviewRegressionTests {
         reader.unreadableRetries = 0
         let hidden = try #require(try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: 50))
         #expect(!hidden.readsAgree && hidden.unreadableSamples.count == 200 * 588)
-        #expect(hidden.reads == 1 && hidden.isUnreadable)
+        #expect(hidden.reads == 2 && hidden.isUnreadable)
+    }
+
+    /// A first pass that reads nothing can be a run of bad reads: the next passes read it.
+    @Test func hiddenAreaCanRecoverAfterAFailedFirstPass() throws {
+        let toc = try TOC(audioTrackStarts: [10], leadOutLBA: 1000)
+        let drive = SimulatedDrive(toc: toc, samples: PreEmphasisTests.sine(440, frames: 1000 * 588))
+        drive.failingReads = Dictionary(uniqueKeysWithValues: (0..<10).map { ($0, 5) })
+        var reader = AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)
+        reader.unreadableRetries = 3
+        let hidden = try #require(try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: 10))
+        #expect(hidden.readsAgree && !hidden.isUnreadable)
+        #expect(hidden.samples == Array(drive.samples[..<(10 * 588)]))
+    }
+
+    /// One whole sector of audio is a hidden track, though the sector before it is unreadable.
+    @Test func readableHiddenAudioIsKept() throws {
+        let toc = try TOC(audioTrackStarts: [2], leadOutLBA: 100)
+        let drive = SimulatedDrive(toc: toc, samples: PreEmphasisTests.sine(440, frames: 100 * 588))
+        drive.unreadableSectors = [0]
+        var reader = AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)
+        reader.unreadableRetries = 0
+        let hidden = try #require(try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: 10))
+        #expect(hidden.peak > HiddenTrackRip.silencePeak && !hidden.isUnreadable && !hidden.readsAgree)
+    }
+
+    /// A drive that refuses C2 but gives the Q subchannel keeps the Q frames.
+    @Test func refusedC2KeepsTheQFrames() throws {
+        let toc = try TOC(audioTrackStarts: [0], leadOutLBA: 200)
+        let base = SimulatedDrive(toc: toc, samples: PreEmphasisTests.sine(440, frames: 200 * 588))
+        base.qControl = [1: 1]
+        let drive = QRefusingDrive(base: base, rejectsQ: false, rejectsC2: true)
+        let reader = AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)
+        let read = try reader.read(0..<(200 * 588), withC2: true, withQ: true)
+        #expect(read.samples == base.samples && read.q.count == 200 && !read.c2Available)
     }
 
     /// A rip in a drive that cannot read before track 1 keeps no hidden track, and says so.

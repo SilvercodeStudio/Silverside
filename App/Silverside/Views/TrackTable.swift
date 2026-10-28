@@ -311,7 +311,9 @@ struct FinishedStatus: View {
                 Text(verdict.text).foregroundStyle(verdict.color)
             }
             if let note {
-                Text(note).font(.caption).foregroundStyle(verdict == .notVerified ? Theme.bad : Theme.warning)
+                // Re-reads that ended in a verified track are routine, so only a repair or a failure gets a color.
+                Text(note).font(.caption).foregroundStyle(
+                    verdict == .verified ? AnyShapeStyle(.secondary) : AnyShapeStyle(verdict.color))
             }
         }
         .help(summary ?? help(for: verdict))

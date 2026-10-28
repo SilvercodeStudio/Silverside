@@ -119,7 +119,7 @@ final class LibraryRun: Identifiable {
                     let deletes =
                         !settings.keepRipAfterEncoding && files.count == disc.tracks.count
                         && disc.tracks.allSatisfy(\.isVerified)
-                    if deletes { try disc.deleteRipFiles() }
+                    if deletes { try disc.deleteRipFiles(albumFolder: record.map { URL(filePath: $0.folder) }) }
                     let deleted = deletes
                     onMain {
                         run.encodedDiscs += 1

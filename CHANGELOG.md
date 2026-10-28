@@ -98,6 +98,10 @@ command-line tool.
 
 ### Fixed
 
+- After an encode deletes a rip's WAV files, the rip's folder goes too. A cover
+  or artwork that the rip found in its folder already, or that a later change
+  of cover wrote there, stayed behind with the folder; now each such file goes
+  when the album folder has the same file. Files of your own stay.
 - A track whose re-reads never agreed on a sector, on a rip that CTDB then
   verified as it was, stayed "not accurate" in AccurateRip, though its audio
   was right. It is now checked again, at another pressing's offset too, as a

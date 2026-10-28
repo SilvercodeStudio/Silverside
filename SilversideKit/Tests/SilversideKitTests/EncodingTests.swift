@@ -274,6 +274,34 @@ struct EncodingTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: artwork.path) == ["scan.jpg"])
     }
 
+    /// A cover the rip found in its folder already (from an earlier attempt) is not in its
+    /// list, but the album folder has the same file: it goes, and so does the folder. A file
+    /// of the user's that the album folder does not have stays.
+    @Test func deletesTheCopiesThatTheAlbumFolderKeeps() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        let files = try DiscEncoder(format: .flac).encode(disc, into: library)
+        let album = files[0].deletingLastPathComponent()
+        let artwork = folder.appending(path: "Artwork", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: artwork, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: album.appending(path: "Artwork"), withIntermediateDirectories: true)
+        for place in [artwork, album.appending(path: "Artwork")] {
+            try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: place.appending(path: "front-01.jpg"))
+        }
+        try Data("mine".utf8).write(to: folder.appending(path: "notes.txt"))
+        try disc.deleteRipFiles(albumFolder: album)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path) == ["notes.txt"])
+        #expect(FileManager.default.fileExists(atPath: album.appending(path: "Artwork/front-01.jpg").path))
+        try FileManager.default.removeItem(at: folder.appending(path: "notes.txt"))
+        try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: folder.appending(path: "cover (old).jpg"))
+        try FileManager.default.copyItem(
+            at: folder.appending(path: "cover (old).jpg"), to: album.appending(path: "cover (old).jpg"))
+        try disc.deleteRipFiles(albumFolder: album)
+        #expect(!FileManager.default.fileExists(atPath: folder.path))
+    }
+
     /// A file that exists stops the encoding before any file is written.
     @Test func checksEveryFileBeforeWritingAny() throws {
         let (folder, library) = try makeRip()

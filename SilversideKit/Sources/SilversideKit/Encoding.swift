@@ -25,10 +25,13 @@ public struct RippedDisc: Sendable {
     public var reportFile: URL
 
     /// Deletes the files that the rip wrote in its folder, as its report lists them (the WAV
-    /// files, the suspects, the reports, and the artwork), and nothing else. Then the Artwork
-    /// folder and the rip's folder go too, if nothing else is in them. A rip from before
-    /// reports listed their files loses the files that a rip writes, by name.
-    public func deleteRipFiles() throws {
+    /// files, the suspects, the reports, and the artwork), and with `albumFolder`, the files
+    /// that the album folder has too, byte for byte: a cover or artwork that a rip found in its
+    /// folder already, from an earlier attempt, or that a change of cover wrote later, is not
+    /// listed, but the library keeps it. Nothing else goes. Then the Artwork folder and the
+    /// rip's folder go too, if nothing else is in them. A rip from before reports listed their
+    /// files loses the files that a rip writes, by name.
+    public func deleteRipFiles(albumFolder: URL? = nil) throws {
         let manager = FileManager.default
         var files: [URL]
         if let listed = report?.files {
@@ -47,10 +50,37 @@ public struct RippedDisc: Sendable {
             files += CoverFiles.extensions.map { folder.appending(path: "\(CoverFiles.discName(position)).\($0)") }
         }
         for file in files where manager.fileExists(atPath: file.path) { try manager.removeItem(at: file) }
+        if let albumFolder {
+            for file in Self.copies(in: folder, of: albumFolder) { try manager.removeItem(at: file) }
+        }
         for directory in [folder.appending(path: "Artwork"), folder] {
             let contents = try? manager.contentsOfDirectory(atPath: directory.path)
             if contents?.allSatisfy({ $0 == ".DS_Store" }) == true { try manager.removeItem(at: directory) }
         }
+    }
+
+    /// The files in `folder` and its subfolders that `album` has at the same place, byte for
+    /// byte. Hidden files, such as a rip's claim, are left alone.
+    static func copies(in folder: URL, of album: URL) -> [URL] {
+        let manager = FileManager.default
+        guard
+            let enumerator = manager.enumerator(
+                at: folder, includingPropertiesForKeys: [.isRegularFileKey], options: .skipsHiddenFiles)
+        else { return [] }
+        let base = folder.standardizedFileURL.resolvingSymlinksInPath().path
+        var copies = [URL]()
+        while let file = enumerator.nextObject() as? URL {
+            guard (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
+            let path = file.standardizedFileURL.resolvingSymlinksInPath().path
+            guard path.hasPrefix(base + "/") else { continue }
+            let counterpart = album.appending(path: String(path.dropFirst(base.count + 1)))
+            if manager.fileExists(atPath: counterpart.path),
+                manager.contentsEqual(atPath: path, andPath: counterpart.path)
+            {
+                copies.append(file)
+            }
+        }
+        return copies
     }
 
     /// The cover that the disc's files embed: its own ("cover (Disc 2).jpg", a box set's

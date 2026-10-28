@@ -106,6 +106,13 @@ struct Drives: ParsableCommand {
                         "  CD: \(bsdName), \(toc.audioTracks.count) audio tracks, "
                             + String(format: "%d:%02d", seconds / 60, seconds % 60)
                             + (data > 0 ? ", and \(data) data track\(data == 1 ? "" : "s")" : ""))
+                    // The release an earlier lookup found, from the cache: no request.
+                    if let release = ReleaseLookup.cachedRelease(toc: toc) {
+                        let disc = release.medium(for: toc).flatMap {
+                            release.media.count > 1 ? " (disc \($0.position) of \(release.media.count))" : nil
+                        }
+                        print("  \(release.artist) - \(release.title)" + (disc ?? ""))
+                    }
                 } else {
                     print("  CD: \(bsdName) (its TOC cannot be read)")
                 }

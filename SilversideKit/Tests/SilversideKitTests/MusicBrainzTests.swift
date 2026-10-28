@@ -79,6 +79,29 @@ struct MusicBrainzTests {
         #expect(await transport.requests.count == 2)
     }
 
+    /// `silverside drives` names a disc from the cache, with no request: nothing before the
+    /// first lookup, the release after it.
+    @Test func namesADiscFromTheCacheOnly() async throws {
+        let toc = try TOC(
+            musicBrainzOffsets: [150, 25220, 61075, 82890, 116599, 145802, 173575, 189016, 210578, 236749, 251121],
+            sectors: 301_681)
+        let transport = FakeTransport([
+            .status(200, body: String(decoding: try fixture("cornell-1977-disc1"), as: UTF8.self))
+        ])
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let web = WebClient(
+            directory: directory, transport: transport,
+            policies: ["musicbrainz.org": .init(interval: .zero, lifetime: .seconds(60))])
+        let client = MusicBrainzClient(client: web)
+        let store = ReleaseChoiceStore(url: directory.appending(path: "ReleaseChoices.json"))
+        #expect(ReleaseLookup.cachedRelease(toc: toc, client: client, store: store) == nil)
+        _ = try await client.lookup(toc)
+        let release = try #require(ReleaseLookup.cachedRelease(toc: toc, client: client, store: store))
+        #expect(release.id == "aa0d7d7e-1d78-4f78-ba03-7a32c200f660")
+        #expect(await transport.requests.count == 1)
+    }
+
     /// *Saint of Circumstance*: MusicBrainz has no disc IDs for its discs (8, 9, and 5 tracks).
     /// A fuzzy match must still give each disc its own medium.
     @Test func findsTheDiscOfAFuzzyMatchByItsTracks() throws {

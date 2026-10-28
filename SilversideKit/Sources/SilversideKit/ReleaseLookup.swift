@@ -78,6 +78,20 @@ public enum ReleaseLookup {
     }
 
     /// The release looked up by its ID, or the summary and why that lookup failed.
+    /// The release for a disc as an earlier lookup found it, from the cache, with no request:
+    /// the remembered choice if there is one, else the best ranked. Nil if the disc was never
+    /// found. For `silverside drives`, which names the disc in each drive.
+    public static func cachedRelease(
+        toc: TOC, client: MusicBrainzClient = MusicBrainzClient(), store: ReleaseChoiceStore = ReleaseChoiceStore()
+    ) -> MusicBrainzRelease? {
+        guard let lookup = client.cachedLookup(toc), !lookup.releases.isEmpty else { return nil }
+        let discID = toc.musicBrainzDiscID
+        return ReleaseRanking.ranked(
+            lookup.releases, discID: discID, mcn: nil, chosen: store.choices(forDiscID: discID),
+            chosenForOtherDiscs: store.allChoices()
+        ).first
+    }
+
     private static func detailed(
         _ summary: MusicBrainzRelease, client: MusicBrainzClient, useCache: Bool
     ) async throws -> (MusicBrainzRelease, String?) {

@@ -35,6 +35,9 @@ command-line tool.
   silence because the drive cannot read past its edge. With the read offset,
   those samples come from past the edge; AccurateRip and CTDB do not check them.
 
+- `silverside drives` names the disc in each drive when MusicBrainz knew it at
+  an earlier lookup, from the cache, so it waits for no request.
+
 ### Fixed
 
 - Look Up Metadata asks MusicBrainz again. It used the answer kept from the

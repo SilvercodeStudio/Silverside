@@ -237,6 +237,12 @@ public struct MusicBrainzClient: Sendable {
         return try Self.lookup(fromJSON: data)
     }
 
+    /// The releases with this disc from an earlier lookup in the cache, with no request; nil if
+    /// the disc was never looked up (or MusicBrainz did not know it).
+    public func cachedLookup(_ toc: TOC) -> MusicBrainzLookup? {
+        client.cachedData(from: Self.lookupURL(for: toc)).flatMap { try? Self.lookup(fromJSON: $0) }
+    }
+
     /// One release, by its MusicBrainz ID, with its recordings' relationships: the composers.
     public func release(id: String, useCache: Bool = true) async throws -> MusicBrainzRelease? {
         guard let data = try await client.data(from: Self.releaseURL(id: id), useCache: useCache) else { return nil }

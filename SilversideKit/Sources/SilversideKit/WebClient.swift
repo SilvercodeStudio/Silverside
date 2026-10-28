@@ -81,6 +81,16 @@ public actor WebClient {
         self.firstRetryDelay = firstRetryDelay
     }
 
+    /// The cached response body for `url`, however old, with no request: nil if the cache has
+    /// none, or has a 404. For a display that must not wait for the network.
+    public nonisolated func cachedData(from url: URL) -> Data? {
+        let key = Insecure.SHA1.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
+        let meta = directory.appending(path: "web/\(key).json")
+        guard let entry = try? JSONDecoder().decode(CacheEntry.self, from: Data(contentsOf: meta)), entry.status == 200
+        else { return nil }
+        return try? Data(contentsOf: directory.appending(path: "web/\(key).data"))
+    }
+
     /// The response body for `url`, or nil if the server answers 404.
     /// `useCache: false` sends a new request, and keeps its answer in the cache. If the
     /// request fails, the answer in the cache is used, however old it is.

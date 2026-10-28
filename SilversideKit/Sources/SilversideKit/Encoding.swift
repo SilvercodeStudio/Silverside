@@ -290,7 +290,16 @@ public struct DiscEncoder: Sendable {
         let (release, medium, jobs) = try plan(disc, into: library)
         let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
         let data = jobs.first.map { dataTrackCopies(of: disc, into: $0.folder, discPart: discPart) } ?? []
-        return jobs.map(\.file) + data.filter { !Self.sameFile($0.source, $0.target) }.map(\.target)
+        // A data track's image, and the folder its files go into.
+        return jobs.map(\.file)
+            + data.filter { !Self.sameFile($0.source, $0.target) }.flatMap {
+                [$0.target, Self.filesFolder(of: $0.target)]
+            }
+    }
+
+    /// The folder beside a data track's image that holds its files: "Data track" for "Data track.iso".
+    static func filesFolder(of image: URL) -> URL {
+        image.deletingPathExtension().appending(path: "", directoryHint: .isDirectory)
     }
 
     /// The data tracks' ISO images (an Enhanced CD's extras) to copy into the album folder:
@@ -430,12 +439,13 @@ public struct DiscEncoder: Sendable {
         if !overwrites, let job = jobs.first(where: { FileManager.default.fileExists(atPath: $0.file.path) }) {
             throw EncodingError.exists(job.file)
         }
+        // A data track's image, or the folder of its files, which would be replaced as a whole.
         if !overwrites,
-            let copy = dataTrackCopies.first(where: {
-                FileManager.default.fileExists(atPath: $0.target.path) && !Self.sameFile($0.source, $0.target)
-            })
+            let existing = dataTrackCopies.filter({ !Self.sameFile($0.source, $0.target) })
+                .flatMap({ [$0.target, Self.filesFolder(of: $0.target)] })
+                .first(where: { FileManager.default.fileExists(atPath: $0.path) })
         {
-            throw EncodingError.exists(copy.target)
+            throw EncodingError.exists(existing)
         }
 
         let cover = try disc.coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }

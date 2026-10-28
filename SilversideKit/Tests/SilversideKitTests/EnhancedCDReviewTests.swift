@@ -92,6 +92,22 @@ struct EnhancedCDReviewTests {
         #expect(try Data(contentsOf: target) == original)
     }
 
+    /// The folder of a data track's files is protected as its image is (review, e2b0a75).
+    @Test func keepsAnExistingFilesFolderWithoutOverwrite() throws {
+        let (disc, library) = try dataRip()
+        defer { try? FileManager.default.removeItem(at: disc.folder.deletingLastPathComponent()) }
+        let encoder = DiscEncoder(format: .flac)
+        let planned = try encoder.plannedFiles(disc, into: library)
+        let album = try #require(planned.first).deletingLastPathComponent()
+        let folder = album.appending(path: "Data track", directoryHint: .isDirectory)
+        #expect(planned.contains { $0.standardizedFileURL.path == folder.standardizedFileURL.path })
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let sentinel = folder.appending(path: "User notes.txt")
+        try Data("Keep this".utf8).write(to: sentinel)
+        #expect(throws: (any Error).self) { try encoder.encode(disc, into: library) }
+        #expect(FileManager.default.fileExists(atPath: sentinel.path))
+    }
+
     /// A later rip that takes the folder makes the earlier rip missing, not there twice.
     @Test func replacedReportIsNotTheRipThere() throws {
         let (folder, _) = try PreEmphasisTests().makeRip(emphasized: [])

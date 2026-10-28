@@ -307,7 +307,14 @@ struct DiscRipTests {
         #expect(result.report.ctdb.status == .repaired)
         #expect(result.report.tracks.map(\.accurateRip) == [.accurate, .accurate])
         #expect(result.report.tracks[1].repairedSamples == 588)
-        #expect(events.contains { if case .trackRepaired(2, 588, .accurate) = $0 { true } else { false } })
+        #expect(
+            events.contains {
+                if case .trackRepaired(let track) = $0 {
+                    track.number == 2 && track.repairedSamples == 588 && track.accurateRip == .accurate
+                } else {
+                    false
+                }
+            })
         // Without overread, the disc's last 6 samples (the drive's offset) are silence; CTDB
         // leaves out the last row, and AccurateRip the last 2940 samples, so both still match.
         let written = try WAVFile.read(result.folder.appending(path: "Track 02.wav"))

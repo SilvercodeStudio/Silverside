@@ -536,3 +536,48 @@ public struct DiscRepairer {
         value > 0 ? "+\(value)" : "\(value)"
     }
 }
+
+extension RipReport.Track {
+    /// Checks the track against AccurateRip again, with the disc's audio after CTDB: at the
+    /// rip's offset, else at another pressing's. `index` is the track's among the audio tracks.
+    public mutating func checkAccurateRip(
+        in result: DiscRepairer.Result, trackAt index: Int, records: [AccurateRipRecord], readOffset: Int
+    ) {
+        let samples = result.samples(ofTrack: index)
+        let edges = (isFirst: index == 0, isLast: index == result.trackStarts.count - 1)
+        let known = records.entries(forTrackAt: index)
+        let checksum = AccurateRipAccumulator.checksum(
+            of: samples[...], isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
+        accurateRipConfidence = nil
+        matchingOffsets = []
+        switch TrackRipper.verification(of: checksum, known: known) {
+        case .accurate(let v1, let v2):
+            accurateRip = .accurate
+            accurateRipConfidence = [v1, v2]
+            matchingOffsets = [readOffset]
+        case .notAccurate:
+            accurateRip = .notAccurate
+            if let shift = DiscRepairer.otherPressingShift(
+                of: result.audio, start: result.trackStarts[index], length: samples.count, edges: edges,
+                known: known)
+            {
+                accurateRip = .otherPressings
+                matchingOffsets = [readOffset + shift]
+            }
+        case .notChecked:
+            accurateRip = .unmatched(trackAt: index, records: records)
+        }
+    }
+
+    /// The AccurateRip result of a repaired track, for the log: "  AccurateRip: accurate (…)".
+    public var accurateRipAfterRepair: String {
+        switch accurateRip {
+        case .accurate:
+            let confidence = accurateRipConfidence ?? [0, 0]
+            return "  AccurateRip: accurate (v1 \(confidence[0]), v2 \(confidence[1]) submissions)"
+        case .otherPressings: return "  AccurateRip: accurate at another pressing's offset"
+        case .notAccurate: return "  AccurateRip: NOT accurate"
+        case .notInDatabase, .noChecksum: return ""
+        }
+    }
+}

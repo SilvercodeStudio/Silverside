@@ -124,8 +124,8 @@ public enum DiscRipEvent: Sendable {
     case repairLog(String)
     /// The CTDB check or repair is done.
     case repaired(DiscRepairer.Result)
-    /// A track that the repair changed, written again, and its AccurateRip result after the repair.
-    case trackRepaired(number: Int, samples: Int, accurateRip: AccurateRipVerification)
+    /// A track that the repair changed, written again, with its AccurateRip result after the repair.
+    case trackRepaired(RipReport.Track)
     /// The disc is in CTDB, but was not checked: CTDB checks the whole disc, and some tracks were not ripped.
     case ctdbNotChecked
     /// The rip is done: what it found, and what it learned of the drive.
@@ -532,7 +532,7 @@ public struct DiscRip {
             ctdb = RipReport.CTDBResult(repair)
             for index in reports.indices { reports[index].ctdbConfidence = repair.trackConfidences[index] }
             events(.repaired(repair))
-            try apply(repair, to: &reports, records: records, folder: folder)
+            try apply(repair, to: &reports, records: records, readOffset: readOffset, folder: folder)
             // Keep the alternatives, with the ones that re-reads added, for tracks that are not yet right.
             for (index, report) in reports.enumerated() {
                 let name = TrackAudio.alternativesFileName(track: report.number)
@@ -851,37 +851,31 @@ public struct DiscRip {
     }
 
     /// Writes the tracks that the repair changed, and checks them against AccurateRip again,
-    /// which does not depend on CTDB.
+    /// which does not depend on CTDB. When CTDB verifies the rip as it is, a track that
+    /// AccurateRip did not match is checked again too: its re-reads may have ended on the
+    /// right values without agreeing, and on a shifted pressing (a CD-R copy) only a check of
+    /// the whole disc's audio finds the other pressing's offset.
     private func apply(
-        _ repair: DiscRepairer.Result, to reports: inout [RipReport.Track], records: [AccurateRipRecord], folder: URL
+        _ repair: DiscRepairer.Result, to reports: inout [RipReport.Track], records: [AccurateRipRecord],
+        readOffset: Int, folder: URL
     ) throws {
         switch repair.outcome {
-        case .repaired, .partlyRepaired: break
-        case .verified, .notVerified: return
-        }
-        for index in reports.indices where repair.changedSamples(inTrack: index) > 0 {
-            let samples = repair.samples(ofTrack: index)
-            try WAVFile.write(samples, to: folder.appending(path: reports[index].file))
-            reports[index].repairedSamples = repair.changedSamples(inTrack: index)
-            reports[index].recordChecksums(
-                of: samples, isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
-            reports[index].hdcd = HDCDCodes.scan(samples)
-            let checksum = AccurateRipAccumulator.checksum(
-                of: samples[...], isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
-            let known = records.entries(forTrackAt: index)
-            let verification = TrackRipper.verification(of: checksum, known: known)
-            switch verification {
-            case .accurate(let v1, let v2):
-                reports[index].accurateRip = .accurate
-                reports[index].accurateRipConfidence = [v1, v2]
-            case .notAccurate:
-                reports[index].accurateRip = .notAccurate
-            case .notChecked:
-                break
+        case .verified:
+            for index in reports.indices where reports[index].accurateRip == .notAccurate {
+                reports[index].checkAccurateRip(in: repair, trackAt: index, records: records, readOffset: readOffset)
             }
-            events(
-                .trackRepaired(
-                    number: reports[index].number, samples: reports[index].repairedSamples, accurateRip: verification))
+        case .repaired, .partlyRepaired:
+            for index in reports.indices where repair.changedSamples(inTrack: index) > 0 {
+                let samples = repair.samples(ofTrack: index)
+                try WAVFile.write(samples, to: folder.appending(path: reports[index].file))
+                reports[index].repairedSamples = repair.changedSamples(inTrack: index)
+                reports[index].recordChecksums(
+                    of: samples, isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
+                reports[index].hdcd = HDCDCodes.scan(samples)
+                reports[index].checkAccurateRip(in: repair, trackAt: index, records: records, readOffset: readOffset)
+                events(.trackRepaired(reports[index]))
+            }
+        case .notVerified: return
         }
     }
 }

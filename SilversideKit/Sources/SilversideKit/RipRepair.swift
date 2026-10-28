@@ -252,31 +252,8 @@ public struct RipRepair {
             report.tracks[position].recordChecksums(
                 of: samples, isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
             report.tracks[position].hdcd = HDCDCodes.scan(samples)
-            let checksum = AccurateRipAccumulator.checksum(
-                of: samples[...], isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
-            let known = records.entries(forTrackAt: index)
-            switch TrackRipper.verification(of: checksum, known: known) {
-            case .accurate(let v1, let v2):
-                report.tracks[position].accurateRip = .accurate
-                report.tracks[position].accurateRipConfidence = [v1, v2]
-                report.tracks[position].matchingOffsets = [report.drive.readOffset]
-            case .notAccurate:
-                report.tracks[position].accurateRipConfidence = nil
-                if let shift = DiscRepairer.otherPressingShift(
-                    of: result.audio, start: result.trackStarts[index], length: samples.count,
-                    edges: (index == 0, index == audioTracks.count - 1), known: known)
-                {
-                    report.tracks[position].accurateRip = .otherPressings
-                    report.tracks[position].matchingOffsets = [report.drive.readOffset + shift]
-                } else {
-                    report.tracks[position].accurateRip = .notAccurate
-                    report.tracks[position].matchingOffsets = []
-                }
-            case .notChecked:
-                report.tracks[position].accurateRip = records.isEmpty ? .notInDatabase : .noChecksum
-                report.tracks[position].accurateRipConfidence = nil
-                report.tracks[position].matchingOffsets = []
-            }
+            report.tracks[position].checkAccurateRip(
+                in: result, trackAt: index, records: records, readOffset: report.drive.readOffset)
         }
         report.hdcd = HDCDStatus(report.tracks)
         report.program = SilversideVersion.program

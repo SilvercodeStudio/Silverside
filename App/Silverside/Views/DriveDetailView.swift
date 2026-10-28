@@ -968,8 +968,22 @@ enum ResultChips {
         if report.tracks.allSatisfy({ $0.accurateRip == .notInDatabase }) {
             chips.append(Chip(text: "Not in AccurateRip"))
         } else {
-            chips.append(Chip(text: "AccurateRip \(accurate) / \(total)", tone: accurate == total ? .good : .warning))
-            if others > 0 { chips.append(Chip(text: "\(others) match other pressings", tone: .good)) }
+            let matched = accurate + others
+            let tone: Chip.Tone = matched == total ? .good : .warning
+            if others == 0 {
+                chips.append(Chip(text: "AccurateRip \(accurate) / \(total)", tone: tone))
+            } else {
+                // One count, so "0 / 13" next to "12 match other pressings" does not read as a failure.
+                chips.append(
+                    Chip(
+                        text: "AccurateRip \(matched) / \(total) · "
+                            + (accurate == 0
+                                ? "other pressing" : "\(others) other pressing" + (others == 1 ? "" : "s")),
+                        tone: tone,
+                        help: (others == 1 ? "1 track matches" : "\(others) tracks match")
+                            + " AccurateRip at another pressing's offset: the audio is right, but a few samples earlier"
+                            + " or later than on the discs in the database. A CD-R copy of a disc often is."))
+            }
             if noChecksum > 0 {
                 chips.append(
                     Chip(
@@ -994,7 +1008,12 @@ enum ResultChips {
         if suspects > 0 {
             var text = Format.count(suspects, "sector") + " re-read"
             if unresolved > 0 {
-                text += report.isVerified ? ", \(unresolved) fixed by CTDB" : ", \(unresolved) never agreed"
+                // Verified as it is, the values that the re-reads settled on were right; repaired, CTDB fixed them.
+                text +=
+                    !report.isVerified
+                    ? ", \(unresolved) never agreed"
+                    : report.ctdb.status == .verified
+                        ? ", \(unresolved) confirmed by CTDB" : ", \(unresolved) fixed by CTDB"
             }
             chips.append(Chip(text: text, tone: unresolved > 0 && !report.isVerified ? .bad : .warning))
         } else if unresolved > 0 {

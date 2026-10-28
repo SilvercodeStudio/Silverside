@@ -64,6 +64,10 @@ command-line tool.
 - While a track is read again, the sidebar says "Reading track 6 again"
   instead of a percent that stands at 100%, and it shows the encoding's own
   progress while the album is encoded.
+- The AccurateRip chip counts tracks that match another pressing with the
+  others: "AccurateRip 12 / 13 · other pressing", not "AccurateRip 0 / 13" and
+  a second chip. A sector whose re-reads never agreed, on a rip that CTDB
+  verified as it was, is "confirmed by CTDB", not "fixed".
 - The "Disc ID match" chip names the release when you point to it (its media,
   such as CD + Blu-ray, label, country, and date), and a click opens the
   release in MusicBrainz. "Several releases match" opens the release picker.
@@ -75,6 +79,10 @@ command-line tool.
 
 ### Fixed
 
+- A track whose re-reads never agreed on a sector, on a rip that CTDB then
+  verified as it was, stayed "not accurate" in AccurateRip, though its audio
+  was right. It is now checked again, at another pressing's offset too, as a
+  CD-R copy needs.
 - The rips folder at the foot of the sidebar no longer overlaps the last item
   of a long list.
 - A disc with no audio, such as a game or program CD, showed as "Audio CD ·

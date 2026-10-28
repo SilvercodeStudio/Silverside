@@ -343,14 +343,10 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print(line)
         case .repaired(let repair):
             printCTDB(repair)
-        case .trackRepaired(let number, let samples, let accurateRip):
-            var line = String(format: "  Track %2d  %6d samples repaired", number, samples)
-            switch accurateRip {
-            case .accurate(let v1, let v2): line += "  AccurateRip: accurate (v1 \(v1), v2 \(v2) submissions)"
-            case .notAccurate: line += "  AccurateRip: NOT accurate"
-            case .notChecked: break
-            }
-            Swift.print(line)
+        case .trackRepaired(let track):
+            Swift.print(
+                String(format: "  Track %2d  %6d samples repaired", track.number, track.repairedSamples)
+                    + track.accurateRipAfterRepair)
         case .ctdbNotChecked:
             Swift.print()
             Swift.print("CTDB: not checked, because it checks the whole disc, and some tracks were not ripped.")

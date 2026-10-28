@@ -111,6 +111,11 @@ struct TrackRipperTests {
     /// AccurateRip record made from its true samples: v2 checksums, as recent rippers submit.
     func disc() throws -> (toc: TOC, samples: [UInt32], record: AccurateRipRecord) {
         let (toc, samples) = try makeDisc(trackSectors: [460, 470, 460])
+        return (toc, samples, record(of: samples, toc: toc))
+    }
+
+    /// The AccurateRip record of a pressing with this audio.
+    func record(of samples: [UInt32], toc: TOC) -> AccurateRipRecord {
         let tracks = toc.tracks.enumerated().map { index, track in
             let sectors = toc.sectorRange(of: track)
             let start = sectors.lowerBound * CDDA.samplesPerSector
@@ -121,7 +126,7 @@ struct TrackRipperTests {
             let frame450 = AccurateRipAccumulator.checksum(of: sector450[...], isFirstTrack: false, isLastTrack: false)
             return AccurateRipRecord.Track(confidence: 4, checksum: checksum.v2, frame450Checksum: frame450.v1)
         }
-        return (toc, samples, AccurateRipRecord(discID: toc.accurateRipDiscID, tracks: tracks))
+        return AccurateRipRecord(discID: toc.accurateRipDiscID, tracks: tracks)
     }
 
     func ripper(readOffset: Int, records: [AccurateRipRecord], toc: TOC, samples: [UInt32]) -> TrackRipper {

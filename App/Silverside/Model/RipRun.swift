@@ -598,15 +598,11 @@ final class RipRun {
                 add("CTDB: done in \(Format.duration(seconds: Int(Date().timeIntervalSince(ctdbStarted)))).")
             }
             phase = .ripping
-        case .trackRepaired(let number, let samples, let accurateRip):
-            repairedTracks[number] = samples
-            var line = String(format: "  Track %2d  %d samples repaired", number, samples)
-            switch accurateRip {
-            case .accurate(let v1, let v2): line += "  AccurateRip: accurate (v1 \(v1), v2 \(v2) submissions)"
-            case .notAccurate: line += "  AccurateRip: NOT accurate"
-            case .notChecked: break
-            }
-            add(line)
+        case .trackRepaired(let track):
+            repairedTracks[track.number] = track.repairedSamples
+            add(
+                String(format: "  Track %2d  %d samples repaired", track.number, track.repairedSamples)
+                    + track.accurateRipAfterRepair)
         case .ctdbNotChecked:
             add("CTDB: not checked, because it checks the whole disc, and some tracks were not ripped.")
         case .finished(let report, _, _):

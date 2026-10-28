@@ -153,6 +153,29 @@ struct DiscRepairerTests {
                 of: samples, start: 0, length: length, edges: (true, false), known: known) == -30)
     }
 
+    /// *The Mirror Conspiracy* on a CD-R: a sector's re-reads never agreed, but CTDB verifies
+    /// the rip as it is, and AccurateRip has only a pressing whose audio is shifted. The check
+    /// after CTDB finds that pressing for the track, as the rip did for the others.
+    @Test func checksAccurateRipAgainAfterCTDB() async throws {
+        let (toc, samples, _) = try TrackRipperTests().disc()
+        let pressing = [UInt32](repeating: 0, count: 30) + samples.dropLast(30)
+        let record = TrackRipperTests().record(of: pressing, toc: toc)
+        let (entry, _) = entry(for: samples, toc: toc)
+        let repairer = DiscRepairer(toc: toc, records: [record], entries: [entry])
+        let result = try await repairer.repair(tracks(of: samples, toc: toc), repairing: false)
+        #expect(result.outcome == .verified(entry: entry, shift: 0))
+        var track = RipReport.Track(
+            number: 2, file: "Track 02.wav", startLBA: 460, sectors: 470, preEmphasis: false,
+            accurateRip: .notAccurate, unresolvedSectors: [8])
+        track.checkAccurateRip(in: result, trackAt: 1, records: [record], readOffset: 6)
+        #expect(track.accurateRip == .otherPressings && track.matchingOffsets == [6 - 30])
+        #expect(track.accurateRipAfterRepair == "  AccurateRip: accurate at another pressing's offset")
+        // With AccurateRip's record of this pressing, the track is accurate.
+        track.checkAccurateRip(
+            in: result, trackAt: 1, records: [TrackRipperTests().record(of: samples, toc: toc)], readOffset: 6)
+        #expect(track.accurateRip == .accurate && track.matchingOffsets == [6])
+    }
+
     @Test func choosesTheMostFrequentValue() {
         let audio = TrackAudio(versions: [[1, 2, 3, 4], [1, 5, 3, 6], [1, 5, 7, 8]])
         #expect(audio.samples == [1, 5, 3, 4])

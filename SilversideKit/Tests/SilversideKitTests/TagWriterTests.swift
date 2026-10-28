@@ -8,6 +8,11 @@ import UniformTypeIdentifiers
 
 /// A JPEG test image of the given size.
 func makeJPEG(width: Int, height: Int) throws -> CoverImage {
+    try makeImage(width: width, height: height, type: .jpeg)
+}
+
+/// A test image of the given size and format.
+func makeImage(width: Int, height: Int, type: UTType) throws -> CoverImage {
     let context = try #require(
         CGContext(
             data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
@@ -17,7 +22,7 @@ func makeJPEG(width: Int, height: Int) throws -> CoverImage {
     let image = try #require(context.makeImage())
     let data = NSMutableData()
     let destination = try #require(
-        CGImageDestinationCreateWithData(data as CFMutableData, UTType.jpeg.identifier as CFString, 1, nil))
+        CGImageDestinationCreateWithData(data as CFMutableData, type.identifier as CFString, 1, nil))
     CGImageDestinationAddImage(destination, image, nil)
     #expect(CGImageDestinationFinalize(destination))
     return CoverImage(data: data as Data)

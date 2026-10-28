@@ -69,6 +69,9 @@ command-line tool.
   release in MusicBrainz. "Several releases match" opens the release picker.
   The picker names media other than plain CDs, and a release with a disc that
   is not a CD says so in its disc chip: "Disc 1 of 2 · CD + Blu-ray".
+- `silverside metadata --cover` takes any image that macOS reads, such as WebP
+  or HEIC, and makes it a JPEG, as the app does. JPEG and PNG stay as they
+  are.
 
 ### Fixed
 

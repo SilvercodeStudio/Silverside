@@ -32,14 +32,44 @@ public struct EmbeddedCover: Equatable, Sendable {
         guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, options as CFDictionary) else {
             throw CoverArtError.unknownFormat
         }
+        (image, self.width, self.height) = (try .jpeg(thumbnail, quality: 0.9), thumbnail.width, thumbnail.height)
+    }
+}
+
+extension CoverImage {
+    /// Makes a cover from any image that macOS reads, such as WebP, HEIC, or TIFF, for the
+    /// tags, which hold JPEG and PNG only. A JPEG or PNG is kept byte for byte; any other
+    /// image becomes a JPEG at its full size, turned upright if its orientation says so.
+    public init(converting data: Data) throws {
+        if CoverImage(data: data).fileExtension != nil {
+            self.init(data: data)
+            return
+        }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+            let width = properties[kCGImagePropertyPixelWidth] as? Int,
+            let height = properties[kCGImagePropertyPixelHeight] as? Int
+        else { throw CoverArtError.notAnImage }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(width, height),
+            kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            throw CoverArtError.notAnImage
+        }
+        self = try .jpeg(image, quality: 0.92)
+    }
+
+    static func jpeg(_ image: CGImage, quality: Double) throws -> CoverImage {
         let output = NSMutableData()
         guard
             let destination = CGImageDestinationCreateWithData(
                 output as CFMutableData, UTType.jpeg.identifier as CFString, 1, nil)
         else { throw CoverArtError.unknownFormat }
         CGImageDestinationAddImage(
-            destination, thumbnail, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
+            destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { throw CoverArtError.unknownFormat }
-        (image, self.width, self.height) = (CoverImage(data: output as Data), thumbnail.width, thumbnail.height)
+        return CoverImage(data: output as Data)
     }
 }

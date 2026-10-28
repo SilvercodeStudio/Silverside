@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UniformTypeIdentifiers
 
 @testable import SilversideKit
 
@@ -8,6 +9,19 @@ struct CoverArtTests {
         #expect(CoverImage(data: Data([0xFF, 0xD8, 0xFF, 0xE0])).fileExtension == "jpg")
         #expect(CoverImage(data: Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0])).mimeType == "image/png")
         #expect(CoverImage(data: Data("GIF89a".utf8)).fileExtension == nil)
+    }
+
+    /// WebP, HEIC, TIFF: anything the tags cannot hold becomes a JPEG at full size.
+    @Test func convertsAnImageThatTagsCannotHold() throws {
+        let jpeg = try makeJPEG(width: 20, height: 10)
+        #expect(try CoverImage(converting: jpeg.data) == jpeg)
+        let tiff = try makeImage(width: 1600, height: 1200, type: .tiff)
+        #expect(tiff.fileExtension == nil)
+        let converted = try CoverImage(converting: tiff.data)
+        #expect(converted.fileExtension == "jpg")
+        let embedded = try EmbeddedCover(converted, maximumPixels: 2000)
+        #expect(embedded.width == 1600 && embedded.height == 1200)
+        #expect(throws: CoverArtError.notAnImage) { try CoverImage(converting: Data("not an image".utf8)) }
     }
 
     @Test func getsTheFrontCover() async throws {

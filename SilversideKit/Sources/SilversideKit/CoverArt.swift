@@ -84,11 +84,13 @@ public enum CoverFiles {
 
 public enum CoverArtError: Error, Equatable, CustomStringConvertible {
     case unknownFormat
+    case notAnImage
     case malformedListing
 
     public var description: String {
         switch self {
         case .unknownFormat: "The cover image is not a JPEG or PNG file."
+        case .notAnImage: "The cover file is not an image that macOS can read."
         case .malformedListing: "The Cover Art Archive's list of images cannot be read."
         }
     }

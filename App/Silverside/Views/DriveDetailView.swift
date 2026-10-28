@@ -754,9 +754,8 @@ struct ResultBanner: View {
     }
 }
 
-/// Images dropped or chosen for the cover: a file, or image data from another app. JPEG
-/// and PNG are kept byte for byte; anything else becomes a JPEG, because that is what the
-/// tags can hold.
+/// Images dropped or chosen for the cover: a file, or image data from another app, made
+/// into a cover the tags can hold by `CoverImage(converting:)`.
 enum CoverDrop {
     static func load(_ provider: NSItemProvider, then apply: @escaping @MainActor (Data?) -> Void) {
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
@@ -812,11 +811,7 @@ enum CoverDrop {
 
     /// The data as JPEG or PNG: as given if it already is one, else re-encoded as JPEG.
     nonisolated static func imageData(from data: Data) -> Data? {
-        if CoverImage(data: data).fileExtension != nil { return data }
-        guard let image = NSImage(data: data), let tiff = image.tiffRepresentation,
-            let bitmap = NSBitmapImageRep(data: tiff)
-        else { return nil }
-        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.92])
+        try? CoverImage(converting: data).data
     }
 }
 

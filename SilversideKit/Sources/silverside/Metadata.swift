@@ -31,7 +31,10 @@ struct Metadata: AsyncParsableCommand {
             "The MusicBrainz ID of the release to use. Silverside keeps the choice for the other discs of the release.")
     var release: String?
 
-    @Option(help: "An image file (JPEG or PNG) to use as the cover, in place of the Cover Art Archive's.")
+    @Option(
+        help:
+            "An image file to use as the cover, in place of the Cover Art Archive's. JPEG and PNG are kept as they are; other formats, such as WebP or HEIC, become JPEG."
+    )
     var cover: String?
 
     @Option(help: "The artwork to save from the Cover Art Archive: front (cover.jpg), all (also Artwork/), or none.")
@@ -136,7 +139,7 @@ struct Metadata: AsyncParsableCommand {
         print(
             "Saved the release" + (edits.isEmpty ? "" : " and the edits")
                 + " in \(folder.appending(path: "disc.json").path).")
-        let image = try cover.map { CoverImage(data: try Data(contentsOf: URL(filePath: $0))) }
+        let image = try cover.map { try CoverImage(converting: try Data(contentsOf: URL(filePath: $0))) }
         if let image {
             print("Cover: \(try image.write(to: folder).path)")
         } else if !chosen.isManual {

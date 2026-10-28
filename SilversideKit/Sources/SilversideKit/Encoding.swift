@@ -339,6 +339,110 @@ public struct DiscEncoder: Sendable {
         image.deletingPathExtension().appending(path: "", directoryHint: .isDirectory)
     }
 
+    /// Copies the data tracks' images into the album folder, each with a folder of the files on
+    /// it, and returns the images' names there.
+    func placeDataTracks(
+        _ copies: [(track: RipReport.DataTrack, source: URL, target: URL, base: String)]
+    ) throws -> [String] {
+        var names = [String]()
+        for (track, source, target, base) in copies {
+            let albumFolder = target.deletingLastPathComponent()
+            if FileManager.default.fileExists(atPath: source.path), !Self.sameFile(source, target) {
+                if FileManager.default.fileExists(atPath: target.path) {
+                    try FileManager.default.removeItem(at: target)
+                }
+                try FileManager.default.copyItem(at: source, to: target)
+                log("\(target.lastPathComponent)")
+            }
+            guard FileManager.default.fileExists(atPath: target.path) else { continue }
+            if !Self.sameFile(source, target)
+                || !FileManager.default.fileExists(atPath: Self.filesFolder(of: target).path)
+            {
+                let files = albumFolder.appending(path: base, directoryHint: .isDirectory)
+                try? FileManager.default.removeItem(at: files)
+                if let reader = try? ISO9660Reader(image: target, startLBA: track.startLBA ?? 0),
+                    let extracted = try? reader.extract(to: files)
+                {
+                    log("\(base)/: \(extracted.files) files from its file system")
+                }
+            }
+            names.append(base + ".iso")
+        }
+        return names
+    }
+
+    /// Save Data Track: reads a data track that a rip did not save (`RipReport.dataTrackFailures`,
+    /// or one skipped) from the disc in `drive`, which must be the rip's disc. A rip's folder
+    /// gets it as `Track NN.iso`; when the rip was encoded, the album folder gets it too, with
+    /// the files on it, as an encoding puts it there. A report kept in the library gets it in
+    /// its album folder. Each report records it.
+    public func saveDataTrack(
+        _ number: Int, reportAt file: URL, drive: any CDDrive, stop: StopToken? = nil,
+        progress: ((Double) -> Void)? = nil
+    ) throws -> RipReport.DataTrack {
+        let report = try RipReport.read(from: file)
+        let toc = try TOC(ctdbTOCString: report.toc)
+        guard try drive.readTOC().ctdbTOCString == report.toc else { throw DataTrackError.otherDisc }
+        guard let track = toc.tracks.first(where: { $0.number == number && $0.kind == .data }) else {
+            throw DataTrackError.notData(track: number)
+        }
+        let folder = file.deletingLastPathComponent()
+        let isRipFolder = file.lastPathComponent == "disc.json"
+        let medium = report.release?.medium(for: toc)
+        let discPart = (report.release?.media.count ?? 1) > 1 ? medium.map { " (Disc \($0.position))" } ?? "" : ""
+        func record(_ saved: RipReport.DataTrack, in report: inout RipReport) {
+            report.dataTracks = ((report.dataTracks ?? []).filter { $0.number != number } + [saved])
+                .sorted { $0.number < $1.number }
+            report.dataTrackFailures = report.dataTrackFailures?.filter { $0.number != number }
+            if report.dataTrackFailures?.isEmpty == true { report.dataTrackFailures = nil }
+        }
+        func base(count: Int) -> String { "Data track" + (count > 1 ? " \(number)" : "") + discPart }
+
+        if isRipFolder {
+            try RipFolder.claimExactly(folder, toc: toc)
+            defer { RipFolder.release(folder) }
+            let name = RipReport.DataTrack.fileName(track: number)
+            let saved = try DataTrackReader.read(
+                track, in: toc, drive: drive, to: folder.appending(path: name), stop: stop, progress: progress)
+            var updated = try RipReport.update(reportAt: file) { report in
+                record(saved, in: &report)
+                report.files = Array(Set((report.files ?? []) + [name])).sorted()
+            }
+            try Data(updated.markdown.utf8).write(to: folder.appending(path: "Rip Report.md"))
+            // An encoded rip's album gets it as an encoding would have put it there.
+            if let encoding = updated.encoding, FileManager.default.fileExists(atPath: encoding.folder) {
+                let album = URL(filePath: encoding.folder, directoryHint: .isDirectory)
+                let copies = dataTrackCopies(of: try RippedDisc(folder: folder), into: album, discPart: discPart)
+                let names = try placeDataTracks(copies)
+                updated = try RipReport.update(reportAt: file) {
+                    $0.encoding?.dataTrackFiles = names.isEmpty ? nil : names
+                }
+                let albumReport = album.appending(path: "Rip Report\(discPart).json")
+                if FileManager.default.fileExists(atPath: albumReport.path) {
+                    let shown = try RipReport.update(reportAt: albumReport) { report in
+                        record(saved, in: &report)
+                        report.encoding?.dataTrackFiles = names.isEmpty ? nil : names
+                    }
+                    try Data(shown.markdown.utf8).write(to: album.appending(path: "Rip Report\(discPart).md"))
+                }
+            }
+            return saved
+        }
+        // A report in the library: the image goes into its album folder, as an encoding names it.
+        let count = Set((report.dataTracks ?? []).map(\.number) + [number]).count
+        let target = folder.appending(path: base(count: count) + ".iso")
+        var saved = try DataTrackReader.read(track, in: toc, drive: drive, to: target, stop: stop, progress: progress)
+        saved.file = target.lastPathComponent
+        _ = try placeDataTracks([(saved, target, target, base(count: count))])
+        let shown = try RipReport.update(reportAt: file) { report in
+            record(saved, in: &report)
+            let names = (report.encoding?.dataTrackFiles ?? []).filter { $0 != target.lastPathComponent }
+            report.encoding?.dataTrackFiles = names + [target.lastPathComponent]
+        }
+        try Data(shown.markdown.utf8).write(to: folder.appending(path: "Rip Report\(discPart).md"))
+        return saved
+    }
+
     /// The data tracks' ISO images (an Enhanced CD's extras) to copy into the album folder:
     /// from the rip's `Track NN.iso`, or, when an album is the source, from its own images. A
     /// decoded copy beside the album gets none.
@@ -702,27 +806,7 @@ public struct DiscEncoder: Sendable {
         // The data tracks' ISO images (an Enhanced CD's extras) go into the album folder, beside
         // the audio, with the files of their ISO 9660 file systems in a folder of the same name:
         // the image alone does not open, as its file system counts from the disc's start.
-        var dataTrackFiles = [String]()
-        if albumFolder != nil {
-            for (track, source, target, base) in dataTrackCopies {
-                let albumFolder = target.deletingLastPathComponent()
-                if FileManager.default.fileExists(atPath: source.path), !Self.sameFile(source, target) {
-                    if FileManager.default.fileExists(atPath: target.path) {
-                        try FileManager.default.removeItem(at: target)
-                    }
-                    try FileManager.default.copyItem(at: source, to: target)
-                    log("\(target.lastPathComponent)")
-                    let files = albumFolder.appending(path: base, directoryHint: .isDirectory)
-                    try? FileManager.default.removeItem(at: files)
-                    if let reader = try? ISO9660Reader(image: target, startLBA: track.startLBA ?? 0),
-                        let extracted = try? reader.extract(to: files)
-                    {
-                        log("\(base)/: \(extracted.files) files from its file system")
-                    }
-                }
-                if FileManager.default.fileExists(atPath: target.path) { dataTrackFiles.append(base + ".iso") }
-            }
-        }
+        let dataTrackFiles = albumFolder != nil ? try placeDataTracks(dataTrackCopies) : []
         let encoding = albumFolder.map {
             // Whole seconds, as the report's JSON keeps dates, so the record returned equals the one saved.
             RipReport.Encoding(

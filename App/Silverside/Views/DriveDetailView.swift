@@ -1116,6 +1116,14 @@ enum ResultChips {
                         + ". The encoding copies it into the album folder as Data track.iso, with its files"
                         + " beside it in the Data track folder."))
         }
+        if let failures = report.dataTrackFailures, !failures.isEmpty {
+            chips.append(
+                Chip(
+                    text: "Data track not saved", tone: .warning, systemImage: "externaldrive.badge.xmark",
+                    help: failures.map { "Data track \($0.number): \($0.reason)" }.joined(separator: " ")
+                        + " The audio's rip is whole. To save the data track, put the disc in a drive and use"
+                        + " Save Data Track… in the toolbar; another drive may read it."))
+        }
         if let encoding = report.encoding {
             let all = encoding.files.count >= report.tracks.count
             chips.append(

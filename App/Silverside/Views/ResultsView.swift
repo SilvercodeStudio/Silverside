@@ -155,6 +155,19 @@ struct ResultsView: View {
                     )
                     .disabled(model.library?.isRunning == true)
                 }
+                if let number = missingDataTrack {
+                    Button {
+                        model.saveDataTrack(number, of: recentRip)
+                    } label: {
+                        Label("Save Data Track…", systemImage: "externaldrive.badge.plus")
+                    }
+                    .help(
+                        model.freeDrive(with: recentRip).map {
+                            "Read data track \(number) from the disc in \($0.name), into the rip and its album folder"
+                        } ?? "Put the disc in a drive to read its data track \(number), which the rip did not save"
+                    )
+                    .disabled(model.freeDrive(with: recentRip) == nil || model.savingDataTrack[recentRip.file] != nil)
+                }
                 if recentRip.canCheckAgain {
                     Button {
                         model.checkAgain([recentRip])
@@ -190,6 +203,13 @@ struct ResultsView: View {
                 }
             }
         }
+    }
+
+    /// The first data track of the disc that the rip did not save, for Save Data Track.
+    private var missingDataTrack: Int? {
+        guard let toc else { return nil }
+        let saved = Set((report.dataTracks ?? []).map(\.number))
+        return toc.tracks.first { $0.kind == .data && !saved.contains($0.number) }?.number
     }
 
     /// A rip whose HDCD codes change the audio, not decoded yet, with lossless audio to decode:
@@ -388,6 +408,13 @@ struct ResultsView: View {
                 }
                 if let advice = report.advice {
                     Text(advice).font(.callout).foregroundStyle(.secondary)
+                }
+                if let fraction = model.savingDataTrack[recentRip.file] {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Saving the data track · \(Int(fraction * 100))%").font(.callout).foregroundStyle(
+                            .secondary)
+                    }
                 }
                 if model.updatingNames.contains(recentRip.file) {
                     HStack(spacing: 6) {

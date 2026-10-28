@@ -574,6 +574,9 @@ final class RipRun {
         case .controlBits(let summary):
             add("Control bits: " + summary)
         case .savingDataTrack(let number, let fraction):
+            // After the audio's report, and the CTDB check.
+            phase = .ripping
+            currentTrack = nil
             if dataTrackProgress == nil { add("Data track \(number): saving it as an ISO image…") }
             dataTrackProgress = (number, fraction)
         case .dataTrackSaved(let track):

@@ -183,6 +183,76 @@ struct EnhancedCDTests {
         #expect(try Data(contentsOf: iso) == Data(contentsOf: result.folder.appending(path: "Track 03.iso")))
     }
 
+    /// *A Clockwork Orange* in the ASUS: the data track fails, but the audio's rip is whole and
+    /// its report says why the data track was not saved. Save Data Track reads it later, into
+    /// the rip's folder and, once the rip is encoded, the album folder, and each report gets it.
+    @Test func keepsTheAudioWhenTheDataTrackFailsAndSavesItLater() async throws {
+        let (toc, samples) = try Self.disc()
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: 6)
+        drive.readsSessionLeadOut = true
+        let data = toc.tracks[2]
+        drive.unreadableSectors = Set(toc.sectorRange(of: data))
+        var settings = Settings()
+        settings.rips = root.path
+        settings.dataTracks = .save
+        var options = DiscRipOptions(settings: settings)
+        options.offline = true
+        options.readOffset = 6
+        options.manualRelease = .manual(toc: toc)
+        let rip = DiscRip(
+            drive: drive, identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"),
+            settings: settings, options: options,
+            profiles: try DriveProfileStore(url: root.appending(path: "DriveProfiles.json")))
+        let result = try await rip.run()
+        let file = result.folder.appending(path: "disc.json")
+        let report = try RipReport.read(from: file)
+        #expect(report.dataTracks == nil && report.dataTrackFailures?.map(\.number) == [3])
+        #expect(report.tracks.count == 2 && report.markdown.contains("Data track 3: not saved"))
+
+        // Encoded first, then saved: the album gets the image and the files on it.
+        var encoder = DiscEncoder(format: .flac)
+        encoder.allowsUnverified = true
+        let (files, record) = try encoder.encodeWithRecord(
+            try RippedDisc(folder: result.folder), into: root.appending(path: "library"))
+        try record?.save(inReportAt: file)
+        let album = files[0].deletingLastPathComponent()
+        try MetadataEdits(album: "Kept").save(inDiscJSONOf: result.folder)
+        drive.unreadableSectors = []
+        #expect(throws: DataTrackError.notData(track: 2)) {
+            try encoder.saveDataTrack(2, reportAt: file, drive: drive)
+        }
+        let saved = try encoder.saveDataTrack(3, reportAt: file, drive: drive)
+        #expect(saved.file == "Track 03.iso")
+        let updated = try RipReport.read(from: file)
+        #expect(updated.dataTracks?.map(\.number) == [3] && updated.dataTrackFailures == nil)
+        #expect(
+            updated.files?.contains("Track 03.iso") == true && updated.encoding?.dataTrackFiles == ["Data track.iso"])
+        // The keys a report does not have stay.
+        #expect(MetadataEdits.read(fromDiscJSONOf: result.folder)?.album == "Kept")
+        #expect(
+            try Data(contentsOf: album.appending(path: "Data track.iso"))
+                == Data(contentsOf: result.folder.appending(path: "Track 03.iso")))
+        let albumReport = try RipReport.read(from: album.appending(path: "Rip Report.json"))
+        #expect(albumReport.dataTracks?.count == 1 && albumReport.encoding?.dataTrackFiles == ["Data track.iso"])
+
+        // Once the rip's WAV files are gone, the library's report takes it in its album folder.
+        try FileManager.default.removeItem(at: album.appending(path: "Data track.iso"))
+        try RipReport.update(reportAt: album.appending(path: "Rip Report.json")) {
+            $0.dataTracks = nil
+            $0.encoding?.dataTrackFiles = nil
+        }
+        let again = try encoder.saveDataTrack(3, reportAt: album.appending(path: "Rip Report.json"), drive: drive)
+        #expect(again.file == "Data track.iso" && again.crc32 == saved.crc32)
+        let library = try RipReport.read(from: album.appending(path: "Rip Report.json"))
+        #expect(
+            library.dataTracks?.first?.file == "Data track.iso"
+                && library.encoding?.dataTrackFiles == ["Data track.iso"])
+        #expect(FileManager.default.fileExists(atPath: album.appending(path: "Data track.iso").path))
+    }
+
     /// With the setting "ask", the rip asks once as it starts; the answer decides.
     @Test(arguments: [true, false])
     func asksWhetherToSaveTheDataTrack(answer: Bool) async throws {

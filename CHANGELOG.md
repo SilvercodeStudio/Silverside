@@ -21,6 +21,10 @@ command-line tool.
   History show them. A set's are still edited in the set's view. When two
   editions were encoded into one album folder, renaming one moves only its
   own files, and the other keeps its folder, report, and CUE sheet.
+- **Save Data Track…** on an earlier rip reads its Enhanced CD data track from
+  the disc in a drive, when the rip did not save it: it failed, or the rip left
+  it out. It goes into the rip's folder, and into the album folder with its
+  files if the rip was encoded.
 - **Accept a rip as it is:** an earlier rip that is not verified can be
   encoded with Encode…, after you accept it. It goes into the library as a
   verified rip does, and its report and an "Accepted as it is" chip say which
@@ -110,6 +114,9 @@ command-line tool.
 - A drive that cannot read an Enhanced CD's data track no longer retries every
   sector of it, which could take hours after the last audio track: after 200
   sectors in a row fail, the data track is not saved, and the rip goes on.
+- An Enhanced CD's data track is read after the music's rip is complete, so a
+  data track that fails, or a drive that stops answering there, costs nothing of
+  the music. The rip says that the data track was not saved, and why.
 - An Enhanced CD's data track is read only to the end of its file systems. The
   empty sectors after them can be unreadable, and one drive stopped answering
   there until it was switched off and on. The image has zeros there, as when a

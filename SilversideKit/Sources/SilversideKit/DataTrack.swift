@@ -43,6 +43,20 @@ extension RipReport {
 }
 
 extension RipReport {
+    /// A data track that a rip was to save, and could not.
+    public struct DataTrackFailure: Codable, Equatable, Sendable {
+        public var number: Int
+        /// Why, for people: the error, or that the rip was stopped.
+        public var reason: String
+
+        public init(number: Int, reason: String) {
+            self.number = number
+            self.reason = reason
+        }
+    }
+}
+
+extension RipReport {
     /// "Data track 15 (Mode 1, 27,393 sectors, 53.5 MB): saved as Track 15.iso, CRC-32 1A2B3C4D", for the log.
     public static func dataTrackSummary(_ track: DataTrack) -> String {
         let megabytes = String(format: "%.1f MB", Double(track.sectors * 2048) / 1_048_576)
@@ -187,12 +201,15 @@ public enum DataTrackReader {
 
 public enum DataTrackError: Error, Equatable, CustomStringConvertible {
     case notData(track: Int)
+    /// The disc in the drive is not the rip's.
+    case otherDisc
     /// So many sectors in a row failed that the drive most likely cannot read the track.
     case unreadable(track: Int, sectors: Int)
 
     public var description: String {
         switch self {
         case .notData(let track): "Track \(track) holds no data that an ISO image can keep (Mode 2 Form 2)."
+        case .otherDisc: "The disc in the drive is not the one that was ripped."
         case .unreadable(let track, let sectors):
             "The drive could not read \(sectors) sectors in a row of track \(track), so it stopped. "
                 + "Another drive may read it."

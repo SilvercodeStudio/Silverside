@@ -468,6 +468,44 @@ final class AppModel {
         }
     }
 
+    // MARK: Save Data Track
+
+    /// The rips whose data track is being saved, with how far.
+    private(set) var savingDataTrack: [URL: Double] = [:]
+
+    /// A free drive with the rip's disc in it.
+    func freeDrive(with rip: RecentRip) -> DriveSlot? {
+        drives.first {
+            !$0.isDemo && !$0.isBusy && $0.rip?.isRunning != true && $0.disc?.toc.ctdbTOCString == rip.report.toc
+        }
+    }
+
+    /// Reads a data track that the rip did not save, from the disc in a free drive
+    /// (`DiscEncoder.saveDataTrack`).
+    func saveDataTrack(_ number: Int, of rip: RecentRip) {
+        guard savingDataTrack[rip.file] == nil, let slot = freeDrive(with: rip) else { return }
+        player.stop(drive: slot.id)
+        slot.isBusy = true
+        savingDataTrack[rip.file] = 0
+        let makeDrive = slot.makeDrive
+        let encoder = DiscEncoder(settings: settings)
+        let file = rip.file
+        Task { @MainActor in
+            do {
+                _ = try await Task.detached {
+                    try encoder.saveDataTrack(number, reportAt: file, drive: try makeDrive()) { fraction in
+                        DispatchQueue.main.async { MainActor.assumeIsolated { self.savingDataTrack[file] = fraction } }
+                    }
+                }.value
+            } catch {
+                alert = AppAlert(title: "The data track could not be saved", message: "\(error)")
+            }
+            savingDataTrack[file] = nil
+            slot.isBusy = false
+            refreshRecentRips()
+        }
+    }
+
     // MARK: Check Again
 
     /// The rips that Check Again is looking up, and the outcome of the latest check of each.

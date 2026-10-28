@@ -293,6 +293,9 @@ public struct RipReport: Codable, Equatable, Sendable {
     public var paddedEdges: [PaddedEdge]?
     /// The data tracks saved as ISO images. Nil if none was, and in reports from before 0.9.
     public var dataTracks: [DataTrack]?
+    /// The data tracks that the rip was to save but could not, with why. Save Data Track
+    /// (`DiscEncoder.saveDataTrack`) can read one later. Nil if none failed.
+    public var dataTrackFailures: [DataTrackFailure]?
     /// Whether the tracks have HDCD codes, from each track's `hdcd`. Nil in reports from
     /// before Silverside looked for them.
     public var hdcd: HDCDStatus?
@@ -504,6 +507,29 @@ public struct RipReport: Codable, Equatable, Sendable {
     /// Reads a report: a rip's disc.json, or an archive manifest that holds one under
     /// "ripReport" (the manifest's release fills in for a report without one). A manifest
     /// from before rips had reports has none to read, and throws.
+    /// Changes the report in `url`, a rip's disc.json or an album folder's report, and keeps
+    /// the file's keys that a report does not have, such as "edits"; a key that the change
+    /// empties goes. Returns the report as changed.
+    @discardableResult
+    public static func update(reportAt url: URL, _ change: (inout RipReport) throws -> Void) throws -> RipReport {
+        var report = try read(from: url)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        func keys(_ report: RipReport) throws -> [String: Any] {
+            try JSONSerialization.jsonObject(with: encoder.encode(report)) as? [String: Any] ?? [:]
+        }
+        let before = try keys(report)
+        try change(&report)
+        let after = try keys(report)
+        var object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any] ?? [:]
+        for key in before.keys where after[key] == nil { object[key] = nil }
+        object.merge(after) { $1 }
+        let data = try JSONSerialization.data(
+            withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        try data.write(to: url, options: .atomic)
+        return report
+    }
+
     public static func read(from url: URL) throws -> RipReport {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

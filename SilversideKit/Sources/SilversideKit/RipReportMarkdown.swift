@@ -113,6 +113,9 @@ extension RipReport {
         if let timing = timingText { lines += ["", timing] }
         if let hdcd = hdcdText { lines += ["", hdcd] }
         for track in dataTracks ?? [] { lines += ["", Self.dataTrackSummary(track) + "."] }
+        for failure in dataTrackFailures ?? [] {
+            lines += ["", "Data track \(failure.number): not saved: \(failure.reason)"]
+        }
         lines.append("")
 
         lines.append("## Tracks")

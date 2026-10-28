@@ -490,29 +490,6 @@ public struct DiscRip {
 
         if let controlBits = RipReport.controlBitsSummary(of: reports) { events(.controlBits(controlBits)) }
 
-        // The data tracks, as ISO images: an Enhanced CD's extras for a computer.
-        var savedDataTracks = [RipReport.DataTrack]()
-        for track in dataTracks {
-            guard options.tracks.map({ $0.contains(track.number) }) ?? savesDataTracks else { continue }
-            try stop.check()
-            let file = RipReport.DataTrack.fileName(track: track.number)
-            do {
-                let saved = try await blocking { [self] in
-                    try DataTrackReader.read(track, in: toc, drive: drive, to: folder.appending(path: file), stop: stop)
-                    {
-                        events(.savingDataTrack(number: track.number, fraction: $0))
-                    }
-                }
-                savedDataTracks.append(saved)
-                written.insert(file)
-                events(.dataTrackSaved(saved))
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch {
-                events(.dataTrackFailed(number: track.number, message: "\(error)"))
-            }
-        }
-
         var ctdb = RipReport.CTDBResult(status: entries.isEmpty && checkedCTDB ? .notInDatabase : .notChecked)
         var ctdbSeconds: Int?
         if checksCTDB {
@@ -610,22 +587,58 @@ public struct DiscRip {
             of: toc, readOffset: readOffset, tracks: Set(reports.map(\.number)), readableLeadOut: reader.readableLeadOut
         )
         report.paddedEdges = padded.isEmpty ? nil : padded
-        report.dataTracks = savedDataTracks.isEmpty ? nil : savedDataTracks
         report.hdcd = HDCDStatus(reports)
         report.cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         report.release = chosen
-        written.formUnion(["disc.json", "Rip Report.md"])
-        report.files = written.sorted()
-        try report.write(to: folder.appending(path: "disc.json"))
-        if !edits.isEmpty {
-            try edits.save(inDiscJSONOf: folder)
-            if let chosen, !chosen.isManual, options.edits != nil {
-                try ReleaseEditsStore().remember(edits, forReleaseID: chosen.id)
+        func writeReport() throws {
+            written.formUnion(["disc.json", "Rip Report.md"])
+            report.files = written.sorted()
+            try report.write(to: folder.appending(path: "disc.json"))
+            if !edits.isEmpty { try edits.save(inDiscJSONOf: folder) }
+            var shown = report
+            shown.release = named
+            try Data(shown.markdown.utf8).write(to: folder.appending(path: "Rip Report.md"))
+        }
+        // The audio's rip is whole before the data tracks are read: a drive can fail there, or
+        // stop answering, and the rip is then usable all the same.
+        try writeReport()
+        if !edits.isEmpty, let chosen, !chosen.isManual, options.edits != nil {
+            try ReleaseEditsStore().remember(edits, forReleaseID: chosen.id)
+        }
+
+        // The data tracks, as ISO images: an Enhanced CD's extras for a computer.
+        var savedDataTracks = [RipReport.DataTrack]()
+        var failures = [RipReport.DataTrackFailure]()
+        for track in dataTracks {
+            guard options.tracks.map({ $0.contains(track.number) }) ?? savesDataTracks else { continue }
+            let file = RipReport.DataTrack.fileName(track: track.number)
+            do {
+                try stop.check()
+                let saved = try await blocking { [self] in
+                    try DataTrackReader.read(track, in: toc, drive: drive, to: folder.appending(path: file), stop: stop)
+                    {
+                        events(.savingDataTrack(number: track.number, fraction: $0))
+                    }
+                }
+                savedDataTracks.append(saved)
+                written.insert(file)
+                events(.dataTrackSaved(saved))
+            } catch is CancellationError {
+                // The audio's rip stays as it is; the report says the data track was not saved.
+                failures.append(.init(number: track.number, reason: "The rip was stopped."))
+                report.dataTrackFailures = failures
+                try writeReport()
+                throw CancellationError()
+            } catch {
+                failures.append(.init(number: track.number, reason: "\(error)"))
+                events(.dataTrackFailed(number: track.number, message: "\(error)"))
             }
         }
-        var shown = report
-        shown.release = named
-        try Data(shown.markdown.utf8).write(to: folder.appending(path: "Rip Report.md"))
+        if !savedDataTracks.isEmpty || !failures.isEmpty {
+            report.dataTracks = savedDataTracks.isEmpty ? nil : savedDataTracks
+            report.dataTrackFailures = failures.isEmpty ? nil : failures
+            try writeReport()
+        }
         events(.finished(report, discOffsets: discOffsets, profile: profile))
         var result = DiscRipResult(report: report, folder: folder)
 

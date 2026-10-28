@@ -138,10 +138,12 @@ Many of these discs are hybrids, for both Windows and the classic Mac OS of the 
 
 A saved data track goes into the album's folder twice:
 
-- **`Data track.iso`**, a disc image of the whole track, exactly as it is on the disc, with both file systems. It is the complete copy.
+- **`Data track.iso`**, a disc image of the whole track, exactly as it is on the disc, with both file systems. It is the complete copy. The empty sectors at the track's end, after its file systems, are not read but written as zeros, which is what they hold: some drives cannot read them, and one stopped answering there.
 - **A `Data track` folder** with the files of the Windows side, copied out with their long names and dates, so the pictures, videos, and web pages open with a double-click. Files that only the Mac side has are not in it, and neither are Mac resource forks. Programs written for the computers of that time usually do not run, but they are kept.
 
 The image does not open in today's macOS. The Mac side is in HFS, which macOS no longer reads, and the Windows side counts its sectors from the start of the disc rather than the track (the report says where the track starts), so programs that expect a standalone image look in the wrong places. To reach the Mac side, open the image in a classic Mac emulator, such as SheepShaver or Basilisk II, or in a tool for HFS volumes. Its addresses start at the track, so the image burned to a CD-R should also mount on a real classic Mac. The Windows side of such a burned disc does not read correctly; use the folder instead.
+
+The data track is read after the music's rip is complete and its report written, so a data track that cannot be read costs nothing of the music: the rip shows a "Data track not saved" chip that says why. To save it later, or to save the data track of a rip that left it out, put the disc in a drive, open the rip, and click **Save Data Track…** in the toolbar. Another drive may read it. The image goes into the rip's folder, and into the album folder with its files if the rip was encoded.
 
 Silverside does not yet copy a whole Enhanced CD, the music and the data track together, into one image that could be burned again or kept for an archive (in the CloneCD format, which keeps both sessions and the subchannel). That is planned. For now, the rip keeps the music, verified, and the data track as above.
 

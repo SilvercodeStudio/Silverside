@@ -356,6 +356,47 @@ struct PreEmphasisQuestionSheet: View {
     }
 }
 
+/// As a rip of a disc with a data track starts (an Enhanced CD's extras for a computer): save
+/// it, or rip the audio only. Saving is the advice; it does not change the audio.
+struct DataTrackQuestionSheet: View {
+    @Environment(AppModel.self) private var model
+    var rip: RipRun
+    var question: RipRun.DataTrackQuestion
+    @State private var remembers = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("“\(question.album)” has a data track").font(.title3.bold())
+            Text(
+                (question.isEnhanced ? "This is an Enhanced CD: after the music, it" : "This disc")
+                    + " has a data track with extras for a computer, such as videos, pictures, lyrics, or a program."
+                    + " Saving it takes about a minute and "
+                    + ByteCountFormatter.string(fromByteCount: Int64(question.bytes), countStyle: .file) + "."
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            Text(
+                .init(
+                    "**Save** puts a disc image of the track, `Data track.iso`, in the album's folder, and a `Data track`"
+                        + " folder with the files on it, ready to open. The music is ripped the same either way.")
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            Toggle("Use this answer for every disc with a data track (Settings › Ripping)", isOn: $remembers)
+            HStack {
+                Spacer()
+                Button("Audio Only") { answer(saves: false) }
+                Button("Save") { answer(saves: true) }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
+    }
+
+    private func answer(saves: Bool) {
+        if remembers { model.settings.dataTracks = saves ? .save : .skip }
+        rip.answerDataTracks(saves: saves)
+    }
+}
+
 /// Decode HDCD… for an earlier rip: a decoded album beside the album, or in place of its files.
 struct HDCDDecodeSheet: View {
     @Environment(AppModel.self) private var model

@@ -25,8 +25,16 @@ struct Rip: AsyncParsableCommand {
     @Option(help: "The drive's read offset in samples, for this rip only.")
     var offset: Int?
 
-    @Option(help: "The tracks to rip, such as 1,3-5. Default: all audio tracks.")
+    @Option(help: "The tracks to rip, such as 1,3-5. Default: all audio tracks. A data track's number saves it.")
     var tracks: String?
+
+    @Option(
+        help: """
+            For a disc with a data track (an Enhanced CD's extras for a computer): save it as an ISO image, \
+            which the encoding copies into the album folder with its files; skip it; or ask (the setting's \
+            default), which asks at a terminal, and saves otherwise.
+            """)
+    var dataTracks: DataTrackChoice?
 
     @Option(
         name: .shortAndLong,
@@ -106,6 +114,7 @@ struct Rip: AsyncParsableCommand {
         options.addsToMusic = encoding.addsToMusic(settings)
         options.hdcd = encoding.hdcdChoice(settings)
         options.preEmphasis = encoding.preEmphasisChoice(settings)
+        options.dataTracks = dataTracks ?? settings.dataTracks
 
         var rip = DiscRip(
             drive: drive,
@@ -128,6 +137,10 @@ struct Rip: AsyncParsableCommand {
             rip.choosePreEmphasis = { [printer] report, format in
                 printer.progress.clear()
                 return Self.askToDeEmphasize(report, format: format)
+            }
+            rip.chooseDataTracks = { [printer] tracks in
+                printer.progress.clear()
+                return Self.askToSaveDataTracks(tracks)
             }
         }
         // Ctrl-C stops the rip after the read under way; the tracks done so far stay.
@@ -199,6 +212,18 @@ struct Rip: AsyncParsableCommand {
                 + (format.isLossless ? "\(format.wideBits)-bit \(format.name) files" : "\(format.name) files")
                 + " tagged DE_EMPHASIZED=yes. Kept, the files are bit for bit the disc, tagged PRE_EMPHASIS=yes.")
         print("De-emphasize? [Y/n] ", terminator: "")
+        fflush(stdout)
+        let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        return answer.isEmpty || answer == "y" || answer == "yes"
+    }
+
+    static func askToSaveDataTracks(_ tracks: [TOC.Track]) -> Bool {
+        print()
+        print(
+            "This disc has a data track (" + tracks.map { "track \($0.number)" }.joined(separator: ", ")
+                + ") with extras for a computer. Saved, it becomes an ISO image, and the encoding copies it into"
+                + " the album folder with its files.")
+        print("Save it? [Y/n] ", terminator: "")
         fflush(stdout)
         let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
         return answer.isEmpty || answer == "y" || answer == "yes"

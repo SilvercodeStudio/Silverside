@@ -12,6 +12,8 @@ struct MainWindow: View {
     private var questionRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.overwriteQuestion != nil } }
     /// A rip that waits to hear whether to decode its HDCD codes.
     private var hdcdRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.hdcdQuestion != nil } }
+    /// A rip that waits to hear whether to save its data tracks.
+    private var dataTrackRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.dataTrackQuestion != nil } }
     /// A rip that waits to hear whether to de-emphasize its tracks with pre-emphasis.
     private var preEmphasisRip: RipRun? {
         model.drives.lazy.compactMap(\.rip).first { $0.preEmphasisQuestion != nil }
@@ -59,6 +61,11 @@ struct MainWindow: View {
         }
         .sheet(isPresented: Binding(get: { hdcdRip != nil }, set: { _ in })) {
             if let rip = hdcdRip, let question = rip.hdcdQuestion { HDCDQuestionSheet(rip: rip, question: question) }
+        }
+        .sheet(isPresented: Binding(get: { dataTrackRip != nil }, set: { _ in })) {
+            if let rip = dataTrackRip, let question = rip.dataTrackQuestion {
+                DataTrackQuestionSheet(rip: rip, question: question)
+            }
         }
         .sheet(isPresented: Binding(get: { preEmphasisRip != nil }, set: { _ in })) {
             if let rip = preEmphasisRip, let question = rip.preEmphasisQuestion {

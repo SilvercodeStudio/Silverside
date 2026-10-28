@@ -54,6 +54,16 @@ extension RipReport {
     }
 }
 
+/// What to do with a disc's data tracks (an Enhanced CD's extras for a computer).
+public enum DataTrackChoice: String, Codable, CaseIterable, Sendable {
+    /// The app asks when a rip of such a disc starts; the command line asks at a terminal, and saves otherwise.
+    case ask
+    /// Save each data track as an ISO image, and its files beside it in the album folder.
+    case save
+    /// Rip the audio only.
+    case skip
+}
+
 /// Reads a data track into an ISO image.
 public enum DataTrackReader {
     /// Sectors in one read: 26 × 2048 bytes fits the 64 KB transfer limit of many USB bridges.

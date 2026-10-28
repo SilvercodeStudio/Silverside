@@ -139,3 +139,4 @@ extension ArtworkChoice: ExpressibleByArgument {}
 extension SegueMarks: ExpressibleByArgument {}
 extension HDCDChoice: ExpressibleByArgument {}
 extension PreEmphasisChoice: ExpressibleByArgument {}
+extension DataTrackChoice: ExpressibleByArgument {}

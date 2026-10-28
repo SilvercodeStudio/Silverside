@@ -71,7 +71,7 @@ struct EnhancedCDTests {
         drive.readsSessionLeadOut = true
         var settings = Settings()
         settings.rips = root.path
-        settings.saveDataTracks = saves
+        settings.dataTracks = saves ? .save : .skip
         var options = DiscRipOptions(settings: settings)
         options.offline = true
         options.readOffset = 6
@@ -101,5 +101,33 @@ struct EnhancedCDTests {
         let iso = files[0].deletingLastPathComponent().appending(path: "Data track.iso")
         #expect(record?.dataTrackFiles == ["Data track.iso"])
         #expect(try Data(contentsOf: iso) == Data(contentsOf: result.folder.appending(path: "Track 03.iso")))
+    }
+
+    /// With the setting "ask", the rip asks once as it starts; the answer decides.
+    @Test(arguments: [true, false])
+    func asksWhetherToSaveTheDataTrack(answer: Bool) async throws {
+        let (toc, samples) = try Self.disc()
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var settings = Settings()
+        settings.rips = root.path
+        var options = DiscRipOptions(settings: settings)
+        #expect(options.dataTracks == .ask)
+        options.offline = true
+        options.readOffset = 6
+        options.manualRelease = .manual(toc: toc)
+        var rip = DiscRip(
+            drive: SimulatedDrive(toc: toc, samples: samples, readOffset: 6),
+            identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"), settings: settings,
+            options: options, profiles: try DriveProfileStore(url: root.appending(path: "DriveProfiles.json")))
+        let asked = DiscRipEvents()
+        rip.chooseDataTracks = { tracks in
+            asked.append(.controlBits("\(tracks.map(\.number))"))
+            return answer
+        }
+        let result = try await rip.run()
+        #expect(asked.list.count == 1)
+        #expect((result.report.dataTracks != nil) == answer)
     }
 }

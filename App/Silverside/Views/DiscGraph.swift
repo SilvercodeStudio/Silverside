@@ -20,6 +20,9 @@ struct DiscGraph: View {
         /// How much of the track is read: 0 queued, 1 done.
         var readFraction = 0.0
         var isSkipped = false
+        /// A data track (an Enhanced CD's extras), drawn striped; `dataState` says what became of it.
+        var isData = false
+        var dataState: String?
         var id: Int { number }
 
         var hasTrouble: Bool { !(flagged.isEmpty && unreadable.isEmpty && suspect.isEmpty && unresolved.isEmpty) }
@@ -82,6 +85,12 @@ struct DiscGraph: View {
 
     private var hoverText: String {
         guard let number = hoveredTrack, let track = tracks.first(where: { $0.number == number }) else { return "" }
+        if track.isData {
+            let size = ByteCountFormatter.string(fromByteCount: Int64(track.sectors * 2048), countStyle: .file)
+            return "Data track \(number) · \(size)" + (track.dataState.map { " · \($0)" } ?? "")
+                + (track.unreadable.isEmpty
+                    ? "" : " · " + Format.count(track.unreadable.count, "sector") + " unreadable")
+        }
         return "Track \(number) · \(Format.duration(sectors: track.sectors)) · \(track.troubleText)"
     }
 
@@ -110,6 +119,20 @@ struct DiscGraph: View {
             context.fill(
                 Path(roundedRect: frame, cornerRadius: 2),
                 with: .color(Color.secondary.opacity(track.isSkipped ? 0.04 : 0.1)))
+            if track.isData {
+                // Diagonal stripes set a data track apart from the music.
+                var stripes = Path()
+                var x = frame.minX - frame.height
+                while x < frame.maxX {
+                    stripes.move(to: CGPoint(x: x, y: frame.maxY))
+                    stripes.addLine(to: CGPoint(x: x + frame.height, y: frame.minY))
+                    x += 6
+                }
+                var clipped = context
+                clipped.clip(to: Path(roundedRect: frame, cornerRadius: 2))
+                clipped.stroke(
+                    stripes, with: .color(Color.secondary.opacity(track.isSkipped ? 0.08 : 0.22)), lineWidth: 1)
+            }
             if track.readFraction > 0 {
                 var done = frame
                 done.size.width = frame.width * min(1, track.readFraction)
@@ -156,9 +179,9 @@ struct DiscGraph: View {
         }
     }
 
-    /// The graph of an earlier rip, from its report.
+    /// The graph of an earlier rip, from its report, with the disc's data tracks in their places.
     static func tracks(of report: RipReport) -> [Track] {
-        report.tracks.map { track in
+        let audio = report.tracks.map { track in
             var row = Track(number: track.number, sectors: track.sectors)
             row.flagged = Set(track.c2Sectors ?? [])
             row.unreadable = Set(track.unreadableSectors ?? [])
@@ -169,5 +192,28 @@ struct DiscGraph: View {
             row.readFraction = 1
             return row
         }
+        guard let toc = try? TOC(ctdbTOCString: report.toc) else { return audio }
+        let data = toc.tracks.filter { $0.kind == .data }.map { track in
+            dataRow(track, in: toc, saved: report.dataTracks?.first { $0.number == track.number }, saving: nil)
+        }
+        return (audio + data).sorted { $0.number < $1.number }
+    }
+
+    /// A data track's row: saved, being saved, or not.
+    static func dataRow(_ track: TOC.Track, in toc: TOC, saved: RipReport.DataTrack?, saving: Double?) -> Track {
+        var row = Track(number: track.number, sectors: toc.sectorRange(of: track).count)
+        row.isData = true
+        if let saved {
+            row.readFraction = 1
+            row.unreadable = Set(saved.unreadableSectors ?? [])
+            row.dataState = "saved as an ISO image"
+        } else if let saving {
+            row.readFraction = saving
+            row.dataState = "saving"
+        } else {
+            row.isSkipped = true
+            row.dataState = "not saved"
+        }
+        return row
     }
 }

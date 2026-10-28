@@ -291,6 +291,7 @@ struct AlbumHeader: View {
                     FlowLayout(spacing: 8) {
                         lookupChip
                         hdcdChip
+                        dataTrackChip
                         if disc.userCover != nil || (disc.sleeve == nil && disc.keptCover != nil) {
                             Chip(text: "Your cover", tone: .warning, systemImage: "photo")
                                 .help("The cover you gave is saved with the rip and embedded in the files.")
@@ -431,6 +432,28 @@ struct AlbumHeader: View {
     }
 
     /// HDCD, from the codes in the tracks ripped so far; before that, from MusicBrainz's format for the disc.
+    /// A disc with a data track: an Enhanced CD's extras after the music, or a program's data first.
+    @ViewBuilder private var dataTrackChip: some View {
+        let data = disc.toc.tracks.filter { $0.kind == .data }
+        if !data.isEmpty {
+            let choice: String =
+                switch model.settings.dataTracks {
+                case .ask:
+                    "The rip asks whether to save it. Saved, the album's folder gets a disc image of it (Data track.iso)"
+                        + " and a Data track folder with the files on it, ready to open."
+                case .save:
+                    "The rip saves it: the album's folder gets a disc image of it (Data track.iso) and a Data track"
+                        + " folder with the files on it, ready to open."
+                case .skip: "The rip leaves it out (Settings › Ripping)."
+                }
+            Chip(
+                text: disc.toc.isEnhanced ? "Enhanced CD · data track" : "Data track", systemImage: "externaldrive",
+                help: (disc.toc.isEnhanced
+                    ? "After the music, this disc has a data track with extras for a computer. "
+                    : "This disc has a data track for a computer. ") + choice)
+        }
+    }
+
     @ViewBuilder private var hdcdChip: some View {
         let ripped = (slot.rip?.trackStates.values ?? [:].values).compactMap { state -> RipReport.Track? in
             if case .finished(let track) = state { track } else { nil }
@@ -583,10 +606,20 @@ struct StatusBar: View {
         return model.earlierRips(of: disc.toc.ctdbTOCString)
     }
 
-    /// The graph's rows: each track's state and trouble so far.
+    /// The graph's rows: each track's state and trouble so far, with the data tracks in their places.
     private var graphTracks: [DiscGraph.Track] {
         guard let rip = slot.rip, let disc = slot.disc else { return [] }
-        return disc.toc.audioTracks.map { track in
+        let data = disc.toc.tracks.filter { $0.kind == .data }.map { track in
+            let saving = rip.dataTrackProgress.flatMap { $0.number == track.number ? $0.fraction : nil }
+            var row = DiscGraph.dataRow(track, in: disc.toc, saved: rip.savedDataTracks[track.number], saving: saving)
+            // Not saved yet: it waits, unless the rip is over or leaves it out.
+            if row.dataState == "not saved", rip.isRunning, rip.savesDataTracks != false {
+                row.isSkipped = false
+                row.dataState = rip.savesDataTracks == true ? "to be saved after the music" : "waiting for your answer"
+            }
+            return row
+        }
+        let audio = disc.toc.audioTracks.map { track in
             var row = DiscGraph.Track(number: track.number, sectors: disc.toc.sectorRange(of: track).count)
             if let errors = rip.trackErrors[track.number] {
                 row.flagged = errors.flagged
@@ -606,6 +639,7 @@ struct StatusBar: View {
             }
             return row
         }
+        return (audio + data).sorted { $0.number < $1.number }
     }
 
     private var graphCursor: (track: Int, sector: Int)? {
@@ -923,8 +957,7 @@ enum ResultChips {
                         + (report.encoding?.deEmphasizedTracks?.isEmpty == false
                             ? "The files hold them de-emphasized, as a CD player plays them, tagged DE_EMPHASIZED=yes."
                             : "The files keep the audio as on the disc, tagged PRE_EMPHASIS=yes, so a player that"
-                                + " ignores the flag plays them too bright.")
-                        + " The CUE sheet marks them (FLAGS PRE)."
+                                + " ignores the flag plays them too bright. The CUE sheet marks them (FLAGS PRE).")
                         + (qOnly ? " The flag is in the Q subchannel only, not in the TOC." : "")))
         }
         let fourChannel = report.tracks.filter(\.isFourChannel)
@@ -936,6 +969,15 @@ enum ResultChips {
                         + " standard that no player supports and no released disc is known to use (the 1999 edition"
                         + " gives the bit to broadcasting). Silverside ripped the"
                         + " audio as two channels, as on any CD. The report has the details."))
+        }
+        if let saved = report.dataTracks {
+            chips.append(
+                Chip(
+                    text: "Data track saved", systemImage: "externaldrive",
+                    help: "The disc's data track, with extras for a computer: "
+                        + saved.map { "\($0.file), \($0.sectors.formatted()) sectors" }.joined(separator: "; ")
+                        + ". The encoding copies it into the album folder as Data track.iso, with its files"
+                        + " beside it in the Data track folder."))
         }
         if let encoding = report.encoding {
             let all = encoding.files.count >= report.tracks.count

@@ -59,6 +59,11 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
 - `Track NN.suspects`, for tracks that are not verified: the other values that
   reads gave for their suspect samples, for a later `silverside repair`
 - `Rip Report.md`, and `Track 00.wav` if the disc has hidden track one audio
+- `Track 15.iso` and so on, for a data track (an Enhanced CD's extras), if it is
+  saved (`--data-tracks`, or the `dataTracks` setting). The encoding copies it
+  into the album folder as `Data track.iso`, and the files of its ISO 9660 file
+  system into a `Data track` folder. The image holds the track exactly; its
+  file system counts from the start of the disc, which the report gives
 
 The report also says whether the tracks have HDCD codes, and what they ask of
 a decoder (peak extend, a gain adjustment, or nothing), and the encoded files
@@ -161,7 +166,7 @@ silverside config unset aac.mode                     # back to the default
 | `ripOnInsert` | `false` | the app rips a disc when it goes in, if its release is certain and it is not ripped yet |
 | `hdcd` | `ask` | for a disc whose HDCD codes ask for peak extend or a gain: `decode` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--hdcd`) |
 | `preEmphasis` | `ask` | for tracks with pre-emphasis: `deemphasize` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--pre-emphasis`) |
-| `saveDataTracks` | `true` | save an Enhanced CD's data track as an ISO image, copied into the album folder as `Data track.iso` |
+| `dataTracks` | `ask` | for a disc with a data track (an Enhanced CD's extras): `save` it as an ISO image, copied into the album folder as `Data track.iso` with its files in a `Data track` folder; `skip` it; or `ask` at a terminal, saving otherwise (`rip --data-tracks`) |
 | `writeImages` | `false` | also write a disc image when a disc is encoded (`--image`) |
 | `images` | `~/Music/Silverside Images` | the folder for disc images (`--images`) |
 | `aac.mode`, `aac.bitRate`, `aac.vbrQuality` | `vbr-constrained`, `256`, `127` | Apple's AAC encoder |

@@ -17,8 +17,8 @@ public struct DriveIdentity: Equatable, Sendable {
 
 /// What a rip should do, beyond the settings.
 public struct DiscRipOptions: Sendable {
-    /// The track numbers to rip. Nil rips every audio track, and every data track if
-    /// `savesDataTracks`. A data track's number saves that track.
+    /// The track numbers to rip. Nil rips every audio track, and every data track as
+    /// `dataTracks` says. A data track's number saves that track.
     public var tracks: [Int]?
     /// The drive's read offset for this rip only. Nil takes it from the drive's profile.
     public var readOffset: Int?
@@ -59,8 +59,9 @@ public struct DiscRipOptions: Sendable {
     /// For a disc with tracks that have pre-emphasis: de-emphasize them, keep them, or ask
     /// `DiscRip.choosePreEmphasis`.
     public var preEmphasis: PreEmphasisChoice
-    /// Save each data track (an Enhanced CD's extras) as an ISO image beside the audio.
-    public var savesDataTracks: Bool
+    /// For a disc with data tracks (an Enhanced CD's extras): save them as ISO images beside
+    /// the audio, skip them, or ask `DiscRip.chooseDataTracks`.
+    public var dataTracks: DataTrackChoice
 
     public init(settings: Settings) {
         artwork = settings.artwork
@@ -70,7 +71,7 @@ public struct DiscRipOptions: Sendable {
         addsToMusic = settings.addToMusic
         hdcd = settings.hdcd
         preEmphasis = settings.preEmphasis
-        savesDataTracks = settings.saveDataTracks
+        dataTracks = settings.dataTracks
     }
 }
 
@@ -209,6 +210,9 @@ public struct DiscRip {
     /// called after the rip (and after `chooseHDCD`), before encoding. True de-emphasizes them.
     /// Nil asks nothing, and they are de-emphasized, as advised.
     public var choosePreEmphasis: (@Sendable (_ report: RipReport, _ format: AudioFormat) async -> Bool)?
+    /// For a disc with data tracks and `DiscRipOptions.dataTracks` ask: true saves them. Asked
+    /// as the rip starts, so the answer is not awaited after the audio. Without it, they are saved.
+    public var chooseDataTracks: (@Sendable (_ tracks: [TOC.Track]) async -> Bool)?
     public var profiles: DriveProfileStore
     /// The client for every lookup and download. Tests give one with a fake transport.
     public var webClient = WebClient.shared
@@ -246,6 +250,17 @@ public struct DiscRip {
         events(.disc(toc))
         let media = (try? drive.readMediaType()) ?? nil
         let selected = try selectedTracks(of: toc)
+        // Whether to save the data tracks: asked now, so that no one waits for the question after the audio.
+        let dataTracks = toc.tracks.filter { $0.kind == .data }
+        var savesDataTracks = false
+        if !dataTracks.isEmpty, options.tracks == nil {
+            switch options.dataTracks {
+            case .save: savesDataTracks = true
+            case .skip: savesDataTracks = false
+            case .ask: savesDataTracks = await chooseDataTracks?(dataTracks) ?? true
+            }
+            try stop.check()
+        }
 
         // The drive's profile gives the offset, unless the options do. A drive with no offset
         // at all is looked up in AccurateRip's list; if that fails, the rip cannot go on.
@@ -476,9 +491,9 @@ public struct DiscRip {
         if let controlBits = RipReport.controlBitsSummary(of: reports) { events(.controlBits(controlBits)) }
 
         // The data tracks, as ISO images: an Enhanced CD's extras for a computer.
-        var dataTracks = [RipReport.DataTrack]()
-        for track in toc.tracks where track.kind == .data {
-            guard options.tracks.map({ $0.contains(track.number) }) ?? options.savesDataTracks else { continue }
+        var savedDataTracks = [RipReport.DataTrack]()
+        for track in dataTracks {
+            guard options.tracks.map({ $0.contains(track.number) }) ?? savesDataTracks else { continue }
             try stop.check()
             let file = RipReport.DataTrack.fileName(track: track.number)
             do {
@@ -488,7 +503,7 @@ public struct DiscRip {
                         events(.savingDataTrack(number: track.number, fraction: $0))
                     }
                 }
-                dataTracks.append(saved)
+                savedDataTracks.append(saved)
                 written.insert(file)
                 events(.dataTrackSaved(saved))
             } catch is CancellationError {
@@ -595,7 +610,7 @@ public struct DiscRip {
             of: toc, readOffset: readOffset, tracks: Set(reports.map(\.number)), readableLeadOut: reader.readableLeadOut
         )
         report.paddedEdges = padded.isEmpty ? nil : padded
-        report.dataTracks = dataTracks.isEmpty ? nil : dataTracks
+        report.dataTracks = savedDataTracks.isEmpty ? nil : savedDataTracks
         report.hdcd = HDCDStatus(reports)
         report.cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         report.release = chosen

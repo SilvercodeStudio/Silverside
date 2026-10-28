@@ -131,6 +131,17 @@ Each rip gets a folder in the rips folder (Settings › General), named from the
 
 ### Enhanced CDs
 
-Some CDs from the late 1990s and the 2000s, often marked "Enhanced CD" or "CD Extra", have a data track after the music with extras for a computer: videos, photos, lyrics, links, or a program to show them. Silverside saves that track as an ISO disc image, `Data track.iso` in the album's folder, unless Settings › Ripping turns it off. The image holds the track exactly as it is on the disc. Its file system counts from the start of the disc, not of the track, so most programs cannot open the image by itself: the report says where the track starts. Many of these extras were made for computers of their time, and the Mac's own format on them (HFS) no longer opens in macOS.
+Some CDs from the late 1990s and the 2000s, often marked "Enhanced CD" or "CD Extra", have a data track after the music with extras for a computer: videos, photos, lyrics, links, or a program to show them. A chip in the header shows such a disc. The first time you rip one, Silverside asks whether to save the data track; the answer can be kept for every disc (Settings › Ripping).
+
+Many of these discs are hybrids, for both Windows and the classic Mac OS of the time. The data track then holds two file systems side by side: one for Windows (ISO 9660, with long names in Joliet), and one for the Mac (HFS, behind an Apple partition map). Files that both use, such as the pictures and movies, are usually stored once; each side also has files of its own, such as a Windows program and a Mac one.
+
+A saved data track goes into the album's folder twice:
+
+- **`Data track.iso`**, a disc image of the whole track, exactly as it is on the disc, with both file systems. It is the complete copy.
+- **A `Data track` folder** with the files of the Windows side, copied out with their long names and dates, so the pictures, videos, and web pages open with a double-click. Files that only the Mac side has are not in it, and neither are Mac resource forks. Programs written for the computers of that time usually do not run, but they are kept.
+
+The image does not open in today's macOS. The Mac side is in HFS, which macOS no longer reads, and the Windows side counts its sectors from the start of the disc rather than the track (the report says where the track starts), so programs that expect a standalone image look in the wrong places. To reach the Mac side, open the image in a classic Mac emulator, such as SheepShaver or Basilisk II, or in a tool for HFS volumes. Its addresses start at the track, so the image burned to a CD-R should also mount on a real classic Mac. The Windows side of such a burned disc does not read correctly; use the folder instead.
+
+Silverside does not yet copy a whole Enhanced CD, the music and the data track together, into one image that could be burned again or kept for an archive (in the CloneCD format, which keeps both sessions and the subchannel). That is planned. For now, the rip keeps the music, verified, and the data track as above.
 
 On such a disc, a drive that can read past the end of the music reads the last track to its end; otherwise its last few samples are silence, as the report says.

@@ -21,8 +21,13 @@ command-line tool.
   you submit the release.
 - **Enhanced CDs:** the data track after the music, with extras for a computer,
   is saved as an ISO disc image and copied into the album folder as
-  `Data track.iso` (Settings › Ripping, `saveDataTracks`; on by default). The
-  report gives its CRC-32 and where it starts on the disc.
+  `Data track.iso`, with its files copied out beside it into a `Data track`
+  folder, where the pictures, videos, and pages open as they are. The image
+  holds the track exactly; its file system counts from the start of the disc,
+  so it does not open by itself, and the report says where it starts. The
+  first rip of such a disc asks whether to save it, with "use this answer for
+  every disc" (Settings › Ripping, `dataTracks`, or `rip --data-tracks`). A
+  chip in the header shows a disc with a data track.
 - On an Enhanced CD, a drive that can read past the end of the music (the
   MATSHITA can) reads the last track to its end, instead of leaving its last
   few samples silent.

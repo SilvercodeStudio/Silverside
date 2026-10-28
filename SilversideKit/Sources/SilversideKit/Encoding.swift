@@ -623,21 +623,30 @@ public struct DiscEncoder: Sendable {
                 try FileManager.default.copyItem(at: artwork, to: destination)
             }
         }
-        // The data tracks' ISO images (an Enhanced CD's extras) go into the album folder, beside the audio.
+        // The data tracks' ISO images (an Enhanced CD's extras) go into the album folder, beside
+        // the audio, with the files of their ISO 9660 file systems in a folder of the same name:
+        // the image alone does not open, as its file system counts from the disc's start.
         var dataTrackFiles = [String]()
         if let albumFolder, albumSuffix == nil, let saved = disc.report?.dataTracks {
             for track in saved {
-                let name = "Data track" + (saved.count > 1 ? " \(track.number)" : "") + discPart + ".iso"
+                let base = "Data track" + (saved.count > 1 ? " \(track.number)" : "") + discPart
                 let source = disc.folder.appending(path: track.file)
-                let target = albumFolder.appending(path: name)
+                let target = albumFolder.appending(path: base + ".iso")
                 if FileManager.default.fileExists(atPath: source.path), !Self.sameFile(source, target) {
                     if FileManager.default.fileExists(atPath: target.path) {
                         try FileManager.default.removeItem(at: target)
                     }
                     try FileManager.default.copyItem(at: source, to: target)
-                    log("\(name)")
+                    log("\(target.lastPathComponent)")
+                    let files = albumFolder.appending(path: base, directoryHint: .isDirectory)
+                    try? FileManager.default.removeItem(at: files)
+                    if let reader = try? ISO9660Reader(image: target, startLBA: track.startLBA ?? 0),
+                        let extracted = try? reader.extract(to: files)
+                    {
+                        log("\(base)/: \(extracted.files) files from its file system")
+                    }
                 }
-                if FileManager.default.fileExists(atPath: target.path) { dataTrackFiles.append(name) }
+                if FileManager.default.fileExists(atPath: target.path) { dataTrackFiles.append(base + ".iso") }
             }
         }
         let encoding = albumFolder.map {

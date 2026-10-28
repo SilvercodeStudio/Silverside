@@ -98,6 +98,9 @@ to be installed. All other supported formats are handled natively.
   burned again exactly.
 - **Hidden track one audio** (a song before track 1) is ripped and encoded as
   track 0.
+- **Enhanced CDs:** the data track after the music is kept as a disc image
+  (`Data track.iso`, both its Windows and its classic Mac file systems), with
+  the Windows side's files copied into a `Data track` folder, ready to open.
 - **Names you can change.** The album's title, artist, and date, and each
   track's title and artist, can be edited in the app or with
   `silverside metadata --set`, and the files are named and tagged with the edits.
@@ -204,11 +207,13 @@ does, and how it was compared with independent tools and real discs.
 
 ## TODO or future ideas
 
-- Ripping of data tracks for mixed-mode / Enhanced CDs.
+- A whole-disc CloneCD image of multisession discs (Enhanced CDs), for
+  archiving and burning; the data track of mixed-mode discs (data first).
 - Option to slow down drive speed (quieter)
   - Autodetect and engage this during problem rips
-- Submit to MusicBrainz from the app: a disc ID for a release, or a new
-  release seeded from the disc (planned for 2.0).
+- Submit to MusicBrainz straight from the app (planned for 2.0). Today
+  Silverside opens MusicBrainz's release editor filled in from the disc, to
+  check and submit there.
 - Search MusicBrainz by album or artist (planned for 1.0), for a disc whose
   TOC it does not know (a burned disc, or a pressing it has not seen), and tag
   the disc from the chosen release

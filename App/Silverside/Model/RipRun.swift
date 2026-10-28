@@ -65,6 +65,16 @@ final class RipRun {
         var format: AudioFormat
     }
 
+    /// The disc has data tracks: the rip waits for `answerDataTracks(saves:)` before it reads.
+    struct DataTrackQuestion: Identifiable {
+        let id = UUID()
+        var album: String
+        var tracks: [Int]
+        /// The tracks' size, as the ISO images take it.
+        var bytes: Int
+        var isEnhanced: Bool
+    }
+
     /// The sectors of a track that the drive flagged, could not read, or that reads disagree on,
     /// counted from the track's start, for the error strip.
     struct TrackErrors: Equatable {
@@ -91,6 +101,10 @@ final class RipRun {
     private(set) var isSavingArtwork = false
     /// The data track being saved as an ISO image, after the audio, and how much of it is read.
     private(set) var dataTrackProgress: (number: Int, fraction: Double)?
+    /// The data tracks saved so far, by number, for the graph.
+    private(set) var savedDataTracks: [Int: RipReport.DataTrack] = [:]
+    /// Whether the rip saves the data tracks: from the options, or the answer; nil until asked.
+    private(set) var savesDataTracks: Bool?
     private(set) var folder: URL?
     private(set) var readOffset: Int?
     private(set) var offsetSource: String?
@@ -116,6 +130,7 @@ final class RipRun {
     private(set) var overwriteQuestion: OverwriteQuestion?
     private(set) var hdcdQuestion: HDCDQuestion?
     private(set) var preEmphasisQuestion: PreEmphasisQuestion?
+    private(set) var dataTrackQuestion: DataTrackQuestion?
     private(set) var startDate = Date()
     private(set) var endDate: Date?
     /// Sectors read so far, over every track to rip, for the whole-rip progress.
@@ -135,6 +150,7 @@ final class RipRun {
     @ObservationIgnored private var overwriteAnswer: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var hdcdAnswer: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var preEmphasisAnswer: CheckedContinuation<Bool, Never>?
+    @ObservationIgnored private var dataTrackAnswer: CheckedContinuation<Bool, Never>?
     /// Hears the question about files in the library, so the app can show the drive and ask for attention.
     @ObservationIgnored var onQuestion: (@MainActor () -> Void)?
 
@@ -188,6 +204,12 @@ final class RipRun {
         self.encodes = encodes
         addsToMusic = encodes && options.addsToMusic && MusicApp.reads(settings.format)
         tracksToRip = options.tracks ?? disc.toc.audioTracks.map(\.number)
+        switch options.dataTracks {
+        case _ where options.tracks != nil: savesDataTracks = false
+        case .save: savesDataTracks = true
+        case .skip: savesDataTracks = false
+        case .ask: savesDataTracks = nil
+        }
         for track in disc.toc.audioTracks {
             trackStates[track.number] = tracksToRip.contains(track.number) ? .queued : .skipped
             trackErrors[track.number] = TrackErrors(sectors: disc.toc.sectorRange(of: track).count)
@@ -227,6 +249,13 @@ final class RipRun {
                     await withCheckedContinuation { continuation in
                         DispatchQueue.main.async {
                             MainActor.assumeIsolated { run.askHDCD(report, format: format, answer: continuation) }
+                        }
+                    }
+                }
+                rip.chooseDataTracks = { tracks in
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated { run.askDataTracks(tracks, answer: continuation) }
                         }
                     }
                 }
@@ -292,6 +321,27 @@ final class RipRun {
         if overwriteQuestion != nil { answer(replaces: false) }
         if hdcdQuestion != nil { answerHDCD(decodes: false) }
         if preEmphasisQuestion != nil { answerPreEmphasis(deEmphasizes: false) }
+        if dataTrackQuestion != nil { answerDataTracks(saves: false) }
+    }
+
+    private func askDataTracks(_ tracks: [TOC.Track], answer: CheckedContinuation<Bool, Never>) {
+        dataTrackAnswer = answer
+        let toc = disc.toc
+        dataTrackQuestion = DataTrackQuestion(
+            album: disc.title, tracks: tracks.map(\.number),
+            bytes: tracks.reduce(0) { $0 + toc.sectorRange(of: $1).count * 2048 }, isEnhanced: toc.isEnhanced)
+        add("A data track. Waiting for an answer: save it, or rip the audio only...")
+        onQuestion?()
+    }
+
+    /// Answers the data track question: true saves the data tracks.
+    func answerDataTracks(saves: Bool) {
+        guard let dataTrackAnswer else { return }
+        self.dataTrackAnswer = nil
+        dataTrackQuestion = nil
+        savesDataTracks = saves
+        add(saves ? "Saving the data track after the audio." : "Ripping the audio only.")
+        dataTrackAnswer.resume(returning: saves)
     }
 
     private func askHDCD(_ report: RipReport, format: AudioFormat, answer: CheckedContinuation<Bool, Never>) {
@@ -391,6 +441,7 @@ final class RipRun {
             if overwriteQuestion != nil { return "Waiting for your answer about the library…" }
             if hdcdQuestion != nil { return "Waiting for your answer about HDCD…" }
             if preEmphasisQuestion != nil { return "Waiting for your answer about pre-emphasis…" }
+            if dataTrackQuestion != nil { return "Waiting for your answer about the data track…" }
             // Between the last read and the encoding: the cover, the lookups' results, and the report.
             guard let currentTrack else {
                 if isSavingArtwork { return "Saving the cover art…" }
@@ -526,6 +577,7 @@ final class RipRun {
             dataTrackProgress = (number, fraction)
         case .dataTrackSaved(let track):
             dataTrackProgress = nil
+            savedDataTracks[track.number] = track
             add(RipReport.dataTrackSummary(track))
         case .dataTrackFailed(let number, let message):
             dataTrackProgress = nil

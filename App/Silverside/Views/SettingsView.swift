@@ -350,9 +350,13 @@ struct RippingSettings: View {
                     "The report keeps the CRC-32 of both reads, as Exact Audio Copy does. The rip already compares reads of every doubtful sector, so this is a check for the record, and it takes as long as another read of the disc."
                 )
                 .font(.caption).foregroundStyle(.secondary)
-                Toggle("Save an Enhanced CD's data track", isOn: $model.settings.saveDataTracks)
+                Picker("Data tracks (Enhanced CDs)", selection: $model.settings.dataTracks) {
+                    Text("Ask each time").tag(DataTrackChoice.ask)
+                    Text("Save").tag(DataTrackChoice.save)
+                    Text("Audio only").tag(DataTrackChoice.skip)
+                }
                 Text(
-                    "Some CDs have a data track with extras for a computer, such as videos. It is saved as an ISO disc image in the album's folder."
+                    "Some CDs have a data track with extras for a computer, such as videos. Save puts a disc image of it (Data track.iso) in the album's folder, and a Data track folder with the files on it, ready to open."
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }

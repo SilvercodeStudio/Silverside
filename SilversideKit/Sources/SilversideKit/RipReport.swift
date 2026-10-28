@@ -260,6 +260,9 @@ public struct RipReport: Codable, Equatable, Sendable {
     public var ctdbSeconds: Int?
     /// When Check Again last looked the disc up in AccurateRip and CTDB (`RipCheck`), if it did.
     public var checkedAgain: Date?
+    /// When a repair wrote this report into a folder of its own ("… repaired"), with the rip's
+    /// time kept: it tells the repair apart from the rip, wherever its files go. Nil for a rip.
+    public var repaired: Date?
     public var drive: Drive
     /// True for a secure rip, with re-reads; false for a single pass.
     public var secure: Bool

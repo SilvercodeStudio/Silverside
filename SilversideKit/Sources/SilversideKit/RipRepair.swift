@@ -147,7 +147,15 @@ public struct RipRepair {
                 if let reader, trackVersions.count < reads {
                     for _ in trackVersions.count..<reads {
                         try reader.flushCache(awayFrom: toc.sectorRange(of: track), count: cacheFlushSectors)
-                        let read = try reader.readTrack(track)
+                        let sectors = toc.sectorRange(of: track)
+                        let whole = try reader.read(
+                            (sectors.lowerBound * CDDA.samplesPerSector)..<(sectors.upperBound * CDDA.samplesPerSector),
+                            withC2: false)
+                        // Samples this reader cannot reach (past the audio's end, where the rip's
+                        // drive could read on into the lead-out) keep the rip's values: silence
+                        // there is no read, and two such reads would outvote it.
+                        var read = whole.samples
+                        for run in whole.padded { read.replaceSubrange(run, with: trackVersions[0][run]) }
                         trackVersions.append(read)
                         // Keep the read, so that a later run can use it.
                         let folder = Self.nextReadFolder(after: firstFolder, track: track)
@@ -273,6 +281,7 @@ public struct RipRepair {
         report.hdcd = HDCDStatus(report.tracks)
         report.program = SilversideVersion.program
         if folder.standardizedFileURL != firstFolder {
+            report.repaired = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
             report.encoding = nil
             var files = Set(report.tracks.map(\.file))
             let others = (report.files ?? []).filter {

@@ -29,10 +29,14 @@ public struct RipHistory: Sendable {
         self.directory = directory
     }
 
-    /// The rip's key: its disc and the time of the rip, as the app tells rips apart, and whether
-    /// it is a repair's "… repaired" folder, whose report keeps the rip's time.
+    /// The rip's key: its disc and the time of the rip, as the app tells rips apart, and for a
+    /// repair's folder, whose report keeps the rip's time, the repair's time
+    /// (`RipReport.repaired`). A repair from before 0.9 has no such time: its "… repaired"
+    /// folder name tells it apart, so it is told apart only while it keeps that name.
     public static func key(of report: RipReport, file: URL) -> String {
-        let repaired = file.deletingLastPathComponent().lastPathComponent.hasSuffix(" repaired") ? " repaired" : ""
+        let repaired =
+            report.repaired.map { " repaired \($0.timeIntervalSince1970)" }
+            ?? (file.deletingLastPathComponent().lastPathComponent.hasSuffix(" repaired") ? " repaired" : "")
         let text = "\(report.toc) \(report.date.timeIntervalSince1970)\(repaired)"
         return Insecure.SHA1.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }
@@ -75,6 +79,12 @@ public struct RipHistory: Sendable {
             }
         }
         return entries
+    }
+
+    /// True if the rip's report is still where it was last seen: a report there of another rip
+    /// (a later rip of the disc that took its folder) does not count.
+    public static func isThere(_ entry: Entry, key: String) -> Bool {
+        (try? RipReport.read(from: entry.url)).map { Self.key(of: $0, file: entry.url) } == key
     }
 
     /// Takes a rip out of the history.

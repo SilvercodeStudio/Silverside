@@ -98,6 +98,8 @@ struct Repair: AsyncParsableCommand {
         }
         var reader = AudioReader(drive: drive, toc: toc, readOffset: readOffset, canOverread: false)
         reader.unreadableRetries = 3
+        // As the rip did: an Enhanced CD's last track reads to its end where the drive can.
+        reader.readableLeadOut = AudioReader.sessionLeadOut(of: toc, drive: drive)
         return (reader, profile?.cacheFlushSectors ?? 4000)
     }
 

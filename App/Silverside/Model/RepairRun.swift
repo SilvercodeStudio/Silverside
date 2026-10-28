@@ -87,9 +87,11 @@ final class RepairRun: Identifiable {
                     let profile = try DriveProfileStore().profile(
                         vendor: identity.vendor, product: identity.product, revision: identity.revision)
                     if let offset = profile.offset?.value {
-                        var reader = AudioReader(
-                            drive: try makeDrive(), toc: toc, readOffset: offset, canOverread: false)
+                        let drive = try makeDrive()
+                        var reader = AudioReader(drive: drive, toc: toc, readOffset: offset, canOverread: false)
                         reader.unreadableRetries = 3
+                        // As the rip did: an Enhanced CD's last track reads to its end where the drive can.
+                        reader.readableLeadOut = AudioReader.sessionLeadOut(of: toc, drive: drive)
                         repair.reader = reader
                         repair.cacheFlushSectors = profile.cacheFlushSectors
                         onMain { run.add("Re-reads in \(identity.name), read offset \(offset.signedDescription).") }

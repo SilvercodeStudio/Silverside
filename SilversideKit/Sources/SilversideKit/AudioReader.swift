@@ -53,6 +53,10 @@ public struct AudioReader {
         public var c2Available = false
         /// Samples from sectors that could not be read. They are silence.
         public var unreadable: [Int] = []
+        /// Samples the drive was not asked for, because they lie outside the audio it reads
+        /// (past the disc's edges, in a data track or a session gap): runs of indexes in
+        /// `samples`, silence. They are not a read of the disc, so they do not vote.
+        public var padded: [Range<Int>] = []
         /// The Q subchannel frames of the sectors read, if asked for: as the drive returned them,
         /// in the order read. Empty if the drive refused to read them with the audio.
         public var q: [QSubchannel] = []
@@ -90,6 +94,18 @@ public struct AudioReader {
             readableLeadOut.map { $0.lowerBound == area.upperBound ? area.lowerBound..<$0.upperBound : area } ?? area
         }
         let parts = canOverread ? [wanted] : areas.map { wanted.clamped(to: $0) }.filter { !$0.isEmpty }
+        // The samples that no part covers: everything between the parts' sample ranges.
+        var covered = positions.lowerBound
+        for part in parts {
+            let start = max(positions.lowerBound, part.lowerBound * CDDA.samplesPerSector - readOffset)
+            if start > covered {
+                result.padded.append((covered - positions.lowerBound)..<(start - positions.lowerBound))
+            }
+            covered = max(covered, min(positions.upperBound, part.upperBound * CDDA.samplesPerSector - readOffset))
+        }
+        if covered < positions.upperBound {
+            result.padded.append((covered - positions.lowerBound)..<(positions.upperBound - positions.lowerBound))
+        }
         let total = parts.reduce(0) { $0 + $1.count }
 
         var sectorsRead = 0

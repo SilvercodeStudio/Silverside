@@ -455,7 +455,8 @@ public struct DiscRepairer {
                         (firstSample + start)..<(firstSample + start + CDDA.samplesPerSector), withC2: false),
                     read.unreadable.isEmpty
                 else { continue }
-                for (offset, value) in read.samples.enumerated() where wanted.contains(start + offset) {
+                for (offset, value) in read.samples.enumerated()
+                where wanted.contains(start + offset) && !read.padded.contains(where: { $0.contains(offset) }) {
                     let sample = start + offset
                     if value != audio[sample] && !(alternatives[sample] ?? []).contains(value) {
                         alternatives[sample, default: []].append(value)

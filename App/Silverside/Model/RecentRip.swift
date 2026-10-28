@@ -105,7 +105,9 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         }
         var missing = [RecentRip]()
         for (key, entry) in history.entries() where !keys.contains(key) {
-            let isThere = FileManager.default.fileExists(atPath: entry.file)
+            // There only if the report at that place is still this rip's: a later rip of the disc
+            // can have taken its folder.
+            let isThere = RipHistory.isThere(entry, key: key)
             if isThere {
                 present.append(RecentRip(history: entry, isMissing: false))
             } else {
@@ -117,9 +119,13 @@ nonisolated struct RecentRip: Identifiable, Sendable {
 
     static func scan(rips: URL, library: URL) -> [RecentRip] {
         var found = scanRips(rips)
-        var seen = Set(found.map { "\($0.report.toc) \($0.report.date.timeIntervalSince1970)" })
+        // A repair's report keeps the rip's time; its own time tells it apart.
+        func identity(_ rip: RecentRip) -> String {
+            "\(rip.report.toc) \(rip.report.date.timeIntervalSince1970) \(rip.report.repaired?.timeIntervalSince1970 ?? 0)"
+        }
+        var seen = Set(found.map(identity))
         for rip in scanLibrary(library, skipping: rips) {
-            let key = "\(rip.report.toc) \(rip.report.date.timeIntervalSince1970)"
+            let key = identity(rip)
             guard !seen.contains(key) else { continue }
             seen.insert(key)
             found.append(rip)

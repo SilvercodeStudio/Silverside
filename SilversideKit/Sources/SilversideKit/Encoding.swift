@@ -287,7 +287,28 @@ public struct DiscEncoder: Sendable {
     /// does for a disc that cannot be encoded, but not for files that exist, so a caller can
     /// ask before it replaces them (see `overwrites`).
     public func plannedFiles(_ disc: RippedDisc, into library: URL) throws -> [URL] {
-        try plan(disc, into: library).jobs.map(\.file)
+        let (release, medium, jobs) = try plan(disc, into: library)
+        let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
+        let data = jobs.first.map { dataTrackCopies(of: disc, into: $0.folder, discPart: discPart) } ?? []
+        return jobs.map(\.file) + data.filter { !Self.sameFile($0.source, $0.target) }.map(\.target)
+    }
+
+    /// The data tracks' ISO images (an Enhanced CD's extras) to copy into the album folder:
+    /// from the rip's `Track NN.iso`, or, when an album is the source, from its own images. A
+    /// decoded copy beside the album gets none.
+    func dataTrackCopies(
+        of disc: RippedDisc, into folder: URL, discPart: String
+    ) -> [(track: RipReport.DataTrack, source: URL, target: URL, base: String)] {
+        guard albumSuffix == nil, let saved = disc.report?.dataTracks else { return [] }
+        let albumFiles = disc.isAlbum ? disc.report?.encoding?.dataTrackFiles ?? [] : []
+        return saved.enumerated().map { index, track in
+            let base = "Data track" + (saved.count > 1 ? " \(track.number)" : "") + discPart
+            let source =
+                disc.isAlbum
+                ? disc.folder.appending(path: albumFiles.indices.contains(index) ? albumFiles[index] : base + ".iso")
+                : disc.folder.appending(path: track.file)
+            return (track, source, folder.appending(path: base + ".iso"), base)
+        }
     }
 
     private struct Job: Sendable {
@@ -402,10 +423,19 @@ public struct DiscEncoder: Sendable {
         var (release, medium, jobs) = try plan(disc, into: library)
         let lame = format == .mp3 ? MP3Encoder.lame() : nil
         if format == .mp3 && lame == nil { throw MP3Error.lameNotFound }
+        let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
+        let dataTrackCopies = jobs.first.map { dataTrackCopies(of: disc, into: $0.folder, discPart: discPart) } ?? []
         // A file that exists stops the encoding before any file is written, so a half-done
-        // album can be finished later.
+        // album can be finished later. So does a data track's image, which is not the source.
         if !overwrites, let job = jobs.first(where: { FileManager.default.fileExists(atPath: $0.file.path) }) {
             throw EncodingError.exists(job.file)
+        }
+        if !overwrites,
+            let copy = dataTrackCopies.first(where: {
+                FileManager.default.fileExists(atPath: $0.target.path) && !Self.sameFile($0.source, $0.target)
+            })
+        {
+            throw EncodingError.exists(copy.target)
         }
 
         let cover = try disc.coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }
@@ -544,7 +574,6 @@ public struct DiscEncoder: Sendable {
                         + " (FLAGS PRE).")
             }
         }
-        let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
         func writeDiscImage() throws -> URL? {
             guard let images, albumSuffix == nil, let albumFolder else { return nil }
             let sheet = cueSheet(
@@ -627,11 +656,9 @@ public struct DiscEncoder: Sendable {
         // the audio, with the files of their ISO 9660 file systems in a folder of the same name:
         // the image alone does not open, as its file system counts from the disc's start.
         var dataTrackFiles = [String]()
-        if let albumFolder, albumSuffix == nil, let saved = disc.report?.dataTracks {
-            for track in saved {
-                let base = "Data track" + (saved.count > 1 ? " \(track.number)" : "") + discPart
-                let source = disc.folder.appending(path: track.file)
-                let target = albumFolder.appending(path: base + ".iso")
+        if albumFolder != nil {
+            for (track, source, target, base) in dataTrackCopies {
+                let albumFolder = target.deletingLastPathComponent()
                 if FileManager.default.fileExists(atPath: source.path), !Self.sameFile(source, target) {
                     if FileManager.default.fileExists(atPath: target.path) {
                         try FileManager.default.removeItem(at: target)

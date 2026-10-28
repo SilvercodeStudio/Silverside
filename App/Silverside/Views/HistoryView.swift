@@ -13,8 +13,8 @@ struct HistoryView: View {
         let needle = search.trimmingCharacters(in: .whitespaces).lowercased()
         let found =
             needle.isEmpty
-            ? model.recentRips
-            : model.recentRips.filter {
+            ? model.allRips
+            : model.allRips.filter {
                 $0.title.lowercased().contains(needle) || $0.artist.lowercased().contains(needle)
                     || $0.report.drive.product.lowercased().contains(needle)
             }
@@ -27,6 +27,12 @@ struct HistoryView: View {
                 Text("Rip History").font(.title2.weight(.semibold))
                 Text(summary).foregroundStyle(.secondary)
                 Spacer()
+                if !model.missingRips.isEmpty {
+                    Button("Look for Moved Rips…") { model.locateMissingRips() }
+                        .help(
+                            "Choose a folder, such as a NAS, where moved albums or rips are. Silverside keeps their new places."
+                        )
+                }
             }
             .padding(16)
             Divider()
@@ -41,9 +47,14 @@ struct HistoryView: View {
             }
             .alternatingRowBackgrounds(.disabled)
             .contextMenu(forSelectionType: URL.self) { files in
-                if let file = files.first, let rip = model.recentRips.first(where: { $0.file == file }) {
+                if let file = files.first, let rip = model.allRips.first(where: { $0.file == file }) {
                     Button("Show Results") { model.selection = .rip(rip.file) }
-                    Button("Show in Finder") { model.revealInFinder(rip.folder) }
+                    if rip.isMissing {
+                        Button("Look for Moved Rips…") { model.locateMissingRips() }
+                        Button("Remove from History") { model.forget(rip) }
+                    } else {
+                        Button("Show in Finder") { model.revealInFinder(rip.folder) }
+                    }
                 }
             } primaryAction: { files in
                 if let file = files.first { model.selection = .rip(file) }
@@ -54,10 +65,11 @@ struct HistoryView: View {
     }
 
     private var summary: String {
-        let all = model.recentRips
+        let all = model.allRips
         let unverified = all.filter { !$0.isVerified }.count
         var text = Format.count(all.count, "rip")
         if unverified > 0 { text += ", \(unverified) not verified" }
+        if !model.missingRips.isEmpty { text += ", \(model.missingRips.count) moved or deleted" }
         if !search.isEmpty { text += " · \(Format.count(rows.count, "match"))" }
         return text
     }

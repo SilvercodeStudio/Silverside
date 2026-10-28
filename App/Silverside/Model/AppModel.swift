@@ -37,6 +37,11 @@ final class AppModel {
     }
     private(set) var drives: [DriveSlot] = []
     private(set) var recentRips: [RecentRip] = []
+    /// Rips that only the history has: their files were moved or deleted.
+    private(set) var missingRips: [RecentRip] = []
+    /// Every rip in the history, there or not, the newest first.
+    var allRips: [RecentRip] { (recentRips + missingRips).sorted { $0.report.date > $1.report.date } }
+    let history = RipHistory()
     var selection: SidebarItem? {
         didSet {
             guard selection != oldValue, let oldValue, !isMovingInHistory else { return }
@@ -129,7 +134,7 @@ final class AppModel {
     private func exists(_ item: SidebarItem) -> Bool {
         switch item {
         case .drive(let id): drives.contains { $0.id == id }
-        case .rip(let url): recentRips.contains { $0.file == url }
+        case .rip(let url): allRips.contains { $0.file == url }
         case .history: true
         case .set(let id): sets.contains { $0.releaseID == id }
         }
@@ -137,7 +142,7 @@ final class AppModel {
 
     var selectedRip: RecentRip? {
         guard case .rip(let url) = selection else { return nil }
-        return recentRips.first { $0.file == url }
+        return recentRips.first { $0.file == url } ?? missingRips.first { $0.file == url }
     }
 
     /// The earlier rips of a disc that still have their audio, by its TOC: the pool for a new rip or a repair.
@@ -502,13 +507,45 @@ final class AppModel {
     func refreshRecentRips(then completion: (@MainActor () -> Void)? = nil) {
         let folder = settings.ripsURL
         let library = settings.libraryURL
+        let history = history
         Task.detached(priority: .utility) {
-            let rips = RecentRip.scan(rips: folder, library: library)
+            let rips = RecentRip.scan(rips: folder, library: library, history: history)
             await MainActor.run {
-                self.recentRips = rips
+                self.recentRips = rips.present
+                self.missingRips = rips.missing
                 completion?()
             }
         }
+    }
+
+    /// Looks for moved rips in a folder the user chooses, such as a NAS, and keeps their new places.
+    func locateMissingRips() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.message = "Choose the folder that has the moved albums or rips. Silverside looks up to six folders deep."
+        panel.prompt = "Look Here"
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        let keys = Set(missingRips.map(\.historyKey))
+        let history = history
+        Task.detached(priority: .userInitiated) {
+            let found = history.locate(keys, in: folder)
+            await MainActor.run {
+                self.refreshRecentRips()
+                self.alert = AppAlert(
+                    title: found == 0 ? "No moved rips found there" : "Found \(Format.count(found, "rip"))",
+                    message: found == 0
+                        ? "None of the missing rips' reports is in \(folder.path)."
+                        : "The history now has their new places. \(keys.count - found) still missing.")
+            }
+        }
+    }
+
+    /// Takes a missing rip out of the history.
+    func forget(_ rip: RecentRip) {
+        try? history.forget(key: rip.historyKey)
+        if case .rip(let url) = selection, url == rip.file { selection = .history }
+        refreshRecentRips()
     }
 
     /// Changes an earlier rip's cover: the cover file in the rip's folder and the album's, the

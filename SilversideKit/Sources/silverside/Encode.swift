@@ -76,7 +76,10 @@ struct Encode: ParsableCommand {
             let files = try encoder.encode(disc, into: libraryURL)
             total += files.count
             written += files
-            if let first = files.first { print("  in \(first.deletingLastPathComponent().path)") }
+            if let first = files.first {
+                print("  in \(first.deletingLastPathComponent().path)")
+                RipHistory().recordAlbum(in: first.deletingLastPathComponent())
+            }
         }
         print("Encoded \(total) tracks as \(format.rawValue.uppercased()), each checked against the rip.")
         if addsToMusic {

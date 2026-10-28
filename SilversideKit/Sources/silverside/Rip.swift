@@ -150,6 +150,10 @@ struct Rip: AsyncParsableCommand {
         let result: DiscRipResult
         do {
             result = try await rip.run()
+            // The history keeps the rip, and its album, even after the files move.
+            let history = RipHistory()
+            if !result.deletedRip { history.recordReport(at: result.folder.appending(path: "disc.json")) }
+            if let folder = result.encodedFiles.first?.deletingLastPathComponent() { history.recordAlbum(in: folder) }
         } catch is CancellationError {
             printer.progress.clear()
             print("Stopped." + (printer.folder.map { " The tracks ripped so far are in \($0.path)." } ?? ""))

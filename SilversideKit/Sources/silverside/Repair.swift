@@ -78,6 +78,7 @@ struct Repair: AsyncParsableCommand {
         defer { withExtendedLifetime(interrupt) {} }
         do {
             _ = try await repair.run()
+            RipHistory().recordReport(at: repair.output.appending(path: "disc.json"))
         } catch is CancellationError {
             Swift.print("Stopped. Nothing was written to \(repair.output.path).")
             throw ExitCode(130)

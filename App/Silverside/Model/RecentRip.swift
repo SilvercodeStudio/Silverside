@@ -12,6 +12,9 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     var report: RipReport
     /// True when the folder has the rip's audio, so the rip can be pooled or repaired.
     var hasAudio: Bool
+    /// True when the rip is only in the history: its files were moved or deleted (`RipHistory`).
+    /// `folder` and `file` are where they were last seen.
+    var isMissing = false
     var id: URL { file }
 
     /// A rip in the rips folder.
@@ -30,6 +33,18 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         hasAudio = false
     }
 
+    /// A rip from the history: where its report was last seen, there or not.
+    init(history entry: RipHistory.Entry, isMissing: Bool) {
+        file = entry.url
+        folder = entry.url.deletingLastPathComponent()
+        report = entry.report
+        hasAudio = entry.hasAudio
+        self.isMissing = isMissing
+    }
+
+    /// The rip's key in the history.
+    var historyKey: String { RipHistory.key(of: report, file: file) }
+
     /// The album, with the disc's number in a set: "Europe '72 (Disc 2)".
     var title: String {
         guard let release = report.release else { return folder.lastPathComponent }
@@ -39,7 +54,7 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     var artist: String { report.release?.artist ?? "" }
     var isVerified: Bool { report.isVerified }
     /// Where the rip is: its folder with the audio, or the library with its encoded files.
-    var location: String { hasAudio ? "Rips folder" : "Library" }
+    var location: String { isMissing ? "Moved or deleted" : hasAudio ? "Rips folder" : "Library" }
     var driveName: String { "\(report.drive.vendor) \(report.drive.product)" }
     var date: Date { report.date }
 
@@ -69,7 +84,7 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         parts.append(report.date.formatted(date: .abbreviated, time: .omitted))
         let unverified = report.tracks.count - verifiedCount
         if unverified > 0 { parts.append("\(unverified) unverified") }
-        if !hasAudio { parts.append("encoded") }
+        if isMissing { parts.append("moved or deleted") } else if !hasAudio { parts.append("encoded") }
         return parts.joined(separator: " · ")
     }
 
@@ -80,6 +95,26 @@ nonisolated struct RecentRip: Identifiable, Sendable {
 
     /// The rips in the rips folder, and the reports in the library's album folders, the
     /// newest first. A rip that is in both places (kept after encoding) is listed once.
+    /// The rips found, kept in the history (`RipHistory`), and the history's other rips: those
+    /// elsewhere (a library folder used before), and those whose files are gone, as missing.
+    static func scan(rips: URL, library: URL, history: RipHistory) -> (present: [RecentRip], missing: [RecentRip]) {
+        var present = scan(rips: rips, library: library)
+        var keys = Set<String>()
+        for rip in present {
+            keys.insert((try? history.record(rip.report, file: rip.file, hasAudio: rip.hasAudio)) ?? rip.historyKey)
+        }
+        var missing = [RecentRip]()
+        for (key, entry) in history.entries() where !keys.contains(key) {
+            let isThere = FileManager.default.fileExists(atPath: entry.file)
+            if isThere {
+                present.append(RecentRip(history: entry, isMissing: false))
+            } else {
+                missing.append(RecentRip(history: entry, isMissing: true))
+            }
+        }
+        return (present.sorted { $0.report.date > $1.report.date }, missing.sorted { $0.report.date > $1.report.date })
+    }
+
     static func scan(rips: URL, library: URL) -> [RecentRip] {
         var found = scanRips(rips)
         var seen = Set(found.map { "\($0.report.toc) \($0.report.date.timeIntervalSince1970)" })

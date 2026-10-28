@@ -34,7 +34,12 @@ command-line tool.
 - The report says when the first or last few samples of the disc's audio are
   silence because the drive cannot read past its edge. With the read offset,
   those samples come from past the edge; AccurateRip and CTDB do not check them.
-
+- **The rip history keeps every rip**, in a folder of its own beside the
+  settings, so a rip stays in Rip History after its album is moved out of the
+  library (to a NAS) or deleted, marked "Moved or deleted", with its report and
+  graph. Look for Moved Rips… finds the albums in a folder you choose; Remove
+  from History forgets one. The About window's counts include them. The rips
+  you have now go into it the first time the app looks through your folders.
 - `silverside drives` names the disc in each drive when MusicBrainz knew it at
   an earlier lookup, from the cache, so it waits for no request.
 

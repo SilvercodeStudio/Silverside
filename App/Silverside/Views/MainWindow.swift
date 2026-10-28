@@ -123,6 +123,8 @@ struct DetailView: View {
                 HistoryView()
             } else if let set = model.selectedSet {
                 SetView(ripSet: set)
+            } else if let rip = model.selectedRip, rip.isMissing {
+                MissingRipView(rip: rip).id(rip.file)
             } else if let rip = model.selectedRip {
                 ResultsView(folder: rip.folder, report: rip.report, hasAudio: rip.hasAudio, reportFile: rip.file)
                     .id(rip.file)
@@ -221,8 +223,10 @@ struct SidebarView: View {
                     .tag(SidebarItem.rip(rip.file))
                     .help(rip.details)
                 }
-                if model.recentRips.count > Self.recentCount || model.selection == .history {
-                    Label("All Rips (\(model.recentRips.count))", systemImage: "clock")
+                if model.recentRips.count > Self.recentCount || !model.missingRips.isEmpty
+                    || model.selection == .history
+                {
+                    Label("All Rips (\(model.allRips.count))", systemImage: "clock")
                         .tag(SidebarItem.history)
                         .help("Every rip Silverside knows, in a table you can search and sort")
                 }

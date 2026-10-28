@@ -64,7 +64,8 @@ struct AboutView: View {
     /// Each disc counts once, however many times it was ripped or repaired, with its best
     /// rip's verified tracks.
     private var discs: (count: Int, verifiedTracks: Int) {
-        let byDisc = Dictionary(grouping: model.recentRips, by: \.report.toc)
+        // Every rip in the history counts, also one whose files were moved or deleted.
+        let byDisc = Dictionary(grouping: model.allRips, by: \.report.toc)
         return (byDisc.count, byDisc.values.reduce(0) { $0 + ($1.map(\.verifiedCount).max() ?? 0) })
     }
 

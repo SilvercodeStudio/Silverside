@@ -9,6 +9,7 @@ Silverside rips audio CDs on the Mac with the care of Exact Audio Copy: every tr
 - **The toolbar** has Eject, Look Up Metadata, Options for the next rip, the read mode (Secure or Fast), and Rip Disc (Stop while a rip runs).
 - **The status bar** shows what the rip is doing, how far it is, and the time left. Show Log opens the rip's log. With "Rip it at once" on in Settings, it counts down before a rip starts by itself, with Rip Now and Cancel.
 - **Recent Rips** lists the newest rips: the rips in your rips folder, and the rips that were encoded into the library (their reports stay in the album folders, marked "encoded"). Select one to see its results and report. **All Rips** at the end of the list, or Rip History in the View menu (⌘Y), is every rip in a table you can search and sort.
+- **The history keeps every rip**, also after you move its album out of the library (to a NAS, for example) or delete it. Silverside keeps its own copy of each rip's report, so such a rip stays in Rip History, marked "Moved or deleted", with its report and graph, and still counts in the About window. **Look for Moved Rips…** in Rip History looks in a folder you choose and keeps the rips' new places; **Remove from History** forgets one.
 - **Sets** lists the releases of several discs that you have started: each disc's state, and the work left. Back and Forward in the toolbar (⌘[ and ⌘]) go between the places you have looked at.
 
 ## A rip, step by step

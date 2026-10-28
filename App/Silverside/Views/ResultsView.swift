@@ -131,12 +131,18 @@ struct ResultsView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 if hasAudio && report.encoding == nil {
                     Button {
-                        model.startLibraryRun(title: recentRip.title, encode: [recentRip], update: [])
+                        if report.isVerified || report.accepted != nil {
+                            model.startLibraryRun(title: recentRip.title, encode: [recentRip], update: [])
+                        } else {
+                            model.acceptAndEncode(recentRip)
+                        }
                     } label: {
-                        Label("Encode", systemImage: "music.note")
+                        Label(
+                            report.isVerified || report.accepted != nil ? "Encode" : "Encode…",
+                            systemImage: "music.note")
                     }
                     .help(encodeHelp)
-                    .disabled(!report.isVerified || model.library?.isRunning == true)
+                    .disabled(model.library?.isRunning == true)
                 }
                 if canDecodeHDCD {
                     Button {
@@ -194,7 +200,10 @@ struct ResultsView: View {
     }
 
     private var encodeHelp: String {
-        if !report.isVerified { return "Only a verified rip is encoded. Repair it first, or rip the disc again." }
+        if !report.isVerified && report.accepted == nil {
+            return "Encode the rip although it is not verified, once you accept it as it is: listen to its "
+                + "unverified tracks first. Repair, or a rip in another drive, may still verify it."
+        }
         return "Encode the rip into the library as \(model.settings.format.name), with the names as they are now."
     }
 

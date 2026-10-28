@@ -86,7 +86,7 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         if !artist.isEmpty { parts.append(artist) }
         parts.append(report.date.formatted(date: .abbreviated, time: .omitted))
         let unverified = report.tracks.count - verifiedCount
-        if unverified > 0 { parts.append("\(unverified) unverified") }
+        if unverified > 0 { parts.append("\(unverified) unverified" + (report.accepted != nil ? ", accepted" : "")) }
         if isMissing { parts.append("moved or deleted") } else if !hasAudio { parts.append("encoded") }
         return parts.joined(separator: " · ")
     }

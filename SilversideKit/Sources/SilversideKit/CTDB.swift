@@ -105,6 +105,15 @@ public enum CTDB {
     /// The CRC of each audio track at `shift`. The first track leaves out the first
     /// row, and the last track the last row and the remainder, as for the disc CRC.
     public static func trackCRCs(of audio: [UInt32], toc: TOC, layout: CTDBLayout, shift: Int = 0) -> [UInt32] {
+        trackRanges(toc: toc, layout: layout, shift: shift, count: audio.count).map {
+            CRC32.checksum(of: audio[$0])
+        }
+    }
+
+    /// The samples that each track CRC covers, in the disc's audio of `count` samples: the
+    /// track's samples at `shift`, without the first row and the last row and remainder. At a
+    /// shift, a track's last samples are in the next track's range.
+    public static func trackRanges(toc: TOC, layout: CTDBLayout, shift: Int = 0, count: Int) -> [Range<Int>] {
         let audioTracks = toc.audioTracks
         let first = audioTracks[0].startLBA
         return audioTracks.indices.map { index in
@@ -113,7 +122,7 @@ public enum CTDB {
             var end = (sectors.upperBound - first) * CDDA.samplesPerSector + shift
             if index == 0 { start += layout.prefixSamples }
             if index == audioTracks.count - 1 { end -= layout.suffixSamples }
-            return CRC32.checksum(of: audio[max(start, 0)..<min(end, audio.count)])
+            return max(start, 0)..<min(end, count)
         }
     }
 
@@ -263,6 +272,11 @@ public enum CTDB {
     public struct Change: Equatable, Sendable {
         public var sample: Int
         public var mask: UInt32
+
+        public init(sample: Int, mask: UInt32) {
+            self.sample = sample
+            self.mask = mask
+        }
     }
 
     /// Corrects the audio at `shift` with the syndromes from a CTDB entry's repair

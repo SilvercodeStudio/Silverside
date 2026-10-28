@@ -263,6 +263,10 @@ public struct RipReport: Codable, Equatable, Sendable {
     /// When a repair wrote this report into a folder of its own ("… repaired"), with the rip's
     /// time kept: it tells the repair apart from the rip, wherever its files go. Nil for a rip.
     public var repaired: Date?
+    /// When the user accepted the rip as it is, with tracks that AccurateRip and CTDB do not
+    /// prove, so that it is encoded and finished as a verified rip is (`accept(reportAt:)`).
+    /// It stays not verified. Nil for a rip not accepted.
+    public var accepted: Date?
     public var drive: Drive
     /// True for a secure rip, with re-reads; false for a single pass.
     public var secure: Bool
@@ -529,6 +533,39 @@ extension RipReport {
                 || ($0.ctdbConfidence ?? 0) > 0
         }
         return tracksVerified && hiddenTrack?.readsAgree != false
+    }
+}
+
+extension RipReport {
+    /// Accepts the rip in the report file as it is (`accepted`): the encoder takes its tracks
+    /// that are not verified, and its WAV files go after the encoding as a verified rip's do.
+    /// The other keys of the file stay, and the Markdown report beside a rip's disc.json says it.
+    public static func accept(reportAt url: URL, date: Date = Date()) throws {
+        var object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any] ?? [:]
+        let stamp = ISO8601DateFormatter().string(
+            from: Date(timeIntervalSince1970: date.timeIntervalSince1970.rounded(.down)))
+        if var nested = object["ripReport"] as? [String: Any] {
+            nested["accepted"] = stamp
+            object["ripReport"] = nested
+        } else {
+            object["accepted"] = stamp
+        }
+        let data = try JSONSerialization.data(
+            withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        try data.write(to: url, options: .atomic)
+        let markdown = url.deletingLastPathComponent().appending(path: "Rip Report.md")
+        if url.lastPathComponent == "disc.json", FileManager.default.fileExists(atPath: markdown.path) {
+            try Data(read(from: url).markdown.utf8).write(to: markdown, options: .atomic)
+        }
+    }
+
+    /// The tracks that AccurateRip and CTDB do not prove, by number.
+    public var unverifiedTracks: [Int] {
+        let wholeDisc = ctdb.status == .verified || ctdb.status == .repaired
+        return tracks.filter {
+            !(wholeDisc || $0.accurateRip == .accurate || $0.accurateRip == .otherPressings
+                || ($0.ctdbConfidence ?? 0) > 0)
+        }.map(\.number)
     }
 }
 

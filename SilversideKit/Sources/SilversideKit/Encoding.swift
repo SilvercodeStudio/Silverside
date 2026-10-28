@@ -83,6 +83,13 @@ public struct RippedDisc: Sendable {
         return copies
     }
 
+    /// True if the user accepted the rip as it is (`RipReport.accepted`).
+    public var isAccepted: Bool { report?.accepted != nil }
+
+    /// True if the rip may go once every track is encoded: every track is verified, or the user
+    /// accepted the rip as it is.
+    public var isFinished: Bool { isAccepted || tracks.allSatisfy(\.isVerified) }
+
     /// The cover that the disc's files embed: its own ("cover (Disc 2).jpg", a box set's
     /// sleeve), else the folder's (cover.jpg or cover.png), if it has one.
     public var coverFile: URL? {
@@ -375,7 +382,7 @@ public struct DiscEncoder: Sendable {
         guard var release = disc.release else { throw EncodingError.noRelease(disc.folder) }
         if let albumSuffix { release.title += albumSuffix }
         guard let medium = release.medium(for: disc.toc) else { throw EncodingError.unknownMedium(disc.folder) }
-        if !allowsUnverified, let track = disc.tracks.first(where: { !$0.isVerified }) {
+        if !allowsUnverified, !disc.isAccepted, let track = disc.tracks.first(where: { !$0.isVerified }) {
             throw EncodingError.notVerified(track: track.number)
         }
         let audioTracks = disc.toc.audioTracks

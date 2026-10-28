@@ -176,6 +176,56 @@ struct DiscRepairerTests {
         #expect(track.accurateRip == .accurate && track.matchingOffsets == [6])
     }
 
+    /// *The 1968 Demos*: an entry at another pressing's alignment proves a track by a CRC
+    /// that, at that shift, covers the end of the track before it. A correction near the end
+    /// of a track is in the next track's CRC; when that one does not match, it is not proved.
+    @Test func keepsOnlyTheCorrectionsThatACRCCovers() throws {
+        let (toc, samples, _) = try TrackRipperTests().disc()
+        let layout = CTDBLayout(toc: toc)
+        let shift = -324
+        let entry = CTDBEntry(
+            id: 1, confidence: 3, crc32: CTDB.discCRC(of: samples, layout: layout, shift: shift),
+            trackCRCs: CTDB.trackCRCs(of: samples, toc: toc, layout: layout, shift: shift),
+            repairDataURL: nil, syndromeCount: 16, column0Syndromes: [])
+        let starts = toc.audioTracks.map { ($0.startLBA - toc.audioTracks[0].startLBA) * 588 }
+        // Damage in track 2's middle and in its last 100 samples, and in track 3, which is not corrected.
+        let middle = starts[1] + 200 * 588
+        let edge = starts[2] - 100
+        var damaged = samples
+        for sample in [middle, edge, starts[2] + 300 * 588] { damaged[sample] ^= 1 }
+        let changes = [CTDB.Change(sample: middle, mask: 1), CTDB.Change(sample: edge, mask: 1)]
+        let repairer = DiscRepairer(toc: toc, records: [], entries: [entry])
+        let proved = repairer.provedTracks(
+            changes, of: damaged, entry: entry, shift: shift, layout: layout, trackStarts: starts)
+        #expect(proved.tracks == [2] && proved.changed == [middle])
+        #expect(proved.audio[middle] == samples[middle] && proved.audio[edge] == damaged[edge])
+    }
+
+    /// A track that AccurateRip matches as it is keeps its samples, whatever an entry's CRC says:
+    /// an entry of one submission can have its own errors.
+    @Test func leavesATrackThatAccurateRipMatches() throws {
+        let (toc, samples, record) = try TrackRipperTests().disc()
+        let layout = CTDBLayout(toc: toc)
+        let starts = toc.audioTracks.map { ($0.startLBA - toc.audioTracks[0].startLBA) * 588 }
+        let sample = starts[1] + 200 * 588
+        var wrong = samples
+        wrong[sample] ^= 1
+        // The entry's submission had the error; its CRCs are of that audio.
+        let entry = CTDBEntry(
+            id: 1, confidence: 1, crc32: CTDB.discCRC(of: wrong, layout: layout),
+            trackCRCs: CTDB.trackCRCs(of: wrong, toc: toc, layout: layout), repairDataURL: nil,
+            syndromeCount: 16, column0Syndromes: [])
+        let change = [CTDB.Change(sample: sample, mask: 1)]
+        let unknown = DiscRepairer(toc: toc, records: [], entries: [entry])
+        #expect(
+            unknown.provedTracks(change, of: samples, entry: entry, shift: 0, layout: layout, trackStarts: starts)
+                .tracks == [2])
+        let known = DiscRepairer(toc: toc, records: [record], entries: [entry])
+        let proved = known.provedTracks(
+            change, of: samples, entry: entry, shift: 0, layout: layout, trackStarts: starts)
+        #expect(proved.tracks.isEmpty && proved.audio == samples)
+    }
+
     @Test func choosesTheMostFrequentValue() {
         let audio = TrackAudio(versions: [[1, 2, 3, 4], [1, 5, 3, 6], [1, 5, 7, 8]])
         #expect(audio.samples == [1, 5, 3, 4])

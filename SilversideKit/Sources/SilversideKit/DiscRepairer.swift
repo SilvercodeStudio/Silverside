@@ -405,31 +405,49 @@ public struct DiscRepairer {
         return confidences
     }
 
-    /// Applies `changes`, and keeps them only in the tracks whose CTDB track CRC then
-    /// matches the entry's. Returns those tracks' numbers, the samples kept, and the audio.
-    private func provedTracks(
+    /// Applies `changes`, and keeps only those that a CTDB track CRC then proves: those in
+    /// the samples of a track CRC that matches the entry's. At the entry's shift, a track CRC
+    /// covers the end of the track before it or the start of the one after, so a change near a
+    /// track's edge is proved by its neighbor's CRC, or not at all. A track that AccurateRip
+    /// matches as it is keeps its samples. Returns the numbers of the tracks changed, the
+    /// samples kept, and the audio.
+    func provedTracks(
         _ changes: [CTDB.Change], of audio: [UInt32], entry: CTDBEntry, shift: Int, layout: CTDBLayout,
         trackStarts: [Int]
     ) -> (tracks: [Int], changed: [Int], audio: [UInt32]) {
         guard !changes.isEmpty, entry.trackCRCs.count == toc.audioTracks.count else { return ([], [], audio) }
         var partial = audio
         for change in changes { partial[change.sample] ^= change.mask }
-        let trackCRCs = CTDB.trackCRCs(of: partial, toc: toc, layout: layout, shift: shift)
-        var kept = Set<Int>()
-        var proved = [Int]()
-        for (index, trackCRC) in trackCRCs.enumerated() {
-            let start = trackStarts[index]
-            let end = index + 1 < trackStarts.count ? trackStarts[index + 1] : partial.count
-            let inTrack = changes.filter { (start..<end).contains($0.sample) }
-            if trackCRC == entry.trackCRCs[index] && !inTrack.isEmpty {
-                kept.formUnion(inTrack.map(\.sample))
-                proved.append(toc.audioTracks[index].number)
-            } else {
-                // Undo this track's corrections: they are not proved.
-                for change in inTrack { partial[change.sample] ^= change.mask }
-            }
+        let ranges = CTDB.trackRanges(toc: toc, layout: layout, shift: shift, count: partial.count)
+        let trackCRCs = ranges.map { CRC32.checksum(of: partial[$0]) }
+        let proved = changes.filter { change in
+            ranges.indices.contains { ranges[$0].contains(change.sample) && trackCRCs[$0] == entry.trackCRCs[$0] }
         }
-        return (proved, kept.sorted(), partial)
+        // The tracks, as the rip has them, that the proved changes are in.
+        func track(of sample: Int) -> Int { trackStarts.lastIndex { $0 <= sample } ?? 0 }
+        let accurate = Set(
+            Set(proved.map { track(of: $0.sample) }).filter {
+                isAccurate(trackAt: $0, of: audio, trackStarts: trackStarts)
+            })
+        let kept = proved.filter { !accurate.contains(track(of: $0.sample)) }
+        partial = audio
+        for change in kept { partial[change.sample] ^= change.mask }
+        let tracks = Set(kept.map { track(of: $0.sample) }).sorted().map { toc.audioTracks[$0].number }
+        return (tracks, kept.map(\.sample).sorted(), partial)
+    }
+
+    /// True if AccurateRip matches the track at `index` as it is: at shift 0, or at another
+    /// pressing's offset.
+    private func isAccurate(trackAt index: Int, of audio: [UInt32], trackStarts: [Int]) -> Bool {
+        let known = records.entries(forTrackAt: index)
+        guard !known.isEmpty else { return false }
+        let start = trackStarts[index]
+        let end = index + 1 < trackStarts.count ? trackStarts[index + 1] : audio.count
+        let edges = (isFirst: index == 0, isLast: index == trackStarts.count - 1)
+        let checksum = AccurateRipAccumulator.checksum(
+            of: audio[start..<end], isFirstTrack: edges.isFirst, isLastTrack: edges.isLast)
+        if case .accurate = TrackRipper.verification(of: checksum, known: known) { return true }
+        return Self.otherPressingShift(of: audio, start: start, length: end - start, edges: edges, known: known) != nil
     }
 
     /// Re-reads the sectors that hold `samples` (indexes in the disc's audio), after

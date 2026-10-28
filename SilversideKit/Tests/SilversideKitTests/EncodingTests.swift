@@ -324,6 +324,31 @@ struct EncodingTests {
         encoder.allowsUnverified = true
         #expect(try encoder.encode(disc, into: library).count == 2)
     }
+
+    /// *The 1968 Demos*: three tracks that no repair could prove, which the user listened to
+    /// and accepted. The rip is encoded as a verified one is, can go once encoded, and its
+    /// reports say it was accepted.
+    @Test func encodesARipAcceptedAsItIs() throws {
+        let (folder, library) = try makeRip(verified: false)
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let report = folder.appending(path: "disc.json")
+        try Data().write(to: folder.appending(path: "Rip Report.md"))
+        #expect(try !RippedDisc(folder: folder).isFinished && RipReport.read(from: report).advice != nil)
+        try RipReport.accept(reportAt: report, date: Date(timeIntervalSince1970: 1_800_000_000.7))
+        let accepted = try RipReport.read(from: report)
+        #expect(accepted.accepted == Date(timeIntervalSince1970: 1_800_000_000) && !accepted.isVerified)
+        #expect(accepted.unverifiedTracks == [2] && accepted.advice == nil)
+        let markdown = try String(contentsOf: folder.appending(path: "Rip Report.md"), encoding: .utf8)
+        #expect(
+            markdown.contains("Accepted as it is 2027-01-15T08:00:00Z") && markdown.contains("track 2 is not verified"))
+        let disc = try RippedDisc(folder: folder)
+        #expect(disc.isAccepted && disc.isFinished)
+        let files = try DiscEncoder(format: .flac).encode(disc, into: library)
+        #expect(files.count == 2)
+        let album = try RipReport.read(
+            from: files[0].deletingLastPathComponent().appending(path: "Rip Report (Disc 2).json"))
+        #expect(album.accepted != nil)
+    }
 }
 
 extension EncodingTests {

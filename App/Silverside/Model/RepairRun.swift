@@ -154,7 +154,7 @@ final class RepairRun: Identifiable {
         case .poolFileSkipped(let file):
             add("\(file.url.lastPathComponent) was not used: \(file.reason).")
         case .ctdbEntries(let count, let mostSubmissions):
-            add("CTDB: \(Format.count(count, "entry")), up to \(mostSubmissions) submissions")
+            add("CTDB: \(Format.count(count, "entry", plural: "entries")), up to \(mostSubmissions) submissions")
         case .repairLog(let line):
             add(line)
         case .finished(let result):

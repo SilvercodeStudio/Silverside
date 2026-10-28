@@ -94,12 +94,12 @@ public struct RipSet: Equatable, Sendable {
     }
 
     /// "1", "1 and 3", "1, 2, and 4".
-    static func list(_ numbers: [Int]) -> String {
+    public static func list(_ numbers: [Int]) -> String {
         list(numbers.map(String.init))
     }
 
     /// "a", "a and b", "a, b, and c".
-    static func list(_ words: [String]) -> String {
+    public static func list(_ words: [String]) -> String {
         switch words.count {
         case 0: return ""
         case 1: return words[0]

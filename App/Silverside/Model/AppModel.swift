@@ -548,6 +548,34 @@ final class AppModel {
         refreshRecentRips()
     }
 
+    /// Encodes a rip that is not verified, after the user accepts it as it is
+    /// (`RipReport.accept`). The report keeps the acceptance; the rip then goes as a verified
+    /// one does, unless Settings keep it.
+    func acceptAndEncode(_ rip: RecentRip) {
+        let unverified = rip.report.unverifiedTracks
+        let tracks = "\(unverified.count == 1 ? "Track" : "Tracks") \(RipSet.list(unverified))"
+        let alert = NSAlert()
+        alert.messageText = "Accept this rip as it is, and encode it?"
+        alert.informativeText =
+            "\(tracks) \(unverified.count == 1 ? "is" : "are") not verified: AccurateRip and CTDB do not prove "
+            + (unverified.count == 1 ? "it" : "them") + ", so there can be errors. Listen to "
+            + (unverified.count == 1 ? "it" : "them") + " first. The rip is encoded into the library as a "
+            + "verified rip is, and its report says that you accepted it."
+            + (settings.keepRipAfterEncoding
+                ? "" : " Then the rip's WAV files are deleted, so it can no longer be repaired.")
+        alert.addButton(withTitle: "Accept and Encode")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try RipReport.accept(reportAt: rip.file)
+        } catch {
+            self.alert = AppAlert(title: "The rip could not be accepted", message: "\(error)")
+            return
+        }
+        refreshRecentRips()
+        startLibraryRun(title: rip.title, encode: [rip], update: [])
+    }
+
     /// True while nothing else works on the rip's files: no repair, no name update, and no rip,
     /// which can write into an earlier rip's folder or album folder. A rip from the command line
     /// is kept out by the folder's claim (`RipRemoval.moveToTrash`).

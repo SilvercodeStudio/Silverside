@@ -326,6 +326,7 @@ struct AlbumHeader: View {
                                 .help("The genre with the most votes in MusicBrainz. It goes into the files' tags.")
                         }
                         if let discLabel = disc.discLabel { Chip(text: discLabel, help: disc.discLabelHelp) }
+                        earlierRipChip
                         if let set = model.set(for: disc.release) {
                             Button {
                                 model.selection = .set(set.releaseID)
@@ -471,6 +472,24 @@ struct AlbumHeader: View {
                 help: (disc.toc.isEnhanced
                     ? "After the music, this disc has a data track with extras for a computer. "
                     : "This disc has a data track for a computer. ") + choice)
+        }
+    }
+
+    /// An earlier rip of this disc, in the rips folder or the library: the newest verified one,
+    /// else the newest. A click opens it. Not shown once this drive has ripped the disc.
+    @ViewBuilder private var earlierRipChip: some View {
+        let rips = model.recentRips.filter { $0.report.toc == disc.toc.ctdbTOCString }
+        if slot.rip == nil, let rip = rips.first(where: \.isVerified) ?? rips.first {
+            let date = rip.date.formatted(date: .abbreviated, time: .omitted)
+            let place = "\(date) on \(rip.driveName), in the \(rip.location.lowercased())"
+            Chip(
+                text: rip.isVerified ? "Ripped before · verified" : "Ripped before · not verified",
+                tone: rip.isVerified ? .good : .warning, systemImage: "clock.arrow.circlepath",
+                help: rip.isVerified
+                    ? "You have a verified rip of this disc, from \(place). Click to open it."
+                    : "You have a rip of this disc that is not verified, from \(place). Click to open it: Repair "
+                        + "there, with the disc in a drive, reads again only what it needs. A new rip pools with it.",
+                action: { model.selection = .rip(rip.file) })
         }
     }
 
@@ -1026,6 +1045,15 @@ enum ResultChips {
                                 ? "this track, so it cannot check it" : "these tracks, so it cannot check them")
                             + ". It keeps none for a track that is all silence."))
             }
+        }
+        if let accepted = report.accepted, !report.isVerified {
+            let unverified = report.unverifiedTracks
+            chips.append(
+                Chip(
+                    text: "Accepted as it is", tone: .warning, systemImage: "hand.thumbsup",
+                    help: "You accepted this rip on \(accepted.formatted(date: .abbreviated, time: .shortened)), with "
+                        + "\(unverified.count == 1 ? "track" : "tracks") \(RipSet.list(unverified)) not verified, "
+                        + "and it was encoded as a verified rip is. Check Again can still verify it later."))
         }
         switch report.ctdb.status {
         case .verified: chips.append(Chip(text: "CTDB verified", tone: .good))

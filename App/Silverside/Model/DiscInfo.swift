@@ -316,8 +316,9 @@ enum Format {
     }
 
     /// "1 sector", "3 sectors".
-    static func count(_ number: Int, _ noun: String) -> String {
-        "\(number) \(noun)" + (number == 1 ? "" : "s")
+    /// "1 track", "3 tracks"; `plural` for a noun that does not take an s, such as "entries".
+    static func count(_ number: Int, _ noun: String, plural: String? = nil) -> String {
+        "\(number) " + (number == 1 ? noun : plural ?? noun + "s")
     }
 
     /// "about 3 min left", "about 40 s left".

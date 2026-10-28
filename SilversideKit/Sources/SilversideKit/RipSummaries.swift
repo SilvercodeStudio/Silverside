@@ -205,7 +205,7 @@ extension RipReport {
     /// The next step that is most likely to help, when the rip is not verified: for the
     /// app's result banner and the CLI. Nil when the rip is verified.
     public var advice: String? {
-        guard !isVerified, let text = adviceText else { return nil }
+        guard !isVerified, accepted == nil, let text = adviceText else { return nil }
         guard tracks.contains(where: { $0.cacheFlushIncomplete == true }) else { return text }
         return text
             + " Some re-reads may have come from the drive's cache, not the disc, so reads that agree prove less there."

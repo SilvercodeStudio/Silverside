@@ -32,6 +32,17 @@ extension RipReport {
                 "", "Checked again in AccurateRip and CTDB \(ISO8601DateFormatter().string(from: checkedAgain)).",
             ]
         }
+        if let accepted {
+            let unverified = unverifiedTracks
+            lines += [
+                "",
+                "Accepted as it is \(ISO8601DateFormatter().string(from: accepted)), and encoded as a verified rip is"
+                    + (unverified.isEmpty
+                        ? "."
+                        : ": \(unverified.count == 1 ? "track" : "tracks") \(RipSet.list(unverified)) "
+                            + (unverified.count == 1 ? "is" : "are") + " not verified."),
+            ]
+        }
         if tracks.contains(where: { $0.cacheFlushIncomplete == true }) {
             lines += [
                 "",

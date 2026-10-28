@@ -21,6 +21,12 @@ command-line tool.
   History show them. A set's are still edited in the set's view. When two
   editions were encoded into one album folder, renaming one moves only its
   own files, and the other keeps its folder, report, and CUE sheet.
+- **Accept a rip as it is:** an earlier rip that is not verified can be
+  encoded with Encode…, after you accept it. It goes into the library as a
+  verified rip does, and its report and an "Accepted as it is" chip say which
+  tracks are not verified.
+- A disc you ripped before shows a "Ripped before" chip in its header, which
+  says whether that rip is verified and opens it when clicked.
 - **Move to Trash…** for an earlier rip, from its menu in Recent Rips and Rip
   History: the rip's folder with its WAV files, or for a rip in the library, its
   report, encoded files, CUE sheet, and disc image. Files that another rip in
@@ -98,6 +104,12 @@ command-line tool.
 
 ### Fixed
 
+- A repair that could fix only some tracks could change a track that
+  AccurateRip had already matched, and make it wrong. With a CTDB entry from
+  another pressing, the check of a track also covers the end of the track
+  before it, and a correction there was kept without proof. Now a correction
+  is kept only where a track check covers it, and a track that AccurateRip
+  matches is never changed. The repair log says "7 entries", not "7 entrys".
 - After an encode deletes a rip's WAV files, the rip's folder goes too. A cover
   or artwork that the rip found in its folder already, or that a later change
   of cover wrote there, stayed behind with the folder; now each such file goes

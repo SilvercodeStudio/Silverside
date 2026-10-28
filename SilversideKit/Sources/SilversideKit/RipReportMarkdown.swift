@@ -280,10 +280,8 @@ extension RipReport {
         lines.append("|---|---|")
         if let media { lines.append("| Media | \(media) |") }
         if let genre = release?.genre { lines.append("| Genre | \(Self.escaped(genre)) |") }
-        if let release, !release.isManual {
-            lines.append(
-                "| MusicBrainz release | [\(Self.escaped(release.title))](https://musicbrainz.org/release/\(release.id)) |"
-            )
+        if let release, let page = release.pageURL {
+            lines.append("| MusicBrainz release | [\(Self.escaped(release.title))](\(page.absoluteString)) |")
         } else if release != nil {
             lines.append("| MusicBrainz release | none; the names were typed in or came from CD-Text |")
         }

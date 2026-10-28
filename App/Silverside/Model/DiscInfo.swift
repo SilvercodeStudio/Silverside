@@ -144,10 +144,28 @@ struct DiscInfo {
         shownRelease?.date == nil && release?.releaseGroup?.firstReleaseDate != nil
     }
 
+    /// "Disc 1 of 2", with the media when some cannot be ripped: "Disc 1 of 2 · CD + Blu-ray".
+    /// A mix of kinds of CD, such as "CD + HDCD", is only in the tooltip: MusicBrainz can be
+    /// wrong about those, and the rip finds HDCD codes itself.
     var discLabel: String? {
-        guard let release else { return nil }
-        guard release.media.count > 1 else { return nil }
-        return medium.map { "Disc \($0.position) of \(release.media.count)" } ?? "\(release.media.count) discs"
+        guard let release, release.media.count > 1 else { return nil }
+        let count = release.media.count
+        let text = medium.map { "Disc \($0.position) of \(count)" } ?? "\(count) discs"
+        return release.media.allSatisfy(\.isCompactDisc) ? text : "\(text) · \(release.formats)"
+    }
+
+    var discLabelHelp: String? {
+        guard let release, release.media.count > 1 else { return nil }
+        let count = release.media.count
+        let place =
+            medium.map { "This is disc \($0.position) of the \(count) in this release" }
+            ?? "This release has \(count) discs"
+        guard !release.isCDsOnly else { return place + "." }
+        guard !release.media.allSatisfy(\.isCompactDisc) else {
+            return place + ". MusicBrainz lists them as \(release.formats)."
+        }
+        return place + ": \(release.formats). Silverside rips the CDs only. The tags number the discs as "
+            + "MusicBrainz does" + (medium.map { ": disc \($0.position) of \(count)." } ?? ".")
     }
 
     var labelText: String? {

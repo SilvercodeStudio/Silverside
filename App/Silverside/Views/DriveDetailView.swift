@@ -327,7 +327,7 @@ struct AlbumHeader: View {
                             Chip(text: genre, systemImage: "music.note.list")
                                 .help("The genre with the most votes in MusicBrainz. It goes into the files' tags.")
                         }
-                        if let discLabel = disc.discLabel { Chip(text: discLabel) }
+                        if let discLabel = disc.discLabel { Chip(text: discLabel, help: disc.discLabelHelp) }
                         if let set = model.set(for: disc.release) {
                             Button {
                                 model.selection = .set(set.releaseID)
@@ -502,11 +502,16 @@ struct AlbumHeader: View {
         case .lookingUp:
             Chip(text: "MusicBrainz · looking up…", isWorking: true)
         case .found where disc.isAmbiguous:
-            Chip(text: "MusicBrainz · several releases match", tone: .warning, systemImage: "questionmark")
+            Chip(
+                text: "MusicBrainz · several releases match", tone: .warning, systemImage: "questionmark",
+                help: "Several releases in MusicBrainz have this disc. Click to choose the one you have.",
+                action: { releasePickerShown = true })
         case .found where disc.isFuzzy:
             ResultChips.lengthsMatch(toc: disc.toc)
         case .found:
-            Chip(text: "MusicBrainz · Disc ID match", tone: .good, systemImage: "checkmark")
+            Chip(
+                text: "MusicBrainz · Disc ID match", tone: .good, systemImage: "checkmark",
+                help: disc.release.map(ResultChips.discIDMatchHelp) ?? "", link: disc.release?.pageURL)
         case .notFound:
             Chip(
                 text: disc.hasCDText
@@ -914,6 +919,17 @@ enum ResultChips {
             action: {
                 if let page = try? MusicBrainzSeed.writePage(for: release, toc: toc) { NSWorkspace.shared.open(page) }
             })
+    }
+
+    /// The tooltip of a release that MusicBrainz found by the disc ID: enough to tell it from
+    /// the other releases of the album, such as a set with a Blu-ray.
+    static func discIDMatchHelp(_ release: MusicBrainzRelease) -> String {
+        let labels = release.labels.compactMap { label in
+            [label.name, label.catalogNumber].compactMap { $0 }.joined(separator: " ")
+        }.filter { !$0.isEmpty }
+        let details = [release.formats] + labels + [release.country, release.date].compactMap { $0 }
+        return "MusicBrainz knows this exact disc, on \(release.title) (\(details.joined(separator: ", "))). "
+            + "Click to open the release in MusicBrainz."
     }
 
     /// For a release that MusicBrainz matched by its track lengths: a click opens the page

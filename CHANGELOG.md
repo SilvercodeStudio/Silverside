@@ -64,6 +64,11 @@ command-line tool.
 - While a track is read again, the sidebar says "Reading track 6 again"
   instead of a percent that stands at 100%, and it shows the encoding's own
   progress while the album is encoded.
+- The "Disc ID match" chip names the release when you point to it (its media,
+  such as CD + Blu-ray, label, country, and date), and a click opens the
+  release in MusicBrainz. "Several releases match" opens the release picker.
+  The picker names media other than plain CDs, and a release with a disc that
+  is not a CD says so in its disc chip: "Disc 1 of 2 · CD + Blu-ray".
 
 ### Fixed
 

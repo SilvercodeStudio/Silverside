@@ -148,6 +148,29 @@ struct MusicBrainzTests {
         #expect(fuzzy.lacksDiscID(of: toc))
     }
 
+    /// A release with a CD and a Blu-ray reads as MusicBrainz shows it.
+    @Test func namesTheMediaAndLinksToTheRelease() throws {
+        let toc = try TOC(musicBrainzOffsets: [150, 20000, 40000], sectors: 60000)
+        var release = try #require(try MusicBrainzClient.lookup(fromJSON: fixture("cornell-1977-disc1")).releases.first)
+        #expect(release.pageURL?.absoluteString == "https://musicbrainz.org/release/\(release.id)")
+        #expect(MusicBrainzRelease.manual(toc: toc).pageURL == nil)
+        let medium = release.media[0]
+        func formats(_ names: [String?]) -> String {
+            release.media = names.map {
+                var copy = medium
+                copy.format = $0
+                return copy
+            }
+            return release.formats
+        }
+        #expect(formats(["CD"]) == "CD")
+        #expect(formats(["CD", "CD", "CD"]) == "3×CD")
+        #expect(formats(["CD", "Blu-ray"]) == "CD + Blu-ray" && !release.isCDsOnly)
+        #expect(formats(["CD", "CD"]) == "2×CD" && release.isCDsOnly)
+        #expect(formats(["CD", "CD", "DVD-Video", "CD"]) == "3×CD + DVD-Video")
+        #expect(formats([nil]) == "(unknown)")
+    }
+
     @Test func linksToTheDiscIDSubmissionPage() throws {
         let toc = try TOC(musicBrainzOffsets: [150, 20000, 40000], sectors: 60000)
         let url = MusicBrainzRelease.submissionURL(for: toc).absoluteString

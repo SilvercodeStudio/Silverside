@@ -122,6 +122,26 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
     /// True if the Cover Art Archive may have images for the release: a front cover, or any
     /// image (in releases saved before the count was kept, any release MusicBrainz knows).
     public var hasArtwork: Bool { !isManual && (hasFrontCover || (artworkCount ?? 1) > 0) }
+
+    /// The release's page in MusicBrainz. Nil for a manual release.
+    public var pageURL: URL? { isManual ? nil : URL(string: "https://musicbrainz.org/release/\(id)") }
+
+    /// True if every medium is a plain CD: no DVD or Blu-ray, and no HDCD or other kind of CD.
+    public var isCDsOnly: Bool { media.allSatisfy { $0.format == "CD" } }
+
+    /// The media as MusicBrainz shows them: "CD", "2×CD", "CD + Blu-ray".
+    public var formats: String {
+        var counts = [(format: String, count: Int)]()
+        for medium in media {
+            let format = medium.format ?? "(unknown)"
+            if let index = counts.firstIndex(where: { $0.format == format }) {
+                counts[index].count += 1
+            } else {
+                counts.append((format, 1))
+            }
+        }
+        return counts.map { $0.count > 1 ? "\($0.count)×\($0.format)" : $0.format }.joined(separator: " + ")
+    }
     /// The genre with the most votes in MusicBrainz, from the release group, else the release:
     /// "Rock", "Jazz". Nil when there are no votes, and in releases saved before Silverside kept it.
     public var genre: String?

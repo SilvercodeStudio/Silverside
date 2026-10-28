@@ -60,6 +60,8 @@ struct ReleasePickerSheet: View {
                 parts.append("\(release.media.count) discs")
             }
         }
+        // A set of CDs only goes without saying; "CD + Blu-ray" or "HDCD" tells releases apart.
+        if !release.isCDsOnly { parts.append(release.formats) }
         if let barcode = release.barcode, !barcode.isEmpty { parts.append("barcode \(barcode)") }
         let labels = release.labels.compactMap { label in
             [label.name, label.catalogNumber].compactMap { $0 }.joined(separator: " ")

@@ -6,10 +6,10 @@ When a disc appears, Silverside reads its table of contents and asks MusicBrainz
 
 | Chip | Meaning |
 |---|---|
-| Disc ID match | MusicBrainz knows this exact disc. |
+| Disc ID match | MusicBrainz knows this exact disc. Point to the chip to see the release (its media, such as CD + Blu-ray, its label, country, and date); click it to open the release in MusicBrainz. |
 | Nearly the same TOC | MusicBrainz does not know the disc ID, but these releases have almost the same track lengths. Check the release, and consider adding the disc ID to MusicBrainz: click the chip (an earlier rip shows it too) or use the link in the release picker. You need a MusicBrainz account. |
 | Disc 2 of your 4-disc *album*? | MusicBrainz has this disc ID on another release only, but a release you ripped other discs of has a disc with the same track lengths. Another edition can be missing the disc ID, or the disc ID can be on a wrong release by mistake. If the disc is from your release, click the chip to add the disc ID to it in MusicBrainz, then use Look Up Metadata. |
-| Several releases match | More than one release has the disc, and Silverside cannot tell which. Choose one. The choice is kept for the other discs of the set. |
+| Several releases match | More than one release has the disc, and Silverside cannot tell which. Click the chip or Choose Release to choose one. The choice is kept for the other discs of the set. |
 | Not in MusicBrainz | No release has the disc. The names come from the disc's CD-Text, or you type them in the header and the track table. The files get those names, but no MusicBrainz IDs. Click **Add to MusicBrainz…** to open MusicBrainz's release editor in your browser with these names, the track lengths, and the disc ID filled in; check and complete it there, and submit it (sign in first). An earlier rip of such a disc has the chip too. |
 
 Other Releases shows every release that matches. A disc with CD-Text gets a switch between the MusicBrainz names and the names on the disc. The switch only changes what you see: the rip's tags come from MusicBrainz. To tag the rip with the disc's names, show them and click Use These Names. They become your edits to the MusicBrainz names, so you can still change them before the rip, and Undo Edits goes back. An album name from CD-Text is an album edit, so the other discs of a set get it too. A disc can have CD-Text in several languages, such as Japanese and English: Silverside shows the one in your Mac's language if the disc has it, else the disc's first.

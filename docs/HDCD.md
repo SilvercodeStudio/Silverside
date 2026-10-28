@@ -60,6 +60,18 @@ exactly −5.0 dBFS after decoding (16 of 18), so the master's peaks were most
 likely held to one ceiling, which peak extend opens up again. The ReplayGain
 over both discs is +1.60 dB.
 
+**One with no HDCD logo (2026-10-28).** Medeski Martin and Wood, *Last Chance to
+Dance Trance (perhaps): Best Of (1991-1996)* (Gramavision GCD 79520, 1999): no
+logo or mention on the case, booklet, or disc, and none in MusicBrainz. Peak
+extend in every packet of all 13 tracks (6,840 to 15,353 packets a track, no
+damaged codes, the transient filter on), and no gain adjustment. AccurateRip 13
+of 13 and CTDB verified. This master uses peak extend much more than the Grateful
+Dead discs: 0.36% to 3.24% of samples per track are in the expanded range. Every
+track peaks at −5.0 to −5.2 dBFS after decoding, which is −0.5 to −0.6 dBFS on
+the disc (FFmpeg's table maps the disc's full scale to 0 dBFS). The *Dick's
+Picks* ceiling of −5.0 dBFS is the same −0.5 dBFS on the disc. The album
+ReplayGain of the decode is −1.23 dB.
+
 **The decode, against FFmpeg, across whole discs (2026-10-27).** Silverside
 decodes a track at a time, and starts each one with the last 5 seconds of the
 track before, as a player that plays the disc straight through has them. All

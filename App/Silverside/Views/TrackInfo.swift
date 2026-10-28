@@ -5,7 +5,23 @@ import SwiftUI
 struct InfoRow: Identifiable {
     let label: String
     let value: String
+    /// For a long value with no spaces, such as the CTDB TOC: it wraps only after these characters.
+    var breaks: Set<Character> = []
     var id: String { label + value }
+
+    /// The value cut after each break character.
+    var pieces: [String] {
+        var pieces = [String]()
+        var piece = ""
+        for character in value {
+            piece.append(character)
+            if breaks.contains(character) {
+                pieces.append(piece)
+                piece = ""
+            }
+        }
+        return piece.isEmpty ? pieces : pieces + [piece]
+    }
 }
 
 /// A group of facts with a heading, such as "Release" or "Tags in file".
@@ -94,10 +110,16 @@ private struct FoldedInfoSection: View {
     }
 
     var body: some View {
-        DisclosureGroup(isExpanded: $open) {
-            InfoGrid(rows: section.rows).padding(.top, 6)
-        } label: {
-            InfoHeading(text: section.title ?? "")
+        VStack(alignment: .leading, spacing: 0) {
+            DisclosureGroup(isExpanded: $open) {
+                InfoGrid(rows: section.rows).padding(.top, 6)
+            } label: {
+                InfoHeading(text: section.title ?? "")
+            }
+            if !open {
+                // Folded rows still count in the popover's width, which does not change when they open.
+                InfoGrid(rows: section.rows).frame(height: 0).hidden()
+            }
         }
     }
 }
@@ -116,9 +138,23 @@ private struct InfoGrid: View {
     var body: some View {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 5) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                GridRow {
+                GridRow(alignment: row.breaks.isEmpty ? nil : .top) {
                     Text(row.label).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-                    Text(row.value).textSelection(.enabled)
+                    if row.breaks.isEmpty {
+                        Text(row.value).textSelection(.enabled)
+                    } else {
+                        // Text breaks a "-" or ":" before a digit nowhere but inside the number, so
+                        // each piece is a view of its own; Copy takes the place of selecting.
+                        FlowLayout(spacing: 0, rowSpacing: 0) {
+                            ForEach(Array(row.pieces.enumerated()), id: \.offset) { Text($0.element) }
+                        }
+                        .contextMenu {
+                            Button("Copy") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(row.value, forType: .string)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -296,7 +332,7 @@ extension InfoSection {
             ids.append(.init(label: "MusicBrainz disc ID", value: toc.musicBrainzDiscID))
             ids.append(.init(label: "freedb disc ID", value: String(format: "%08x", toc.freedbDiscID)))
             ids.append(.init(label: "AccurateRip disc ID", value: toc.accurateRipDiscID.name))
-            ids.append(.init(label: "CTDB TOC", value: toc.ctdbTOCString))
+            ids.append(.init(label: "CTDB TOC", value: toc.ctdbTOCString, breaks: [":"]))
         }
         if let mcn { rows.append(.init(label: "MCN", value: mcn)) }
         if let cdText {

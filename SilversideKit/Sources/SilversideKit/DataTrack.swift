@@ -18,10 +18,14 @@ extension RipReport {
         public var crc32: String
         /// Sectors, counted from the track's start, that could not be read. They are zeros in the file.
         public var unreadableSectors: [Int]?
+        /// The sectors at the track's end, after its file systems, that were not read: zeros in
+        /// the file. A data track's post-gap is empty, and can be unreadable; one drive (ASUS
+        /// BW-16D1HT) stops answering there. Nil when the whole track was read.
+        public var skippedSectors: Int?
 
         public init(
             number: Int, startLBA: Int? = nil, file: String, sectors: Int, mode: DataSectorMode, crc32: String,
-            unreadableSectors: [Int]? = nil
+            unreadableSectors: [Int]? = nil, skippedSectors: Int? = nil
         ) {
             self.number = number
             self.startLBA = startLBA
@@ -30,6 +34,7 @@ extension RipReport {
             self.mode = mode
             self.crc32 = crc32
             self.unreadableSectors = unreadableSectors
+            self.skippedSectors = skippedSectors
         }
 
         /// "Track 15.iso".
@@ -49,6 +54,9 @@ extension RipReport {
         }
         if let unreadable = track.unreadableSectors {
             text += "; \(unreadable.count) sectors could not be read, and are zeros in the file"
+        }
+        if let skipped = track.skippedSectors {
+            text += "; the last \(skipped.formatted()) sectors, after its file systems, were not read and are zeros"
         }
         return text
     }
@@ -72,10 +80,14 @@ public enum DataTrackReader {
     /// Reads `track`, a data track, into `url`, a chunk at a time. A chunk that fails is read
     /// sector by sector, each up to `retries` more times; a sector that still fails is zeros
     /// in the file, and the result lists it. `progress` hears the fraction read. Throws if the
-    /// track's first sector has no data mode that an ISO image holds, or once `stop` is stopped.
+    /// track's first sector has no data mode that an ISO image holds, once `stop` is stopped,
+    /// or after `giveUpAfter` sectors in a row fail: a drive that cannot read a data session
+    /// would otherwise retry every sector of it, which can take hours. The sectors after the
+    /// track's file systems (`fileSystemEnd`), its empty post-gap, are not read: they are zeros
+    /// in the file, as a drive that reads them gives.
     public static func read(
-        _ track: TOC.Track, in toc: TOC, drive: any CDDrive, to url: URL, retries: Int = 3, stop: StopToken? = nil,
-        progress: ((Double) -> Void)? = nil
+        _ track: TOC.Track, in toc: TOC, drive: any CDDrive, to url: URL, retries: Int = 3,
+        giveUpAfter: Int = 200, stop: StopToken? = nil, progress: ((Double) -> Void)? = nil
     ) throws -> RipReport.DataTrack {
         let range = toc.sectorRange(of: track)
         let mode = try drive.readDataMode(at: range.lowerBound)
@@ -88,26 +100,51 @@ public enum DataTrackReader {
         defer { try? handle.close() }
         var crc: UInt32 = 0
         var unreadable = [Int]()
-        for lba in stride(from: range.lowerBound, to: range.upperBound, by: sectorsPerRead) {
+        var failedInARow = 0
+        // Where the reads end: the track's end, until the first chunk shows its file systems.
+        var readEnd = range.upperBound
+        for lba in stride(from: range.lowerBound, to: range.upperBound, by: sectorsPerRead) where lba < readEnd {
             try stop?.check()
-            let count = min(sectorsPerRead, range.upperBound - lba)
+            let count = min(sectorsPerRead, readEnd - lba)
             var bytes: [UInt8]
             do {
                 bytes = try drive.readDataSectors(at: lba, count: count, mode: mode)
+                failedInARow = 0
             } catch DriveError.readFailed {
                 bytes = []
                 for sector in lba..<(lba + count) {
+                    try stop?.check()
                     var data: [UInt8]?
                     for _ in 0...retries where data == nil {
                         data = try? drive.readDataSectors(at: sector, count: 1, mode: mode)
                     }
-                    if data == nil { unreadable.append(sector - range.lowerBound) }
+                    if data == nil {
+                        unreadable.append(sector - range.lowerBound)
+                        failedInARow += 1
+                        if failedInARow >= giveUpAfter {
+                            throw DataTrackError.unreadable(track: track.number, sectors: failedInARow)
+                        }
+                    } else {
+                        failedInARow = 0
+                    }
                     bytes += data ?? [UInt8](repeating: 0, count: 2048)
                 }
+            }
+            if lba == range.lowerBound,
+                let end = fileSystemEnd(of: bytes, startLBA: range.lowerBound, sectors: range.count)
+            {
+                readEnd = max(range.lowerBound + end, lba + count)
             }
             crc = CRC32.checksum(of: bytes, after: crc)
             try handle.write(contentsOf: bytes)
             progress?(Double(lba + count - range.lowerBound) / Double(range.count))
+        }
+        let skipped = range.upperBound - readEnd
+        if skipped > 0 {
+            let zeros = [UInt8](repeating: 0, count: skipped * 2048)
+            crc = CRC32.checksum(of: zeros, after: crc)
+            try handle.write(contentsOf: zeros)
+            progress?(1)
         }
         try handle.close()
         if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
@@ -115,16 +152,50 @@ public enum DataTrackReader {
         return RipReport.DataTrack(
             number: track.number, startLBA: range.lowerBound, file: url.lastPathComponent, sectors: range.count,
             mode: mode,
-            crc32: String(format: "%08X", crc), unreadableSectors: unreadable.isEmpty ? nil : unreadable)
+            crc32: String(format: "%08X", crc), unreadableSectors: unreadable.isEmpty ? nil : unreadable,
+            skippedSectors: skipped > 0 ? skipped : nil)
+    }
+
+    /// The sectors that a data track's file systems use, from its first sectors' bytes: the
+    /// ISO 9660 volume's size, and the end of each partition of an Apple partition map (a
+    /// Mac's HFS beside the ISO). A session-2 ISO volume counts from the disc's start, as
+    /// `startLBA` does. Nil when neither is there, or either says more than the track holds.
+    static func fileSystemEnd(of bytes: [UInt8], startLBA: Int, sectors: Int) -> Int? {
+        func uint32(_ offset: Int, bigEndian: Bool) -> Int {
+            let word = bytes[offset..<(offset + 4)]
+            return (bigEndian ? word : word.reversed()[...]).reduce(0) { $0 << 8 | Int($1) }
+        }
+        var ends = [Int]()
+        let pvd = 16 * 2048
+        if bytes.count >= pvd + 2048, bytes[pvd] == 1, Array(bytes[(pvd + 1)..<(pvd + 6)]) == Array("CD001".utf8) {
+            let size = uint32(pvd + 80, bigEndian: false)
+            ends.append(size > startLBA ? size - startLBA : size)
+        }
+        if bytes.count >= 1024, bytes[512] == 0x50, bytes[513] == 0x4D {
+            let entries = uint32(512 + 4, bigEndian: true)
+            for entry in 1...max(1, min(entries, bytes.count / 512 - 1)) {
+                let base = 512 * entry
+                guard bytes[base] == 0x50, bytes[base + 1] == 0x4D else { continue }
+                let blocks = uint32(base + 8, bigEndian: true) + uint32(base + 12, bigEndian: true)
+                ends.append((blocks + 3) / 4)
+            }
+        }
+        guard let end = ends.max(), end > 0, end <= sectors else { return nil }
+        return end
     }
 }
 
 public enum DataTrackError: Error, Equatable, CustomStringConvertible {
     case notData(track: Int)
+    /// So many sectors in a row failed that the drive most likely cannot read the track.
+    case unreadable(track: Int, sectors: Int)
 
     public var description: String {
         switch self {
         case .notData(let track): "Track \(track) holds no data that an ISO image can keep (Mode 2 Form 2)."
+        case .unreadable(let track, let sectors):
+            "The drive could not read \(sectors) sectors in a row of track \(track), so it stopped. "
+                + "Another drive may read it."
         }
     }
 }

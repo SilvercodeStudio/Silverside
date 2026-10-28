@@ -75,6 +75,9 @@ public final class SimulatedDrive: CDDrive {
     /// The simulated user data of a data sector: byte `index` of sector `lba`.
     public static func dataByte(lba: Int, index: Int) -> UInt8 { UInt8(truncatingIfNeeded: lba &* 7 &+ index) }
 
+    /// The user data of some data sectors (2048 bytes each), by LBA, in place of `dataByte`'s.
+    public var dataSectors: [Int: [UInt8]] = [:]
+
     public func readDataMode(at lba: Int) throws -> DataSectorMode {
         guard isData(lba), !unreadableSectors.contains(lba) else { throw DriveError.readFailed(lba: lba) }
         return .mode1
@@ -88,7 +91,9 @@ public final class SimulatedDrive: CDDrive {
             failingReads[bad]! -= 1
             throw DriveError.readFailed(lba: bad)
         }
-        return sectors.flatMap { sector in (0..<2048).map { Self.dataByte(lba: sector, index: $0) } }
+        return sectors.flatMap { sector in
+            dataSectors[sector] ?? (0..<2048).map { Self.dataByte(lba: sector, index: $0) }
+        }
     }
 
     private func isData(_ lba: Int) -> Bool {

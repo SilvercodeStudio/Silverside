@@ -442,12 +442,13 @@ final class RipRun {
             if hdcdQuestion != nil { return "Waiting for your answer about HDCD…" }
             if preEmphasisQuestion != nil { return "Waiting for your answer about pre-emphasis…" }
             if dataTrackQuestion != nil { return "Waiting for your answer about the data track…" }
+            // The data track is read after the audio, while the last audio track is still current.
+            if let (number, fraction) = dataTrackProgress {
+                return "Saving data track \(number) · \(Int(fraction * 100))%"
+            }
             // Between the last read and the encoding: the cover, the lookups' results, and the report.
             guard let currentTrack else {
                 if isSavingArtwork { return "Saving the cover art…" }
-                if let (number, fraction) = dataTrackProgress {
-                    return "Saving data track \(number) · \(Int(fraction * 100))%"
-                }
                 return fraction >= 1 ? "Finishing the rip…" : "Ripping…"
             }
             var text = "Ripping track \(currentTrack)" + (count > 1 ? " (\(position) of \(count))" : "")

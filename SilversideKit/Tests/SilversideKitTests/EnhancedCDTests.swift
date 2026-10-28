@@ -59,6 +59,86 @@ struct EnhancedCDTests {
         #expect(fractions.last == 1)
     }
 
+    /// *A Clockwork Orange* (East Side Digital): the data track's last 152 sectors, its
+    /// post-gap, cannot be read, and the ASUS stops answering there. Its ISO 9660 volume ends
+    /// 302 sectors before the track, so the reader stops there, and the image has zeros after,
+    /// as a drive that reads them gives.
+    @Test func readsTheDataTrackToTheEndOfItsFileSystem() throws {
+        let (toc, samples) = try Self.disc()
+        let drive = SimulatedDrive(toc: toc, samples: samples)
+        let data = toc.tracks[2]
+        // A session-2 volume counts from the disc's start: 240 sectors of the track's 300.
+        var pvd = [UInt8](repeating: 0, count: 2048)
+        pvd[0] = 1
+        pvd.replaceSubrange(1..<6, with: Array("CD001".utf8))
+        let size = UInt32(data.startLBA + 240)
+        pvd.replaceSubrange(80..<84, with: (0..<4).map { UInt8(truncatingIfNeeded: size >> ($0 * 8)) })
+        drive.dataSectors[data.startLBA + 16] = pvd
+        for lba in (data.startLBA + 240)..<(data.startLBA + 300) {
+            drive.dataSectors[lba] = [UInt8](repeating: 0, count: 2048)
+        }
+        drive.unreadableSectors = Set((data.startLBA + 250)..<(data.startLBA + 300))
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appending(path: "Track 03.iso")
+        let saved = try DataTrackReader.read(data, in: toc, drive: drive, to: url, giveUpAfter: 5)
+        #expect(saved.skippedSectors == 60 && saved.unreadableSectors == nil && saved.sectors == 300)
+        // The same file as a drive that reads the empty sectors gives.
+        drive.unreadableSectors = []
+        drive.dataSectors[data.startLBA + 16] = [UInt8](repeating: 0, count: 2048)
+        let whole = try DataTrackReader.read(data, in: toc, drive: drive, to: root.appending(path: "whole.iso"))
+        #expect(whole.skippedSectors == nil)
+        var expected = try [UInt8](Data(contentsOf: root.appending(path: "whole.iso")))
+        expected.replaceSubrange((16 * 2048)..<(17 * 2048), with: pvd)
+        #expect(try [UInt8](Data(contentsOf: url)) == expected)
+    }
+
+    /// The end of an Apple partition map's last partition (a Mac's HFS) counts too, as on *Mirrorball*.
+    @Test func findsTheEndOfAnHFSPartition() {
+        var bytes = [UInt8](repeating: 0, count: 26 * 2048)
+        func put(_ value: UInt32, at offset: Int) {
+            bytes.replaceSubrange(
+                offset..<(offset + 4), with: (0..<4).reversed().map { UInt8(truncatingIfNeeded: value >> ($0 * 8)) })
+        }
+        for entry in 1...2 {
+            bytes[512 * entry] = 0x50
+            bytes[512 * entry + 1] = 0x4D
+            put(2, at: 512 * entry + 4)
+        }
+        put(1, at: 512 + 8)
+        put(2, at: 512 + 12)
+        put(165, at: 1024 + 8)
+        put(108_197, at: 1024 + 12)
+        #expect(DataTrackReader.fileSystemEnd(of: bytes, startLBA: 308_636, sectors: 27_393) == 27_091)
+        #expect(DataTrackReader.fileSystemEnd(of: bytes, startLBA: 308_636, sectors: 20_000) == nil)
+        #expect(
+            DataTrackReader.fileSystemEnd(of: [UInt8](repeating: 0, count: 26 * 2048), startLBA: 0, sectors: 100) == nil
+        )
+    }
+
+    /// A drive that cannot read the data session fails every sector of it: the reader stops
+    /// after a run of failures, not after retrying each sector of the track.
+    @Test func stopsWhenTheDriveCannotReadTheDataTrack() throws {
+        let (toc, samples) = try Self.disc()
+        let drive = SimulatedDrive(toc: toc, samples: samples)
+        let data = toc.tracks[2]
+        drive.unreadableSectors = Set((data.startLBA + 40)..<(data.startLBA + 300))
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appending(path: "Track 03.iso")
+        #expect(throws: DataTrackError.unreadable(track: 3, sectors: 50)) {
+            try DataTrackReader.read(data, in: toc, drive: drive, to: url, giveUpAfter: 50)
+        }
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+        // A shorter run of failures is kept as zeros.
+        drive.unreadableSectors = Set((data.startLBA + 40)..<(data.startLBA + 60))
+        #expect(
+            try DataTrackReader.read(data, in: toc, drive: drive, to: url, giveUpAfter: 50).unreadableSectors?.count
+                == 20)
+    }
+
     /// A rip saves the data track and reads the last track to its end; the encoding copies
     /// the ISO image into the album folder. With the setting off, there is none.
     @Test(arguments: [true, false])

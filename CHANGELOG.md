@@ -104,6 +104,18 @@ command-line tool.
 
 ### Fixed
 
+- Eject crashed the app when macOS refused to unmount the disc, as it can for
+  an Enhanced CD whose data session is in use. Now it says why the disc could
+  not be ejected.
+- A drive that cannot read an Enhanced CD's data track no longer retries every
+  sector of it, which could take hours after the last audio track: after 200
+  sectors in a row fail, the data track is not saved, and the rip goes on.
+- An Enhanced CD's data track is read only to the end of its file systems. The
+  empty sectors after them can be unreadable, and one drive stopped answering
+  there until it was switched off and on. The image has zeros there, as when a
+  drive reads them.
+- While a rip saves an Enhanced CD's data track, the status line says so, with
+  its progress, instead of "Ripping track 10" at 100%.
 - A repair that could fix only some tracks could change a track that
   AccurateRip had already matched, and make it wrong. With a CTDB entry from
   another pressing, the check of a track also covers the end of the track

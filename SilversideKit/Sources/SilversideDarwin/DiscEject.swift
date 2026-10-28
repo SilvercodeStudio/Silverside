@@ -11,7 +11,7 @@ public enum DiscEjectError: Error, Equatable, CustomStringConvertible {
         case .noDisk(let name): "There is no disc \(name)."
         case .refused(let name, let step, let status, let reason):
             "Cannot \(step) \(name): " + (reason ?? String(format: "status 0x%08X", UInt32(bitPattern: status)))
-                + (status == Int32(bitPattern: UInt32(kDAReturnBusy)) ? " (a program is using it)" : "")
+                + (status == Int32(truncatingIfNeeded: kDAReturnBusy) ? " (a program is using it)" : "")
         }
     }
 }
@@ -32,7 +32,8 @@ public enum DiscEject {
                 DADiskUnmount(disk, DADiskUnmountOptions(kDADiskUnmountOptionWhole), callback, $0)
             }
         } catch DiscEjectError.refused(_, _, let status, _)
-            where status == Int32(bitPattern: UInt32(kDAReturnNotMounted))
+            // The constants are negative Ints in Swift: UInt32(_:) of one traps.
+            where status == Int32(truncatingIfNeeded: kDAReturnNotMounted)
         {
             // Nothing was mounted.
         }

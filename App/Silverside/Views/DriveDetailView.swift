@@ -753,7 +753,7 @@ struct ResultBanner: View {
 /// gets an alert, so a drop or a choice never fails without a word.
 enum CoverDrop {
     static func load(_ provider: NSItemProvider, then apply: @escaping @MainActor (Data) -> Void) {
-        func done(_ image: Data?) {
+        let done: @Sendable (Data?) -> Void = { image in
             Task { @MainActor in
                 if let image { apply(image) } else { showUnreadable() }
             }
@@ -933,6 +933,21 @@ enum ResultChips {
                 if let page = try? MusicBrainzSeed.writePage(for: release, toc: toc) { NSWorkspace.shared.open(page) }
             })
     }
+
+    /// Opens MusicBrainz's release editor with a new release of this disc alone, copied from
+    /// `release`, which has the disc as one of its discs: for an edition that MusicBrainz lacks.
+    static func openNewRelease(copying release: MusicBrainzRelease, toc: TOC) {
+        if let page = try? MusicBrainzSeed.writePage(for: release, toc: toc, newRelease: true) {
+            NSWorkspace.shared.open(page)
+        }
+    }
+
+    /// The help for the commands that open it.
+    static let newReleaseHelp =
+        "For an edition of this disc that MusicBrainz does not have, such as the single-disc edition of a set's "
+        + "first disc: opens MusicBrainz's release editor in your browser with a new release copied from this one, "
+        + "with this disc's tracks, lengths, and disc ID. Add your edition's barcode, catalog number, and format "
+        + "there, and submit it (you need an account). Then use Look Up Metadata."
 
     /// The tooltip of a release that MusicBrainz found by the disc ID: enough to tell it from
     /// the other releases of the album, such as a set with a Blu-ray.

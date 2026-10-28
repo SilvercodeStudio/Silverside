@@ -548,6 +548,34 @@ final class AppModel {
         refreshRecentRips()
     }
 
+    /// True while nothing else works on the rip's files.
+    func canMoveToTrash(_ rip: RecentRip) -> Bool {
+        !rip.isMissing && !updatingNames.contains(rip.file) && repair?.isRunning != true
+    }
+
+    /// Moves an earlier rip's own files to the Trash (`RipRemoval`), after asking, and takes
+    /// the rip out of the history.
+    func moveToTrash(_ rip: RecentRip) {
+        let files = RipRemoval.files(ofReportAt: rip.file, hasAudio: rip.hasAudio)
+        let encoded = files.filter { !["json", "md"].contains($0.pathExtension) }.count
+        let alert = NSAlert()
+        alert.messageText = "Move “\(rip.title)” to the Trash?"
+        alert.informativeText =
+            rip.hasAudio
+            ? "The rip's folder, with its WAV files, goes to the Trash. Files encoded into the library stay."
+            : "The rip's report" + (encoded > 0 ? " and \(Format.count(encoded, "encoded file"))" : "")
+                + " go to the Trash. Files that another rip in the album folder uses, the cover, and the CUE sheet stay."
+        alert.addButton(withTitle: "Move to Trash")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try RipRemoval.moveToTrash(files)
+        } catch {
+            self.alert = AppAlert(title: "The rip could not be moved to the Trash", message: "\(error)")
+        }
+        forget(rip)
+    }
+
     /// Changes an earlier rip's cover: the cover file in the rip's folder and the album's, the
     /// tags of the encoded files, and the cover kept for the release. Nil puts the Cover Art
     /// Archive's front cover back.

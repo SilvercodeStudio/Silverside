@@ -222,6 +222,11 @@ struct SidebarView: View {
                     )
                     .tag(SidebarItem.rip(rip.file))
                     .help(rip.details)
+                    .contextMenu {
+                        Button("Show in Finder") { model.revealInFinder(rip.folder) }
+                        Divider()
+                        Button("Move to Trash…") { model.moveToTrash(rip) }.disabled(!model.canMoveToTrash(rip))
+                    }
                 }
                 if model.recentRips.count > Self.recentCount || !model.missingRips.isEmpty
                     || model.selection == .history

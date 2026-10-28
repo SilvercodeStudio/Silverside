@@ -46,6 +46,48 @@ struct MusicBrainzSeedTests {
         #expect(value("mediums.0.track.1.artist_credit.names.0.name") == "Eddy Louiss")
     }
 
+    /// *American Beauty*'s 50th anniversary remaster on one CD: MusicBrainz has its disc ID
+    /// only as disc 1 of the 3-disc deluxe edition, so the new release is copied from that.
+    @Test func copiesANewReleaseForADiscOfAnotherRelease() throws {
+        let toc = try TOC(audioTrackStarts: [0, 1000], leadOutLBA: 2000)
+        func medium(_ position: Int, discIDs: [String]) -> MusicBrainzRelease.Medium {
+            .init(
+                position: position, format: "HDCD", title: nil, discIDs: discIDs,
+                tracks: [1, 2].map {
+                    .init(
+                        position: $0, number: String($0), title: "Song \($0)", length: nil,
+                        artistCredit: [.init(name: "Grateful Dead", artistID: "gd")], recordingID: "r\($0)")
+                })
+        }
+        let deluxe = MusicBrainzRelease(
+            id: "deluxe", title: "American Beauty", artistCredit: [.init(name: "Grateful Dead", artistID: "gd")],
+            date: "2020-10-30", country: "XE", status: "Official", barcode: "603497848515",
+            disambiguation: "50th anniversary deluxe edition",
+            labels: [.init(name: "Rhino", catalogNumber: "R2 624978")],
+            releaseGroup: .init(
+                id: "group", title: "American Beauty", primaryType: "Album", secondaryTypes: [],
+                firstReleaseDate: "1970-11-01"),
+            media: [medium(1, discIDs: [toc.musicBrainzDiscID]), medium(2, discIDs: ["d2"]), medium(3, discIDs: [])],
+            hasFrontCover: true)
+        let fields = MusicBrainzSeed.fields(for: deluxe, toc: toc, newRelease: true)
+        let value = { (name: String) in fields.first { $0.name == name }?.value }
+        #expect(value("name") == "American Beauty" && value("release_group") == "group")
+        #expect(value("status") == "official" && value("events.0.country") == "XE")
+        #expect(value("labels.0.name") == "Rhino")
+        // Another product's codes.
+        #expect(value("barcode") == nil && value("labels.0.catalog_number") == nil && value("comment") == nil)
+        #expect(value("mediums.0.format") == "HDCD" && value("mediums.1.format") == nil)
+        #expect(value("mediums.0.track.1.name") == "Song 2" && value("mediums.0.track.1.recording") == "r2")
+        #expect(value("mediums.0.track.0.artist_credit.names.0.mbid") == "gd")
+        #expect(value("edit_note")?.contains("https://musicbrainz.org/release/deluxe") == true)
+        #expect(value("edit_note")?.contains("disc 1 of 3") == true)
+        // A disc that MusicBrainz does not know keeps the old form.
+        let unknown = MusicBrainzSeed.fields(for: deluxe, toc: toc).map(\.name)
+        #expect(
+            unknown.contains("barcode") && !unknown.contains("release_group")
+                && !unknown.contains { $0.hasSuffix(".recording") })
+    }
+
     @Test func leavesOutTheNamesOfAnUntouchedDisc() throws {
         let toc = try TOC(audioTrackStarts: [0, 1000], leadOutLBA: 2000)
         let names = MusicBrainzSeed.fields(for: .manual(toc: toc), toc: toc).map(\.name)

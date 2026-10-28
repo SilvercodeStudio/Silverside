@@ -34,6 +34,13 @@ struct ReleasePickerSheet: View {
                 .font(.callout)
             }
             HStack {
+                Button("New Release in MusicBrainz…") {
+                    if let release = disc.releases.first(where: { $0.id == selected }) {
+                        ResultChips.openNewRelease(copying: release, toc: disc.toc)
+                    }
+                }
+                .disabled(selected == nil)
+                .help(ResultChips.newReleaseHelp.replacingOccurrences(of: "this one", with: "the selected one"))
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Use This Release") {

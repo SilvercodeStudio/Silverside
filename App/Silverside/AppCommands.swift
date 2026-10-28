@@ -40,6 +40,12 @@ struct AppCommands: Commands {
             Button("Look Up Metadata") { model.selectedDrive?.lookUpAgain() }
                 .keyboardShortcut("l", modifiers: .command)
                 .disabled(model.selectedDrive?.disc == nil)
+            Button("New Release in MusicBrainz…") {
+                if let disc = model.selectedDrive?.disc, let release = disc.release {
+                    ResultChips.openNewRelease(copying: release, toc: disc.toc)
+                }
+            }
+            .disabled(!canAddNewRelease)
             Button("Show Rip Log") { model.logShown = true }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
                 .disabled(model.selectedDrive?.rip == nil)
@@ -53,6 +59,13 @@ struct AppCommands: Commands {
                 .disabled(model.selectedDrive?.device.discBSDName == nil)
             Button("Refresh Drives") { model.refreshDrives() }
         }
+    }
+
+    /// A release that MusicBrainz found by the disc ID. One matched by its track lengths needs
+    /// the disc ID attached instead, and a disc MusicBrainz does not know has Add to MusicBrainz.
+    private var canAddNewRelease: Bool {
+        guard let disc = model.selectedDrive?.disc, let release = disc.release else { return false }
+        return !release.isManual && !release.lacksDiscID(of: disc.toc)
     }
 
     private var canRip: Bool {

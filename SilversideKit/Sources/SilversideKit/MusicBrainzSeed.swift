@@ -5,6 +5,11 @@ import Foundation
 /// attaches its disc ID when the release is added. MusicBrainz takes these as a form posted
 /// to its "add release" page ("release editor seeding"), so the page in `page(for:toc:)`
 /// posts the form when a browser opens it. The user reviews the release there and submits it.
+///
+/// A disc that MusicBrainz knows only as part of another release, such as the single-disc
+/// edition of a box set's first disc, gets a new release copied from that one
+/// (`newRelease: true`): the same release group, names, and recordings, but not the barcode
+/// or catalog numbers, which are the other product's.
 public enum MusicBrainzSeed {
     public static let addReleaseURL = URL(string: "https://musicbrainz.org/release/add")!
     /// MusicBrainz's "Various Artists".
@@ -12,13 +17,19 @@ public enum MusicBrainzSeed {
 
     /// The form's fields, in order. Names that Silverside made up ("Unknown Album", "Track 3")
     /// are left out, so the editor shows them as missing.
-    public static func fields(for release: MusicBrainzRelease, toc: TOC) -> [(name: String, value: String)] {
+    public static func fields(
+        for release: MusicBrainzRelease, toc: TOC, newRelease: Bool = false
+    ) -> [(name: String, value: String)] {
         var fields = [(name: String, value: String)]()
         let placeholder = MusicBrainzRelease.manual(toc: toc)
         if release.title != placeholder.title { fields.append(("name", release.title)) }
         let albumArtist = release.artist
         if albumArtist != placeholder.artist {
             fields += credit(release.artistCredit, prefix: "artist_credit")
+        }
+        if newRelease {
+            if let group = release.releaseGroup { fields.append(("release_group", group.id)) }
+            if let status = release.status { fields.append(("status", status.lowercased())) }
         }
         if let date = release.date {
             let parts = date.split(separator: "-")
@@ -27,19 +38,23 @@ public enum MusicBrainzSeed {
             }
         }
         if let country = release.country { fields.append(("events.0.country", country)) }
-        if let barcode = release.barcode, !barcode.isEmpty { fields.append(("barcode", barcode)) }
+        if !newRelease, let barcode = release.barcode, !barcode.isEmpty { fields.append(("barcode", barcode)) }
         for (index, label) in release.labels.enumerated() {
             if let name = label.name { fields.append(("labels.\(index).name", name)) }
-            if let number = label.catalogNumber { fields.append(("labels.\(index).catalog_number", number)) }
+            if !newRelease, let number = label.catalogNumber {
+                fields.append(("labels.\(index).catalog_number", number))
+            }
         }
-        fields.append(("mediums.0.format", "CD"))
+        let medium = release.medium(for: toc) ?? release.media.first
+        fields.append(("mediums.0.format", newRelease ? medium?.format ?? "CD" : "CD"))
         // The TOC adds the disc ID, and gives MusicBrainz the tracks' exact lengths.
         fields.append(("mediums.0.toc", toc.musicBrainzTOCString.replacingOccurrences(of: "+", with: " ")))
-        let medium = release.medium(for: toc) ?? release.media.first
         for (index, (track, tocTrack)) in zip(medium?.tracks ?? [], toc.audioTracks).enumerated() {
             let prefix = "mediums.0.track.\(index)"
             if track.title != "Track \(tocTrack.number)" { fields.append(("\(prefix).name", track.title)) }
             fields.append(("\(prefix).number", String(index + 1)))
+            // The same recordings: the new release is another edition of the same audio.
+            if newRelease, let recording = track.recordingID { fields.append(("\(prefix).recording", recording)) }
             fields.append(
                 ("\(prefix).length", String(toc.sectorRange(of: tocTrack).count * 1000 / CDDA.sectorsPerSecond)))
             // MusicBrainz needs an artist on every track: the track's own, else the album's. A track
@@ -50,11 +65,17 @@ public enum MusicBrainzSeed {
                 fields += credit(release.artistCredit, prefix: "\(prefix).artist_credit")
             }
         }
+        let source =
+            newRelease
+            ? " Copied from \(release.pageURL?.absoluteString ?? release.id), which has this disc ID on "
+                + (medium.map { "disc \($0.position) of \(release.media.count)" } ?? "one of its discs")
+                + "; this release is the disc on its own."
+            : ""
         fields.append(
             (
                 "edit_note",
                 "Added with \(SilversideVersion.program) (https://silverside.app) from a rip of the disc: "
-                    + "the TOC and track lengths are the disc's (disc ID \(toc.musicBrainzDiscID))."
+                    + "the TOC and track lengths are the disc's (disc ID \(toc.musicBrainzDiscID))." + source
             ))
         return fields
     }
@@ -73,8 +94,8 @@ public enum MusicBrainzSeed {
 
     /// A web page that posts the form to MusicBrainz as soon as it opens, with a button for a
     /// browser that does not run its script.
-    public static func page(for release: MusicBrainzRelease, toc: TOC) -> String {
-        let inputs = fields(for: release, toc: toc).map {
+    public static func page(for release: MusicBrainzRelease, toc: TOC, newRelease: Bool = false) -> String {
+        let inputs = fields(for: release, toc: toc, newRelease: newRelease).map {
             "<input type=\"hidden\" name=\"\(escaped($0.name))\" value=\"\(escaped($0.value))\">"
         }
         return """
@@ -93,10 +114,10 @@ public enum MusicBrainzSeed {
     }
 
     /// Writes the page into the temporary folder, for the browser to open.
-    public static func writePage(for release: MusicBrainzRelease, toc: TOC) throws -> URL {
+    public static func writePage(for release: MusicBrainzRelease, toc: TOC, newRelease: Bool = false) throws -> URL {
         let url = FileManager.default.temporaryDirectory.appending(
             path: "Silverside MusicBrainz \(toc.musicBrainzDiscID).html")
-        try Data(page(for: release, toc: toc).utf8).write(to: url)
+        try Data(page(for: release, toc: toc, newRelease: newRelease).utf8).write(to: url)
         return url
     }
 

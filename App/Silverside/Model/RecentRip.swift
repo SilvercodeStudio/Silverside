@@ -10,6 +10,8 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     /// The report file: `disc.json` in a rip folder, or the album folder's copy.
     var file: URL
     var report: RipReport
+    /// The album's names as edited: the rip's own edits, with those kept for its release on top.
+    var names = MetadataEdits()
     /// True when the folder has the rip's audio, so the rip can be pooled or repaired.
     var hasAudio: Bool
     /// True when the rip is only in the history: its files were moved or deleted (`RipHistory`).
@@ -48,10 +50,11 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     /// The album, with the disc's number in a set: "Europe '72 (Disc 2)".
     var title: String {
         guard let release = report.release else { return folder.lastPathComponent }
-        guard release.media.count > 1, let position = report.discPosition else { return release.title }
-        return "\(release.title) (Disc \(position))"
+        let album = names.album ?? release.title
+        guard release.media.count > 1, let position = report.discPosition else { return album }
+        return "\(album) (Disc \(position))"
     }
-    var artist: String { report.release?.artist ?? "" }
+    var artist: String { names.albumArtist ?? report.release?.artist ?? "" }
     var isVerified: Bool { report.isVerified }
     /// Where the rip is: its folder with the audio, or the library with its encoded files.
     var location: String { isMissing ? "Moved or deleted" : hasAudio ? "Rips folder" : "Library" }
@@ -114,7 +117,21 @@ nonisolated struct RecentRip: Identifiable, Sendable {
                 missing.append(RecentRip(history: entry, isMissing: true))
             }
         }
-        return (present.sorted { $0.report.date > $1.report.date }, missing.sorted { $0.report.date > $1.report.date })
+        return (
+            named(present).sorted { $0.report.date > $1.report.date },
+            named(missing).sorted { $0.report.date > $1.report.date }
+        )
+    }
+
+    /// The rips with their album's names as edited, as the library has them.
+    private static func named(_ rips: [RecentRip]) -> [RecentRip] {
+        let store = ReleaseEditsStore()
+        return rips.map { rip in
+            guard let release = rip.report.release else { return rip }
+            var named = rip
+            named.names = MetadataEdits.current(forReportAt: rip.file, release: release, store: store).albumLevel
+            return named
+        }
     }
 
     static func scan(rips: URL, library: URL) -> [RecentRip] {

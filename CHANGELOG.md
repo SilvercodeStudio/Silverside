@@ -14,6 +14,21 @@ command-line tool.
 - A pregap that cannot be found, because the subchannel near the track's
   start cannot be read (a scratch can do that), shows as "unknown" in the
   report and the log, instead of as no pregap.
+- An earlier rip's album, album artist, and date can be edited in its
+  header, as its track titles already could. Press Return to keep a change:
+  the files take the new names then, not while a name is half typed (track
+  titles too). The names are kept for the release, and the sidebar and Rip
+  History show them. A set's are still edited in the set's view.
+- **Move to Trash…** for an earlier rip, from its menu in Recent Rips and Rip
+  History: the rip's folder with its WAV files, or for a rip in the library, its
+  report and encoded files. Files that another rip in the same album folder
+  uses stay.
+- **New Release in MusicBrainz** (Disc menu, and the release picker): for a
+  disc that MusicBrainz has only as part of another release, such as the
+  single-disc edition of a set's first disc. It opens MusicBrainz's release
+  editor with a new release copied from that one (release group, names,
+  recordings, labels) and this disc's track lengths and disc ID, but not the
+  other edition's barcode or catalog numbers.
 - **Add to MusicBrainz:** a disc that MusicBrainz does not know has an "Add to
   MusicBrainz…" chip, before the rip and on the earlier rip. It opens
   MusicBrainz's release editor in the browser with the names you typed, the

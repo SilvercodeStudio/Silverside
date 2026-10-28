@@ -28,6 +28,11 @@ struct ResultsView: View {
     @State private var savedEdits = MetadataEdits()
     /// The album edits kept for the release, which every disc of a set shares.
     @State private var keptEdits = MetadataEdits()
+    @State private var savedKeptEdits = MetadataEdits()
+    /// The album's names as typed, kept when Return is pressed.
+    @State private var albumText = ""
+    @State private var albumArtistText = ""
+    @State private var dateText = ""
     /// Tracks whose artist field shows, though they have no artist of their own.
     @State private var artistRows: Set<Int> = []
 
@@ -102,16 +107,17 @@ struct ResultsView: View {
             savedEdits = edits
             if let release = report.release, !release.isManual {
                 keptEdits = ReleaseEditsStore().edits(forReleaseID: release.id) ?? MetadataEdits()
+                savedKeptEdits = keptEdits
             }
+            loadAlbumFields()
         }
-        // A name is saved, and the encoded files follow it, a moment after the last change.
-        .task(id: edits) {
-            guard edits != savedEdits else { return }
-            try? await Task.sleep(for: .seconds(1.5))
-            guard !Task.isCancelled else { return }
+        // A name is saved, and the encoded files follow it, when Return is pressed, so that the
+        // files and the album folder are not renamed while the name is half typed.
+        .onSubmit { saveNames() }
+        .onDisappear {
+            keepAlbumFields()
             saveNames()
         }
-        .onDisappear { saveNames() }
         .sheet(isPresented: $hdcdDecodeShown) { HDCDDecodeSheet(rip: recentRip) }
         #if DEBUG
             .onAppear { hdcdDecodeShown = canDecodeHDCD && UserDefaults.standard.bool(forKey: "hdcdDecode") }
@@ -193,10 +199,75 @@ struct ResultsView: View {
     }
 
     /// Saves the edits, if they changed, and brings the encoded files up to date.
+    /// Saves the rip's own edits, and the album's names kept for the release, then brings the
+    /// encoded files up to date with them.
     private func saveNames() {
-        guard edits != savedEdits else { return }
+        guard edits != savedEdits || keptEdits != savedKeptEdits else { return }
+        if keptEdits != savedKeptEdits, let release = report.release, !release.isManual {
+            do {
+                try ReleaseEditsStore().remember(keptEdits, forReleaseID: release.id)
+            } catch {
+                model.alert = AppAlert(title: "The names could not be saved", message: "\(error)")
+                return
+            }
+        }
         savedEdits = edits
+        savedKeptEdits = keptEdits
         model.saveNames(edits, of: recentRip)
+    }
+
+    private func loadAlbumFields() {
+        let shown = shownRelease
+        albumText = shown?.title ?? ""
+        albumArtistText = shown?.artist ?? ""
+        dateText = shown?.date ?? ""
+    }
+
+    /// Keeps the album's names as typed: the release's own value, or an empty one, clears the
+    /// edit. A MusicBrainz release keeps them for the release, as the set view does, so that a
+    /// later rip of the disc gets them too; a release Silverside made keeps them in the rip's
+    /// own edits.
+    private func keepAlbumFields() {
+        guard let release = report.release else { return }
+        func keep(_ text: String, _ field: WritableKeyPath<MetadataEdits, String?>, original: String?) {
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            let value = trimmed.isEmpty || trimmed == original ? nil : trimmed
+            if release.isManual {
+                edits[keyPath: field] = value
+            } else {
+                keptEdits[keyPath: field] = value
+                // The kept value is the only one, so clearing it shows MusicBrainz's again.
+                edits[keyPath: field] = nil
+            }
+        }
+        keep(albumText, \.album, original: release.title)
+        keep(albumArtistText, \.albumArtist, original: release.artist)
+        keep(dateText, \.date, original: release.date)
+        loadAlbumFields()
+    }
+
+    /// The album, its artist, and its date, for a rip that is not one disc of a set: a set's
+    /// names are edited in its own view.
+    @ViewBuilder private var albumFields: some View {
+        if let release = report.release, model.set(for: release) == nil {
+            HStack(alignment: .top, spacing: 12) {
+                EditableField(
+                    label: "Album", text: $albumText, shown: shownRelease?.title ?? release.title,
+                    editable: canEditNames)
+                EditableField(
+                    label: "Album Artist", text: $albumArtistText, shown: shownRelease?.artist ?? release.artist,
+                    editable: canEditNames)
+                EditableField(
+                    label: "Date", text: $dateText, shown: shownRelease?.date ?? release.date ?? "",
+                    editable: canEditNames
+                )
+                .frame(width: 140)
+            }
+            .onSubmit {
+                keepAlbumFields()
+                saveNames()
+            }
+        }
     }
 
     private var canRepair: Bool {
@@ -281,6 +352,7 @@ struct ResultsView: View {
                     .onAppear { archivePickerShown = UserDefaults.standard.bool(forKey: "coverArchive") }
                 #endif
             VStack(alignment: .leading, spacing: 6) {
+                albumFields.padding(.bottom, 6)
                 Label {
                     Text(RipRun.headline(for: report)).font(.title2.weight(.semibold))
                 } icon: {

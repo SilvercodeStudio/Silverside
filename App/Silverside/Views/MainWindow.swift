@@ -276,6 +276,7 @@ struct SidebarView: View {
         case .failed: return "Cannot read the disc"
         case .ready:
             guard let disc = slot.disc else { return "" }
+            if disc.toc.audioTracks.isEmpty { return "Data disc · no audio" }
             let count = disc.toc.audioTracks.count
             return "\(disc.title) · \(count) track\(count == 1 ? "" : "s")"
         }

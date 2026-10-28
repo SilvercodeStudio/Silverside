@@ -103,6 +103,7 @@ struct DiscInfo {
 
     func title(from source: Source) -> String {
         if source == .cdText, let title = cdText?.titles[0] { return title }
+        if toc.audioTracks.isEmpty { return "Data Disc" }
         return shownRelease?.title ?? cdText?.titles[0] ?? "Audio CD"
     }
 

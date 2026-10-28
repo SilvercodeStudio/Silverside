@@ -102,6 +102,10 @@ struct Drives: ParsableCommand {
                     let seconds =
                         toc.audioTracks.reduce(0) { $0 + toc.sectorRange(of: $1).count } / CDDA.sectorsPerSecond
                     let data = toc.tracks.count - toc.audioTracks.count
+                    guard !toc.audioTracks.isEmpty else {
+                        print("  CD: \(bsdName), a data disc (\(data) data track\(data == 1 ? "" : "s")), no audio")
+                        continue
+                    }
                     print(
                         "  CD: \(bsdName), \(toc.audioTracks.count) audio tracks, "
                             + String(format: "%d:%02d", seconds / 60, seconds % 60)

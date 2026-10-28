@@ -45,6 +45,9 @@ command-line tool.
 
 ### Fixed
 
+- A disc with no audio, such as a game or program CD, showed as "Audio CD ·
+  0 tracks" with an empty track list. It now shows as a data disc, in the app
+  and in `silverside drives`.
 - Look Up Metadata asks MusicBrainz again. It used the answer kept from the
   last lookup, so a disc just added to MusicBrainz stayed "Not in
   MusicBrainz" for up to a day.

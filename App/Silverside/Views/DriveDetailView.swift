@@ -28,7 +28,18 @@ struct DriveDetailView: View {
                     Button("Try Again") { slot.readDisc(settings: model.settings) }
                 }
             case .ready:
-                if slot.disc != nil { DiscView(slot: slot, releasePickerShown: $releasePickerShown) }
+                if let disc = slot.disc, disc.toc.audioTracks.isEmpty {
+                    // A CD-ROM, such as a game or a program: nothing for a music ripper.
+                    ContentUnavailableView {
+                        Label("A data disc", systemImage: "externaldrive")
+                    } description: {
+                        Text(
+                            "This disc holds only data, such as a computer program, and no audio tracks. Silverside rips audio CDs."
+                        )
+                    }
+                } else if slot.disc != nil {
+                    DiscView(slot: slot, releasePickerShown: $releasePickerShown)
+                }
             }
         }
         .navigationTitle(slot.disc?.title ?? slot.name)

@@ -8,6 +8,7 @@ When a disc appears, Silverside reads its table of contents and asks MusicBrainz
 |---|---|
 | Disc ID match | MusicBrainz knows this exact disc. |
 | Nearly the same TOC | MusicBrainz does not know the disc ID, but these releases have almost the same track lengths. Check the release, and consider adding the disc ID to MusicBrainz: click the chip (an earlier rip shows it too) or use the link in the release picker. You need a MusicBrainz account. |
+| Disc 2 of your 4-disc *album*? | MusicBrainz has this disc ID on another release only, but a release you ripped other discs of has a disc with the same track lengths. Another edition can be missing the disc ID, or the disc ID can be on a wrong release by mistake. If the disc is from your release, click the chip to add the disc ID to it in MusicBrainz, then use Look Up Metadata. |
 | Several releases match | More than one release has the disc, and Silverside cannot tell which. Choose one. The choice is kept for the other discs of the set. |
 | Not in MusicBrainz | No release has the disc. The names come from the disc's CD-Text, or you type them in the header and the track table. The files get those names, but no MusicBrainz IDs. Click **Add to MusicBrainz…** to open MusicBrainz's release editor in your browser with these names, the track lengths, and the disc ID filled in; check and complete it there, and submit it (sign in first). An earlier rip of such a disc has the chip too. |
 

@@ -248,7 +248,7 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 360)
-        .safeAreaInset(edge: .bottom) {
+        .sidebarFooter {
             Button {
                 model.revealFolder(model.settings.ripsURL)
             } label: {
@@ -269,7 +269,16 @@ struct SidebarView: View {
     }
 
     private func subtitle(of slot: DriveSlot) -> String {
-        if let rip = slot.rip, rip.isRunning { return "Ripping · \(Int(rip.fraction * 100))%" }
+        if let rip = slot.rip, rip.isRunning {
+            // The percent counts each track's first read, so it stands still while a track is read again.
+            switch rip.phase {
+            case .checkingCTDB: return "Checking CTDB"
+            case .encoding: return "Encoding · \(Int(rip.encodeFraction * 100))%"
+            default:
+                if rip.isRereading, let track = rip.currentTrack { return "Reading track \(track) again" }
+                return "Ripping · \(Int(rip.fraction * 100))%"
+            }
+        }
         switch slot.discState {
         case .empty: return "No disc"
         case .reading: return "Reading the disc…"
@@ -290,6 +299,37 @@ struct SidebarView: View {
         if let rip = slot.rip, rip.isRunning { return .good }
         return slot.disc == nil ? .neutral : .good
     }
+}
+
+extension View {
+    /// A bar at the foot of the sidebar that the list scrolls under. On macOS 26 the bar fades
+    /// the rows under it; before that, the sidebar's own material hides them.
+    @ViewBuilder func sidebarFooter(@ViewBuilder _ content: () -> some View) -> some View {
+        if #available(macOS 26, *) {
+            safeAreaBar(edge: .bottom, content: content)
+        } else {
+            safeAreaInset(edge: .bottom) {
+                VStack(spacing: 0) {
+                    Divider()
+                    content()
+                }
+                .background(SidebarMaterial())
+            }
+        }
+    }
+}
+
+/// The sidebar's material, behind a footer, for macOS 15.
+private struct SidebarMaterial: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
 struct SidebarRow: View {

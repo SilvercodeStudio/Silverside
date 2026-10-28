@@ -31,7 +31,7 @@ The report lists each track's CRC-32, as Exact Audio Copy and XLD print it, with
 | Copied, grey | The reads agree, but no database has this disc to check against. |
 | Not verified, red | No database matches the track, and a repair was not possible. |
 
-The Re-reads column counts the sectors that were read again (in red when some never agreed), and the Repaired column the samples that CTDB corrected.
+Under a track's status, a short line says what the track needed: the sectors that were read again (in red when some never agreed), and the samples that CTDB corrected. The AccurateRip and CTDB columns show how many rips in each database have the track's checksum. Control-click the column headings to show more columns or hide some: the Re-reads column counts the re-read sectors in a column of their own.
 
 ## When tracks stay unverified
 

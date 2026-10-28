@@ -392,6 +392,24 @@ struct EncodingSettings: View {
     var body: some View {
         @Bindable var model = model
         Form {
+            // The chosen format and its own options, first; the other formats' options do not apply.
+            Section {
+                LabeledContent {
+                    Text(model.settings.format.name)
+                } label: {
+                    Text("Format")
+                    Text("Chosen in General")
+                }
+                switch model.settings.format {
+                case .aac: aacOptions
+                case .mp3: mp3Options
+                case .flac, .alac, .aiff, .wav:
+                    Text(
+                        "\(model.settings.format.name) has no options. Each file is decoded again after encoding and compared with the audio it was made from: the rip, or the rip after HDCD decoding or de-emphasis."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Section("Tags") {
                 Toggle("ReplayGain: volume normalization tags", isOn: $model.settings.replayGain)
                 Text(
@@ -421,78 +439,6 @@ struct EncodingSettings: View {
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
-            Section {
-                Picker("Mode", selection: $model.settings.aac.mode) {
-                    ForEach(AACOptions.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }
-                }
-                if model.settings.aac.mode == .vbr {
-                    Picker("Quality", selection: $model.settings.aac.vbrQuality) {
-                        ForEach(Self.aacQualities, id: \.value) { Text($0.name).tag($0.value) }
-                        if !Self.aacQualities.contains(where: { $0.value == model.settings.aac.vbrQuality }) {
-                            Text("Custom (\(model.settings.aac.vbrQuality))").tag(model.settings.aac.vbrQuality)
-                        }
-                    }
-                    Text("A true VBR takes its size from the quality alone; the bit rate is not used.")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Picker("Bit rate", selection: $model.settings.aac.bitRate) {
-                        ForEach(Self.bitRates, id: \.self) { Text("\($0) kbit/s").tag($0) }
-                        if !Self.bitRates.contains(model.settings.aac.bitRate) {
-                            Text("\(model.settings.aac.bitRate) kbit/s").tag(model.settings.aac.bitRate)
-                        }
-                    }
-                    Text(
-                        model.settings.aac.mode == .vbrConstrained
-                            ? "Apple's choice for iTunes Plus: the bit rate varies around this target. 256 is the usual."
-                            : "The bit rate everywhere, or on average over the track."
-                    )
-                    .font(.caption).foregroundStyle(.secondary)
-                }
-            } header: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("AAC")
-                    Text(
-                        "Advanced Audio Coding, Apple's preferred format for compressed audio. Most other systems play it too."
-                    )
-                    .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            Section("MP3") {
-                LabeledContent("lame") {
-                    if let lame {
-                        Text("Found at \(lame.path)").foregroundStyle(Theme.good)
-                    } else {
-                        Text("Not found. Install it with `brew install lame`.").foregroundStyle(Theme.warning)
-                    }
-                }
-                // The options do nothing until lame is found.
-                Group {
-                    Picker("Mode", selection: $model.settings.mp3.mode) {
-                        ForEach(MP3Options.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }
-                    }
-                    if model.settings.mp3.mode == .vbr {
-                        Picker("Quality", selection: $model.settings.mp3.vbrQuality) {
-                            ForEach(0...9, id: \.self) { Text(Self.mp3Quality($0)).tag($0) }
-                        }
-                    } else {
-                        Picker("Bit rate", selection: $model.settings.mp3.bitRate) {
-                            ForEach(Self.bitRates, id: \.self) { Text("\($0) kbit/s").tag($0) }
-                            if !Self.bitRates.contains(model.settings.mp3.bitRate) {
-                                Text("\(model.settings.mp3.bitRate) kbit/s").tag(model.settings.mp3.bitRate)
-                            }
-                        }
-                    }
-                }
-                .disabled(lame == nil)
-                Text("Silverside runs the \"lame\" MP3 encoder as an external program.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Lossless") {
-                Text(
-                    "FLAC, Apple Lossless, AIFF, and WAV have no options. Every file is checked after encoding to make sure it's exactly the same as the original rip."
-                )
-                .font(.callout).foregroundStyle(.secondary)
-            }
             Section("Disc image") {
                 Toggle("Also write a disc image", isOn: $model.settings.writeImages)
                 FolderField(label: "Images", path: $model.settings.images)
@@ -505,6 +451,70 @@ struct EncodingSettings: View {
         }
         .formStyle(.grouped)
         .watchingForLAME($lame)
+    }
+
+    @ViewBuilder private var aacOptions: some View {
+        @Bindable var model = model
+        Picker("Mode", selection: $model.settings.aac.mode) {
+            ForEach(AACOptions.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }
+        }
+        if model.settings.aac.mode == .vbr {
+            Picker("Quality", selection: $model.settings.aac.vbrQuality) {
+                ForEach(Self.aacQualities, id: \.value) { Text($0.name).tag($0.value) }
+                if !Self.aacQualities.contains(where: { $0.value == model.settings.aac.vbrQuality }) {
+                    Text("Custom (\(model.settings.aac.vbrQuality))").tag(model.settings.aac.vbrQuality)
+                }
+            }
+            Text("A true VBR takes its size from the quality alone; the bit rate is not used.")
+                .font(.caption).foregroundStyle(.secondary)
+        } else {
+            Picker("Bit rate", selection: $model.settings.aac.bitRate) {
+                ForEach(Self.bitRates, id: \.self) { Text("\($0) kbit/s").tag($0) }
+                if !Self.bitRates.contains(model.settings.aac.bitRate) {
+                    Text("\(model.settings.aac.bitRate) kbit/s").tag(model.settings.aac.bitRate)
+                }
+            }
+            Text(
+                model.settings.aac.mode == .vbrConstrained
+                    ? "Apple's choice for iTunes Plus: the bit rate varies around this target. 256 is the usual."
+                    : "The bit rate everywhere, or on average over the track."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        Text("Advanced Audio Coding, Apple's preferred format for compressed audio. Most other systems play it too.")
+            .font(.caption).foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder private var mp3Options: some View {
+        @Bindable var model = model
+        LabeledContent("lame") {
+            if let lame {
+                Text("Found at \(lame.path)").foregroundStyle(Theme.good)
+            } else {
+                Text("Not found. Install it with `brew install lame`.").foregroundStyle(Theme.warning)
+            }
+        }
+        // The options do nothing until lame is found.
+        Group {
+            Picker("Mode", selection: $model.settings.mp3.mode) {
+                ForEach(MP3Options.Mode.allCases, id: \.self) { Text(Self.name(of: $0)).tag($0) }
+            }
+            if model.settings.mp3.mode == .vbr {
+                Picker("Quality", selection: $model.settings.mp3.vbrQuality) {
+                    ForEach(0...9, id: \.self) { Text(Self.mp3Quality($0)).tag($0) }
+                }
+            } else {
+                Picker("Bit rate", selection: $model.settings.mp3.bitRate) {
+                    ForEach(Self.bitRates, id: \.self) { Text("\($0) kbit/s").tag($0) }
+                    if !Self.bitRates.contains(model.settings.mp3.bitRate) {
+                        Text("\(model.settings.mp3.bitRate) kbit/s").tag(model.settings.mp3.bitRate)
+                    }
+                }
+            }
+        }
+        .disabled(lame == nil)
+        Text("Silverside runs the \"lame\" MP3 encoder as an external program.")
+            .font(.caption).foregroundStyle(.secondary)
     }
 
     static func name(of mode: AACOptions.Mode) -> String {

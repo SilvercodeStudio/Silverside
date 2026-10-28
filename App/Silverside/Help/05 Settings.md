@@ -21,7 +21,7 @@ C2 error flags are a drive's own report of sectors it had trouble with. Silversi
 
 ## Encoding
 
-FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit rate mode, bit rate, and VBR quality.
+The format itself is chosen in General; this tab shows the options of that format only. FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit rate mode, bit rate, and VBR quality.
 
 MP3 needs LAME, a free encoder that Silverside runs as a separate program, because Apple's frameworks cannot write MP3. Install it with Homebrew (brew.sh), in Terminal:
 
@@ -29,9 +29,9 @@ MP3 needs LAME, a free encoder that Silverside runs as a separate program, becau
 brew install lame
 ```
 
-Until LAME is installed, MP3 is missing from the formats in General and in the welcome, and the MP3 options here are dimmed. Silverside looks for LAME every few seconds while Settings or the welcome is open, so MP3 turns on as soon as the install ends. The options are lame's: a variable bit rate from a quality (0 is the best, about 245 kbit/s), or a constant or average bit rate.
+Until LAME is installed, MP3 is missing from the formats in General and in the welcome, and if MP3 is already the format, its options here are dimmed. Silverside looks for LAME every few seconds while Settings or the welcome is open, so MP3 turns on as soon as the install ends. The options are lame's: a variable bit rate from a quality (0 is the best, about 245 kbit/s), or a constant or average bit rate.
 
-Every encoded file is decoded again and compared with the rip before it goes into the library.
+Every encoded file is decoded again and compared with the audio it was made from before it goes into the library: the rip, or the rip after HDCD decoding or de-emphasis.
 
 ### ReplayGain
 

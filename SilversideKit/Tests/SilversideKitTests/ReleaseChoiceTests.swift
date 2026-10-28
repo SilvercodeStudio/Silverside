@@ -95,4 +95,50 @@ struct ReleaseChoiceTests {
         #expect(!ReleaseRanking.isAmbiguous(ranked, chosenForOtherDiscs: ["box"]))
         #expect(ReleaseRanking.ranked([single, box], discID: "unknown").map(\.id) == ["single", "box"])
     }
+
+    /// *Vegas 96*: disc 3's ID is on the 3-disc edition only, and the set was ripped as the
+    /// 4-disc edition, whose disc 3 has no disc ID. Disc 2's ID is on a 1988 show by mistake.
+    @Test func findsTheReleaseOfEarlierRipsThatTheLookupMissed() throws {
+        // Disc 3, as MusicBrainz has it (offsets less the 150-sector lead-in).
+        let toc = try TOC(
+            audioTrackStarts: [0, 18266, 30537, 50178, 60514, 69177, 89305, 128888, 159843], leadOutLBA: 172388)
+        let lengths = toc.audioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
+        func medium(_ position: Int, lengths: [Int?], discIDs: [String] = []) -> MusicBrainzRelease.Medium {
+            .init(
+                position: position, format: "CD", title: nil, discIDs: discIDs,
+                tracks: lengths.enumerated().map {
+                    .init(
+                        position: $0.offset + 1, number: String($0.offset + 1), title: "", length: $0.element,
+                        artistCredit: [], recordingID: nil)
+                })
+        }
+        func made(_ id: String, media: [MusicBrainzRelease.Medium]) -> MusicBrainzRelease {
+            var result = release(id, discIDs: [])
+            result.media = media
+            return result
+        }
+        let otherDisc = lengths.map { $0 + 60_000 }
+        let three = made(
+            "three",
+            media: [
+                medium(1, lengths: otherDisc), medium(2, lengths: [1, 2]),
+                medium(3, lengths: lengths, discIDs: [toc.musicBrainzDiscID]),
+            ])
+        // Whole seconds, as people type them: still the same disc.
+        let rounded = lengths.map { $0 / 1000 * 1000 }
+        let four = made(
+            "four",
+            media: [
+                medium(1, lengths: otherDisc, discIDs: ["d1"]), medium(2, lengths: [1, 2]),
+                medium(3, lengths: rounded), medium(4, lengths: [1]),
+            ])
+        let longer = made("longer", media: [medium(1, lengths: lengths.map { $0 + 5000 })])
+        let unknown = made("unknown", media: [medium(1, lengths: lengths.map { _ in nil })])
+
+        let match = ReleaseRanking.earlierRelease(fitting: toc, found: [three], earlier: [longer, unknown, four])
+        #expect(match?.release.id == "four" && match?.medium.position == 3)
+        // Found by the lookup, it needs no note: the remembered choice ranks it first.
+        #expect(ReleaseRanking.earlierRelease(fitting: toc, found: [three, four], earlier: [four]) == nil)
+        #expect(ReleaseRanking.earlierRelease(fitting: toc, found: [three], earlier: [three, longer]) == nil)
+    }
 }

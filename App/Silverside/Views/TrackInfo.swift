@@ -12,6 +12,9 @@ struct InfoRow: Identifiable {
 struct InfoSection: Identifiable {
     var title: String?
     var rows: [InfoRow]
+    /// A section that only some people want (the file's tags, the disc's IDs) is folded at
+    /// first; the key remembers whether it was last open.
+    var foldKey: String?
     var id: String { title ?? "" }
 }
 
@@ -21,6 +24,8 @@ struct InfoButton: View {
     /// Text beside the symbol, for a toolbar; nil for a plain symbol in a table row.
     var title: String?
     var help = "Info"
+    /// Debug builds open the popover at launch with `-infoPopover <debugID>`, for screenshots.
+    var debugID: String?
     /// The sections are built when the popover opens: reading a file's tags is for then.
     let sections: () -> [InfoSection]
     @State private var shown = false
@@ -40,34 +45,83 @@ struct InfoButton: View {
         .popover(isPresented: $shown, arrowEdge: title == nil ? .trailing : .bottom) {
             InfoPopover(sections: sections())
         }
+        #if DEBUG
+            .onAppear {
+                if let debugID, UserDefaults.standard.string(forKey: "infoPopover") == debugID {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { shown = true }
+                }
+            }
+        #endif
     }
 }
 
-/// The popover's content: each section as a heading and a two-column grid.
+/// The popover's content: each section as a heading and a two-column grid. A long one scrolls.
 private struct InfoPopover: View {
     let sections: [InfoSection]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
-                VStack(alignment: .leading, spacing: 6) {
-                    if let heading = section.title {
-                        Text(heading).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    }
-                    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 5) {
-                        ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
-                            GridRow {
-                                Text(row.label).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-                                Text(row.value).textSelection(.enabled)
-                            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                    if let key = section.foldKey {
+                        FoldedInfoSection(section: section, key: key)
+                    } else {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if let heading = section.title { InfoHeading(text: heading) }
+                            InfoGrid(rows: section.rows)
                         }
                     }
                 }
             }
+            .font(.callout)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .font(.callout)
-        .padding(16)
-        .frame(minWidth: 300, maxWidth: 560, alignment: .leading)
+        // The popover takes the content's height, up to the limit, and scrolls past it.
+        .frame(minWidth: 300, maxWidth: 560, maxHeight: 520)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// A section folded under its heading, open or closed as it was last.
+private struct FoldedInfoSection: View {
+    let section: InfoSection
+    @AppStorage private var open: Bool
+
+    init(section: InfoSection, key: String) {
+        self.section = section
+        _open = AppStorage(wrappedValue: false, "infoOpen" + key)
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $open) {
+            InfoGrid(rows: section.rows).padding(.top, 6)
+        } label: {
+            InfoHeading(text: section.title ?? "")
+        }
+    }
+}
+
+private struct InfoHeading: View {
+    let text: String
+
+    var body: some View {
+        Text(text).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+    }
+}
+
+private struct InfoGrid: View {
+    let rows: [InfoRow]
+
+    var body: some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 5) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    Text(row.label).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
+                    Text(row.value).textSelection(.enabled)
+                }
+            }
+        }
     }
 }
 
@@ -118,7 +172,7 @@ extension InfoSection {
         }
         var sections = [InfoSection(title: nil, rows: rows)]
         if let file, let tags = fileTags(file) {
-            sections.append(InfoSection(title: "Tags in \(file.lastPathComponent)", rows: tags))
+            sections.append(InfoSection(title: "Tags in \(file.lastPathComponent)", rows: tags, foldKey: "Tags"))
         }
         return sections
     }
@@ -224,10 +278,12 @@ extension InfoSection {
                 rows.append(
                     .init(label: "Cover art", value: Format.count(count, "image") + " in the Cover Art Archive"))
             }
-            if !release.isManual { rows.append(.init(label: "MusicBrainz", value: release.id)) }
             sections.append(InfoSection(title: "Release", rows: rows))
         }
         var rows = [InfoRow]()
+        // The IDs that the databases know the release and the disc by, folded at first.
+        var ids = [InfoRow]()
+        if let release, !release.isManual { ids.append(.init(label: "MusicBrainz release", value: release.id)) }
         if let toc {
             let audio = toc.audioTracks
             let sectors = audio.reduce(0) { $0 + toc.sectorRange(of: $1).count }
@@ -237,10 +293,10 @@ extension InfoSection {
             if !emphasis.isEmpty {
                 rows.append(.init(label: "Pre-emphasis", value: "tracks " + emphasis.joined(separator: ", ")))
             }
-            rows.append(.init(label: "MusicBrainz disc ID", value: toc.musicBrainzDiscID))
-            rows.append(.init(label: "freedb disc ID", value: String(format: "%08x", toc.freedbDiscID)))
-            rows.append(.init(label: "AccurateRip disc ID", value: toc.accurateRipDiscID.name))
-            rows.append(.init(label: "CTDB TOC", value: toc.ctdbTOCString))
+            ids.append(.init(label: "MusicBrainz disc ID", value: toc.musicBrainzDiscID))
+            ids.append(.init(label: "freedb disc ID", value: String(format: "%08x", toc.freedbDiscID)))
+            ids.append(.init(label: "AccurateRip disc ID", value: toc.accurateRipDiscID.name))
+            ids.append(.init(label: "CTDB TOC", value: toc.ctdbTOCString))
         }
         if let mcn { rows.append(.init(label: "MCN", value: mcn)) }
         if let cdText {
@@ -248,6 +304,7 @@ extension InfoSection {
         }
         if let media { rows.append(.init(label: "Media", value: "\(media)")) }
         if !rows.isEmpty { sections.append(InfoSection(title: "Disc", rows: rows)) }
+        if !ids.isEmpty { sections.append(InfoSection(title: "Identifiers", rows: ids, foldKey: "Identifiers")) }
         return sections
     }
 }

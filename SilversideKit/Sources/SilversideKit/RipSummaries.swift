@@ -37,7 +37,11 @@ extension SecureTrackRip {
         if fullReads > 1 || rounds > 0 {
             rereads = ", after \(fullReads) reads of the track"
             if !suspectSectors.isEmpty {
-                rereads += " and \(rounds) re-reads of \(suspectSectors.count) sectors"
+                // With no rounds, the later reads of the whole track settled the sectors.
+                rereads +=
+                    rounds == 0
+                    ? ", which settled \(suspectSectors.count) suspect sectors"
+                    : " and \(rounds) rounds of re-reads of \(suspectSectors.count) sectors"
             }
         }
         var shifted = ""

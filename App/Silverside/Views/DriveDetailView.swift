@@ -301,6 +301,10 @@ struct AlbumHeader: View {
                 HStack(alignment: .top, spacing: 8) {
                     FlowLayout(spacing: 8) {
                         lookupChip
+                        if let earlier = earlierRelease, let found = disc.release {
+                            ResultChips.earlierRelease(
+                                earlier.release, medium: earlier.medium, found: found, toc: disc.toc)
+                        }
                         hdcdChip
                         dataTrackChip
                         if disc.userCover != nil || (disc.sleeve == nil && disc.keptCover != nil) {
@@ -335,7 +339,10 @@ struct AlbumHeader: View {
                             .buttonStyle(.plain)
                             .help(set.summary + ". The album's names and cover are the set's. Click for the set.")
                         }
-                        InfoButton(help: "Disc info: the release as MusicBrainz has it, and the disc's own codes") {
+                        InfoButton(
+                            help: "Disc info: the release as MusicBrainz has it, and the disc's own codes",
+                            debugID: "disc"
+                        ) {
                             InfoSection.disc(disc)
                         }
                         .keepsWithPrevious()
@@ -387,6 +394,14 @@ struct AlbumHeader: View {
                 .padding(.top, 2)
             }
         }
+    }
+
+    /// A release of earlier rips with a disc of this disc's track lengths, which the lookup did
+    /// not give: MusicBrainz has the disc ID on another release only.
+    private var earlierRelease: (release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium)? {
+        guard case .found = disc.lookup, let release = disc.release, !release.isManual else { return nil }
+        return ReleaseRanking.earlierRelease(
+            fitting: disc.toc, found: disc.releases + [release], earlier: model.allRips.compactMap(\.report.release))
     }
 
     /// The edits that give the release the CD-Text's names.
@@ -909,6 +924,26 @@ enum ResultChips {
             help: "MusicBrainz does not know this disc ID, so the release was matched by its track lengths. "
                 + "Click to add the disc ID to the right release in MusicBrainz (you need an account); "
                 + "after that, every ripper finds the disc by its ID.",
+            link: MusicBrainzRelease.submissionURL(for: toc))
+    }
+
+    /// For a disc whose ID MusicBrainz has on other releases only, when a release of earlier
+    /// rips has a disc with its track lengths: a click opens the page that adds the disc ID to it.
+    static func earlierRelease(
+        _ release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium, found: MusicBrainzRelease, toc: TOC
+    ) -> Chip {
+        let count = release.media.count
+        let catalog = release.labels.compactMap(\.catalogNumber).first.map { " (\($0))" } ?? ""
+        let disc = count > 1 ? "its disc \(medium.position)" : "it"
+        return Chip(
+            text: count > 1
+                ? "Disc \(medium.position) of your \(count)-disc \(release.title)?" : "Your \(release.title)?",
+            tone: .warning, systemImage: "questionmark",
+            help: "Your earlier rips of \(release.title)\(catalog) have a disc with this disc's track lengths, but "
+                + "MusicBrainz has this disc ID on \(found.title) only, so the lookup cannot find \(release.title). "
+                + "If this disc is from it, click to add the disc ID to \(disc) in MusicBrainz (you need an account). "
+                + "If the other release is wrong, you can remove the disc ID from it on the disc ID's page there. "
+                + "Then use Look Up Metadata.",
             link: MusicBrainzRelease.submissionURL(for: toc))
     }
 

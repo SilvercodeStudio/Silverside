@@ -28,6 +28,11 @@ command-line tool.
   first rip of such a disc asks whether to save it, with "use this answer for
   every disc" (Settings › Ripping, `dataTracks`, or `rip --data-tracks`). A
   chip in the header shows a disc with a data track.
+- When MusicBrainz has a disc's ID on another release only, but a release you
+  ripped other discs of has a disc with the same track lengths, a chip asks
+  "Disc 2 of your 4-disc Vegas 96?". A click opens MusicBrainz's page that adds
+  the disc ID to that release. This finds a set's other edition, and a disc ID
+  that someone added to the wrong release.
 - On an Enhanced CD, a drive that can read past the end of the music (the
   MATSHITA can) reads the last track to its end, instead of leaving its last
   few samples silent.
@@ -43,8 +48,27 @@ command-line tool.
 - `silverside drives` names the disc in each drive when MusicBrainz knew it at
   an earlier lookup, from the cache, so it waits for no request.
 
+### Changed
+
+- The track table is quieter. Green marks only each track's result; AccurateRip
+  and CTDB show their match as a check mark and the number of rips that agree.
+  The Repaired column is gone, and Re-reads is hidden at first: a short line
+  under the track's result says how many sectors were re-read and how many
+  samples CTDB repaired. Control-click the column headings to show the Re-reads column again,
+  or to hide AccurateRip, CTDB, or Encoding; the table keeps your choice.
+- An earlier rip's report pane is hidden at first, and stays shown or hidden as
+  you leave it.
+- Track and disc info is shorter: a file's tags and the disc's IDs fold away
+  under their headings, and a long list scrolls.
+- Settings › Encoding shows the options of the chosen format only, at the top.
+- While a track is read again, the sidebar says "Reading track 6 again"
+  instead of a percent that stands at 100%, and it shows the encoding's own
+  progress while the album is encoded.
+
 ### Fixed
 
+- The rips folder at the foot of the sidebar no longer overlaps the last item
+  of a long list.
 - A disc with no audio, such as a game or program CD, showed as "Audio CD ·
   0 tracks" with an empty track list. It now shows as a data disc, in the app
   and in `silverside drives`.

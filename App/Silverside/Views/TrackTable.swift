@@ -8,19 +8,24 @@ struct TrackTable: View {
     @State private var tableSelection: Set<Int> = []
     /// Tracks whose artist field is open although the track has no artist of its own yet.
     @State private var artistRows: Set<Int> = []
+    @AppStorage("driveTrackColumns") private var columns = TableColumnCustomization<DiscInfo.Track>()
+    @AppStorage("ripTrackColumns") private var ripColumns = TableColumnCustomization<RipReport.Track>()
 
     private var rows: [DiscInfo.Track] { slot.disc?.tracks(from: slot.namesSource) ?? [] }
 
     var body: some View {
         // Before a rip, the result columns would hold only dashes, so the titles get the room.
         if let rip = slot.rip {
-            Table(rows, selection: $tableSelection) {
+            Table(rows, selection: $tableSelection, columnCustomization: $columns) {
                 discColumns
                 TableColumn("Status") { track in
                     StatusCell(
-                        state: rip.trackStates[track.number], ctdb: rip.ctdb, summary: rip.summaries[track.number])
+                        state: rip.trackStates[track.number], ctdb: rip.ctdb, summary: rip.summaries[track.number],
+                        showsRereads: columns[visibility: TrackColumns.rereads] != .visible)
                 }
                 .width(min: 150, ideal: 200)
+                .customizationID("status")
+                .disabledCustomizationBehavior(.visibility)
                 TableColumn("Re-reads") { track in
                     if case .finished(let report)? = rip.trackStates[track.number] {
                         RereadsCell(track: report, ctdb: rip.ctdb)
@@ -29,30 +34,28 @@ struct TrackTable: View {
                     }
                 }
                 .width(min: 80, ideal: 100)
-                TableColumn("Repaired") { track in
-                    if case .finished(let report)? = rip.trackStates[track.number] {
-                        RepairedCell(track: report)
-                    } else {
-                        Text("—").foregroundStyle(.secondary)
-                    }
-                }
-                .width(min: 80, ideal: 110)
+                .customizationID(TrackColumns.rereads)
+                .defaultVisibility(.hidden)
                 TableColumn("AccurateRip") { track in
                     AccurateRipCell(state: rip.trackStates[track.number])
                 }
-                .width(min: 110, ideal: 150)
+                .width(min: 90, ideal: 110)
+                .customizationID("accurateRip")
                 TableColumn("CTDB") { track in
                     CTDBCell(run: rip, number: track.number)
                 }
-                .width(min: 70, ideal: 110)
+                .width(min: 70, ideal: 90)
+                .customizationID("ctdb")
                 if rip.encodes {
                     TableColumn("Encoding") { track in
                         EncodeCell(state: rip.encodeStates[track.number], format: rip.encodingFormat)
                     }
                     .width(min: 80, ideal: 100)
+                    .customizationID("encoding")
                 }
             }
             .alternatingRowBackgrounds(.disabled)
+            .onChange(of: columns) { TrackColumns.copyVisibility(from: columns, to: &ripColumns) }
         } else {
             Table(rows, selection: $tableSelection) {
                 discColumns
@@ -69,6 +72,8 @@ struct TrackTable: View {
                 .disabled(slot.rip?.isRunning == true)
         }
         .width(24)
+        .customizationID("include")
+        .disabledCustomizationBehavior(.all)
         TableColumn("") { track in
             PlayButton(player: model.player, source: .disc(slotID: slot.id, track: track.number), isEnabled: canPlay) {
                 guard let disc = slot.disc,
@@ -80,10 +85,14 @@ struct TrackTable: View {
             }
         }
         .width(22)
+        .customizationID("play")
+        .disabledCustomizationBehavior(.all)
         TableColumn("#") { track in
             Text(String(track.number)).foregroundStyle(.secondary).monospacedDigit()
         }
         .width(28)
+        .customizationID("number")
+        .disabledCustomizationBehavior(.all)
         TableColumn("Title") { track in
             VStack(alignment: .leading, spacing: 1) {
                 if canEdit {
@@ -116,14 +125,22 @@ struct TrackTable: View {
             }
         }
         .width(min: 220, ideal: 360)
+        .customizationID("title")
+        .disabledCustomizationBehavior(.visibility)
         TableColumn("Time") { track in
             Text(track.duration).monospacedDigit().foregroundStyle(.secondary)
         }
         .width(52)
+        .customizationID("time")
+        .disabledCustomizationBehavior(.visibility)
         TableColumn("") { track in
-            if let disc = slot.disc { InfoButton(help: "Track info") { InfoSection.track(track, disc: disc) } }
+            if let disc = slot.disc {
+                InfoButton(help: "Track info", debugID: "track\(track.number)") { InfoSection.track(track, disc: disc) }
+            }
         }
         .width(22)
+        .customizationID("info")
+        .disabledCustomizationBehavior(.all)
     }
 
     /// A track plays while the drive is free: not during a rip, a repair, or a drive test.
@@ -167,10 +184,26 @@ struct TrackTable: View {
     }
 }
 
+/// The track tables' columns that can be shown and hidden from the header's menu. A choice in
+/// a drive's table holds in an earlier rip's table too, and the other way round.
+enum TrackColumns {
+    static let rereads = "rereads"
+    static let optional = [rereads, "accurateRip", "ctdb", "encoding"]
+
+    static func copyVisibility<Source, Target>(
+        from source: TableColumnCustomization<Source>, to target: inout TableColumnCustomization<Target>
+    ) {
+        for id in optional where target[visibility: id] != source[visibility: id] {
+            target[visibility: id] = source[visibility: id]
+        }
+    }
+}
+
 struct StatusCell: View {
     var state: RipRun.TrackState?
     var ctdb: RipReport.CTDBResult?
     var summary: String?
+    var showsRereads = false
 
     var body: some View {
         switch state {
@@ -205,7 +238,7 @@ struct StatusCell: View {
                 SheenProgressBar(fraction: fraction)
             }
         case .finished(let track):
-            FinishedStatus(track: track, ctdb: ctdb, summary: summary)
+            FinishedStatus(track: track, ctdb: ctdb, summary: summary, showsRereads: showsRereads)
         }
     }
 }
@@ -267,14 +300,37 @@ struct FinishedStatus: View {
     var track: RipReport.Track
     var ctdb: RipReport.CTDBResult?
     var summary: String?
+    /// Re-reads go under the verdict while the table's Re-reads column is hidden.
+    var showsRereads = false
 
     var body: some View {
         let verdict = TrackVerdict(track, ctdb: ctdb)
-        HStack(spacing: 5) {
-            Image(systemName: verdict.icon).foregroundStyle(verdict.color)
-            Text(verdict.text).foregroundStyle(verdict.color)
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 5) {
+                Image(systemName: verdict.icon).foregroundStyle(verdict.color)
+                Text(verdict.text).foregroundStyle(verdict.color)
+            }
+            if let note {
+                Text(note).font(.caption).foregroundStyle(verdict == .notVerified ? Theme.bad : Theme.warning)
+            }
         }
         .help(summary ?? help(for: verdict))
+    }
+
+    /// What the track needed, under its verdict: the samples CTDB repaired, and the re-reads.
+    private var note: String? {
+        var parts = [String]()
+        if showsRereads {
+            let rereads = track.suspectSectors.count
+            let unreadable = track.unreadableSectors?.count ?? 0
+            if rereads > 0 { parts.append(Format.count(rereads, "sector") + " re-read") }
+            if unreadable > 0 { parts.append("\(unreadable) unreadable") }
+        }
+        if track.repairedSamples > 0 {
+            parts.append(
+                track.repairedSamples.formatted() + (track.repairedSamples == 1 ? " sample" : " samples") + " repaired")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private func help(for verdict: TrackVerdict) -> String {
@@ -298,7 +354,7 @@ struct RereadsCell: View {
         if count == 0 && unreadable == 0 {
             Text("—").foregroundStyle(.secondary)
         } else {
-            Text(count > 0 ? Format.count(count, "sector") : Format.count(unreadable, "unreadable"))
+            Text(count > 0 ? Format.count(count, "sector") : "\(unreadable) unreadable")
                 .foregroundStyle(TrackVerdict(track, ctdb: ctdb) == .notVerified ? Theme.bad : Theme.warning)
                 .help(
                     "\(Format.count(count, "sector")) read differently and were re-read"
@@ -310,15 +366,15 @@ struct RereadsCell: View {
     }
 }
 
-struct RepairedCell: View {
-    var track: RipReport.Track
+/// A result that is good: a check mark and plain text. Green is for the verdict alone, so a
+/// table of good results stays quiet, and color marks the tracks that need a look.
+struct CheckedText: View {
+    var text: String
 
     var body: some View {
-        if track.repairedSamples > 0 {
-            Text(track.repairedSamples.formatted() + " samples").foregroundStyle(Theme.warning)
-                .help("Samples that CTDB's repair data corrected.")
-        } else {
-            Text("—").foregroundStyle(.secondary)
+        HStack(spacing: 4) {
+            Image(systemName: "checkmark").foregroundStyle(.secondary)
+            Text(text).monospacedDigit()
         }
     }
 }
@@ -332,12 +388,12 @@ struct AccurateRipCell: View {
             switch track.accurateRip {
             case .accurate:
                 let confidence = track.accurateRipConfidence.map { max($0[0], $0[1]) } ?? 0
-                Text("Accurate · conf \(confidence)").foregroundStyle(Theme.good)
+                CheckedText(text: String(confidence))
                     .help(
-                        "\(confidence) rips in AccurateRip have this track's checksum, at this pressing's offset (the larger of the v1 and v2 counts). AccurateRip stops counting at 200."
+                        "Accurate: \(confidence) rips in AccurateRip have this track's checksum, at this pressing's offset (the larger of the v1 and v2 counts). AccurateRip stops counting at 200."
                     )
             case .otherPressings:
-                Text("Other pressing").foregroundStyle(Theme.good)
+                CheckedText(text: "Other pressing")
                     .help("Matches AccurateRip at other offsets only, so it is free of errors.")
             case .notAccurate:
                 Text("Not accurate").foregroundStyle(Theme.bad)
@@ -363,21 +419,32 @@ struct CTDBCell: View {
 
     var body: some View {
         if let run, case .finished(let track) = run.trackStates[number] {
-            if let confidence = track.ctdbConfidence, confidence > 0 {
-                Text("Verified · \(confidence)").foregroundStyle(Theme.good)
-                    .help("\(confidence) rips in the CUETools database have this track's checksum.")
-            } else if let ctdb = run.ctdb {
-                switch ctdb.status {
-                case .verified, .repaired: Text("Verified").foregroundStyle(Theme.good)
-                case .partlyRepaired, .notVerified: Text("Not verified").foregroundStyle(Theme.bad)
-                case .notInDatabase: Text("Not in database").foregroundStyle(.secondary)
-                case .notChecked: Text("Not checked").foregroundStyle(.secondary)
-                }
-            } else if run.isRunning {
-                Text("Pending").foregroundStyle(.secondary)
-            } else {
-                Text("—").foregroundStyle(.secondary)
+            CTDBResultCell(track: track, ctdb: run.ctdb, isRunning: run.isRunning)
+        } else {
+            Text("—").foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// A finished track's CTDB result: its own confidence, or the disc's result once the rip has one.
+struct CTDBResultCell: View {
+    var track: RipReport.Track
+    var ctdb: RipReport.CTDBResult?
+    var isRunning = false
+
+    var body: some View {
+        if let confidence = track.ctdbConfidence, confidence > 0 {
+            CheckedText(text: String(confidence))
+                .help("Verified: \(confidence) rips in the CUETools database have this track's checksum.")
+        } else if let ctdb {
+            switch ctdb.status {
+            case .verified, .repaired: CheckedText(text: "Verified")
+            case .partlyRepaired, .notVerified: Text("Not verified").foregroundStyle(Theme.bad)
+            case .notInDatabase: Text("Not in database").foregroundStyle(.secondary)
+            case .notChecked: Text("Not checked").foregroundStyle(.secondary)
             }
+        } else if isRunning {
+            Text("Pending").foregroundStyle(.secondary)
         } else {
             Text("—").foregroundStyle(.secondary)
         }
@@ -398,9 +465,7 @@ struct EncodeCell: View {
                 Text("Encoding")
             }
         case .encoded(let file):
-            Label(format?.rawValue.uppercased() ?? "Encoded", systemImage: "checkmark.circle")
-                .foregroundStyle(Theme.good)
-                .help(file.path)
+            CheckedText(text: format?.rawValue.uppercased() ?? "Encoded").help(file.path)
         case .notEncoded:
             Text("Not encoded").foregroundStyle(.secondary)
         case .failed:

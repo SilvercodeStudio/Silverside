@@ -12,7 +12,10 @@ struct ResultsView: View {
     var hasAudio = true
     /// The report file, for a report kept in the library; nil means the folder's disc.json.
     var reportFile: URL?
-    @State private var reportShown = true
+    /// The report is extra detail, so it is hidden at first, and stays as the person leaves it.
+    @AppStorage("reportShown") private var reportShown = false
+    @AppStorage("ripTrackColumns") private var columns = TableColumnCustomization<RipReport.Track>()
+    @AppStorage("driveTrackColumns") private var driveColumns = TableColumnCustomization<DiscInfo.Track>()
     @State private var hdcdDecodeShown = false
     /// The cover in the rip's folder, or in the album folder for a report kept in the library.
     @State private var cover: Data?
@@ -167,7 +170,10 @@ struct ResultsView: View {
                     Label("Rip Report", systemImage: "sidebar.trailing")
                 }
                 .help("Show or hide the rip report")
-                InfoButton(title: "Disc Info", help: "The release as MusicBrainz has it, and the disc's own codes") {
+                InfoButton(
+                    title: "Disc Info", help: "The release as MusicBrainz has it, and the disc's own codes",
+                    debugID: "disc"
+                ) {
                     InfoSection.disc(report: report)
                 }
             }
@@ -354,20 +360,23 @@ struct ResultsView: View {
         return URL(filePath: encoding.folder, directoryHint: .isDirectory).appending(path: file)
     }
 
-    /// The columns of the disc itself. A table takes ten columns at most, and the results need
-    /// eleven, so these count as one.
+    /// The columns of the disc itself, as one: a table's builder takes ten at most.
     @TableColumnBuilder<RipReport.Track, Never> private var discColumns: some TableColumnContent<RipReport.Track, Never>
     {
         TableColumn("#") { track in Text(String(track.number)).foregroundStyle(.secondary) }.width(28)
-        TableColumn("Title") { track in titleCell(track) }.width(min: 120, ideal: 180)
+            .customizationID("number").disabledCustomizationBehavior(.all)
+        TableColumn("Title") { track in titleCell(track) }.width(min: 160, ideal: 360)
+            .customizationID("title").disabledCustomizationBehavior(.visibility)
         TableColumn("Time") { track in Text(Format.duration(sectors: track.sectors)).foregroundStyle(.secondary) }
             .width(52)
+            .customizationID("time").disabledCustomizationBehavior(.visibility)
         TableColumn("") { track in
-            InfoButton(help: "Track info, and the tags of its encoded file") {
+            InfoButton(help: "Track info, and the tags of its encoded file", debugID: "track\(track.number)") {
                 InfoSection.track(track, report: report, title: titles[track.number], file: audioURL(of: track))
             }
         }
         .width(22)
+        .customizationID("info").disabledCustomizationBehavior(.all)
     }
 
     /// A track's title, and its artist when it has one of its own, editable as in a drive's table.
@@ -424,7 +433,7 @@ struct ResultsView: View {
     }
 
     private var table: some View {
-        Table(report.tracks) {
+        Table(report.tracks, columnCustomization: $columns) {
             TableColumn("") { track in
                 if let url = audioURL(of: track) {
                     PlayButton(player: model.player, source: .file(url)) {
@@ -435,38 +444,34 @@ struct ResultsView: View {
                 }
             }
             .width(22)
+            .customizationID("play").disabledCustomizationBehavior(.all)
             discColumns
-            TableColumn("Status") { track in FinishedStatus(track: track, ctdb: report.ctdb) }.width(
-                min: 100, ideal: 115)
-            TableColumn("Re-reads") { track in RereadsCell(track: track, ctdb: report.ctdb) }.width(min: 60, ideal: 75)
-            TableColumn("Repaired") { track in RepairedCell(track: track) }.width(min: 60, ideal: 80)
-            TableColumn("AccurateRip") { track in AccurateRipCell(state: .finished(track)) }.width(min: 100, ideal: 130)
-            TableColumn("CTDB") { track in
-                if let confidence = track.ctdbConfidence, confidence > 0 {
-                    Text("Verified · \(confidence)").foregroundStyle(Theme.good)
-                } else {
-                    switch report.ctdb.status {
-                    case .verified, .repaired: Text("Verified").foregroundStyle(Theme.good)
-                    case .partlyRepaired, .notVerified: Text("Not verified").foregroundStyle(Theme.bad)
-                    case .notInDatabase: Text("Not in database").foregroundStyle(.secondary)
-                    case .notChecked: Text("Not checked").foregroundStyle(.secondary)
-                    }
-                }
+            TableColumn("Status") { track in
+                FinishedStatus(
+                    track: track, ctdb: report.ctdb,
+                    showsRereads: columns[visibility: TrackColumns.rereads] != .visible)
             }
-            .width(min: 80, ideal: 100)
+            .width(min: 110, ideal: 150)
+            .customizationID("status").disabledCustomizationBehavior(.visibility)
+            TableColumn("Re-reads") { track in RereadsCell(track: track, ctdb: report.ctdb) }.width(min: 60, ideal: 75)
+                .customizationID(TrackColumns.rereads).defaultVisibility(.hidden)
+            TableColumn("AccurateRip") { track in AccurateRipCell(state: .finished(track)) }.width(min: 90, ideal: 110)
+                .customizationID("accurateRip")
+            TableColumn("CTDB") { track in CTDBResultCell(track: track, ctdb: report.ctdb) }.width(min: 70, ideal: 90)
+                .customizationID("ctdb")
             if let encoding = report.encoding {
                 TableColumn("Encoding") { track in
                     if let file = encoding.file(ofTrack: track.number) {
-                        Label(encoding.format.rawValue.uppercased(), systemImage: "checkmark.circle")
-                            .foregroundStyle(Theme.good)
-                            .help(file)
+                        CheckedText(text: encoding.format.rawValue.uppercased()).help(file)
                     } else {
                         Text("Not encoded").foregroundStyle(.secondary)
                     }
                 }
                 .width(min: 60, ideal: 75)
+                .customizationID("encoding")
             }
         }
         .alternatingRowBackgrounds(.disabled)
+        .onChange(of: columns) { TrackColumns.copyVisibility(from: columns, to: &driveColumns) }
     }
 }

@@ -50,6 +50,16 @@ the same audio. Nine other Grateful Dead albums have no codes.
 FFmpeg's decode, only 0.06% to 0.28% of samples are above the peak-extend level
 (−3.1 dBFS), and decoding raises them 3.7 to 4.5 dB against the rest.
 
+**A second one (2026-10-27).** *Dick's Picks, Volume 22* (2 discs, 18 tracks):
+peak extend in every packet of every track, with no gain adjustment and no
+damaged codes. Both discs are accurate in AccurateRip (8 of 8, 10 of 10) and
+verified by CTDB. Measured from Silverside's decoded 20-bit FLAC files, 0.006%
+to 0.25% of samples per track are in the expanded range, and "Dark Star" never
+reaches it, so its decode is only the 6 dB step. Nearly every track peaks at
+exactly −5.0 dBFS after decoding (16 of 18), so the master's peaks were most
+likely held to one ceiling, which peak extend opens up again. The ReplayGain
+over both discs is +1.60 dB.
+
 **The decode, against FFmpeg, across whole discs (2026-10-27).** Silverside
 decodes a track at a time, and starts each one with the last 5 seconds of the
 track before, as a player that plays the disc straight through has them. All

@@ -53,6 +53,31 @@ public enum ReleaseRanking {
         return first.title != second.title || first.media.count != second.media.count
     }
 
+    /// A release of earlier rips with a disc that has this disc's track lengths, when the
+    /// lookup did not give that release: MusicBrainz has the disc ID on other releases only.
+    /// It can be another edition (*Vegas 96* disc 3, on the 3-disc edition only, of a set ripped
+    /// as the 4-disc edition), or a mistake (its disc 2, on a 1988 show with as many tracks).
+    /// Adding the disc ID to the release in MusicBrainz (`submissionURL`) lets the lookup find it.
+    public static func earlierRelease(
+        fitting toc: TOC, found: [MusicBrainzRelease], earlier: [MusicBrainzRelease]
+    ) -> (release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium)? {
+        let lengths = toc.audioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
+        let foundIDs = Set(found.map(\.id))
+        for release in earlier where !release.isManual && !foundIDs.contains(release.id) {
+            if let medium = release.media.first(where: { fits($0, lengths: lengths) }) { return (release, medium) }
+        }
+        return nil
+    }
+
+    /// True if each track of the medium is within 3 seconds of the TOC's: pressings differ a
+    /// little in their gaps. A track whose length MusicBrainz does not know does not fit.
+    private static func fits(_ medium: MusicBrainzRelease.Medium, lengths: [Int]) -> Bool {
+        medium.tracks.count == lengths.count
+            && zip(medium.tracks, lengths).allSatisfy { track, length in
+                track.length.map { abs($0 - length) <= 3000 } ?? false
+            }
+    }
+
     /// True if a barcode is the MCN. An MCN has 13 digits (EAN-13); a 12-digit UPC is the
     /// same number with a leading zero.
     public static func matches(barcode: String?, mcn: String) -> Bool {

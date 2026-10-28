@@ -1,3 +1,5 @@
+import Foundation
+
 /// A CUE sheet for a disc ripped to one file for each track, or to one file for the whole disc.
 ///
 /// Silverside's track files run from one track's index 01 to the next track's, so a pregap
@@ -132,5 +134,22 @@ public struct CueSheet: Sendable {
     /// Text in quotes. A quote in it becomes an apostrophe, as CUE sheets cannot hold one.
     static func quoted(_ text: String) -> String {
         "\"" + text.replacingOccurrences(of: "\"", with: "'") + "\""
+    }
+}
+
+extension CueSheet {
+    /// The CUE sheets in `folder` whose FILE lines name only files in `names`: one rip's
+    /// sheets, in an album folder whose other files can be another rip's.
+    public static func sheets(in folder: URL, namingOnly names: Set<String>) -> [URL] {
+        let quotedNames = Set(names.map(quoted))
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        return files.filter { $0.hasSuffix(".cue") }.map { folder.appending(path: $0) }.filter { sheet in
+            guard let text = try? String(contentsOf: sheet, encoding: .utf8) else { return false }
+            let named = text.split(whereSeparator: \.isNewline).compactMap { line -> String? in
+                guard line.hasPrefix("FILE "), let end = line.lastIndex(of: "\"") else { return nil }
+                return String(line[line.index(line.startIndex, offsetBy: 5)...end])
+            }
+            return !named.isEmpty && named.allSatisfy(quotedNames.contains)
+        }
     }
 }

@@ -383,6 +383,43 @@ extension EncodingTests {
         #expect(again.renamed == 0 && again.files == update.files)
     }
 
+    /// *American Beauty*: the deluxe edition's disc 1 and the single-disc edition, encoded into
+    /// one album folder while they had one name. Renaming this rip's album moves its files only:
+    /// the other edition keeps its folder, report, files, CUE sheet, and cover.
+    @Test func renamesOneEditionOutOfAFolderAnotherShares() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        let files = try DiscEncoder(format: .flac).encode(disc, into: library)
+        let oldAlbum = files[0].deletingLastPathComponent()
+        let releaseID = try #require(disc.release?.id)
+        // The other edition: a report of another release, its file, and its CUE sheet.
+        var other = try RipReport.read(from: oldAlbum.appending(path: "Rip Report (Disc 2).json"))
+        other.release?.id = "other-edition"
+        other.encoding?.files = [.init(track: 1, file: "01-01 Other.flac")]
+        try other.write(to: oldAlbum.appending(path: "Rip Report (Disc 1).json"))
+        try Data("x".utf8).write(to: oldAlbum.appending(path: "01-01 Other.flac"))
+        try Data("FILE \"01-01 Other.flac\" WAVE\n".utf8).write(to: oldAlbum.appending(path: "Other (Disc 1).cue"))
+        try makeJPEG(width: 10, height: 10).write(to: oldAlbum)
+
+        let edits = ReleaseEditsStore(url: folder.deletingLastPathComponent().appending(path: "edits.json"))
+        try edits.remember(MetadataEdits(album: "Giants Stadium 1991"), forReleaseID: releaseID)
+        let update = try DiscEncoder(format: .flac).updateLibrary(
+            reportAt: folder.appending(path: "disc.json"), library: library, editsStore: edits,
+            coverStore: ReleaseCoverStore(folder: folder.deletingLastPathComponent().appending(path: "covers")))
+        let newAlbum = library.appending(path: "Grateful Dead/Giants Stadium 1991")
+        #expect(update.albumFolder?.standardizedFileURL == newAlbum.standardizedFileURL)
+        let moved = try FileManager.default.contentsOfDirectory(atPath: newAlbum.path)
+        let stayed = try FileManager.default.contentsOfDirectory(atPath: oldAlbum.path)
+        #expect(Set(moved).isSuperset(of: files.map(\.lastPathComponent)))
+        #expect(moved.contains("Rip Report (Disc 2).json") && moved.contains("Giants Stadium 1991 (Disc 2).cue"))
+        #expect(moved.contains("cover.jpg") && stayed.contains("cover.jpg"))
+        #expect(
+            Set(stayed).isSuperset(of: ["Rip Report (Disc 1).json", "01-01 Other.flac", "Other (Disc 1).cue"]))
+        #expect(!stayed.contains { $0.hasSuffix(".flac") && $0 != "01-01 Other.flac" })
+        #expect(!stayed.contains("Rip Report (Disc 2).json") && stayed.filter { $0.hasSuffix(".cue") }.count == 1)
+    }
+
     /// The album of a multi-disc release is the whole release: until every disc is encoded,
     /// each disc's album gain is its own; the last disc takes the gain over every disc, and
     /// the discs encoded before it are written again with it.

@@ -178,14 +178,18 @@ extension DiscEncoder {
         var renamed = 0
 
         // The album folder, as the templates name it now. A set shares one folder, so a move
-        // into a folder that exists merges into it.
+        // into a folder that exists merges into it. A folder that another release's rip shares
+        // (another edition, encoded into it before its names changed) keeps that rip's files:
+        // only this rip's go.
         if let library, let first = medium.tracks.first {
             let values = metadata(release: release, medium: medium, track: first, isrc: nil).nameValues
             let planned = library.appending(path: folderTemplate.name(values), directoryHint: .isDirectory)
             if planned.standardizedFileURL != current.standardizedFileURL,
                 FileManager.default.fileExists(atPath: current.path)
             {
-                if FileManager.default.fileExists(atPath: planned.path) {
+                if Self.holdsOtherRelease(current, than: original.id) {
+                    try Self.moveOwnFiles(of: encoding, discPart: discPart, from: current, to: planned)
+                } else if FileManager.default.fileExists(atPath: planned.path) {
                     try Self.mergeAlbum(from: current, into: planned)
                 } else {
                     try FileManager.default.createDirectory(
@@ -285,10 +289,16 @@ extension DiscEncoder {
         }
         encoding.folder = album.path
 
-        // The CUE sheet again, under its new name, and the reports.
-        for name in (try? FileManager.default.contentsOfDirectory(atPath: album.path)) ?? []
-        where name.hasSuffix(".cue") && (discPart.isEmpty || name.hasSuffix(discPart + ".cue")) {
-            try FileManager.default.removeItem(at: album.appending(path: name))
+        // The CUE sheet again, under its new name, and the reports. In a folder that another
+        // release's rip shares, only the sheets that name this rip's files are its own.
+        if Self.holdsOtherRelease(album, than: original.id) {
+            let names = Set(report.encoding?.files.map(\.file) ?? []).union(encoding.files.map(\.file))
+            for sheet in CueSheet.sheets(in: album, namingOnly: names) { try FileManager.default.removeItem(at: sheet) }
+        } else {
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: album.path)) ?? []
+            where name.hasSuffix(".cue") && (discPart.isEmpty || name.hasSuffix(discPart + ".cue")) {
+                try FileManager.default.removeItem(at: album.appending(path: name))
+            }
         }
         if !cueTracks.isEmpty {
             try writeCueSheet(
@@ -306,6 +316,46 @@ extension DiscEncoder {
         }
         if isRipFolder, report.encoding != nil { try encoding.save(inReportAt: file) }
         return LibraryUpdate(files: files, renamed: renamed, albumFolder: album)
+    }
+
+    /// True if the album folder holds the report of a rip of another release: another edition
+    /// of the album, encoded into the folder while the two had the same name.
+    static func holdsOtherRelease(_ folder: URL, than releaseID: String) -> Bool {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        return names.contains { name in
+            guard name.hasPrefix("Rip Report"), name.hasSuffix(".json"),
+                let other = try? RipReport.read(from: folder.appending(path: name)).release
+            else { return false }
+            return other.id != releaseID
+        }
+    }
+
+    /// Moves one rip's files out of an album folder that another release's rip shares: its
+    /// audio and data tracks, its CUE sheets, and its report. The covers are copied, because
+    /// the other rip's files keep theirs. Every collision is checked before anything moves.
+    private static func moveOwnFiles(
+        of encoding: RipReport.Encoding, discPart: String, from source: URL, to destination: URL
+    ) throws {
+        let manager = FileManager.default
+        var moving = RipRemoval.ownFiles(of: encoding, in: source).filter {
+            $0.deletingLastPathComponent().standardizedFileURL == source.standardizedFileURL
+        }
+        moving += CueSheet.sheets(in: source, namingOnly: Set(encoding.files.map(\.file)))
+        moving += ["json", "md"].map { source.appending(path: "Rip Report\(discPart).\($0)") }
+        moving = moving.filter { manager.fileExists(atPath: $0.path) }
+        let covers = ((try? manager.contentsOfDirectory(atPath: source.path)) ?? [])
+            .filter { $0.hasPrefix("cover") && ["jpg", "png"].contains(($0 as NSString).pathExtension) }
+            .map { source.appending(path: $0) }
+            .filter { !manager.fileExists(atPath: destination.appending(path: $0.lastPathComponent).path) }
+        for file in moving {
+            let target = destination.appending(path: file.lastPathComponent)
+            if manager.fileExists(atPath: target.path) { throw EncodingError.exists(target) }
+        }
+        try manager.createDirectory(at: destination, withIntermediateDirectories: true)
+        for file in moving { try manager.moveItem(at: file, to: destination.appending(path: file.lastPathComponent)) }
+        for cover in covers {
+            try manager.copyItem(at: cover, to: destination.appending(path: cover.lastPathComponent))
+        }
     }
 
     /// Check every collision before moving anything. Only byte-identical files can be deduplicated.

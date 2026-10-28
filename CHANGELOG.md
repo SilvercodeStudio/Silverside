@@ -18,11 +18,13 @@ command-line tool.
   header, as its track titles already could. Press Return to keep a change:
   the files take the new names then, not while a name is half typed (track
   titles too). The names are kept for the release, and the sidebar and Rip
-  History show them. A set's are still edited in the set's view.
+  History show them. A set's are still edited in the set's view. When two
+  editions were encoded into one album folder, renaming one moves only its
+  own files, and the other keeps its folder, report, and CUE sheet.
 - **Move to Trash…** for an earlier rip, from its menu in Recent Rips and Rip
   History: the rip's folder with its WAV files, or for a rip in the library, its
-  report and encoded files. Files that another rip in the same album folder
-  uses stay.
+  report, encoded files, CUE sheet, and disc image. Files that another rip in
+  the same album folder uses stay.
 - **New Release in MusicBrainz** (Disc menu, and the release picker): for a
   disc that MusicBrainz has only as part of another release, such as the
   single-disc edition of a set's first disc. It opens MusicBrainz's release

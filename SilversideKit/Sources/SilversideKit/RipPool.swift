@@ -75,11 +75,14 @@ public enum RipFolderError: Error, Equatable, CustomStringConvertible {
     case otherDisc(URL, toc: String)
     /// Both the folder and its other name hold rips of other discs.
     case taken(URL, URL)
+    /// A rip is writing into the folder.
+    case inUse(URL)
 
     public var description: String {
         switch self {
         case .otherDisc(let folder, let toc): "\(folder.path) holds a rip of another disc (TOC \(toc))."
         case .taken(let first, let second): "Both \(first.path) and \(second.path) hold another disc's rip."
+        case .inUse(let folder): "A rip is writing into \(folder.path). Try again when it is done."
         }
     }
 }
@@ -105,6 +108,12 @@ public enum RipFolder {
             path: "\(folder.lastPathComponent) [\(toc.musicBrainzDiscID)]", directoryHint: .isDirectory)
         guard try claimIfFree(other, toc: toc) else { throw RipFolderError.taken(folder, other) }
         return other
+    }
+
+    /// Claims exactly `folder`, for work that must not run beside a rip into it, such as
+    /// moving it to the Trash. Throws if a rip has it.
+    public static func claimExactly(_ folder: URL, toc: TOC) throws {
+        guard try claimIfFree(folder, toc: toc) else { throw RipFolderError.inUse(folder) }
     }
 
     public static func release(_ folder: URL) {

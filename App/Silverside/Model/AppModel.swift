@@ -548,9 +548,12 @@ final class AppModel {
         refreshRecentRips()
     }
 
-    /// True while nothing else works on the rip's files.
+    /// True while nothing else works on the rip's files: no repair, no name update, and no rip,
+    /// which can write into an earlier rip's folder or album folder. A rip from the command line
+    /// is kept out by the folder's claim (`RipRemoval.moveToTrash`).
     func canMoveToTrash(_ rip: RecentRip) -> Bool {
         !rip.isMissing && !updatingNames.contains(rip.file) && repair?.isRunning != true
+            && !drives.contains { $0.rip?.isRunning == true }
     }
 
     /// Moves an earlier rip's own files to the Trash (`RipRemoval`), after asking, and takes
@@ -563,17 +566,21 @@ final class AppModel {
         alert.informativeText =
             rip.hasAudio
             ? "The rip's folder, with its WAV files, goes to the Trash. Files encoded into the library stay."
-            : "The rip's report" + (encoded > 0 ? " and \(Format.count(encoded, "encoded file"))" : "")
-                + " go to the Trash. Files that another rip in the album folder uses, the cover, and the CUE sheet stay."
+            : "The rip's report" + (encoded > 0 ? " and \(Format.count(encoded, "other file"))" : "")
+                + " go to the Trash: its encoded files, CUE sheet, and disc image. Files that another rip in the "
+                + "album folder uses, and the cover, stay."
         alert.addButton(withTitle: "Move to Trash")
         alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard alert.runModal() == .alertFirstButtonReturn, canMoveToTrash(rip) else { return }
         do {
-            try RipRemoval.moveToTrash(files)
+            try RipRemoval.moveToTrash(reportAt: rip.file, hasAudio: rip.hasAudio)
+            forget(rip)
         } catch {
+            // The report goes last, so a rip that is only partly in the Trash keeps it, and its
+            // place in the history, to try again.
             self.alert = AppAlert(title: "The rip could not be moved to the Trash", message: "\(error)")
+            refreshRecentRips()
         }
-        forget(rip)
     }
 
     /// Changes an earlier rip's cover: the cover file in the rip's folder and the album's, the

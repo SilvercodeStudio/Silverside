@@ -22,6 +22,12 @@ struct CoverArtTests {
         let embedded = try EmbeddedCover(converted, maximumPixels: 2000)
         #expect(embedded.width == 1600 && embedded.height == 1200)
         #expect(throws: CoverArtError.notAnImage) { try CoverImage(converting: Data("not an image".utf8)) }
+        // A drawing is not a picture: ImageIO does not read SVG, so the file panels leave it out.
+        let svg =
+            #"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>"#
+        #expect(throws: CoverArtError.notAnImage) { try CoverImage(converting: Data(svg.utf8)) }
+        #expect(CoverImage.readableTypes.contains(.jpeg) && CoverImage.readableTypes.contains(.webP))
+        #expect(!CoverImage.readableTypes.contains(.svg) && !CoverImage.readableTypes.contains(.pdf))
     }
 
     @Test func getsTheFrontCover() async throws {

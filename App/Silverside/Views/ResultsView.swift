@@ -239,9 +239,7 @@ struct ResultsView: View {
                 }
                 .onDrop(of: [.fileURL, .image], isTargeted: $coverTargeted) { providers in
                     guard let provider = providers.first else { return false }
-                    CoverDrop.load(provider) { data in
-                        if let data { model.changeCover(of: recentRip, to: CoverImage(data: data)) }
-                    }
+                    CoverDrop.load(provider) { model.changeCover(of: recentRip, to: CoverImage(data: $0)) }
                     return true
                 }
                 .onTapGesture {
@@ -339,12 +337,10 @@ struct ResultsView: View {
     }
 
     private func chooseCover() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.image]
-        panel.message = "Choose an image for the cover. JPEG and PNG are kept as they are; other formats become JPEG."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        if let data = CoverDrop.imageData(from: url) { model.changeCover(of: recentRip, to: CoverImage(data: data)) }
+        let message = "Choose an image for the cover. JPEG and PNG are kept as they are; other formats become JPEG."
+        if let data = CoverDrop.choose(message: message) {
+            model.changeCover(of: recentRip, to: CoverImage(data: data))
+        }
     }
 
     /// "Disc 2 of 3 · Discs 1 and 2 of 3 ripped; disc 3 still to do".

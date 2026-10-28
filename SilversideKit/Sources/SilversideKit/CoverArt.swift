@@ -90,7 +90,9 @@ public enum CoverArtError: Error, Equatable, CustomStringConvertible {
     public var description: String {
         switch self {
         case .unknownFormat: "The cover image is not a JPEG or PNG file."
-        case .notAnImage: "The cover file is not an image that macOS can read."
+        case .notAnImage:
+            "The cover file cannot be read as a picture. Use a JPEG, PNG, HEIC, WebP, TIFF, or GIF file; "
+                + "a drawing such as SVG or PDF must first be saved as one of those."
         case .malformedListing: "The Cover Art Archive's list of images cannot be read."
         }
     }

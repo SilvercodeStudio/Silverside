@@ -215,9 +215,7 @@ struct AlbumHeader: View {
                 }
                 .onDrop(of: [.fileURL, .image], isTargeted: $coverTargeted) { providers in
                     guard slot.rip?.isRunning != true, let provider = providers.first else { return false }
-                    CoverDrop.load(provider) { data in
-                        if let data { slot.disc?.userCover = CoverImage(data: data) }
-                    }
+                    CoverDrop.load(provider) { slot.disc?.userCover = CoverImage(data: $0) }
                     return true
                 }
                 .onTapGesture {
@@ -439,12 +437,8 @@ struct AlbumHeader: View {
     }
 
     private func chooseCover() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.image]
-        panel.message = "Choose an image for the cover. JPEG and PNG are kept as they are; other formats become JPEG."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        if let data = CoverDrop.imageData(from: url) { slot.disc?.userCover = CoverImage(data: data) }
+        let message = "Choose an image for the cover. JPEG and PNG are kept as they are; other formats become JPEG."
+        if let data = CoverDrop.choose(message: message) { slot.disc?.userCover = CoverImage(data: data) }
     }
 
     /// A binding to one album-level edit: the original value clears the edit.
@@ -755,23 +749,47 @@ struct ResultBanner: View {
 }
 
 /// Images dropped or chosen for the cover: a file, or image data from another app, made
-/// into a cover the tags can hold by `CoverImage(converting:)`.
+/// into a cover the tags can hold by `CoverImage(converting:)`. One that cannot be read
+/// gets an alert, so a drop or a choice never fails without a word.
 enum CoverDrop {
-    static func load(_ provider: NSItemProvider, then apply: @escaping @MainActor (Data?) -> Void) {
+    static func load(_ provider: NSItemProvider, then apply: @escaping @MainActor (Data) -> Void) {
+        func done(_ image: Data?) {
+            Task { @MainActor in
+                if let image { apply(image) } else { showUnreadable() }
+            }
+        }
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
             provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
-                let url = data.flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
-                let image = url.flatMap(imageData(from:))
-                Task { @MainActor in apply(image) }
+                done(data.flatMap { URL(dataRepresentation: $0, relativeTo: nil) }.flatMap(imageData(from:)))
             }
         } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
             provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
-                let image = data.flatMap(imageData(from:))
-                Task { @MainActor in apply(image) }
+                done(data.flatMap(imageData(from:)))
             }
         } else {
-            apply(nil)
+            showUnreadable()
         }
+    }
+
+    /// Asks for an image file, of the types that can become a cover only.
+    static func choose(message: String) -> Data? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = CoverImage.readableTypes
+        panel.message = message
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        guard let data = imageData(from: url) else {
+            showUnreadable()
+            return nil
+        }
+        return data
+    }
+
+    static func showUnreadable() {
+        let alert = NSAlert()
+        alert.messageText = "This file cannot be used as a cover"
+        alert.informativeText = CoverArtError.notAnImage.description
+        alert.runModal()
     }
 
     nonisolated static func imageData(from url: URL) -> Data? {

@@ -75,7 +75,9 @@ command-line tool.
   is not a CD says so in its disc chip: "Disc 1 of 2 · CD + Blu-ray".
 - `silverside metadata --cover` takes any image that macOS reads, such as WebP
   or HEIC, and makes it a JPEG, as the app does. JPEG and PNG stay as they
-  are.
+  are. In the app, Choose Cover offers only such images, and a file dropped on
+  the cover that cannot be used, such as an SVG drawing, gets a message
+  instead of no change.
 
 ### Fixed
 

@@ -37,6 +37,13 @@ public struct EmbeddedCover: Equatable, Sendable {
 }
 
 extension CoverImage {
+    /// The file types that `init(converting:)` reads: the picture formats of ImageIO, not
+    /// drawings such as SVG or PDF.
+    public static var readableTypes: [UTType] {
+        let identifiers = CGImageSourceCopyTypeIdentifiers() as? [String] ?? []
+        return identifiers.compactMap { UTType($0) }.filter { $0.conforms(to: .image) && !$0.conforms(to: .svg) }
+    }
+
     /// Makes a cover from any image that macOS reads, such as WebP, HEIC, or TIFF, for the
     /// tags, which hold JPEG and PNG only. A JPEG or PNG is kept byte for byte; any other
     /// image becomes a JPEG at its full size, turned upright if its orientation says so.

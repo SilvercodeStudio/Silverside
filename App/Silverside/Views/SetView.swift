@@ -136,9 +136,7 @@ struct SetView: View {
                 }
                 .onDrop(of: [.fileURL, .image], isTargeted: $coverTargeted) { providers in
                     guard let provider = providers.first else { return false }
-                    CoverDrop.load(provider) { data in
-                        if let data { changeCover(to: CoverImage(data: data)) }
-                    }
+                    CoverDrop.load(provider) { changeCover(to: CoverImage(data: $0)) }
                     return true
                 }
                 .onTapGesture {
@@ -381,13 +379,9 @@ struct SetView: View {
     private var coverFileName: String { "\(ripSet.artist) - \(ripSet.title) cover" }
 
     private func chooseCover() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.image]
-        panel.message =
+        let message =
             "Choose an image for the set's cover. JPEG and PNG are kept as they are; other formats become JPEG."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        if let data = CoverDrop.imageData(from: url) { changeCover(to: CoverImage(data: data)) }
+        if let data = CoverDrop.choose(message: message) { changeCover(to: CoverImage(data: data)) }
     }
 
     /// A cover for every disc: the encoded ones through a library update, the others through

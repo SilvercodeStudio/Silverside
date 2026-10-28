@@ -44,6 +44,15 @@ Thunderbolt, or a SATA drive in an enclosure.
 Encoding to MP3 requires an [external CLI encoder app](#encoding-to-mp3)
 to be installed. All other supported formats are handled natively.
 
+### Why it is not in the Mac App Store
+
+Apps in the Mac App Store must run in Apple's App Sandbox, which does not
+allow the low-level access to the drive that accurate ripping needs: reading
+raw audio sectors, the C2 error flags, the subchannel, and the full table of
+contents. So Silverside is distributed from [silverside.app](https://silverside.app)
+instead. Release builds are signed with a Developer ID and notarized by
+Apple, so macOS opens them without warnings.
+
 ## Silverside features
 
 - **Accurate rips.** Each track is read with the drive's read offset corrected,
@@ -205,29 +214,44 @@ makes, and the settings.
 [pre-emphasis](docs/PreEmphasis.md) each have a short page: what Silverside
 does, and how it was compared with independent tools and real discs.
 
-## TODO or future ideas
+## Roadmap
 
-- A whole-disc CloneCD image of multisession discs (Enhanced CDs), for
-  archiving and burning; the data track of mixed-mode discs (data first).
-- Option to slow down drive speed (quieter)
-  - Autodetect and engage this during problem rips
-- Submit to MusicBrainz straight from the app (planned for 2.0). Today
-  Silverside opens MusicBrainz's release editor filled in from the disc, to
-  check and submit there.
-- Search MusicBrainz by album or artist (planned for 1.0), for a disc whose
-  TOC it does not know (a burned disc, or a pressing it has not seen), and tag
-  the disc from the chosen release
-- Submit rips to CTDB (planned for 2.0), also later from a saved rip.
-- Secondary metadata source (GnuDB)
-- Multiple encodings at once (e.g. FLAC + AAC)
-- Filename template enhancements
-- Localization in other languages. 
-- A warning before a lossy encode of a DTS-CD, and a note in the report when a
-  disc looks copy-controlled.
+### Planned for 1.0
+
+- **Search MusicBrainz by album or artist**, for a disc whose TOC it does not
+  know (a burned disc, or a pressing it has not seen), and tag the disc from
+  the release you choose.
+- **Whole-disc images in the CloneCD format** (`.ccd`, `.img`, `.sub`), for
+  archiving: every session of a multisession disc such as an Enhanced CD,
+  with the full subchannel, which also keeps CD-Text and CD+G graphics.
+- **Mixed-mode discs** (a data track first, then music), checked on real
+  discs, and CUE sheets that describe the whole disc.
+- **Copy-controlled discs:** checked on real discs, with a note in the report
+  when a disc looks copy-controlled.
+- More tests with real discs: CD+G, hidden track one audio.
+- Signed and notarized release builds, with Add to Music working under
+  macOS's hardened runtime.
+- Polish in the app.
+
+### Possible later (2.0 or beyond, no date)
+
+- Submit to MusicBrainz straight from the app. Today Silverside opens
+  MusicBrainz's release editor filled in from the disc, to check and submit
+  there.
+- Submit rips to CTDB, also later from a saved rip.
+- CD burning, with verification.
 - CD+G graphics as a `.cdg` file beside the audio.
-- Per-track pregap adjustments
-- CD Burning with verification
-- AcoustID?
+- A slower drive speed, for quieter rips, and slowing down by itself on a
+  troubled disc.
+- A C2 error-flag check for each drive, kept in its profile.
+- A warning before a lossy encode of a DTS-CD; 
+- DVD-Audio extraction support.
+- An option to leave out silent filler tracks (as before a hidden track at the
+  end).
+- A second metadata source (GnuDB), and AcoustID.
+- Several encodings at once (for example FLAC and AAC).
+- More filename template options, and per-track pregap adjustments.
+- The app in other languages.
 
 See [docs/internal/Milestones.md](docs/internal/Milestones.md) for the plan.
 

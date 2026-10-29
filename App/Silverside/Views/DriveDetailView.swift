@@ -595,14 +595,20 @@ struct NameTextField: View {
     var tabOrder: (() -> [NameField])?
     var pending: PendingNames?
     var commit: (String) -> Void
-    /// The text as typed, until it is accepted; nil shows `value`.
+    /// The text as typed; nil shows `value`. It stays after it is accepted, until `value`
+    /// changes with it: cleared at once, the field showed the old value for a moment, and the
+    /// field, as it ended editing, wrote that old value back as if it were typed.
     @State private var draft: String?
+    /// The draft was accepted, and waits for `value` to follow.
+    @State private var isAccepted = false
 
     var body: some View {
         let text = Binding(
             get: { draft ?? value },
             set: { typed in
+                guard typed != (draft ?? value) else { return }
                 draft = typed
+                isAccepted = false
                 pending?.set(field) { commit(typed) }
             })
         TextField("", text: text, prompt: prompt.map { Text($0) })
@@ -612,15 +618,26 @@ struct NameTextField: View {
             .onChange(of: focus.wrappedValue) { left, now in
                 if left == field, now != field { accept() }
             }
+            .onChange(of: value) {
+                // The accepted name arrived, or the name changed elsewhere (Undo Edits).
+                if isAccepted || draft == nil {
+                    draft = nil
+                    isAccepted = false
+                }
+            }
             .onDisappear(perform: accept)
-            .modifier(TabsThroughTracks(field: field, order: tabOrder, focus: focus))
+            .modifier(TabsThroughTracks(field: field, order: tabOrder, focus: focus, accept: accept))
     }
 
     private func accept() {
-        guard let typed = draft else { return }
-        draft = nil
+        guard let typed = draft, !isAccepted else { return }
         pending?.set(field, accept: nil)
-        if typed != value { commit(typed) }
+        if typed == value {
+            draft = nil
+        } else {
+            isAccepted = true
+            commit(typed)
+        }
     }
 }
 
@@ -630,12 +647,16 @@ private struct TabsThroughTracks: ViewModifier {
     var field: NameField
     var order: (() -> [NameField])?
     var focus: FocusState<NameField?>.Binding
+    /// Accepts the field's text, before the focus moves: a click into a field does not always
+    /// set the focus state, so its change cannot be counted on to accept it.
+    var accept: () -> Void
 
     func body(content: Content) -> some View {
         if let order {
             content.onKeyPress(keys: [.tab, KeyEquivalent("\u{19}")]) { press in
                 let backward = press.modifiers.contains(.shift) || press.key == KeyEquivalent("\u{19}")
                 guard let next = field.next(in: order(), backward: backward) else { return .ignored }
+                accept()
                 focus.wrappedValue = next
                 return .handled
             }

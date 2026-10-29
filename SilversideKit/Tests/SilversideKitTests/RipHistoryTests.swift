@@ -40,6 +40,37 @@ struct RipHistoryTests {
         #expect(history.entries().isEmpty)
     }
 
+    /// A disc that MusicBrainz does not know gets the names of its newest rip that has any.
+    @Test func findsTheNamesOfADiscThatMusicBrainzDoesNotKnow() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let history = RipHistory(directory: root.appending(path: "History"))
+        let toc = try TOC(audioTrackStarts: [0, 300], leadOutLBA: 700)
+        let other = try TOC(audioTrackStarts: [0, 400], leadOutLBA: 700)
+        func rip(_ name: String, toc: TOC, daysAgo: Double, title: String?) throws -> URL {
+            let folder = root.appending(path: name)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appending(path: "disc.json")
+            let date = Date(timeIntervalSince1970: (1_800_000_000 - daysAgo * 86_400).rounded())
+            try RipSetTests.report(.manual(toc: toc), toc: toc, date: date).write(to: file)
+            var edits = MetadataEdits()
+            edits.setTitle(title, ofTrack: 1)
+            if title != nil { try edits.save(inReportAt: file) }
+            _ = try history.record(try RipReport.read(from: file), file: file, hasAudio: true)
+            return file
+        }
+        #expect(history.newestNamedRip(of: toc) == nil)
+        _ = try rip("Old", toc: toc, daysAgo: 3, title: "Old Name")
+        let named = try rip("Named", toc: toc, daysAgo: 2, title: "New Name")
+        _ = try rip("Unnamed", toc: toc, daysAgo: 1, title: nil)
+        _ = try rip("Other", toc: other, daysAgo: 0, title: "Another Disc")
+        // The newest rip has no names, so the one before it gives them.
+        #expect(history.newestNamedRip(of: toc)?.standardizedFileURL == named.standardizedFileURL)
+        // A rip whose files are gone does not count.
+        try FileManager.default.removeItem(at: named.deletingLastPathComponent())
+        #expect(history.newestNamedRip(of: toc)?.deletingLastPathComponent().lastPathComponent == "Old")
+    }
+
     /// A repair's "… repaired" folder keeps the rip's time, but is a rip of its own.
     @Test func tellsARepairedFolderFromItsRip() throws {
         let toc = try TOC(audioTrackStarts: [0], leadOutLBA: 100)

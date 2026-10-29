@@ -76,6 +76,37 @@ struct C2Tests {
             }
         }
     }
+
+    /// Seven damaged sectors in the last place of seven rows (10 sectors each): too many
+    /// erasures for 6 syndromes, so the repair re-reads them, unless the rip's secure ripper
+    /// re-read them already. Six more, one in each other place, can be repaired, so that the
+    /// repair does not take the shift for a wrong one.
+    @Test(arguments: [false, true])
+    func reReadsForCTDBOnlyWhatTheRipDidNot(readAlready: Bool) async throws {
+        let corrupt = Set(stride(from: 509, to: 579, by: 10)).union([501, 512, 523, 534, 545, 556])
+        let (secure, toc, samples, _) = try setUp(corrupt: corrupt, withRecords: false)
+        let rips = try toc.audioTracks.map { try secure.rip($0) }
+        let layout = CTDBLayout(toc: toc)
+        let syndromes = CTDB.syndromes(of: samples, layout: layout, shift: 0, count: 6)
+        let entry = CTDBEntry(
+            id: 1, confidence: 5, crc32: CTDB.discCRC(of: samples, layout: layout),
+            trackCRCs: CTDB.trackCRCs(of: samples, toc: toc, layout: layout),
+            repairDataURL: URL(string: "https://example.org/parity"), syndromeCount: 6,
+            column0Syndromes: Array(syndromes[0..<6]))
+        var repairer = DiscRepairer(toc: toc, records: [], entries: [entry], reader: secure.ripper.reader)
+        repairer.repairData = { _ in syndromes }
+        repairer.maximumColumnsToReread = 2 * CDDA.samplesPerSector
+        repairer.rereadRounds = 1
+        repairer.cacheFlushSectors = toc.leadOutLBA
+        if readAlready { repairer.sectorsReadAlready = Set(0..<toc.leadOutLBA) }
+        let lines = DiscRipEvents()
+        repairer.log = { lines.append(.repairLog($0)) }
+        let result = try await repairer.repair(rips.map(TrackAudio.init))
+        #expect(result.outcome == .notVerified)
+        let log = lines.list.compactMap { if case .repairLog(let line) = $0 { line } else { nil } }
+        #expect(log.contains { $0.contains("Re-reading") } == !readAlready)
+        #expect(log.contains { $0.contains("No re-reads") } == readAlready)
+    }
 }
 
 struct RipEventTests {

@@ -230,7 +230,7 @@ extension RipReport {
         }
         if ctdb.status == .notChecked {
             return
-                "CTDB did not check this rip: it was offline, or not every track was ripped. Repair checks the rip against CTDB, and can repair it when every track is there."
+                "CTDB did not check this rip: it was offline, the check was stopped, or not every track was ripped. Repair checks the rip against CTDB, and can repair it when every track is there."
         }
         var text = ""
         switch ctdb.status {

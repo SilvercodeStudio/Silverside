@@ -296,6 +296,35 @@ struct DiscRipTests {
         #expect(RipReport.AccurateRipStatus.unmatched(trackAt: 1, records: []) == .notInDatabase)
     }
 
+    /// A stop in the CTDB check, whose repair re-reads can take many minutes on a damaged
+    /// disc, keeps the audio's rip with its report, as not checked by CTDB.
+    @Test func keepsTheRipWhenTheCTDBCheckIsStopped() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900])
+        let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: 6)
+        drive.corruptSectors = [1000]
+        var settings = Settings()
+        settings.rips = root.path
+        var options = DiscRipOptions(settings: settings)
+        options.readOffset = 6
+        var rip = DiscRip(
+            drive: drive, identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"),
+            settings: settings, options: options,
+            profiles: try DriveProfileStore(url: root.appending(path: "DriveProfiles.json")))
+        rip.webClient = await Self.web(toc: toc, samples: samples).client(in: root.appending(path: "cache"))
+        let stop = rip.stop
+        rip.events = { if case .checkingCTDB = $0 { stop.stop() } }
+        await #expect(throws: CancellationError.self) { try await rip.run() }
+        let reports = try FileManager.default.subpathsOfDirectory(atPath: root.path).filter {
+            $0.hasSuffix("/disc.json")
+        }
+        let report = try RipReport.read(from: root.appending(path: try #require(reports.first)))
+        #expect(report.ctdb.status == .notChecked)
+        #expect(report.tracks.map(\.number) == [1, 2])
+    }
+
     /// A sector that reads wrong every time: the secure rip cannot see it, CTDB repairs it,
     /// and the track is written again and matches AccurateRip.
     @Test func repairsWithCTDBAndWritesTheTrackAgain() async throws {

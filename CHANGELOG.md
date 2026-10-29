@@ -3,7 +3,7 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
-## 0.9 (not released yet)
+## 0.9 (2026-10-28)
 
 ### Added
 
@@ -15,13 +15,13 @@ command-line tool.
   start cannot be read (a scratch can do that), shows as "unknown" in the
   report and the log, instead of as no pregap.
 - An earlier rip's album, album artist, and date can be edited in its
-  header, as its track titles already could. Press Return to keep a change:
-  the files take the new names then, not while a name is half typed (track
-  titles too). The names are kept for the release, and the sidebar and Rip
-  History show them. A set's are still edited in the set's view. When two
-  editions were encoded into one album folder, renaming one moves only its
-  own files, and the other keeps its folder, report, and CUE sheet; a file
-  that both list is copied.
+  header, as its track titles already could. Press Return or leave the field
+  to keep a change: the files take the new names then, not while a name is
+  half typed (track titles too). The names are kept for the release, and the
+  sidebar, Rip History, and the report pane show them. A set's are still
+  edited in the set's view. When two editions were encoded into one album
+  folder, renaming one moves only its own files, and the other keeps its
+  folder, report, and CUE sheet; a file that both list is copied.
 - **Save Data Track…** on an earlier rip reads its Enhanced CD data track from
   the disc in a drive, when the rip did not save it: it failed, or the rip left
   it out. It goes into the rip's folder, and into the album folder with its
@@ -46,7 +46,9 @@ command-line tool.
   MusicBrainz…" chip, before the rip and on the earlier rip. It opens
   MusicBrainz's release editor in the browser with the names you typed, the
   track lengths, and the disc's TOC filled in, so the disc ID is attached when
-  you submit the release.
+  you submit the release. When MusicBrainz has the release but not the disc
+  ID, an "Add Disc ID…" chip beside it opens the page that adds the disc ID to
+  the release you find.
 - **Enhanced CDs:** the data track after the music, with extras for a computer,
   is saved as an ISO disc image and copied into the album folder as
   `Data track.iso`, with its files copied out beside it into a `Data track`
@@ -55,7 +57,13 @@ command-line tool.
   so it does not open by itself, and the report says where it starts. The
   first rip of such a disc asks whether to save it, with "use this answer for
   every disc" (Settings › Ripping, `dataTracks`, or `rip --data-tracks`). A
-  chip in the header shows a disc with a data track.
+  chip in the header shows a disc with a data track. The data track is read
+  after the music's rip is complete, with its own progress, so a data track
+  that fails costs nothing of the music: the report says it was not saved, and
+  why. It is read only to the end of its file systems, because the empty
+  sectors after them can be unreadable (one drive stopped answering there),
+  and the image has zeros there, as when a drive reads them. A drive that
+  cannot read the track gives up after 200 sectors in a row fail.
 - When MusicBrainz has a disc's ID on another release only, but a release you
   ripped other discs of has a disc with the same track lengths, a chip asks
   "Disc 2 of your 4-disc Vegas 96?". A click opens MusicBrainz's page that adds
@@ -78,12 +86,24 @@ command-line tool.
 
 ### Changed
 
+- During a rip, the status bar shows the time since the rip started, and it
+  keeps counting through the re-reads and the CTDB check, when nothing else
+  moves. A CTDB repair that re-reads damaged sectors says so, round by round.
+- A rip's CTDB repair no longer reads again the sectors that the rip's own
+  re-reads already read in the same drive, which took minutes on a damaged disc
+  and gave nothing new. Repair, best in another drive, still re-reads them.
+- A disc that MusicBrainz does not know gets the names and the cover of your
+  newest rip of it that has names, so a second rip, in another drive or after a
+  cleaning, does not need them typed again.
+- The "Disc N of your release?" chip names each edition by its catalog number,
+  so two editions with one title can be told apart.
 - The track table is quieter. Green marks only each track's result; AccurateRip
   and CTDB show their match as a check mark and the number of rips that agree.
   The Repaired column is gone, and Re-reads is hidden at first: a short line
   under the track's result says how many sectors were re-read and how many
-  samples CTDB repaired. Control-click the column headings to show the Re-reads column again,
-  or to hide AccurateRip, CTDB, or Encoding; the table keeps your choice.
+  samples CTDB repaired. Control-click the column headings to show the
+  Re-reads column again, or to hide AccurateRip, CTDB, or Encoding; the table
+  keeps your choice.
 - An earlier rip's report pane is hidden at first, and stays shown or hidden as
   you leave it.
 - Track and disc info is shorter: a file's tags and the disc's IDs fold away
@@ -109,21 +129,12 @@ command-line tool.
 
 ### Fixed
 
+- Stop during the CTDB check lost the rip: the tracks were read, but no report
+  was written. Now the rip is kept, as not checked by CTDB, and Repair can
+  check it later.
 - Eject crashed the app when macOS refused to unmount the disc, as it can for
   an Enhanced CD whose data session is in use. Now it says why the disc could
   not be ejected.
-- A drive that cannot read an Enhanced CD's data track no longer retries every
-  sector of it, which could take hours after the last audio track: after 200
-  sectors in a row fail, the data track is not saved, and the rip goes on.
-- An Enhanced CD's data track is read after the music's rip is complete, so a
-  data track that fails, or a drive that stops answering there, costs nothing of
-  the music. The rip says that the data track was not saved, and why.
-- An Enhanced CD's data track is read only to the end of its file systems. The
-  empty sectors after them can be unreadable, and one drive stopped answering
-  there until it was switched off and on. The image has zeros there, as when a
-  drive reads them.
-- While a rip saves an Enhanced CD's data track, the status line says so, with
-  its progress, instead of "Ripping track 10" at 100%.
 - A repair that could fix only some tracks could change a track that
   AccurateRip had already matched, and make it wrong. With a CTDB entry from
   another pressing, the check of a track also covers the end of the track

@@ -492,6 +492,8 @@ public struct DiscRip {
 
         var ctdb = RipReport.CTDBResult(status: entries.isEmpty && checkedCTDB ? .notInDatabase : .notChecked)
         var ctdbSeconds: Int?
+        // A stop in the CTDB check keeps the audio's rip, as not checked: Repair can check it later.
+        var stoppedInCTDB = false
         if checksCTDB {
             events(.checkingCTDB)
             let ctdbStarted = Date()
@@ -500,29 +502,39 @@ public struct DiscRip {
             var repairer = DiscRepairer(
                 toc: toc, records: records, entries: entries, reader: options.singlePass ? nil : reader)
             repairer.cacheFlushSectors = profile.cacheFlushSectors
+            repairer.sectorsReadAlready = Self.sectorsReadAlready(in: reports, toc: toc)
             repairer.stop = stop
             repairer.log = { events(.repairLog($0)) }
             let client = webClient
             repairer.repairData = { try await $0.downloadRepairData(client: client) }
-            let repair = try await repairer.repair(trackAudio, repairing: !errorFree && options.repairs)
+            let repair: DiscRepairer.Result?
+            do {
+                repair = try await repairer.repair(trackAudio, repairing: !errorFree && options.repairs)
+            } catch is CancellationError {
+                repair = nil
+                stoppedInCTDB = true
+                events(.repairLog("Stopped. The rip is kept, not checked by CTDB."))
+            }
             trackAudio = []
-            ctdb = RipReport.CTDBResult(repair)
-            for index in reports.indices { reports[index].ctdbConfidence = repair.trackConfidences[index] }
-            events(.repaired(repair))
-            try apply(repair, to: &reports, records: records, readOffset: readOffset, folder: folder)
-            // Keep the alternatives, with the ones that re-reads added, for tracks that are not yet right.
-            for (index, report) in reports.enumerated() {
-                let name = TrackAudio.alternativesFileName(track: report.number)
-                let url = folder.appending(path: name)
-                var audio = TrackAudio(samples: repair.samples(ofTrack: index))
-                audio.add(repair.alternatives(ofTrack: index))
-                let isRight = report.accurateRip == .accurate || report.accurateRip == .otherPressings
-                if isRight || audio.alternatives.isEmpty || ctdb.status == .repaired {
-                    try? FileManager.default.removeItem(at: url)
-                    written.remove(name)
-                } else {
-                    try audio.writeAlternatives(to: url)
-                    written.insert(name)
+            if let repair {
+                ctdb = RipReport.CTDBResult(repair)
+                for index in reports.indices { reports[index].ctdbConfidence = repair.trackConfidences[index] }
+                events(.repaired(repair))
+                try apply(repair, to: &reports, records: records, readOffset: readOffset, folder: folder)
+                // Keep the alternatives, with the ones that re-reads added, for tracks that are not yet right.
+                for (index, report) in reports.enumerated() {
+                    let name = TrackAudio.alternativesFileName(track: report.number)
+                    let url = folder.appending(path: name)
+                    var audio = TrackAudio(samples: repair.samples(ofTrack: index))
+                    audio.add(repair.alternatives(ofTrack: index))
+                    let isRight = report.accurateRip == .accurate || report.accurateRip == .otherPressings
+                    if isRight || audio.alternatives.isEmpty || ctdb.status == .repaired {
+                        try? FileManager.default.removeItem(at: url)
+                        written.remove(name)
+                    } else {
+                        try audio.writeAlternatives(to: url)
+                        written.insert(name)
+                    }
                 }
             }
         } else if !entries.isEmpty {
@@ -605,6 +617,7 @@ public struct DiscRip {
         if !edits.isEmpty, let chosen, !chosen.isManual, options.edits != nil {
             try ReleaseEditsStore().remember(edits, forReleaseID: chosen.id)
         }
+        if stoppedInCTDB { throw CancellationError() }
 
         // The data tracks, as ISO images: an Enhanced CD's extras for a computer.
         var savedDataTracks = [RipReport.DataTrack]()
@@ -709,6 +722,18 @@ public struct DiscRip {
             }
         }
         return result
+    }
+
+    /// The sectors, counted from the first audio track's start, that the secure ripper re-read:
+    /// the CTDB repair's re-reads leave them out (`DiscRepairer.sectorsReadAlready`).
+    static func sectorsReadAlready(in reports: [RipReport.Track], toc: TOC) -> Set<Int> {
+        guard let first = toc.audioTracks.first?.startLBA else { return [] }
+        var sectors = Set<Int>()
+        for report in reports where report.rereadRounds > 0 {
+            guard let track = toc.audioTracks.first(where: { $0.number == report.number }) else { continue }
+            sectors.formUnion(report.suspectSectors.map { track.startLBA - first + $0 })
+        }
+        return sectors
     }
 
     /// The edges of the disc's audio that a drive without overread cannot read, in the tracks

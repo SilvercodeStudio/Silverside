@@ -69,6 +69,8 @@ struct DiscInfo {
     var manual: MusicBrainzRelease?
     /// The user's changes to the names, kept with the rip and, for the album, for the release.
     var edits = MetadataEdits()
+    /// For a disc MusicBrainz does not know: the names came from an earlier rip of it.
+    var namesFromEarlierRip = false
 
     init(bsdName: String?, toc: TOC, mcn: String?, cdText: CDText?) {
         self.bsdName = bsdName
@@ -243,7 +245,7 @@ struct DiscInfo {
             result = try await ReleaseLookup.find(toc: toc, mcn: mcn, details: true, useCache: !fresh)
         } catch {
             lookup = .failed("\(error)")
-            if release == nil { useManualRelease() }
+            if release == nil { await useManualRelease() }
             return
         }
         releases = result.ranked
@@ -251,7 +253,7 @@ struct DiscInfo {
         guard let chosen = result.chosen else {
             lookup = .notFound
             release = nil
-            useManualRelease()
+            await useManualRelease()
             return
         }
         let remembered = ReleaseChoiceStore().choices(forDiscID: toc.musicBrainzDiscID)
@@ -270,12 +272,29 @@ struct DiscInfo {
         await use(detailed ?? chosen)
     }
 
-    /// Without a release, the names come from CD-Text or are typed in, and the files get no MusicBrainz IDs.
-    private mutating func useManualRelease() {
+    /// Without a release, the names come from CD-Text or are typed in, and the files get no
+    /// MusicBrainz IDs. A disc ripped before with names typed in gets those names, and the cover
+    /// of that rip, again.
+    private mutating func useManualRelease() async {
         let made = MusicBrainzRelease.manual(toc: toc, cdText: cdText)
         manual = made
         medium = made.media.first
         edits = MetadataEdits()
+        namesFromEarlierRip = false
+        let toc = toc
+        guard
+            let earlier = await Task.detached(operation: { RipHistory().newestNamedRip(of: toc) }).value,
+            let names = MetadataEdits.read(fromReportAt: earlier)
+        else { return }
+        edits = names
+        namesFromEarlierRip = true
+        let report = try? RipReport.read(from: earlier)
+        if userCover == nil,
+            let file = CoverFiles.embedded(forDisc: report?.discPosition, in: earlier.deletingLastPathComponent()),
+            let data = try? Data(contentsOf: file)
+        {
+            userCover = CoverImage(data: data)
+        }
     }
 
     private mutating func use(_ chosen: MusicBrainzRelease) async {

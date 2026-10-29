@@ -527,16 +527,31 @@ struct AlbumHeader: View {
                 help: disc.release.map(ResultChips.discIDMatchHelp) ?? "", link: disc.release?.pageURL)
         case .notFound:
             Chip(
-                text: disc.hasCDText
-                    ? "Not in MusicBrainz · names from CD-Text" : "Not in MusicBrainz · type the names",
+                text: disc.namesFromEarlierRip
+                    ? "Not in MusicBrainz · names from your earlier rip"
+                    : disc.hasCDText
+                        ? "Not in MusicBrainz · names from CD-Text" : "Not in MusicBrainz · type the names",
                 tone: .warning, systemImage: "xmark"
             )
-            .help("The files get no MusicBrainz IDs. Edit the names here; they are kept with the rip.")
+            .help(
+                (disc.namesFromEarlierRip
+                    ? "The names and the cover are those you gave your newest rip of this disc. " : "")
+                    + "The files get no MusicBrainz IDs. Edit the names here; they are kept with the rip.")
             if let release = disc.shownRelease { ResultChips.addToMusicBrainz(release, toc: disc.toc) }
+            ResultChips.addDiscID(toc: disc.toc)
         case .failed:
             Chip(text: "MusicBrainz · lookup failed", tone: .bad, systemImage: "wifi.slash")
         }
     }
+}
+
+/// A name field of an earlier rip, for saving the names when the focus leaves one.
+enum NameField: Hashable {
+    case album, albumArtist, date
+    case title(Int)
+    case artist(Int)
+
+    var isAlbumField: Bool { [.album, .albumArtist, .date].contains(self) }
 }
 
 /// A field the user can edit, laid out like `Field`. `shown` is the text when it is not editable.
@@ -547,12 +562,18 @@ struct EditableField: View {
     /// Grey text in an empty field, such as a date the release does not have itself.
     var prompt: String?
     var editable: Bool
+    /// Where the field reports its focus, if anywhere.
+    var focus: FocusState<NameField?>.Binding?
+    var field = NameField.album
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label).font(.caption).foregroundStyle(.secondary)
             Group {
-                if editable {
+                if editable, let focus {
+                    TextField("", text: $text, prompt: prompt.map { Text($0) }).textFieldStyle(.plain)
+                        .focused(focus, equals: field)
+                } else if editable {
                     TextField("", text: $text, prompt: prompt.map { Text($0) }).textFieldStyle(.plain)
                 } else {
                     Text(shown).lineLimit(1)
@@ -613,7 +634,12 @@ struct StatusBar: View {
                     }
                 }
                 Spacer()
-                Text(timeText).font(.callout).foregroundStyle(.secondary).monospacedDigit()
+                if slot.rip?.isRunning == true {
+                    // Each second, for the time since the rip started, which moves when nothing else does.
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in timeLabel }
+                } else {
+                    timeLabel
+                }
                 HStack(spacing: 10) {
                     Text(slot.fastMode ? "Fast" : "Secure")
                     if slot.choices.offline { Text("Offline") }
@@ -705,6 +731,10 @@ struct StatusBar: View {
         return "Ready to rip \(count) of \(disc.toc.audioTracks.count) tracks"
     }
 
+    private var timeLabel: some View {
+        Text(timeText).font(.callout).foregroundStyle(.secondary).monospacedDigit()
+    }
+
     private var timeText: String {
         guard let rip = slot.rip else {
             guard let disc = slot.disc else { return "" }
@@ -713,14 +743,17 @@ struct StatusBar: View {
             return Format.duration(sectors: sectors)
         }
         guard rip.isRunning else { return "took \(Format.duration(seconds: Int(rip.elapsed)))" }
-        var text =
-            Format.duration(sectors: rip.sectorsDone + rip.sectorsInPass) + " of "
-            + Format.duration(sectors: rip.sectorsTotal)
-        if let speed = rip.speed, speed > 0 { text += String(format: " · %.1f×", speed) }
-        if let left = rip.secondsLeft {
-            text += " · " + Format.timeLeft(seconds: left) + (rip.isRereading ? ", plus re-reads" : "")
+        var parts = ["\(Format.duration(seconds: Int(rip.elapsed))) elapsed"]
+        // The audio read so far, until the first pass is done; re-reads and CTDB come after.
+        let read = rip.sectorsDone + rip.sectorsInPass
+        if read < rip.sectorsTotal {
+            parts.append(Format.duration(sectors: read) + " of " + Format.duration(sectors: rip.sectorsTotal))
+            if let speed = rip.speed, speed > 0 { parts.append(String(format: "%.1f×", speed)) }
+            if let left = rip.secondsLeft {
+                parts.append(Format.timeLeft(seconds: left) + (rip.isRereading ? ", plus re-reads" : ""))
+            }
         }
-        return text
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -945,12 +978,27 @@ enum ResultChips {
     static func addToMusicBrainz(_ release: MusicBrainzRelease, toc: TOC) -> Chip {
         Chip(
             text: "Add to MusicBrainz…", systemImage: "plus",
-            help: "Opens MusicBrainz's release editor in your browser with this disc's names, track lengths, and "
-                + "disc ID filled in. Check and complete it there, and submit it (you need an account, and to be "
-                + "signed in). Then every ripper finds the disc by its ID.",
+            help: "Opens MusicBrainz's release editor in your browser with a new release: this disc's names, "
+                + "track lengths, and disc ID. Use it only when MusicBrainz has no release of this disc; search "
+                + "there first. If it has the release, use Add Disc ID… instead. Check and complete the new "
+                + "release, and submit it (you need an account). Then use Look Up Metadata.",
             action: {
                 if let page = try? MusicBrainzSeed.writePage(for: release, toc: toc) { NSWorkspace.shared.open(page) }
             })
+    }
+
+    /// For a disc that MusicBrainz does not know: a click opens the page that finds a release
+    /// in MusicBrainz and adds the disc ID to it.
+    static func addDiscID(toc: TOC) -> Chip {
+        let count = toc.audioTracks.count
+        return Chip(
+            text: "Add Disc ID…", systemImage: "link",
+            help: "When MusicBrainz has the release of this disc, but not its disc ID: opens MusicBrainz in your "
+                + "browser, where you find the release and add the disc ID to it (you need an account). MusicBrainz "
+                + "offers only releases with \(count) \(count == 1 ? "track" : "tracks"), as on this disc; if the "
+                + "release's track list differs, such as one copied from a cover that counts takes the disc does "
+                + "not, correct it there first. Then use Look Up Metadata.",
+            link: MusicBrainzRelease.submissionURL(for: toc))
     }
 
     /// Opens MusicBrainz's release editor with a new release of this disc alone, copied from
@@ -996,17 +1044,21 @@ enum ResultChips {
         _ release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium, found: MusicBrainzRelease, toc: TOC
     ) -> Chip {
         let count = release.media.count
-        let catalog = release.labels.compactMap(\.catalogNumber).first.map { " (\($0))" } ?? ""
+        // The catalog number (else the country) tells two editions with one title apart.
+        func name(_ release: MusicBrainzRelease) -> String {
+            let edition = release.labels.compactMap(\.catalogNumber).first ?? release.country
+            return release.title + (edition.map { " (\($0))" } ?? "")
+        }
         let disc = count > 1 ? "its disc \(medium.position)" : "it"
         return Chip(
             text: count > 1
                 ? "Disc \(medium.position) of your \(count)-disc \(release.title)?" : "Your \(release.title)?",
             tone: .warning, systemImage: "questionmark",
-            help: "Your earlier rips of \(release.title)\(catalog) have a disc with this disc's track lengths, but "
-                + "MusicBrainz has this disc ID on \(found.title) only, so the lookup cannot find \(release.title). "
-                + "If this disc is from it, click to add the disc ID to \(disc) in MusicBrainz (you need an account). "
-                + "If the other release is wrong, you can remove the disc ID from it on the disc ID's page there. "
-                + "Then use Look Up Metadata.",
+            help: "Your earlier rips of \(name(release)) have a disc with this disc's track lengths, but MusicBrainz "
+                + "has this disc ID only on \(name(found)), so the lookup cannot find \(name(release)). Editions "
+                + "often have the same disc, so a disc ID can be on both. If this disc is from \(name(release)), "
+                + "click to add the disc ID to \(disc) in MusicBrainz (you need an account), then use Look Up "
+                + "Metadata. Remove the disc ID from the other release only if that release is wrong.",
             link: MusicBrainzRelease.submissionURL(for: toc))
     }
 

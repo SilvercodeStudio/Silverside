@@ -192,6 +192,10 @@ public struct DiscRepairer {
     public var reader: AudioReader?
     /// Rounds of re-reads for the columns that cannot be repaired.
     public var rereadRounds = 4
+    /// Sectors, counted from the first audio track's start, that the re-reads leave out: in a
+    /// rip, those that the secure ripper re-read already, in the same drive, minutes before.
+    /// More reads there give the same kind of versions; a repair in another drive does not.
+    public var sectorsReadAlready: Set<Int> = []
     /// Sectors to read elsewhere before each re-read, so that the drive's cache holds none of them.
     public var cacheFlushSectors = 4000
     /// Receives a line for each step, for people to read.
@@ -209,7 +213,7 @@ public struct DiscRepairer {
     static let maximumSyndromes = 16
 
     /// Re-read the suspect samples of at most this many columns that cannot be repaired.
-    static let maximumColumnsToReread = 512
+    var maximumColumnsToReread = 512
 
     /// Search for shifts with many errors in column 0 only for this many entries, the
     /// largest first. That search is slow, and small entries rarely help.
@@ -340,21 +344,24 @@ public struct DiscRepairer {
                                 + part + (columns.count <= 8 ? ": columns \(details.joined(separator: ", "))" : "")
                                 + ".")
                         // Most columns repaired: this is the entry's shift, so re-read, and try no other shift.
-                        guard checked == CTDBLayout.stride, columns.count <= Self.maximumColumnsToReread else {
+                        guard checked == CTDBLayout.stride, columns.count <= maximumColumnsToReread else {
                             break rounds
                         }
-                        if let reader, round < rereadRounds {
-                            let samples = columns.flatMap {
-                                CTDB.suspectSamples(
-                                    inColumn: $0, suspects: suspects, layout: layout, shift: match.shift)
-                            }
+                        let samples = columns.flatMap {
+                            CTDB.suspectSamples(inColumn: $0, suspects: suspects, layout: layout, shift: match.shift)
+                        }.filter { !sectorsReadAlready.contains($0 / CDDA.samplesPerSector) }
+                        if reader != nil, round == 0, samples.isEmpty {
+                            log("  No re-reads: the rip re-read these sectors already.")
+                        }
+                        if let reader, round < rereadRounds, !samples.isEmpty {
+                            let sectors = Set(samples.map { $0 / CDDA.samplesPerSector }).count
+                            log("  Re-reading \(sectors) sectors, round \(round + 1) of \(rereadRounds)...")
                             let (found, more) = try await blocking { [self, alternatives] in
                                 var alternatives = alternatives
                                 let found = try reread(samples, of: audio, reader: reader, into: &alternatives)
                                 return (found, alternatives)
                             }
                             alternatives = more
-                            let sectors = Set(samples.map { $0 / CDDA.samplesPerSector }).count
                             log("  Re-read \(sectors) sectors: \(found) new versions.")
                             quietRounds = found == 0 ? quietRounds + 1 : 0
                             if quietRounds < 2 { continue rounds }

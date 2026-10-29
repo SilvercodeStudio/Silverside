@@ -23,7 +23,8 @@ struct ResultsView: View {
     /// The cover's file while Quick Look shows it.
     @State private var coverPreview: URL?
     @State private var archivePickerShown = false
-    /// The rip's own edits (track titles and artists), as typed; saved a moment after the last change.
+    /// The rip's own edits (track titles and artists), as typed; saved on Return, or when the
+    /// focus leaves the field.
     @State private var edits = MetadataEdits()
     @State private var savedEdits = MetadataEdits()
     /// The album edits kept for the release, which every disc of a set shares.
@@ -33,21 +34,30 @@ struct ResultsView: View {
     @State private var albumText = ""
     @State private var albumArtistText = ""
     @State private var dateText = ""
+    /// The name field being edited. Leaving one saves the names, as Return does.
+    @FocusState private var focusedName: NameField?
     /// Tracks whose artist field shows, though they have no artist of their own.
     @State private var artistRows: Set<Int> = []
 
     private var toc: TOC? { try? TOC(ctdbTOCString: report.toc) }
 
-    /// The chip for a disc that MusicBrainz did not know at the rip, with the names as they are now.
+    /// The chips for a disc that MusicBrainz did not know at the rip, with the names as they are now.
     private var addToMusicBrainzChip: [Chip] {
         guard let toc, report.release?.isManual == true, let release = shownRelease else { return [] }
-        return [ResultChips.addToMusicBrainz(release, toc: toc)]
+        return [ResultChips.addToMusicBrainz(release, toc: toc), ResultChips.addDiscID(toc: toc)]
     }
 
     /// The chip for a release that MusicBrainz matched by its track lengths at the rip.
     private var lengthsMatchChip: [Chip] {
         guard let toc, report.release?.lacksDiscID(of: toc) == true else { return [] }
         return [ResultChips.lengthsMatch(toc: toc)]
+    }
+
+    /// The report, with the names as they are now, as the rip writes its Markdown.
+    private var markdown: String {
+        var shown = report
+        if let shownRelease { shown.release = shownRelease }
+        return shown.markdown
     }
 
     /// The release with the names as they are now: the rip's edits, and the kept album edits.
@@ -84,13 +94,13 @@ struct ResultsView: View {
                     Spacer()
                     Button("Copy as Markdown") {
                         NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(report.markdown, forType: .string)
+                        NSPasteboard.general.setString(markdown, forType: .string)
                     }
                 }
                 .padding(12)
                 Divider()
                 HelpWebView(
-                    html: MarkdownHTML.page(MarkdownHTML.render(Self.withoutTrackTable(report.markdown)), compact: true)
+                    html: MarkdownHTML.page(MarkdownHTML.render(Self.withoutTrackTable(markdown)), compact: true)
                 )
             }
             .frame(minWidth: 300, idealWidth: 380, maxWidth: 560)
@@ -111,9 +121,14 @@ struct ResultsView: View {
             }
             loadAlbumFields()
         }
-        // A name is saved, and the encoded files follow it, when Return is pressed, so that the
-        // files and the album folder are not renamed while the name is half typed.
+        // A name is saved, and the encoded files follow it, when Return is pressed or the field
+        // is left, so that the files and the album folder are not renamed while it is half typed.
         .onSubmit { saveNames() }
+        .onChange(of: focusedName) { left, _ in
+            guard let left else { return }
+            if left.isAlbumField { keepAlbumFields() }
+            saveNames()
+        }
         .onDisappear {
             keepAlbumFields()
             saveNames()
@@ -282,13 +297,13 @@ struct ResultsView: View {
             HStack(alignment: .top, spacing: 12) {
                 EditableField(
                     label: "Album", text: $albumText, shown: shownRelease?.title ?? release.title,
-                    editable: canEditNames)
+                    editable: canEditNames, focus: $focusedName, field: .album)
                 EditableField(
                     label: "Album Artist", text: $albumArtistText, shown: shownRelease?.artist ?? release.artist,
-                    editable: canEditNames)
+                    editable: canEditNames, focus: $focusedName, field: .albumArtist)
                 EditableField(
                     label: "Date", text: $dateText, shown: shownRelease?.date ?? release.date ?? "",
-                    editable: canEditNames
+                    editable: canEditNames, focus: $focusedName, field: .date
                 )
                 .frame(width: 140)
             }
@@ -490,9 +505,11 @@ struct ResultsView: View {
         VStack(alignment: .leading, spacing: 1) {
             if canEditNames, shown != nil {
                 TextField("", text: title(of: track.number)).textFieldStyle(.plain)
+                    .focused($focusedName, equals: .title(track.number))
                 if ownArtist != nil || artistRows.contains(track.number) {
                     TextField("", text: artist(of: track.number), prompt: Text("Track artist"))
                         .textFieldStyle(.plain).font(.caption).foregroundStyle(.secondary)
+                        .focused($focusedName, equals: .artist(track.number))
                 }
             } else {
                 Text(titles[track.number] ?? track.file)

@@ -81,6 +81,18 @@ public struct RipHistory: Sendable {
         return entries
     }
 
+    /// The report file of the newest rip of a disc that MusicBrainz did not know, with names
+    /// the user gave it: a new rip of the disc starts from those names. (A disc that MusicBrainz
+    /// knows keeps its album's names by release, `ReleaseEditsStore`.) Nil if no such rip is there.
+    public func newestNamedRip(of toc: TOC) -> URL? {
+        let rips = entries().filter {
+            $0.value.report.toc == toc.ctdbTOCString && $0.value.report.release?.isManual == true
+        }
+        return rips.sorted { $0.value.report.date > $1.value.report.date }.first { key, entry in
+            Self.isThere(entry, key: key) && MetadataEdits.read(fromReportAt: entry.url).map { !$0.isEmpty } == true
+        }?.value.url
+    }
+
     /// True if the rip's report is still where it was last seen: a report there of another rip
     /// (a later rip of the disc that took its folder) does not count.
     public static func isThere(_ entry: Entry, key: String) -> Bool {

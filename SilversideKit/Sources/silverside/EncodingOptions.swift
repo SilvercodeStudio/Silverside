@@ -88,6 +88,15 @@ struct EncodingOptions: ParsableArguments {
             """)
     var preEmphasis: PreEmphasisChoice?
 
+    @Option(
+        help: """
+            For a DTS-CD, whose tracks hold a DTS stream (surround sound that plays as static without a DTS \
+            decoder): decode writes the album as the disc has it and a decoded copy beside it, "… (DTS 5.1)"; \
+            decode-only writes the decode alone; keep writes the stream only. Decoding needs ffmpeg. ask (the \
+            setting's default) asks in rip at a terminal, and keeps the stream otherwise.
+            """)
+    var dts: DTSChoice?
+
     /// The HDCD choice: the option, else the setting.
     func hdcdChoice(_ settings: Settings) -> HDCDChoice {
         hdcd ?? settings.hdcd
@@ -96,6 +105,11 @@ struct EncodingOptions: ParsableArguments {
     /// The pre-emphasis choice: the option, else the setting.
     func preEmphasisChoice(_ settings: Settings) -> PreEmphasisChoice {
         preEmphasis ?? settings.preEmphasis
+    }
+
+    /// The DTS choice: the option, else the setting.
+    func dtsChoice(_ settings: Settings) -> DTSChoice {
+        dts ?? settings.dts
     }
 
     /// Add the files to Music: the option, else the setting; never for a format Music cannot read.
@@ -140,3 +154,4 @@ extension SegueMarks: ExpressibleByArgument {}
 extension HDCDChoice: ExpressibleByArgument {}
 extension PreEmphasisChoice: ExpressibleByArgument {}
 extension DataTrackChoice: ExpressibleByArgument {}
+extension DTSChoice: ExpressibleByArgument {}

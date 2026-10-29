@@ -31,7 +31,9 @@ brew install lame
 
 Until LAME is installed, MP3 is missing from the formats in General and in the welcome, and if MP3 is already the format, its options here are dimmed. Silverside looks for LAME every few seconds while Settings or the welcome is open, so MP3 turns on as soon as the install ends. The options are lame's: a variable bit rate from a quality (0 is the best, about 245 kbit/s), or a constant or average bit rate.
 
-Every encoded file is decoded again and compared with the audio it was made from before it goes into the library: the rip, or the rip after HDCD decoding or de-emphasis.
+Every encoded file is decoded again and compared with the audio it was made from before it goes into the library: the rip, or the rip after HDCD decoding, de-emphasis, or DTS decoding.
+
+**DTS-CD** chooses what to write for a disc whose tracks hold a DTS stream: ask each time, the album and a decoded copy beside it, the decoded album only, or the stream only (see Ripping a Disc). Decoding needs ffmpeg; the section says where Silverside found it, or how to install it (in Terminal: `brew install ffmpeg`).
 
 ### ReplayGain
 

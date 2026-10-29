@@ -1265,6 +1265,15 @@ enum ResultChips {
         }
         if repaired > 0 { chips.append(Chip(text: "\(repaired.formatted()) samples repaired", tone: .warning)) }
         if report.hdcd != nil, let chip = hdcd(report.tracks) { chips.append(chip) }
+        if let text = report.dtsText {
+            chips.append(
+                Chip(
+                    text: report.encoding?.dtsDecoded.map { "DTS · decoded to \($0)" } ?? "DTS stream",
+                    systemImage: "hifispeaker.2",
+                    help: text
+                        + (report.encoding?.dtsDecoded == nil
+                            ? " Decode DTS… in the toolbar makes a decoded copy, with ffmpeg." : "")))
+        }
         let emphasized = report.tracks.filter(\.preEmphasis)
         if !emphasized.isEmpty {
             let qOnly = emphasized.allSatisfy { $0.tocFlags?.preEmphasis == false }
@@ -1313,6 +1322,7 @@ enum ResultChips {
                 Chip(
                     text: "Encoded · \(encoding.format.rawValue.uppercased())"
                         + (encoding.hdcdDecoded == true ? " · HDCD decoded" : "")
+                        + (encoding.dtsDecoded.map { " · DTS \($0)" } ?? "")
                         + (encoding.deEmphasizedTracks?.isEmpty == false ? " · de-emphasized" : "")
                         + (all ? "" : " · \(encoding.files.count) tracks"),
                     tone: all ? .good : .warning, systemImage: "music.note"))

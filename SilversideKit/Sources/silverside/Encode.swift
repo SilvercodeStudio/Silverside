@@ -73,10 +73,14 @@ struct Encode: ParsableCommand {
             var name = disc.release.map { "\($0.artist) - \($0.title)" } ?? folder.lastPathComponent
             if let medium, let release = disc.release, release.media.count > 1 { name += ", disc \(medium.position)" }
             print("\(name): \(disc.tracks.count) tracks")
-            let files = try encoder.encode(disc, into: libraryURL)
-            total += files.count
-            written += files
-            if let first = files.first {
+            // A DTS-CD as the setting or --dts says, but not for an HDCD copy.
+            let encoded = try encoder.encodeWithRecord(
+                disc, into: libraryURL, dts: hdcdCopy ? .keep : encoding.dtsChoice(settings))
+            total += encoded.files.count + encoded.copyFiles.count
+            // Music plays a DTS stream as static, so it gets the decode, if there is one.
+            let keepsStream = try !encoder.dtsTracks(of: disc).isEmpty && encoded.encoding?.dtsDecoded == nil
+            written += keepsStream ? encoded.copyFiles : encoded.files
+            for first in [encoded.files.first, encoded.copyFiles.first].compactMap(\.self) {
                 print("  in \(first.deletingLastPathComponent().path)")
                 RipHistory().recordAlbum(in: first.deletingLastPathComponent())
             }

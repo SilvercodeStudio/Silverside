@@ -145,4 +145,17 @@ struct TrackMetadataTests {
             .vorbisComments.map(\.key)
         #expect(!keys.contains("ARTISTSORT") && !keys.contains("GENRE") && !keys.contains("COMPOSER"))
     }
+
+    /// *Forever Yours* has DTS Entertainment twice, with two catalog numbers: one LABEL tag for it.
+    @Test func tagsEachLabelOnce() {
+        var release = summerMagic()
+        release.labels = [
+            .init(name: "DTS Entertainment", catalogNumber: "710215-1002-27"),
+            .init(name: "DTS Entertainment", catalogNumber: "CD-1002"), .init(name: "Motown", catalogNumber: nil),
+        ]
+        let comments = TrackMetadata(release: release, medium: release.media[17], track: release.media[17].tracks[2])
+            .vorbisComments
+        #expect(comments.filter { $0.key == "LABEL" }.map(\.value) == ["DTS Entertainment", "Motown"])
+        #expect(comments.filter { $0.key == "CATALOGNUMBER" }.map(\.value) == ["710215-1002-27", "CD-1002"])
+    }
 }

@@ -114,6 +114,7 @@ struct Rip: AsyncParsableCommand {
         options.addsToMusic = encoding.addsToMusic(settings)
         options.hdcd = encoding.hdcdChoice(settings)
         options.preEmphasis = encoding.preEmphasisChoice(settings)
+        options.dts = encoding.dtsChoice(settings)
         options.dataTracks = dataTracks ?? settings.dataTracks
 
         var rip = DiscRip(
@@ -137,6 +138,10 @@ struct Rip: AsyncParsableCommand {
             rip.choosePreEmphasis = { [printer] report, format in
                 printer.progress.clear()
                 return Self.askToDeEmphasize(report, format: format)
+            }
+            rip.chooseDTS = { [printer] report, format, canDecode in
+                printer.progress.clear()
+                return Self.askAboutDTS(report, format: format, canDecode: canDecode)
             }
             rip.chooseDataTracks = { [printer] tracks in
                 printer.progress.clear()
@@ -204,6 +209,29 @@ struct Rip: AsyncParsableCommand {
         fflush(stdout)
         let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
         return answer.isEmpty ? recommended : answer == "y" || answer == "yes"
+    }
+
+    /// Asks at the terminal what to do with a DTS-CD's stream. A decoded copy beside the album
+    /// is the default; without ffmpeg, the stream is kept.
+    static func askAboutDTS(_ report: RipReport, format: AudioFormat, canDecode: Bool) -> DTSChoice {
+        print()
+        if let text = report.dtsText { print(text) }
+        guard canDecode else {
+            print(
+                "ffmpeg is not installed, so the files keep the stream. Install it (brew install ffmpeg) to decode it.")
+            return .keep
+        }
+        let decoded = DiscEncoder.surroundFormat(for: format).name
+        print(
+            "ffmpeg can decode it into \(decoded) files with every channel. d: the album as the disc has it, and a"
+                + " decoded copy beside it; o: the decode only; k: the stream only.")
+        print("Decode the DTS? [D/o/k] ", terminator: "")
+        fflush(stdout)
+        switch readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? "" {
+        case "o": return .decodeOnly
+        case "k": return .keep
+        default: return .decode
+        }
     }
 
     /// Asks at the terminal whether to de-emphasize a disc's tracks with pre-emphasis. Yes is the default.

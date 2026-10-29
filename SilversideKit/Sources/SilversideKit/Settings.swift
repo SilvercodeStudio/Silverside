@@ -61,6 +61,8 @@ public struct Settings: Codable, Equatable, Sendable {
     public var hdcd = HDCDChoice.ask
     /// What to do with tracks whose control bits say pre-emphasis.
     public var preEmphasis = PreEmphasisChoice.ask
+    /// What to do with a DTS-CD: keep the stream, decode it (with ffmpeg) beside it or in its place, or ask.
+    public var dts = DTSChoice.ask
     /// Also write a disc image when a disc is encoded: the whole disc in one lossless file, with
     /// a CUE sheet, in `images`.
     public var writeImages = false
@@ -211,6 +213,7 @@ public struct Settings: Codable, Equatable, Sendable {
         ripOnInsert = try value(.ripOnInsert, defaults.ripOnInsert)
         hdcd = try value(.hdcd, defaults.hdcd)
         preEmphasis = try value(.preEmphasis, defaults.preEmphasis)
+        dts = try value(.dts, defaults.dts)
         writeImages = try value(.writeImages, defaults.writeImages)
         images = try value(.images, defaults.images)
         dataTracks = try value(.dataTracks, defaults.dataTracks)

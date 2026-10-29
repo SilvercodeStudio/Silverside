@@ -95,6 +95,9 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var seconds: Int?
         /// The track's HDCD codes. Nil if it has none, and in older reports (see `RipReport.hdcd`).
         public var hdcd: HDCDCodes?
+        /// True if the track's audio is a DTS stream (a DTS-CD), not PCM. Nil if it is not, and
+        /// in older reports (see `RipReport.dts`).
+        public var dts: Bool?
         /// The track's control bits in the TOC. Nil in reports from before 0.8.
         public var tocFlags: ControlFlags?
         /// The control bits of the track's Q frames in its first read. Nil if the drive did not
@@ -124,6 +127,13 @@ public struct RipReport: Codable, Equatable, Sendable {
         ) {
             let found = PregapFinder.indexes(of: track, in: toc, positions: positions, drive: drive)
             indexes = found.isEmpty ? nil : found
+        }
+
+        /// Records whether the track holds a DTS stream, and its HDCD codes if it does not: a
+        /// stream's lowest bits are not audio, so any codes there are chance.
+        public mutating func recordDTS(in samples: [UInt32]) {
+            dts = DTSStream.isStream(samples) ? true : nil
+            hdcd = dts == true ? nil : HDCDCodes.scan(samples)
         }
 
         public mutating func recordSubchannel(_ control: SubchannelControl?) {
@@ -299,6 +309,9 @@ public struct RipReport: Codable, Equatable, Sendable {
     /// Whether the tracks have HDCD codes, from each track's `hdcd`. Nil in reports from
     /// before Silverside looked for them.
     public var hdcd: HDCDStatus?
+    /// Whether tracks hold a DTS stream, from each track's `dts`. Nil in reports from before
+    /// Silverside looked for one.
+    public var dts: DTSStatus?
 
     public struct HiddenTrack: Codable, Equatable, Sendable {
         public var file: String
@@ -360,6 +373,10 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// True if the files hold the HDCD decode of the rip (at the format's `wideBits`), tagged HDCD=decoded.
         /// Nil (or false) when they hold the audio as it is on the disc.
         public var hdcdDecoded: Bool?
+        /// The layout of the DTS decode that the files hold, such as "5.1" (at 20 bits in FLAC and
+        /// Apple Lossless, or as the stream says), tagged DTS=decoded. Nil when they hold the
+        /// disc's DTS stream as it is, or the disc has none.
+        public var dtsDecoded: String?
         /// The tracks whose pre-emphasis the encoding took out, at the format's `wideBits`, tagged
         /// DE_EMPHASIZED=yes. Nil when none was.
         public var deEmphasizedTracks: [Int]?
@@ -449,6 +466,12 @@ public struct RipReport: Codable, Equatable, Sendable {
                         + "\(which) de-emphasized, at \(format.wideBits) bits: each file decodes to exactly the"
                         + " audio it was made from."
                     : "Each file decodes to the track's length; a lossy file cannot equal the rip."
+            }
+            if let layout = dtsDecoded {
+                return format.isLossless
+                    ? "DTS decoded into \(layout): each file decodes to exactly the decode of the ripped stream."
+                    : "DTS decoded into \(layout): each file decodes to the track's length; a lossy file cannot equal"
+                        + " the decode."
             }
             if hdcdDecoded == true {
                 return format.isLossless

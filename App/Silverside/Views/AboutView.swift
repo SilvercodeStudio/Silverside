@@ -200,6 +200,10 @@ private struct AcknowledgmentsSheet: View {
             "encodes MP3, when it is installed. Silverside runs it as a separate program and does not include it."
         ),
         (
+            "[FFmpeg](https://ffmpeg.org)",
+            "decodes a DTS-CD's surround sound, when it is installed. Silverside runs it as a separate program and does not include it."
+        ),
+        (
             "Apple's AudioToolbox",
             "encodes FLAC, ALAC, and AAC."
         ),

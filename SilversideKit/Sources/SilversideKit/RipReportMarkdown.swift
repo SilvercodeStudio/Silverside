@@ -112,6 +112,7 @@ extension RipReport {
         if repaired > 0 { lines += ["", "\(repaired) samples were repaired with CTDB's repair data."] }
         if let timing = timingText { lines += ["", timing] }
         if let hdcd = hdcdText { lines += ["", hdcd] }
+        if let dts = dtsText { lines += ["", dts] }
         for track in dataTracks ?? [] { lines += ["", Self.dataTrackSummary(track) + "."] }
         for failure in dataTrackFailures ?? [] {
             lines += ["", "Data track \(failure.number): not saved: \(failure.reason)"]

@@ -55,6 +55,17 @@ final class RipRun {
         var recommendsDecoding: Bool { format.recommendsHDCDDecode }
     }
 
+    /// The rip found a DTS stream: it waits for `answerDTS(_:)`.
+    struct DTSQuestion: Identifiable {
+        let id = UUID()
+        var album: String
+        /// What the stream is, from the report.
+        var text: String?
+        var format: AudioFormat
+        /// True if ffmpeg is there to decode it.
+        var canDecode: Bool
+    }
+
     /// The rip found tracks with pre-emphasis: it waits for `answerPreEmphasis(deEmphasizes:)`.
     struct PreEmphasisQuestion: Identifiable {
         let id = UUID()
@@ -130,6 +141,7 @@ final class RipRun {
     private(set) var overwriteQuestion: OverwriteQuestion?
     private(set) var hdcdQuestion: HDCDQuestion?
     private(set) var preEmphasisQuestion: PreEmphasisQuestion?
+    private(set) var dtsQuestion: DTSQuestion?
     private(set) var dataTrackQuestion: DataTrackQuestion?
     private(set) var startDate = Date()
     private(set) var endDate: Date?
@@ -150,6 +162,7 @@ final class RipRun {
     @ObservationIgnored private var overwriteAnswer: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var hdcdAnswer: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var preEmphasisAnswer: CheckedContinuation<Bool, Never>?
+    @ObservationIgnored private var dtsAnswer: CheckedContinuation<DTSChoice, Never>?
     @ObservationIgnored private var dataTrackAnswer: CheckedContinuation<Bool, Never>?
     /// Hears the question about files in the library, so the app can show the drive and ask for attention.
     @ObservationIgnored var onQuestion: (@MainActor () -> Void)?
@@ -259,6 +272,15 @@ final class RipRun {
                         }
                     }
                 }
+                rip.chooseDTS = { report, format, canDecode in
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated {
+                                run.askDTS(report, format: format, canDecode: canDecode, answer: continuation)
+                            }
+                        }
+                    }
+                }
                 rip.choosePreEmphasis = { report, format in
                     await withCheckedContinuation { continuation in
                         DispatchQueue.main.async {
@@ -321,6 +343,7 @@ final class RipRun {
         if overwriteQuestion != nil { answer(replaces: false) }
         if hdcdQuestion != nil { answerHDCD(decodes: false) }
         if preEmphasisQuestion != nil { answerPreEmphasis(deEmphasizes: false) }
+        if dtsQuestion != nil { answerDTS(.keep) }
         if dataTrackQuestion != nil { answerDataTracks(saves: false) }
     }
 
@@ -360,6 +383,28 @@ final class RipRun {
             decodes
                 ? "Decoding the HDCD codes." : "Keeping the audio as pressed, with its HDCD codes.")
         hdcdAnswer.resume(returning: decodes)
+    }
+
+    private func askDTS(
+        _ report: RipReport, format: AudioFormat, canDecode: Bool, answer: CheckedContinuation<DTSChoice, Never>
+    ) {
+        dtsAnswer = answer
+        dtsQuestion = DTSQuestion(album: disc.title, text: report.dtsText, format: format, canDecode: canDecode)
+        add("A DTS stream. Waiting for an answer: decode it, or keep the stream...")
+        onQuestion?()
+    }
+
+    /// Answers the DTS question.
+    func answerDTS(_ choice: DTSChoice) {
+        guard let dtsAnswer else { return }
+        self.dtsAnswer = nil
+        dtsQuestion = nil
+        switch choice {
+        case .decode: add("Decoding the DTS stream into a copy beside the album.")
+        case .decodeOnly: add("Decoding the DTS stream into the album.")
+        case .keep, .ask: add("Keeping the DTS stream as the disc has it.")
+        }
+        dtsAnswer.resume(returning: choice)
     }
 
     private func askPreEmphasis(_ report: RipReport, format: AudioFormat, answer: CheckedContinuation<Bool, Never>) {
@@ -441,6 +486,7 @@ final class RipRun {
             if overwriteQuestion != nil { return "Waiting for your answer about the library…" }
             if hdcdQuestion != nil { return "Waiting for your answer about HDCD…" }
             if preEmphasisQuestion != nil { return "Waiting for your answer about pre-emphasis…" }
+            if dtsQuestion != nil { return "Waiting for your answer about DTS…" }
             if dataTrackQuestion != nil { return "Waiting for your answer about the data track…" }
             // The data track is read after the audio, while the last audio track is still current.
             if let (number, fraction) = dataTrackProgress {

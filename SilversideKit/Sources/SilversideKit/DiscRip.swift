@@ -59,6 +59,9 @@ public struct DiscRipOptions: Sendable {
     /// For a disc with tracks that have pre-emphasis: de-emphasize them, keep them, or ask
     /// `DiscRip.choosePreEmphasis`.
     public var preEmphasis: PreEmphasisChoice
+    /// For a DTS-CD: keep the stream, decode it beside the album or in its place, or ask
+    /// `DiscRip.chooseDTS`.
+    public var dts: DTSChoice
     /// For a disc with data tracks (an Enhanced CD's extras): save them as ISO images beside
     /// the audio, skip them, or ask `DiscRip.chooseDataTracks`.
     public var dataTracks: DataTrackChoice
@@ -71,6 +74,7 @@ public struct DiscRipOptions: Sendable {
         addsToMusic = settings.addToMusic
         hdcd = settings.hdcd
         preEmphasis = settings.preEmphasis
+        dts = settings.dts
         dataTracks = settings.dataTracks
     }
 }
@@ -210,6 +214,11 @@ public struct DiscRip {
     /// called after the rip (and after `chooseHDCD`), before encoding. True de-emphasizes them.
     /// Nil asks nothing, and they are de-emphasized, as advised.
     public var choosePreEmphasis: (@Sendable (_ report: RipReport, _ format: AudioFormat) async -> Bool)?
+    /// With `options.dts` at `.ask`, for a DTS-CD: called after the rip, before encoding, with
+    /// whether ffmpeg is there to decode it. The answer is not `.ask`. Nil asks nothing, and
+    /// the stream is kept.
+    public var chooseDTS:
+        (@Sendable (_ report: RipReport, _ format: AudioFormat, _ canDecode: Bool) async -> DTSChoice)?
     /// For a disc with data tracks and `DiscRipOptions.dataTracks` ask: true saves them. Asked
     /// as the rip starts, so the answer is not awaited after the audio. Without it, they are saved.
     public var chooseDataTracks: (@Sendable (_ tracks: [TOC.Track]) async -> Bool)?
@@ -441,7 +450,7 @@ public struct DiscRip {
                 let index = toc.audioTracks.firstIndex(of: track)!
                 report.recordChecksums(
                     of: samples, isFirstTrack: index == 0, isLastTrack: index == toc.audioTracks.count - 1)
-                report.hdcd = HDCDCodes.scan(samples)
+                report.recordDTS(in: samples)
                 if options.testAndCopy {
                     let test = try testRead(track, toc: toc, reader: reader, cacheFlushSectors: flushSectors)
                     report.testCRC32 = CRC32.hex(test.crc)
@@ -485,6 +494,7 @@ public struct DiscRip {
             if let hdcd = report.hdcd {
                 summary += hdcd.changesAudio ? ", HDCD codes (\(hdcd.featuresText))" : ", HDCD codes"
             }
+            if report.dts == true { summary += ", a DTS stream" }
             events(.trackFinished(report, summary: summary, seconds: report.seconds ?? 0))
         }
 
@@ -601,6 +611,7 @@ public struct DiscRip {
         )
         report.paddedEdges = padded.isEmpty ? nil : padded
         report.hdcd = HDCDStatus(reports)
+        report.dts = DTSStatus(reports)
         report.cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         report.release = chosen
         func writeReport() throws {
@@ -693,17 +704,41 @@ public struct DiscRip {
                     try stop.check()
                 }
             }
+            var dts = options.dts
+            if report.dts == .stream, dts == .ask {
+                dts = await chooseDTS?(report, encoder.format, FFmpeg.program() != nil) ?? .keep
+                try stop.check()
+            }
+            // A lossy format would turn a stream that is not decoded into noise: the rip stays as it is.
+            let decodes = (dts == .decode || dts == .decodeOnly) && FFmpeg.program() != nil
+            if report.dts == .stream, !decodes, !encoder.format.isLossless {
+                events(.encodedTrack(DTSError.lossyStream(encoder.format).description + " The rip is kept."))
+                events(.ripKept(folder))
+                return result
+            }
             events(.encoding(encoder.format))
             encoder.log = { events(.encodedTrack($0)) }
             encoder.trackEncoded = { events(.trackEncoded(number: $0, file: $1)) }
-            let (files, record) = try await blocking { [encoder] in try encoder.encodeWithRecord(disc, into: library) }
+            let encoded = try await blocking { [encoder, dts] in
+                try encoder.encodeWithRecord(disc, into: library, dts: dts)
+            }
+            let (files, record) = (encoded.files, encoded.encoding)
             result.encodedFiles = files
             // The rip's own report says where its tracks went, for as long as the rip is kept.
             try record?.save(inReportAt: folder.appending(path: "disc.json"))
-            events(.encoded(files, format: encoder.format, record: record))
-            if options.addsToMusic, MusicApp.reads(encoder.format), !files.isEmpty {
+            events(.encoded(files, format: record?.format ?? encoder.format, record: record))
+            if let copy = encoded.copyEncoding {
+                events(
+                    .encodedTrack(
+                        "The decoded copy: \(encoded.copyFiles.count) \(copy.format.name) files in \(copy.folder)"))
+            }
+            // Music plays a DTS stream as static, so it gets the decode, if there is one.
+            let keepsStream = report.dts == .stream && record?.dtsDecoded == nil
+            let (musicFiles, musicFormat) =
+                keepsStream ? (encoded.copyFiles, encoded.copyEncoding?.format) : (files, record?.format)
+            if options.addsToMusic, let musicFormat, MusicApp.reads(musicFormat), !musicFiles.isEmpty {
                 do {
-                    events(.addedToMusic(try await blocking { try MusicApp.add(files) }))
+                    events(.addedToMusic(try await blocking { try MusicApp.add(musicFiles) }))
                 } catch {
                     events(.addToMusicFailed(error))
                 }
@@ -913,7 +948,7 @@ public struct DiscRip {
                 reports[index].repairedSamples = repair.changedSamples(inTrack: index)
                 reports[index].recordChecksums(
                     of: samples, isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
-                reports[index].hdcd = HDCDCodes.scan(samples)
+                reports[index].recordDTS(in: samples)
                 reports[index].checkAccurateRip(in: repair, trackAt: index, records: records, readOffset: readOffset)
                 events(.trackRepaired(reports[index]))
             }

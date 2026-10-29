@@ -65,6 +65,57 @@ public enum ReplayGain {
         }
     }
 
+    /// Analyzes surround audio, as BS.1770 weighs its channels: the surround channels count
+    /// 1.41 times (+1.5 dB), the low-frequency effects channel not at all, and its peak is
+    /// the highest of every channel's.
+    public static func analyze(_ audio: SurroundPCM, sampleRate: Double = 44100) -> Analysis {
+        let channels = audio.channels
+        // WAVE's bits, in channel order: back left and right, side left and right, back center.
+        var weights = [Double]()
+        var bit: UInt32 = 1
+        while weights.count < channels, bit != 0 {
+            if audio.channelMask & bit != 0 {
+                weights.append(
+                    bit == SurroundPCM.lfeBit ? 0 : [0x10, 0x20, 0x100, 0x200, 0x400].contains(bit) ? 1.41 : 1)
+            }
+            bit <<= 1
+        }
+        while weights.count < channels { weights.append(1) }
+        let step = Int((sampleRate / 10).rounded())
+        var filters = (0..<channels).map { _ in KWeighting(sampleRate: sampleRate) }
+        var stepPowers = [Double]()
+        stepPowers.reserveCapacity(audio.frameCount / step + 1)
+        var peak = 0.0
+        var sum = 0.0
+        var inStep = 0
+        audio.values.withUnsafeBufferPointer { values in
+            for frame in 0..<audio.frameCount {
+                for channel in 0..<channels {
+                    let x = Double(values[frame * channels + channel]) / 2_147_483_648
+                    peak = max(peak, abs(x))
+                    guard weights[channel] > 0 else { continue }
+                    let z = filters[channel].filter(x)
+                    sum += weights[channel] * z * z
+                }
+                inStep += 1
+                if inStep == step {
+                    stepPowers.append(sum)
+                    sum = 0
+                    inStep = 0
+                }
+            }
+        }
+        return Analysis(blockPowers: blocks(of: stepPowers, step: step), peak: peak)
+    }
+
+    /// The 400 ms blocks of the 100 ms steps: four steps each, as the mean square over them.
+    static func blocks(of stepPowers: [Double], step: Int) -> [Double] {
+        guard stepPowers.count >= 4 else { return [] }
+        return (0..<(stepPowers.count - 3)).map {
+            (stepPowers[$0] + stepPowers[$0 + 1] + stepPowers[$0 + 2] + stepPowers[$0 + 3]) / Double(4 * step)
+        }
+    }
+
     /// The measurement as the samples go by: each 100 ms step's K-weighted power, and the peak.
     private struct Meter {
         let step: Int
@@ -97,16 +148,7 @@ public enum ReplayGain {
         }
 
         var analysis: Analysis {
-            // A block is four steps (400 ms); its power is the mean square over them.
-            var blocks = [Double]()
-            if stepPowers.count >= 4 {
-                blocks.reserveCapacity(stepPowers.count - 3)
-                for i in 0..<(stepPowers.count - 3) {
-                    blocks.append(
-                        (stepPowers[i] + stepPowers[i + 1] + stepPowers[i + 2] + stepPowers[i + 3]) / Double(4 * step))
-                }
-            }
-            return Analysis(blockPowers: blocks, peak: peak)
+            Analysis(blockPowers: ReplayGain.blocks(of: stepPowers, step: step), peak: peak)
         }
     }
 

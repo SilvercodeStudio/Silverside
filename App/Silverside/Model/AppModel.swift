@@ -235,6 +235,23 @@ final class AppModel {
         }
     }
 
+    /// Decodes an earlier rip's DTS stream with ffmpeg: beside its album, its title ending in
+    /// `suffix`, or in place of its files.
+    func startDTSDecode(_ rip: RecentRip, beside: Bool, format: AudioFormat, suffix: String) {
+        guard library?.isRunning != true else {
+            libraryShown = true
+            return
+        }
+        let run = LibraryRun(
+            title: rip.title, encode: [], update: [],
+            dts: LibraryRun.DTSDecode(rip: rip, beside: beside, format: format, suffix: suffix))
+        library = run
+        libraryShown = true
+        run.start(settings: settings, cover: nil) { [weak self] in
+            self?.refreshRecentRips()
+        }
+    }
+
     /// A cover for every disc of a set. Nil takes the Cover Art Archive's front cover.
     func changeCover(ofSet set: RipSet, rips: [RecentRip], to image: CoverImage?) {
         Task { @MainActor in

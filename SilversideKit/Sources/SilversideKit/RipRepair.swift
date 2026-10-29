@@ -251,11 +251,12 @@ public struct RipRepair {
             let samples = result.samples(ofTrack: index)
             report.tracks[position].recordChecksums(
                 of: samples, isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
-            report.tracks[position].hdcd = HDCDCodes.scan(samples)
+            report.tracks[position].recordDTS(in: samples)
             report.tracks[position].checkAccurateRip(
                 in: result, trackAt: index, records: records, readOffset: report.drive.readOffset)
         }
         report.hdcd = HDCDStatus(report.tracks)
+        report.dts = DTSStatus(report.tracks)
         report.program = SilversideVersion.program
         if folder.standardizedFileURL != firstFolder {
             report.repaired = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))

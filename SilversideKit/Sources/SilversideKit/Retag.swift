@@ -249,6 +249,7 @@ extension DiscEncoder {
                 + PreEmphasis.tags(
                     hasPreEmphasis: (entry.track == 0 ? report.tracks.first : reported)?.preEmphasis == true,
                     deEmphasized: encoding.deEmphasizedTracks?.contains(entry.track) == true)
+                + (reported?.dts == true ? DTSStream.tags(decoded: encoding.dtsDecoded != nil) : [])
                 + ReplayGain.tags(
                     track: gain?.tracks.first { $0.track == entry.track }?.values, album: gain?.albumInTags)
             // A file whose tags are already these is left alone (a library on a network
@@ -561,9 +562,11 @@ extension DiscEncoder {
             entry -> Result<ReplayGain.Analysis, any Error>? in
             let file = album.appending(path: entry.file)
             return Result {
-                encoding.hdcdDecoded == true || encoding.deEmphasizedTracks?.contains(entry.track) == true
-                    ? ReplayGain.analyze(.wide(try AudioEncoder.decodeWide(file)))
-                    : ReplayGain.analyze(try AudioEncoder.decode(file))
+                encoding.dtsDecoded != nil
+                    ? ReplayGain.analyze(try AudioEncoder.decodeSurround(file))
+                    : encoding.hdcdDecoded == true || encoding.deEmphasizedTracks?.contains(entry.track) == true
+                        ? ReplayGain.analyze(.wide(try AudioEncoder.decodeWide(file)))
+                        : ReplayGain.analyze(try AudioEncoder.decode(file))
             }
         }
         return ReplayGain.Histogram(try measured.map { try $0.get() })

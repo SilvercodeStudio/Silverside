@@ -147,6 +147,11 @@ public struct TrackMetadata: Equatable, Sendable {
         return text(show.map { "\(base) \($0.titleSuffix)" } ?? base)
     }
 
+    private static func unique(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values.filter { seen.insert($0).inserted }
+    }
+
     private func text(_ value: String) -> String {
         plainPunctuation ? PlainPunctuation.apply(value) : value
     }
@@ -188,9 +193,10 @@ public struct TrackMetadata: Equatable, Sendable {
         for lyricist in track.lyricists { comments.append(("LYRICIST", text(lyricist.tagName))) }
         if let isrc { comments.append(("ISRC", isrc)) }
         if let barcode = release.barcode, !barcode.isEmpty { comments.append(("BARCODE", barcode)) }
-        for label in release.labels {
-            if let name = label.name { comments.append(("LABEL", name)) }
-            if let number = label.catalogNumber { comments.append(("CATALOGNUMBER", number)) }
+        // Each name and number once, as Picard does: a label with two catalog numbers is one LABEL.
+        for name in Self.unique(release.labels.compactMap(\.name)) { comments.append(("LABEL", name)) }
+        for number in Self.unique(release.labels.compactMap(\.catalogNumber)) {
+            comments.append(("CATALOGNUMBER", number))
         }
         if let country = release.country { comments.append(("RELEASECOUNTRY", country)) }
         if let sort = MusicBrainzRelease.sortName(track.artistCredit) { comments.append(("ARTISTSORT", text(sort))) }

@@ -175,6 +175,21 @@ environment variable `SILVERSIDE_LAME` can name another `lame`, or with
 it uses LAME's best variable bit rate (`-V 0`, about 245 kbit/s); Settings ›
 Encoding changes that.
 
+## Decoding DTS-CDs
+
+A DTS-CD holds surround sound coded as DTS, which plays as static without a
+DTS decoder. Silverside rips it bit for bit, and decodes it with the free
+[FFmpeg](https://ffmpeg.org) into files with every channel (FLAC, Apple
+Lossless, AAC, or AIFF), gapless across the tracks. Install it with Homebrew:
+
+```sh
+brew install ffmpeg
+```
+
+Silverside finds `ffmpeg` as it finds `lame`, and runs it as a separate
+program. The environment variable `SILVERSIDE_FFMPEG` can name another
+`ffmpeg`, or with `none` make Silverside act as if it were not installed.
+
 ## MusicBrainz
 
 Silverside looks up each disc in MusicBrainz once, waits between requests, and

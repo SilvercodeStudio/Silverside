@@ -388,6 +388,7 @@ extension View {
 struct EncodingSettings: View {
     @Environment(AppModel.self) private var model
     @State private var lame = MP3Encoder.lame()
+    @State private var ffmpeg = FFmpeg.program()
 
     var body: some View {
         @Bindable var model = model
@@ -405,7 +406,7 @@ struct EncodingSettings: View {
                 case .mp3: mp3Options
                 case .flac, .alac, .aiff, .wav:
                     Text(
-                        "\(model.settings.format.name) has no options. Each file is decoded again after encoding and compared with the audio it was made from: the rip, or the rip after HDCD decoding or de-emphasis."
+                        "\(model.settings.format.name) has no options. Each file is decoded again after encoding and compared with the audio it was made from: the rip, or the rip after HDCD decoding, de-emphasis, or DTS decoding."
                     )
                     .font(.caption).foregroundStyle(.secondary)
                 }
@@ -439,6 +440,26 @@ struct EncodingSettings: View {
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
+            Section("DTS-CD") {
+                Picker("Discs whose tracks hold a DTS stream", selection: $model.settings.dts) {
+                    Text("Ask each time").tag(DTSChoice.ask)
+                    Text("Album and a decoded copy").tag(DTSChoice.decode)
+                    Text("Decoded album only").tag(DTSChoice.decodeOnly)
+                    Text("DTS stream only").tag(DTSChoice.keep)
+                }
+                Text(
+                    "A DTS-CD holds surround sound coded as DTS, which plays as loud static except through a DTS decoder or receiver. Silverside decodes it with ffmpeg into files with every channel (20-bit FLAC or Apple Lossless, AAC, or AIFF), tagged DTS=decoded. The DTS stream as the disc has it needs a lossless format."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+                LabeledContent("ffmpeg") {
+                    Text(ffmpeg.map { ($0.path as NSString).abbreviatingWithTildeInPath } ?? "Not found")
+                        .foregroundStyle(ffmpeg == nil ? .orange : .secondary)
+                }
+                if ffmpeg == nil {
+                    Text("To decode DTS, install ffmpeg. In Terminal: brew install ffmpeg")
+                        .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+            }
             Section("Disc image") {
                 Toggle("Also write a disc image", isOn: $model.settings.writeImages)
                 FolderField(label: "Images", path: $model.settings.images)
@@ -451,6 +472,14 @@ struct EncodingSettings: View {
         }
         .formStyle(.grouped)
         .watchingForLAME($lame)
+        .task {
+            // ffmpeg too, so that an install in Terminal shows here at once.
+            while !Task.isCancelled {
+                let found = FFmpeg.program()
+                if found != ffmpeg { ffmpeg = found }
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
     }
 
     @ViewBuilder private var aacOptions: some View {

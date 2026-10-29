@@ -84,6 +84,21 @@ them as pressed, tagged `PRE_EMPHASIS=yes`. With `ask`, the default, `rip` asks
 at a terminal (yes by default), and `encode` de-emphasizes. The CUE sheet marks
 the tracks kept as pressed (`FLAGS PRE`), not the de-emphasized ones.
 
+A DTS-CD's tracks hold a DTS stream (surround sound that plays as static
+without a DTS decoder), which the report names. `--dts decode` (or the `dts`
+setting) encodes the album as the disc has it, the stream bit for bit, and a
+decoded copy beside it, `<Album> (DTS 5.1)`; `--dts decode-only` writes the
+decode alone; `--dts keep` the stream alone. With `ask`, the default, `rip`
+asks at a terminal (decode by default), and `encode` keeps the stream.
+Decoding needs `ffmpeg` (`brew install ffmpeg`), which Silverside runs as a
+separate program (`SILVERSIDE_FFMPEG` names another, or `none`); without it,
+the stream is kept. The decoded files have every channel, 20-bit in FLAC and
+Apple Lossless (24-bit if the stream says its source was), in FLAC, Apple
+Lossless, AAC, or AIFF (FLAC for WAV, AAC for MP3); they are gapless across
+the tracks, tagged `DTS=decoded`, with ReplayGain. Every file of a DTS-CD is
+tagged `MEDIA=DTS CD`. AAC and MP3 cannot keep the stream itself: a rip in
+those formats writes the decode alone, or encodes nothing.
+
 `encode -i` also takes an album folder in the library: the album is encoded
 again from its lossless files, each checked against the rip's CRC-32 first.
 `--hdcd-copy` writes the decode as an album of its own beside it,
@@ -166,6 +181,7 @@ silverside config unset aac.mode                     # back to the default
 | `ripOnInsert` | `false` | the app rips a disc when it goes in, if its release is certain and it is not ripped yet |
 | `hdcd` | `ask` | for a disc whose HDCD codes ask for peak extend or a gain: `decode` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--hdcd`) |
 | `preEmphasis` | `ask` | for tracks with pre-emphasis: `deemphasize` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--pre-emphasis`) |
+| `dts` | `ask` | for a DTS-CD: `decode` (the stream, and a decoded copy beside it), `decode-only`, `keep` the stream, or `ask` (`--dts`); decoding needs ffmpeg |
 | `dataTracks` | `ask` | for a disc with a data track (an Enhanced CD's extras): `save` it as an ISO image, copied into the album folder as `Data track.iso` with its files in a `Data track` folder; `skip` it; or `ask` at a terminal, saving otherwise (`rip --data-tracks`) |
 | `writeImages` | `false` | also write a disc image when a disc is encoded (`--image`) |
 | `images` | `~/Music/Silverside Images` | the folder for disc images (`--images`) |

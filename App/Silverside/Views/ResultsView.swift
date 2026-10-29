@@ -28,6 +28,7 @@ struct ResultsView: View {
     @AppStorage("ripTrackColumns") private var columns = TableColumnCustomization<RipReport.Track>()
     @AppStorage("driveTrackColumns") private var driveColumns = TableColumnCustomization<DiscInfo.Track>()
     @State private var hdcdDecodeShown = false
+    @State private var dtsDecodeShown = false
     /// The cover in the rip's folder, or in the album folder for a report kept in the library.
     @State private var cover: Data?
     @State private var coverTargeted = false
@@ -148,8 +149,10 @@ struct ResultsView: View {
             saveNames()
         }
         .sheet(isPresented: $hdcdDecodeShown) { HDCDDecodeSheet(rip: recentRip) }
+        .sheet(isPresented: $dtsDecodeShown) { DTSDecodeSheet(rip: recentRip) }
         #if DEBUG
             .onAppear { hdcdDecodeShown = canDecodeHDCD && UserDefaults.standard.bool(forKey: "hdcdDecode") }
+            .onAppear { dtsDecodeShown = canDecodeDTS && UserDefaults.standard.bool(forKey: "dtsDecode") }
         #endif
         .navigationTitle(shownRelease.map { "\($0.title)" } ?? folder.lastPathComponent)
         .navigationSubtitle(
@@ -181,6 +184,17 @@ struct ResultsView: View {
                     }
                     .help(
                         "Decode the HDCD codes: a copy beside the album, or in place of its files"
+                    )
+                    .disabled(model.library?.isRunning == true)
+                }
+                if canDecodeDTS {
+                    Button {
+                        dtsDecodeShown = true
+                    } label: {
+                        Label("Decode DTS…", systemImage: "hifispeaker.2")
+                    }
+                    .help(
+                        "Decode the DTS stream into surround files with ffmpeg: a copy beside the album, or in place of its files"
                     )
                     .disabled(model.library?.isRunning == true)
                 }
@@ -245,6 +259,13 @@ struct ResultsView: View {
     /// its WAV files, or the album's files.
     private var canDecodeHDCD: Bool {
         guard report.hdcd == .featuresUsed, report.encoding?.hdcdDecoded != true else { return false }
+        return hasAudio || report.encoding?.format.isLossless == true
+    }
+
+    /// A rip whose tracks hold a DTS stream, not decoded yet, with lossless audio to decode:
+    /// its WAV files, or the album's files.
+    private var canDecodeDTS: Bool {
+        guard report.dts == .stream, report.encoding?.dtsDecoded == nil else { return false }
         return hasAudio || report.encoding?.format.isLossless == true
     }
 

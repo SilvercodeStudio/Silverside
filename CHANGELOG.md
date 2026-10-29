@@ -11,6 +11,16 @@ command-line tool.
   in MusicBrainz, such as your edition, or one added since the rip. The
   rip's encoded files get the release's tags, names, and cover, with no new
   rip.
+- **DTS-CDs.** A rip finds the DTS stream (surround sound that plays as
+  static without a DTS decoder) and asks what to encode: the album as the
+  disc has it with a decoded copy beside it, such as "Forever Yours (DTS
+  5.1)", the decode alone, or the stream alone. Decoding needs ffmpeg
+  (`brew install ffmpeg`), which Silverside runs as a separate program, as
+  it runs lame. The decoded files have every channel (20-bit FLAC or Apple
+  Lossless, AAC, or AIFF), are gapless across the tracks, and have
+  ReplayGain; they are tagged DTS=decoded. Decode DTS… decodes an earlier
+  rip, the preview plays a DTS track decoded, and Settings › Encoding has the
+  choice. `silverside rip` and `encode` take `--dts`.
 
 ### Changed
 
@@ -23,6 +33,8 @@ command-line tool.
 
 ### Fixed
 
+- A label that MusicBrainz lists twice, with two catalog numbers, was in the
+  Label tag twice. Now each label and each catalog number is there once.
 - On a disc that MusicBrainz does not know, a track with no artist of its
   own was tagged "Unknown Artist" after you typed the album artist. Now it
   takes the album artist.

@@ -23,6 +23,15 @@ final class LibraryRun: Identifiable {
         var suffix = " (HDCD)"
     }
 
+    /// A DTS decode of an earlier rip, with ffmpeg: as an album of its own beside the album,
+    /// its title ending in `suffix` (" (DTS 5.1)"), in `format`; or in place of the album's files.
+    struct DTSDecode {
+        var rip: RecentRip
+        var beside: Bool
+        var format: AudioFormat
+        var suffix = " (DTS 5.1)"
+    }
+
     /// Change Release: another release for an earlier rip, with its cover if it has one.
     struct ReleaseChange {
         var rip: RecentRip
@@ -36,6 +45,7 @@ final class LibraryRun: Identifiable {
     let encode: [RecentRip]
     let update: [RecentRip]
     let hdcd: HDCDDecode?
+    let dts: DTSDecode?
     let change: ReleaseChange?
     /// The changed rip's report, where it is after the change (an album folder's report moves
     /// when its name or folder changes).
@@ -50,13 +60,14 @@ final class LibraryRun: Identifiable {
     @ObservationIgnored private let stopToken = StopToken()
 
     init(
-        title: String, encode: [RecentRip], update: [RecentRip], hdcd: HDCDDecode? = nil,
+        title: String, encode: [RecentRip], update: [RecentRip], hdcd: HDCDDecode? = nil, dts: DTSDecode? = nil,
         change: ReleaseChange? = nil
     ) {
         self.title = title
         self.encode = encode
         self.update = update
         self.hdcd = hdcd
+        self.dts = dts
         self.change = change
     }
 
@@ -66,6 +77,7 @@ final class LibraryRun: Identifiable {
         switch phase {
         case .running:
             if change != nil { return "Changing the release…" }
+            if dts != nil { return "Decoding DTS…" }
             return hdcd != nil ? "Decoding HDCD…" : encode.isEmpty ? "Updating the library…" : "Encoding…"
         case .stopped: return "Stopped after the disc under way."
         case .failed(let message): return "Failed: \(message)"
@@ -74,7 +86,7 @@ final class LibraryRun: Identifiable {
             if change != nil, changedReport != nil { parts.append("Release changed") }
             if !encode.isEmpty { parts.append("\(Format.count(encodedDiscs, "disc")) encoded") }
             if !update.isEmpty { parts.append("\(Format.count(updatedDiscs, "disc")) brought up to date") }
-            if hdcd != nil { parts.append("\(Format.count(decodedDiscs, "disc")) decoded") }
+            if hdcd != nil || dts != nil { parts.append("\(Format.count(decodedDiscs, "disc")) decoded") }
             if problems > 0 { parts.append("\(Format.count(problems, "problem"))") }
             return parts.joined(separator: ", ") + "."
         }
@@ -88,7 +100,7 @@ final class LibraryRun: Identifiable {
     ) {
         let run = self
         let stop = self.stopToken
-        let (encode, update, hdcd, change) = (self.encode, self.update, self.hdcd, self.change)
+        let (encode, update, hdcd, dts, change) = (self.encode, self.update, self.hdcd, self.dts, self.change)
         task = Task.detached {
             @Sendable func onMain(_ body: @escaping @MainActor () -> Void) {
                 DispatchQueue.main.async { MainActor.assumeIsolated(body) }
@@ -150,7 +162,10 @@ final class LibraryRun: Identifiable {
                     var encoder = DiscEncoder(settings: settings)
                     encoder.log = { line in onMain { run.add("  \(line)") } }
                     onMain { run.add("\(rip.title): encoding as \(settings.format.rawValue.uppercased())…") }
-                    let (files, record) = try encoder.encodeWithRecord(disc, into: library)
+                    // A DTS-CD as the setting says; asking is for a rip, so here the stream is kept.
+                    let encoded = try encoder.encodeWithRecord(
+                        disc, into: library, dts: settings.dts == .ask ? .keep : settings.dts)
+                    let (files, record) = (encoded.files, encoded.encoding)
                     try record?.save(inReportAt: rip.folder.appending(path: "disc.json"))
                     if settings.addToMusic, MusicApp.reads(settings.format), !files.isEmpty {
                         do {
@@ -206,6 +221,42 @@ final class LibraryRun: Identifiable {
                         run.decodedDiscs += 1
                         run.add(
                             "\(rip.title): wrote \(Format.count(files.count, "file")), tagged HDCD=decoded"
+                                + (files.first.map {
+                                    ", in \(($0.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)"
+                                } ?? "")
+                                + ".")
+                    }
+                } catch {
+                    onMain {
+                        run.problems += 1
+                        run.add("\(rip.title): \(error)")
+                    }
+                }
+            }
+            if let dts, !stop.isStopped {
+                let rip = dts.rip
+                do {
+                    // The rip's WAV files when it still has them, else the album's lossless files.
+                    let disc =
+                        rip.hasAudio ? try RippedDisc(folder: rip.folder) : try RippedDisc(albumReportAt: rip.file)
+                    let format = dts.beside ? dts.format : rip.report.encoding?.format ?? dts.format
+                    var encoder = DiscEncoder(settings: settings, format: format)
+                    encoder.decodesDTS = true
+                    if dts.beside { encoder.albumSuffix = dts.suffix } else { encoder.overwrites = true }
+                    encoder.log = { line in onMain { run.add("  \(line)") } }
+                    onMain {
+                        run.add(
+                            "\(rip.title): decoding DTS as \(format.rawValue.uppercased()), "
+                                + (dts.beside ? "beside the album…" : "in place of the album's files…"))
+                    }
+                    let (files, record) = try encoder.encodeWithRecord(disc, into: library)
+                    // In place, the rip's own report follows its files; a copy beside it is not the rip's.
+                    if !dts.beside, rip.hasAudio { try record?.save(inReportAt: rip.file) }
+                    onMain {
+                        run.decodedDiscs += 1
+                        run.add(
+                            "\(rip.title): wrote \(Format.count(files.count, "file")) in \(record?.dtsDecoded ?? "surround"),"
+                                + " tagged DTS=decoded"
                                 + (files.first.map {
                                     ", in \(($0.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)"
                                 } ?? "")

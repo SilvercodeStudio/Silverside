@@ -176,7 +176,9 @@ extension RippedDisc {
         let report = try RipReport.read(from: file)
         guard let encoding = report.encoding else { throw EncodingError.noDiscJSON(folder) }
         guard encoding.format.isLossless else { throw EncodingError.lossySource(folder) }
-        guard encoding.hdcdDecoded != true else { throw EncodingError.alreadyDecoded(folder) }
+        guard encoding.hdcdDecoded != true, encoding.dtsDecoded == nil else {
+            throw EncodingError.alreadyDecoded(folder)
+        }
         guard encoding.deEmphasizedTracks?.isEmpty != false else { throw EncodingError.deEmphasized(folder) }
         self.folder = folder
         reportFile = file
@@ -256,7 +258,7 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
         case .lossySource(let folder):
             "\(folder.path) holds lossy files, which no longer have the ripped audio to encode from."
         case .alreadyDecoded(let folder):
-            "\(folder.path) holds an HDCD decode, which is no longer the ripped audio to encode from."
+            "\(folder.path) holds a decode (HDCD or DTS), which is no longer the ripped audio to encode from."
         case .deEmphasized(let folder):
             "\(folder.path) holds de-emphasized tracks, which are no longer the ripped audio to encode from."
         case .duplicateDestination(let file):
@@ -295,6 +297,12 @@ public struct DiscEncoder: Sendable {
     /// for AIFF and WAV), tagged DE_EMPHASIZED=yes. Other tracks are encoded as they are. When
     /// false, those tracks are tagged PRE_EMPHASIS=yes.
     public var deEmphasizes = true
+    /// Decode the tracks that hold a DTS stream (a DTS-CD) with ffmpeg, into surround files
+    /// tagged DTS=decoded (see `DTSDecoder`). When false, they keep the stream as the disc has
+    /// it, which only a lossless format can. Other tracks are encoded as they are.
+    public var decodesDTS = false
+    /// The ffmpeg program for `decodesDTS`; nil finds it (`FFmpeg.program()`).
+    public var ffmpeg: URL?
     /// Added to the album's title in names and tags, as " (HDCD)" for a decoded copy beside
     /// the album: the copy gets a folder of its own, and players list it apart.
     public var albumSuffix: String?
@@ -530,6 +538,11 @@ public struct DiscEncoder: Sendable {
         /// decoder, and the de-emphasis filter when `previousDeEmphasizes`.
         var previous: RippedDisc.Track?
         var previousDeEmphasizes = false
+        /// The track after it on the disc, if this encoding has it: a DTS stream's frames run
+        /// across the tracks' starts.
+        var next: RippedDisc.Track?
+        /// True if the track holds a DTS stream.
+        var isDTS = false
         /// Tags beyond the metadata's: the ReplayGain values, once every track is measured.
         var extraComments: [(key: String, value: String)] = []
     }
@@ -583,6 +596,7 @@ public struct DiscEncoder: Sendable {
             guard before == 0 || before == number - 1 else { continue }
             jobs[position].previous = jobs[position - 1].ripped
             jobs[position].previousDeEmphasizes = jobs[position - 1].deEmphasizes
+            jobs[position - 1].next = jobs[position].ripped
         }
         return (release, medium, jobs)
     }
@@ -628,6 +642,28 @@ public struct DiscEncoder: Sendable {
         var (release, medium, jobs) = try plan(disc, into: library)
         let lame = format == .mp3 ? MP3Encoder.lame() : nil
         if format == .mp3 && lame == nil { throw MP3Error.lameNotFound }
+        // A DTS-CD's tracks: decoded, or kept as the stream, which only a lossless format keeps.
+        // They have no pre-emphasis or HDCD to take out: their bits are not PCM.
+        let dtsTracks = try dtsTracks(of: disc)
+        let dtsDecoder: DTSDecoder?
+        if !dtsTracks.isEmpty && decodesDTS {
+            guard AudioEncoder.holdsSurround(format) else { throw DTSError.noSurround(format) }
+            guard let program = ffmpeg ?? FFmpeg.program() else { throw DTSError.ffmpegNotFound }
+            dtsDecoder = DTSDecoder(ffmpeg: program)
+        } else {
+            dtsDecoder = nil
+        }
+        if !dtsTracks.isEmpty {
+            if dtsDecoder == nil && !format.isLossless { throw DTSError.lossyStream(format) }
+            for index in jobs.indices where dtsTracks.contains(jobs[index].ripped.number) {
+                jobs[index].isDTS = true
+                jobs[index].hasPreEmphasis = false
+                jobs[index].deEmphasizes = false
+            }
+            for index in jobs.indices.dropFirst() where jobs[index].previous != nil {
+                jobs[index].previousDeEmphasizes = jobs[index - 1].deEmphasizes
+            }
+        }
         let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
         let dataTrackCopies = jobs.first.map { dataTrackCopies(of: disc, into: $0.folder, discPart: discPart) } ?? []
         // A file that exists stops the encoding before any file is written, so a half-done
@@ -656,7 +692,8 @@ public struct DiscEncoder: Sendable {
                     $0.report.discPosition != medium.position && $0.report.encoding?.hdcdDecoded == true
                 }
             } == true
-        let hdcd = try decodesHDCD || followsDecodedDiscs ? hdcdStatus(of: disc) : disc.report?.hdcd
+        let hdcd =
+            !dtsTracks.isEmpty ? nil : try decodesHDCD || followsDecodedDiscs ? hdcdStatus(of: disc) : disc.report?.hdcd
         let decodes =
             (decodesHDCD && hdcd == .featuresUsed)
             || (followsDecodedDiscs && (hdcd == .codesOnly || hdcd == .featuresUsed))
@@ -672,6 +709,16 @@ public struct DiscEncoder: Sendable {
             jobs[index].extraComments =
                 HDCDStatus.tags(hdcd, decoded: decodes)
                 + PreEmphasis.tags(hasPreEmphasis: jobs[index].hasPreEmphasis, deEmphasized: jobs[index].deEmphasizes)
+                + (jobs[index].isDTS ? DTSStream.tags(decoded: dtsDecoder != nil) : [])
+        }
+        if !dtsTracks.isEmpty {
+            let which =
+                dtsTracks.count == disc.toc.audioTracks.count
+                ? "the tracks" : "tracks " + RipReport.list(dtsTracks.sorted())
+            log(
+                dtsDecoder != nil
+                    ? "DTS: decoding the stream of \(which) with ffmpeg into surround \(format.name) files, tagged DTS=decoded."
+                    : "DTS: \(which) hold a DTS stream; the files keep it as the disc has it, for a DTS decoder.")
         }
         let deEmphasized = jobs.filter(\.deEmphasizes).map(\.ripped.number)
         if !deEmphasized.isEmpty {
@@ -683,17 +730,27 @@ public struct DiscEncoder: Sendable {
 
         // A track in flight holds its audio; an HDCD decode's or de-emphasis's values are twice
         // as wide, so half as many tracks go at once.
-        let lanes = max(1, decodes || !deEmphasized.isEmpty ? parallelTracks / 2 : parallelTracks)
+        let lanes = max(
+            1, decodes || !deEmphasized.isEmpty || dtsDecoder != nil ? parallelTracks / 2 : parallelTracks)
 
         // ReplayGain needs every track's loudness before the first tag is written: the album's
         // gain is one gating over all of them. The tracks are measured from their WAV files,
         // as many at a time as they encode.
         // For the last disc of a multi-disc release into the album folder, the album is the whole release.
         var replayGainRecord: RipReport.Encoding.ReplayGainRecord?
-        if replayGain {
+        // A DTS stream is not audio to measure; its decode is.
+        if replayGain && !dtsTracks.isEmpty && dtsDecoder == nil {
+            log("ReplayGain: none, as the DTS stream is not audio a player plays.")
+        }
+        if replayGain && (dtsTracks.isEmpty || dtsDecoder != nil) {
             let measured = CTDB.parallelMap(over: jobs, lanes: lanes) {
                 job -> Result<ReplayGain.Analysis, any Error>? in
-                Result { ReplayGain.analyze(try audio(of: job, in: disc, decodes: decodes)) }
+                Result {
+                    switch try audio(of: job, in: disc, decodes: decodes, dts: dtsDecoder) {
+                    case .pcm(let pcm): ReplayGain.analyze(pcm)
+                    case .surround(let surround): ReplayGain.analyze(surround)
+                    }
+                }
             }
             let analyses = try measured.map { try $0.get() }
             let album = ReplayGain.album(of: analyses)
@@ -733,7 +790,8 @@ public struct DiscEncoder: Sendable {
             for index in stride(from: lane, to: laneJobs.count, by: encodingLanes) where !outcomes.hasFailed {
                 do {
                     let staged = try encoder.encode(
-                        laneJobs[index], of: disc, decodes: decodes, cover: cover, lame: lame, staging: replacesSource)
+                        laneJobs[index], of: disc, decodes: decodes, dts: dtsDecoder, cover: cover, lame: lame,
+                        staging: replacesSource, outcomes: outcomes)
                     // A staged file is named once it replaces its source, below.
                     outcomes.finish(
                         index, staged: staged, line: staged == nil ? laneJobs[index].file.lastPathComponent : nil)
@@ -869,12 +927,13 @@ public struct DiscEncoder: Sendable {
             // Whole seconds, as the report's JSON keeps dates, so the record returned equals the one saved.
             RipReport.Encoding(
                 date: Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down)),
-                format: format, encoder: encoderName(lame: lame), aac: format == .aac ? aac : nil,
+                format: format, encoder: encoderName(lame: lame, dts: dtsDecoder), aac: format == .aac ? aac : nil,
                 mp3: format == .mp3 ? mp3 : nil, folder: $0.path, files: encodedFiles,
                 seconds: Int(Date().timeIntervalSince(encodingStarted)), replayGain: replayGainRecord)
         }.map {
             var encoding = $0
             encoding.hdcdDecoded = decodes ? true : nil
+            encoding.dtsDecoded = dtsDecoder != nil ? outcomes.surroundLayout : nil
             encoding.deEmphasizedTracks = deEmphasized.isEmpty ? nil : deEmphasized
             encoding.albumSuffix = albumSuffix
             encoding.dataTrackFiles = dataTrackFiles.isEmpty ? nil : dataTrackFiles
@@ -890,7 +949,13 @@ public struct DiscEncoder: Sendable {
                 try FileManager.default.copyItem(at: disc.reportFile, to: destination)
             }
             try encoding.save(inReportAt: destination)
+            // A rip from before Silverside looked for DTS: its album's report says what was found,
+            // so that an update of the library keeps the tags.
+            if disc.report != nil, disc.report?.dts == nil {
+                _ = try? RipReport.update(reportAt: destination) { Self.recordDTS(dtsTracks, in: &$0) }
+            }
             if var report = disc.report {
+                if report.dts == nil { Self.recordDTS(dtsTracks, in: &report) }
                 report.release = release
                 report.encoding = encoding
                 try Data(report.markdown.utf8).write(to: albumFolder.appending(path: "Rip Report\(discPart).md"))
@@ -918,13 +983,16 @@ public struct DiscEncoder: Sendable {
         return (written, encoding)
     }
 
-    /// The program that writes the audio, for the report.
-    private func encoderName(lame: URL?) -> String {
-        switch format {
-        case .mp3: lame.flatMap(MP3Encoder.version(of:)) ?? "LAME"
-        case .wav: "Silverside \(SilversideVersion.string)"
-        case .flac, .alac, .aac, .aiff: "Apple AudioToolbox"
-        }
+    /// The program that writes the audio, for the report; with the DTS decoder, if it ran.
+    private func encoderName(lame: URL?, dts: DTSDecoder?) -> String {
+        let writer =
+            switch format {
+            case .mp3: lame.flatMap(MP3Encoder.version(of:)) ?? "LAME"
+            case .wav: "Silverside \(SilversideVersion.string)"
+            case .flac, .alac, .aac, .aiff: "Apple AudioToolbox"
+            }
+        guard let dts else { return writer }
+        return (FFmpeg.version(of: dts.ffmpeg) ?? "FFmpeg") + " (DTS), " + writer
     }
 
     /// The CUE sheet: everything needed to burn the disc again from the files, with the tags' names.
@@ -962,10 +1030,21 @@ public struct DiscEncoder: Sendable {
     }
 
     private func write(
-        _ pcm: TrackPCM, metadata: TrackMetadata, extra: [(key: String, value: String)], cover: EmbeddedCover?,
+        _ audio: JobAudio, metadata: TrackMetadata, extra: [(key: String, value: String)], cover: EmbeddedCover?,
         to url: URL, lame: URL?
     ) throws {
         let comments = metadata.vorbisComments + extra
+        guard case .pcm(let pcm) = audio else {
+            guard case .surround(let surround) = audio else { return }
+            try AudioEncoder.encode(surround, format: format, to: url, aac: aac)
+            switch format {
+            case .flac: try FLACTags.write(comments, cover: cover, to: url)
+            case .alac, .aac: try MP4Tags.write(comments, cover: cover, to: url)
+            case .aiff: try ChunkTags.writeAIFF(comments, cover: cover, to: url)
+            case .wav, .mp3: throw DTSError.noSurround(format)
+            }
+            return
+        }
         switch format {
         case .flac:
             try AudioEncoder.encode(pcm, format: .flac, to: url)
@@ -989,6 +1068,22 @@ public struct DiscEncoder: Sendable {
     /// format's bits. HDCD is decoded first, at 24 bits, and de-emphasis rounds to the format's.
     /// The end of the track before, if the encoding has it, settles the decoder and the filter,
     /// as in a player that plays the disc straight through.
+    /// A job's audio: stereo, or the surround audio of a DTS decode.
+    private enum JobAudio {
+        case pcm(TrackPCM)
+        case surround(SurroundPCM)
+    }
+
+    /// A job's audio to encode: a DTS stream decoded, with the tracks around it for the frames
+    /// that cross its edges, else as `audio(of:in:decodes:)` gives it.
+    private func audio(of job: Job, in disc: RippedDisc, decodes: Bool, dts: DTSDecoder?) throws -> JobAudio {
+        guard job.isDTS, let dts else { return .pcm(try audio(of: job, in: disc, decodes: decodes)) }
+        let samples = try disc.audio(of: job.ripped)
+        let previous = try job.previous.map { try disc.audio(of: $0) }
+        let next = try job.next.map { try disc.audio(of: $0) }
+        return .surround(try dts.decode(samples, previous: previous?[...], next: next?[...]))
+    }
+
     private func audio(of job: Job, in disc: RippedDisc, decodes: Bool) throws -> TrackPCM {
         let samples = try disc.audio(of: job.ripped)
         let usesPrevious = decodes || (job.deEmphasizes && job.previousDeEmphasizes)
@@ -1011,6 +1106,27 @@ public struct DiscEncoder: Sendable {
             DeEmphasis.apply(source(samples[...], before: previous?[...]), bits: format.wideBits, previous: settling))
     }
 
+    /// The tracks that hold a DTS stream: from the report, or for a rip from before Silverside
+    /// looked, from the audio.
+    public func dtsTracks(of disc: RippedDisc) throws -> Set<Int> {
+        if let report = disc.report, report.dts != nil {
+            return Set(report.tracks.filter { $0.dts == true }.map(\.number))
+        }
+        let found = CTDB.parallelMap(over: disc.tracks, lanes: parallelTracks) {
+            track -> Result<Int?, any Error>? in
+            Result { DTSStream.isStream(try disc.audio(of: track)) ? track.number : nil }
+        }
+        return Set(try found.compactMap { try $0.get() })
+    }
+
+    /// Sets which tracks hold a DTS stream in a report from before Silverside looked.
+    static func recordDTS(_ tracks: Set<Int>, in report: inout RipReport) {
+        for index in report.tracks.indices {
+            report.tracks[index].dts = tracks.contains(report.tracks[index].number) ? true : nil
+        }
+        report.dts = DTSStatus(report.tracks)
+    }
+
     /// Whether the disc's HDCD codes ask for anything: from its report, or for a rip from
     /// before Silverside looked for them, from its audio.
     func hdcdStatus(of disc: RippedDisc) throws -> HDCDStatus {
@@ -1027,10 +1143,12 @@ public struct DiscEncoder: Sendable {
     /// into place. With `staging`, it leaves the checked partial file for the caller to move,
     /// and returns it. Runs on one of the encoding lanes.
     private func encode(
-        _ job: Job, of disc: RippedDisc, decodes: Bool, cover: EmbeddedCover?, lame: URL?, staging: Bool
+        _ job: Job, of disc: RippedDisc, decodes: Bool, dts: DTSDecoder?, cover: EmbeddedCover?, lame: URL?,
+        staging: Bool, outcomes: EncodeOutcomes
     ) throws -> URL? {
         try FileManager.default.createDirectory(at: job.folder, withIntermediateDirectories: true)
-        let samples = try audio(of: job, in: disc, decodes: decodes)
+        let samples = try audio(of: job, in: disc, decodes: decodes, dts: dts)
+        if case .surround(let surround) = samples { outcomes.surroundLayout = surround.layoutName }
         // Write to a partial file, and move it into place only when it is checked.
         let partial = job.folder.appending(path: ".\(UUID().uuidString).partial.\(format.fileExtension)")
         var keepsPartial = false
@@ -1048,13 +1166,19 @@ public struct DiscEncoder: Sendable {
     }
 
     /// Decodes the file: a lossless file must give the samples it was made from; a lossy one, about as many.
-    private func check(_ url: URL, against pcm: TrackPCM, final: URL) throws {
+    private func check(_ url: URL, against audio: JobAudio, final: URL) throws {
         let matches: Bool
-        switch pcm {
-        case .cd(let samples):
+        switch audio {
+        case .surround(let surround):
+            let decoded = try AudioEncoder.decodeSurround(url)
+            matches =
+                decoded.channels == surround.channels
+                && (format.isLossless
+                    ? decoded.values == surround.values : abs(decoded.frameCount - surround.frameCount) < 4 * 1152)
+        case .pcm(.cd(let samples)):
             let decoded = try AudioEncoder.decode(url)
             matches = format.isLossless ? decoded == samples : abs(decoded.count - samples.count) < 4 * 1152
-        case .wide(let values):
+        case .pcm(.wide(let values)):
             let decoded = try AudioEncoder.decodeWide(url)
             matches = format.isLossless ? decoded == values : abs(decoded.count - values.count) < 8 * 1152
         }
@@ -1076,6 +1200,13 @@ private final class EncodeOutcomes: @unchecked Sendable {
     private var nextLine = 0
 
     private var partials = [Int: URL]()
+    private var layout: String?
+
+    /// The layout of the surround audio that a DTS decode wrote, such as "5.1".
+    var surroundLayout: String? {
+        get { lock.withLock { layout } }
+        set { lock.withLock { layout = newValue } }
+    }
 
     init(log: @escaping @Sendable (String) -> Void) {
         self.log = log

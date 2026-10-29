@@ -113,6 +113,29 @@ In a set, a disc whose codes ask for nothing is decoded too when another disc of
 
 Silverside decodes from the rip's WAV files. If they are gone, it uses the album's lossless files, and first checks each one against the CRC-32 of the verified rip.
 
+## DTS-CDs
+
+A DTS-CD holds surround sound, usually 5.1, coded as DTS in place of the usual audio, for a player or receiver with a DTS decoder. Other players play it as loud static, and so does the preview without ffmpeg. The disc rips like any other, bit for bit, and AccurateRip and CTDB check it as usual.
+
+Silverside finds the DTS stream in each track while it rips, and the header shows a DTS chip. Before it encodes such a disc, it asks what to write:
+
+- **The album as the disc has it, and a decoded copy beside it** (the advice): the album keeps the stream bit for bit, for a DTS receiver, and a copy with its own folder and title, such as "Forever Yours (DTS 5.1)", holds the decode.
+- **The decoded album only.**
+- **The DTS stream only.**
+
+Decoding needs [ffmpeg](https://ffmpeg.org), a free program that Silverside runs separately, as it runs LAME for MP3. Install it with Homebrew (brew.sh), in Terminal: `brew install ffmpeg`. Without it, the album keeps the stream, and Decode DTS… can make the copy later. With it, the preview plays a DTS track decoded, mixed down to stereo.
+
+The decoded files:
+
+- **have every channel,** named in the file, so players route them: FLAC, Apple Lossless, AAC, or AIFF (FLAC in place of WAV, and AAC in place of MP3, which cannot hold them).
+- **are 20-bit** in FLAC and Apple Lossless, the resolution of a DTS-CD's source audio, which the stream names; 24-bit if it names 24.
+- **are gapless:** the stream runs on across the tracks' starts, so each track is decoded with the end of the track before it and the start of the track after, and the tracks one after another are the decode of the whole disc.
+- **are tagged** `DTS=decoded`, with ReplayGain measured as EBU R 128 measures surround sound. Every file of a DTS-CD is tagged `MEDIA=DTS CD`. The stream gets no ReplayGain, as it is not audio a player plays.
+
+AAC and MP3 would turn the stream itself into noise, so with those formats Silverside writes the decode alone, or keeps the rip and encodes nothing.
+
+**Decode DTS…** in an earlier rip's toolbar decodes it later: a copy beside the album, in any format that holds surround sound, or in place of the album's files.
+
 ## Pre-emphasis and other flags
 
 **Pre-emphasis** is a type of noise reduction from the first years of the Compact Disc. The mastering boosts the treble, up to about 10 dB in the highest frequencies, and a compliant CD player is supposed to cut the treble by the same amount when it plays (de-emphasis). The cut also lowers the hiss that the conversion adds, which mattered because the earliest converters were noisy; some players' converters were only 14-bit. Better recorders, converters and mastering soon made pre-emphasis unnecessary, so it is rare, and almost no disc made after the mid-1980s uses it.

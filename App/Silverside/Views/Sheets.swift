@@ -513,6 +513,168 @@ struct DataTrackQuestionSheet: View {
     }
 }
 
+/// After a rip of a DTS-CD, before encoding: the album as the disc has it with a decoded copy
+/// beside it (the advice), the decode alone, or the stream alone. Without ffmpeg, it says how
+/// to get it, and the stream is kept.
+struct DTSQuestionSheet: View {
+    @Environment(AppModel.self) private var model
+    var rip: RipRun
+    var question: RipRun.DTSQuestion
+    @State private var choice = DTSChoice.decode
+    @State private var remembers = false
+
+    var body: some View {
+        let format = question.format
+        let decoded = DiscEncoder.surroundFormat(for: format)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("“\(question.album)” is a DTS-CD").font(.title3.bold())
+            Text(
+                "Its tracks hold surround sound coded as DTS, for a player or receiver with a DTS decoder. Other"
+                    + " players play it as loud static."
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            if question.canDecode {
+                Picker("Encode", selection: $choice) {
+                    if format.isLossless {
+                        Text("The album as the disc has it, and a decoded copy beside it").tag(DTSChoice.decode)
+                    }
+                    Text("The decoded album only").tag(DTSChoice.decodeOnly)
+                    Text(format.isLossless ? "The DTS stream only" : "Nothing: keep the rip").tag(DTSChoice.keep)
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                Text(
+                    "ffmpeg decodes the stream into \(decoded.name) files with every channel, tagged DTS=decoded."
+                        + (format.isLossless
+                            ? " The album as the disc has it is the stream bit for bit, for a DTS receiver."
+                            : " \(format.name) would turn the stream itself into noise.")
+                )
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                Toggle("Use this answer for every DTS-CD (Settings › Encoding)", isOn: $remembers)
+            } else {
+                Text(
+                    (format.isLossless
+                        ? "The files keep the stream as the disc has it, bit for bit."
+                        : "\(format.name) would turn the stream into noise, so the rip is kept, not encoded.")
+                        + " To decode it into \(decoded.name) files with every channel, install ffmpeg (in Terminal:"
+                        + " brew install ffmpeg), then choose Decode DTS… for this rip."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                if question.canDecode {
+                    Button("Encode") { answer(choice) }.keyboardShortcut(.defaultAction)
+                } else {
+                    Button("OK") { rip.answerDTS(.keep) }.keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 500)
+        .onAppear { choice = format.isLossless ? .decode : .decodeOnly }
+    }
+
+    private func answer(_ choice: DTSChoice) {
+        if remembers { model.settings.dts = choice }
+        rip.answerDTS(choice)
+    }
+}
+
+/// Decode DTS… for an earlier rip, with ffmpeg: a decoded album beside the album, or in place
+/// of its files.
+struct DTSDecodeSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    var rip: RecentRip
+    @State private var beside = true
+    @State private var format = AudioFormat.flac
+    /// What the copy's album title ends with, after a space.
+    @State private var suffix = "(DTS 5.1)"
+    @State private var ffmpeg = FFmpeg.program()
+
+    private var album: String { rip.report.release?.title ?? rip.title }
+    private var trimmedSuffix: String { suffix.trimmingCharacters(in: .whitespaces) }
+    private var encoding: RipReport.Encoding? { rip.report.encoding }
+    /// The album's files can be replaced when it is encoded in a format that holds surround sound.
+    private var canReplace: Bool { encoding.map { AudioEncoder.holdsSurround($0.format) } ?? false }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Decode DTS").font(.title3.bold())
+            if let text = rip.report.dtsText { Text(text).fixedSize(horizontal: false, vertical: true) }
+            if ffmpeg == nil {
+                Text(
+                    "Decoding needs ffmpeg, which is not installed. In Terminal: brew install ffmpeg. This window"
+                        + " finds it as soon as it is there."
+                )
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            Picker("Write", selection: $beside) {
+                Text("A copy beside the album, as “\(album) \(trimmedSuffix)”").tag(true)
+                Text("In place of the album's files").tag(false).disabled(!canReplace)
+            }
+            .pickerStyle(.radioGroup)
+            if beside {
+                HStack(spacing: 6) {
+                    Text("Title").frame(width: 50, alignment: .leading)
+                    Text(album).lineLimit(1).foregroundStyle(.secondary)
+                    TextField("(DTS 5.1)", text: $suffix).frame(width: 140)
+                }
+                .help(
+                    "The copy's album title is the album's with this added, and so is its folder's name. It must not be empty: the copy needs a name of its own."
+                )
+                Picker("Format", selection: $format) {
+                    ForEach(AudioFormat.allCases.filter(AudioEncoder.holdsSurround), id: \.self) {
+                        Text($0.name).tag($0)
+                    }
+                }
+                .fixedSize()
+                Text(
+                    "The copy has its own folder and album title, tagged DTS=decoded, so players list it next to the album as it is. "
+                        + (rip.hasAudio
+                            ? "It is made from the rip's WAV files."
+                            : "It is made from the album's files, each checked first against the rip.")
+                )
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            } else if let encoding {
+                Text(
+                    "The album's \(encoding.format.name) files become the decode, tagged DTS=decoded, with ReplayGain. The DTS stream is gone from the library"
+                        + (rip.hasAudio
+                            ? ", but stays in the rip's WAV files." : "; only a new rip of the disc gets it back.")
+                )
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                Button("Decode") {
+                    dismiss()
+                    model.startDTSDecode(
+                        rip, beside: beside, format: beside ? format : encoding?.format ?? format,
+                        suffix: " " + trimmedSuffix)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(ffmpeg == nil || (beside && trimmedSuffix.isEmpty))
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+        .onAppear { format = DiscEncoder.surroundFormat(for: encoding?.format ?? model.settings.format) }
+        .task {
+            // Look for ffmpeg every 2 seconds, so an install in Terminal turns Decode on.
+            while ffmpeg == nil, !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                ffmpeg = FFmpeg.program()
+            }
+        }
+    }
+}
+
 /// Decode HDCD… for an earlier rip: a decoded album beside the album, or in place of its files.
 struct HDCDDecodeSheet: View {
     @Environment(AppModel.self) private var model

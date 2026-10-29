@@ -65,7 +65,9 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     /// again: its WAV files, or the album's lossless files, not an HDCD decode.
     var canCheckAgain: Bool {
         guard report.mayCheckAgain else { return false }
-        return hasAudio || (report.encoding?.format.isLossless == true && report.encoding?.hdcdDecoded != true)
+        return hasAudio
+            || (report.encoding?.format.isLossless == true && report.encoding?.hdcdDecoded != true
+                && report.encoding?.dtsDecoded == nil)
     }
 
     /// The tracks that AccurateRip or CTDB proves.

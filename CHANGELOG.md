@@ -3,6 +3,24 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.9.1 (not released yet)
+
+### Fixed
+
+- Stop during the CTDB check could still lose the rip when it came while CTDB's
+  repair data was downloading. Now the rip is kept then too.
+- **Save Data Track…** replaced a data track image, and the folder of its
+  files, that the rip had not put in the album folder, such as another
+  edition's or files of your own. Now it asks first, and `Data track` files
+  that the rip put there are replaced as before.
+- An Enhanced CD whose Mac partition map uses 2048-byte blocks had the end of
+  its Mac partition left out of the data track's image, as zeros. Now the map's
+  block size is used, and when the map's end is not certain, the whole track is
+  read.
+- A change to the report of a rip from Silverside's archive format (the report
+  inside a larger file) went beside that report instead of into it, so Save
+  Data Track could leave the album folder without the data track.
+
 ## 0.9 (2026-10-28)
 
 ### Added

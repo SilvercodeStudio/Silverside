@@ -384,11 +384,48 @@ public struct DiscEncoder: Sendable {
         return names
     }
 
+    /// The files in the album folder that Save Data Track of track `number` would replace,
+    /// though the rip's encoding did not put them there: another edition's image, or a file of
+    /// the user's in the folder of an image's files. Save Data Track replaces them only when
+    /// `overwrites` is set.
+    public func dataTrackConflicts(_ number: Int, reportAt file: URL) throws -> [URL] {
+        let report = try RipReport.read(from: file)
+        let album: URL
+        if file.lastPathComponent == "disc.json" {
+            guard let folder = report.encoding?.folder, FileManager.default.fileExists(atPath: folder) else {
+                return []
+            }
+            album = URL(filePath: folder, directoryHint: .isDirectory)
+        } else {
+            album = file.deletingLastPathComponent()
+        }
+        let numbers = Set((report.dataTracks ?? []).map(\.number) + [number]).sorted()
+        let discPart = try Self.discPart(of: report)
+        let owned = Set(report.encoding?.dataTrackFiles ?? [])
+        var conflicts = [URL]()
+        for track in numbers {
+            let base = "Data track" + (numbers.count > 1 ? " \(track)" : "") + discPart
+            guard !owned.contains(base + ".iso") else { continue }
+            let image = album.appending(path: base + ".iso")
+            conflicts += [image, Self.filesFolder(of: image)].filter { FileManager.default.fileExists(atPath: $0.path) }
+        }
+        return conflicts
+    }
+
+    /// " (Disc 2)" for a disc of a release with several, as the album folder's names have it.
+    static func discPart(of report: RipReport) throws -> String {
+        let toc = try TOC(ctdbTOCString: report.toc)
+        guard (report.release?.media.count ?? 1) > 1, let medium = report.release?.medium(for: toc) else { return "" }
+        return " (Disc \(medium.position))"
+    }
+
     /// Save Data Track: reads a data track that a rip did not save (`RipReport.dataTrackFailures`,
     /// or one skipped) from the disc in `drive`, which must be the rip's disc. A rip's folder
     /// gets it as `Track NN.iso`; when the rip was encoded, the album folder gets it too, with
     /// the files on it, as an encoding puts it there. A report kept in the library gets it in
-    /// its album folder. Each report records it.
+    /// its album folder. Each report records it. Throws `EncodingError.exists`, before it reads
+    /// anything, when that would replace files the rip does not own (`dataTrackConflicts`)
+    /// and `overwrites` is not set.
     public func saveDataTrack(
         _ number: Int, reportAt file: URL, drive: any CDDrive, stop: StopToken? = nil,
         progress: ((Double) -> Void)? = nil
@@ -399,10 +436,12 @@ public struct DiscEncoder: Sendable {
         guard let track = toc.tracks.first(where: { $0.number == number && $0.kind == .data }) else {
             throw DataTrackError.notData(track: number)
         }
+        if !overwrites, let conflict = try dataTrackConflicts(number, reportAt: file).first {
+            throw EncodingError.exists(conflict)
+        }
         let folder = file.deletingLastPathComponent()
         let isRipFolder = file.lastPathComponent == "disc.json"
-        let medium = report.release?.medium(for: toc)
-        let discPart = (report.release?.media.count ?? 1) > 1 ? medium.map { " (Disc \($0.position))" } ?? "" : ""
+        let discPart = try Self.discPart(of: report)
         func record(_ saved: RipReport.DataTrack, in report: inout RipReport) {
             report.dataTracks = ((report.dataTracks ?? []).filter { $0.number != number } + [saved])
                 .sorted { $0.number < $1.number }

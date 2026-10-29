@@ -230,6 +230,30 @@ struct EncodingTests {
         #expect(object?["archive"] as? String == "kept" && object?["encoding"] == nil)
     }
 
+    /// A change to a manifest's report goes under "ripReport" too, where `RippedDisc` reads
+    /// it, and the root gets no second copy that `RipReport.read` would prefer (review of 0.9).
+    @Test func updatesTheReportInsideAManifest() throws {
+        let (folder, _) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let file = folder.appending(path: "disc.json")
+        let original = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        let manifest: [String: Any] = [
+            "toc": original["toc"]!, "release": original["release"]!, "ripReport": original, "archive": "kept",
+        ]
+        try JSONSerialization.data(withJSONObject: manifest).write(to: file)
+        try RipReport.update(reportAt: file) {
+            $0.dataTracks = [
+                .init(number: 3, startLBA: 13100, file: "Track 03.iso", sectors: 300, mode: .mode1, crc32: "12345678")
+            ]
+        }
+        #expect(try RipReport.read(from: file).dataTracks?.count == 1)
+        #expect(try RippedDisc(folder: folder).report?.dataTracks?.count == 1)
+        let updated = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        let nested = try #require(updated["ripReport"] as? [String: Any])
+        #expect((nested["dataTracks"] as? [[String: Any]])?.count == 1)
+        #expect(updated["dataTracks"] == nil && updated["archive"] as? String == "kept")
+    }
+
     @Test func putsTheReportInTheAlbumFolderAndDeletesOnlyTheRipsFiles() throws {
         let (folder, library) = try makeRip()
         defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }

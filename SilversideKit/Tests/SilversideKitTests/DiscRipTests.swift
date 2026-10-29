@@ -325,6 +325,44 @@ struct DiscRipTests {
         #expect(report.tracks.map(\.number) == [1, 2])
     }
 
+    /// A stop while the CTDB repair data downloads comes as URLSession's "cancelled", not as
+    /// `CancellationError`; the rip is kept all the same (review of 0.9).
+    @Test func keepsTheRipWhenStoppedDuringTheRepairDataDownload() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900])
+        let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: 6)
+        drive.corruptSectors = [1000]
+        var settings = Settings()
+        settings.rips = root.path
+        var options = DiscRipOptions(settings: settings)
+        options.readOffset = 6
+        var rip = DiscRip(
+            drive: drive, identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"),
+            settings: settings, options: options,
+            profiles: try DriveProfileStore(url: root.appending(path: "DriveProfiles.json")))
+        let transport = HeldRepairData(base: Self.web(toc: toc, samples: samples))
+        let hosts = ["musicbrainz.org", "www.accuraterip.com", "db.cuetools.net", "p.cuetools.net"]
+        rip.webClient = WebClient(
+            directory: root.appending(path: "cache"), transport: transport,
+            policies: Dictionary(
+                uniqueKeysWithValues: hosts.map { ($0, WebClient.HostPolicy(interval: .zero, lifetime: .seconds(60))) })
+        )
+        let task = Task { [rip] in try await rip.run() }
+        defer { task.cancel() }
+        let deadline = ContinuousClock.now + .seconds(60)
+        while await !transport.downloading {
+            try #require(ContinuousClock.now < deadline, "The repair data's request never started")
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        let paths = try FileManager.default.subpathsOfDirectory(atPath: root.path)
+        #expect(paths.filter { $0.hasSuffix(".wav") }.count == 2)
+        #expect(paths.filter { $0.hasSuffix("/disc.json") }.count == 1)
+    }
+
     /// A sector that reads wrong every time: the secure rip cannot see it, CTDB repairs it,
     /// and the track is written again and matches AccurateRip.
     @Test func repairsWithCTDBAndWritesTheTrackAgain() async throws {
@@ -522,5 +560,33 @@ struct DiscRipTests {
         defer { try? FileManager.default.removeItem(at: root) }
         #expect(result.report.tracks.allSatisfy { $0.testCRC32 == nil && $0.crc32 != nil })
         #expect(!events.contains { if case .reading(.testing) = $0 { true } else { false } })
+    }
+}
+
+/// A URLSession request that never answers, so that a test can cancel it while it waits.
+private final class HeldRequest: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {}
+    override func stopLoading() {}
+}
+
+/// `FakeWeb`, except that the CTDB repair data's download goes to a real URLSession and waits.
+private actor HeldRepairData: HTTPTransport {
+    let base: FakeWeb
+    let session: URLSession
+    private(set) var downloading = false
+
+    init(base: FakeWeb) {
+        self.base = base
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [HeldRequest.self]
+        session = URLSession(configuration: configuration)
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        guard request.url?.host == "p.cuetools.net" else { return try await base.data(for: request) }
+        downloading = true
+        return try await session.data(for: request)
     }
 }

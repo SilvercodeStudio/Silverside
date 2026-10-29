@@ -484,16 +484,32 @@ final class AppModel {
     /// (`DiscEncoder.saveDataTrack`).
     func saveDataTrack(_ number: Int, of rip: RecentRip) {
         guard savingDataTrack[rip.file] == nil, let slot = freeDrive(with: rip) else { return }
+        var encoder = DiscEncoder(settings: settings)
+        // Files in the album folder that the rip did not put there are replaced only when asked.
+        let conflicts = (try? encoder.dataTrackConflicts(number, reportAt: rip.file)) ?? []
+        if !conflicts.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = "Replace the data track files in the album folder?"
+            alert.informativeText =
+                "The album folder has "
+                + conflicts.map { "“\($0.lastPathComponent)”" }.joined(separator: " and ")
+                + ", which this rip did not put there: perhaps another edition's, or files of your own. "
+                + "Saving the data track replaces them."
+            alert.addButton(withTitle: "Replace")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            encoder.overwrites = true
+        }
         player.stop(drive: slot.id)
         slot.isBusy = true
         savingDataTrack[rip.file] = 0
         let makeDrive = slot.makeDrive
-        let encoder = DiscEncoder(settings: settings)
+        let saver = encoder
         let file = rip.file
         Task { @MainActor in
             do {
                 _ = try await Task.detached {
-                    try encoder.saveDataTrack(number, reportAt: file, drive: try makeDrive()) { fraction in
+                    try saver.saveDataTrack(number, reportAt: file, drive: try makeDrive()) { fraction in
                         DispatchQueue.main.async { MainActor.assumeIsolated { self.savingDataTrack[file] = fraction } }
                     }
                 }.value

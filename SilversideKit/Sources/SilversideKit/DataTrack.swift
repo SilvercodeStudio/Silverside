@@ -173,7 +173,8 @@ public enum DataTrackReader {
     /// The sectors that a data track's file systems use, from its first sectors' bytes: the
     /// ISO 9660 volume's size, and the end of each partition of an Apple partition map (a
     /// Mac's HFS beside the ISO). A session-2 ISO volume counts from the disc's start, as
-    /// `startLBA` does. Nil when neither is there, or either says more than the track holds.
+    /// `startLBA` does. Nil, so that the whole track is read, when neither is there, when
+    /// either says more than the track holds, or when the partition map's end is not certain.
     static func fileSystemEnd(of bytes: [UInt8], startLBA: Int, sectors: Int) -> Int? {
         func uint32(_ offset: Int, bigEndian: Bool) -> Int {
             let word = bytes[offset..<(offset + 4)]
@@ -185,17 +186,47 @@ public enum DataTrackReader {
             let size = uint32(pvd + 80, bigEndian: false)
             ends.append(size > startLBA ? size - startLBA : size)
         }
-        if bytes.count >= 1024, bytes[512] == 0x50, bytes[513] == 0x4D {
-            let entries = uint32(512 + 4, bigEndian: true)
-            for entry in 1...max(1, min(entries, bytes.count / 512 - 1)) {
-                let base = 512 * entry
-                guard bytes[base] == 0x50, bytes[base + 1] == 0x4D else { continue }
-                let blocks = uint32(base + 8, bigEndian: true) + uint32(base + 12, bigEndian: true)
-                ends.append((blocks + 3) / 4)
-            }
+        switch appleMapEnd(of: bytes) {
+        case .none: break
+        case .end(let end): ends.append(end)
+        case .uncertain: return nil
         }
         guard let end = ends.max(), end > 0, end <= sectors else { return nil }
         return end
+    }
+
+    enum AppleMapEnd: Equatable {
+        case none
+        /// The sector after the last partition.
+        case end(Int)
+        /// A map whose partitions cannot all be read.
+        case uncertain
+    }
+
+    /// The end of an Apple partition map's partitions, in 2048-byte sectors. The map's blocks
+    /// are the size that the driver descriptor ("ER" in block 0) gives, 512 or 2048 bytes on
+    /// a CD, and 512 without a descriptor, as Apple's partition scheme reads them; the entries
+    /// ("PM") fill blocks 1 on, and count their partitions in those blocks.
+    static func appleMapEnd(of bytes: [UInt8]) -> AppleMapEnd {
+        func uint32(_ offset: Int) -> Int { bytes[offset..<(offset + 4)].reduce(0) { $0 << 8 | Int($1) } }
+        func isEntry(_ offset: Int) -> Bool {
+            offset + 16 <= bytes.count && bytes[offset] == 0x50 && bytes[offset + 1] == 0x4D
+        }
+        let hasDescriptor = bytes.count >= 4 && bytes[0] == 0x45 && bytes[1] == 0x52
+        let size = hasDescriptor ? Int(bytes[2]) << 8 | Int(bytes[3]) : 512
+        guard isEntry(size) || hasDescriptor else { return .none }
+        // A descriptor whose map is not where its block size puts it: the blocks are not known.
+        guard [512, 1024, 2048, 4096].contains(size), isEntry(size) else { return .uncertain }
+        let entries = uint32(size + 4)
+        // Every entry must be in the bytes read, or a partition past them could be missed.
+        guard entries >= 1, (entries + 1) * size <= bytes.count else { return .uncertain }
+        var end = 0
+        for entry in 1...entries {
+            guard isEntry(size * entry) else { return .uncertain }
+            let blocks = uint32(size * entry + 8) + uint32(size * entry + 12)
+            end = max(end, (blocks * size + 2047) / 2048)
+        }
+        return .end(end)
     }
 }
 

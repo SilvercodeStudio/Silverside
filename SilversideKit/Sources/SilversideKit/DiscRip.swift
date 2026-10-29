@@ -510,7 +510,8 @@ public struct DiscRip {
             let repair: DiscRepairer.Result?
             do {
                 repair = try await repairer.repair(trackAudio, repairing: !errorFree && options.repairs)
-            } catch is CancellationError {
+            } catch  where error is CancellationError || stop.isStopped || (error as? URLError)?.code == .cancelled {
+                // A stop in the repair data's download comes as URLSession's own error.
                 repair = nil
                 stoppedInCTDB = true
                 events(.repairLog("Stopped. The rip is kept, not checked by CTDB."))

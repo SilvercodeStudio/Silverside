@@ -117,6 +117,54 @@ struct EnhancedCDTests {
         )
     }
 
+    /// An Apple partition map in 2048-byte blocks, as a driver descriptor can say: its HFS
+    /// partition ends after the ISO volume, and the tail after it is all that is not read
+    /// (review of 0.9).
+    @Test func readsAnHFSPartitionIn2048ByteBlocks() throws {
+        let (toc, samples) = try Self.disc()
+        let drive = SimulatedDrive(toc: toc, samples: samples)
+        let track = toc.tracks[2]
+        var header = [UInt8](repeating: 0, count: 26 * 2048)
+        func put(_ value: UInt32, at offset: Int, bigEndian: Bool = true) {
+            let shifts = bigEndian ? [24, 16, 8, 0] : [0, 8, 16, 24]
+            header.replaceSubrange(offset..<(offset + 4), with: shifts.map { UInt8(truncatingIfNeeded: value >> $0) })
+        }
+        // The driver descriptor: "ER", 2048-byte blocks.
+        header.replaceSubrange(0..<4, with: [0x45, 0x52, 0x08, 0x00])
+        put(300, at: 4)
+        for (entry, start, count) in [(1, 1, 2), (2, 40, 200)] {
+            header.replaceSubrange((entry * 2048)..<(entry * 2048 + 2), with: [0x50, 0x4D])
+            put(2, at: entry * 2048 + 4)
+            put(UInt32(start), at: entry * 2048 + 8)
+            put(UInt32(count), at: entry * 2048 + 12)
+        }
+        // The ISO volume ends first, at sector 100 of the track.
+        let pvd = 16 * 2048
+        header[pvd] = 1
+        header.replaceSubrange((pvd + 1)..<(pvd + 6), with: "CD001".utf8)
+        put(UInt32(track.startLBA + 100), at: pvd + 80, bigEndian: false)
+        for sector in 0..<26 {
+            drive.dataSectors[track.startLBA + sector] = Array(header[(sector * 2048)..<((sector + 1) * 2048)])
+        }
+        let macData = [UInt8](repeating: 0xA5, count: 2048)
+        drive.dataSectors[track.startLBA + 200] = macData
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = root.appending(path: "hybrid.iso")
+        let saved = try DataTrackReader.read(track, in: toc, drive: drive, to: target)
+        #expect(saved.skippedSectors == 60)
+        #expect(try Data(contentsOf: target).subdata(in: (200 * 2048)..<(201 * 2048)) == Data(macData))
+
+        // Where the map's end is not certain, the whole track is read.
+        var other = header
+        other[2] = 0x02  // a descriptor that says 512-byte blocks, with no map there
+        #expect(DataTrackReader.fileSystemEnd(of: other, startLBA: track.startLBA, sectors: 300) == nil)
+        other = header
+        other.replaceSubrange((2048 + 4)..<(2048 + 8), with: [0, 0, 0, 40])  // 40 entries, past the bytes read
+        #expect(DataTrackReader.fileSystemEnd(of: other, startLBA: track.startLBA, sectors: 300) == nil)
+    }
+
     /// A drive that cannot read the data session fails every sector of it: the reader stops
     /// after a run of failures, not after retrying each sector of the track.
     @Test func stopsWhenTheDriveCannotReadTheDataTrack() throws {
@@ -186,6 +234,54 @@ struct EnhancedCDTests {
     /// *A Clockwork Orange* in the ASUS: the data track fails, but the audio's rip is whole and
     /// its report says why the data track was not saved. Save Data Track reads it later, into
     /// the rip's folder and, once the rip is encoded, the album folder, and each report gets it.
+    /// Save Data Track does not replace an image or files in the album folder that the rip
+    /// did not put there, such as another edition's, unless it is told to (review of 0.9).
+    @Test func savesADataTrackOverOtherFilesOnlyWhenAsked() throws {
+        let (toc, samples) = try Self.disc()
+        let drive = SimulatedDrive(toc: toc, samples: samples)
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        let rip = root.appending(path: "rip")
+        let album = root.appending(path: "album")
+        let extras = album.appending(path: "Data track")
+        try FileManager.default.createDirectory(at: rip, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: extras, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var report = RipReport(
+            drive: .init(vendor: "SIM", product: "DRIVE", revision: "1", readOffset: 0, offsetSource: "test"),
+            secure: true, toc: toc, tracks: [], ctdb: .init(status: .notVerified))
+        report.release = .manual(toc: toc)
+        report.encoding = .init(format: .flac, encoder: "test", folder: album.path, files: [])
+        let file = rip.appending(path: "disc.json")
+        try report.write(to: file)
+        let albumReport = album.appending(path: "Rip Report.json")
+        try report.write(to: albumReport)
+        let image = album.appending(path: "Data track.iso")
+        let userFile = extras.appending(path: "user.txt")
+        let original = Data("Another edition's image".utf8)
+        try original.write(to: image)
+        try Data("A file of the user's".utf8).write(to: userFile)
+
+        var encoder = DiscEncoder(format: .flac)
+        #expect(
+            try encoder.dataTrackConflicts(3, reportAt: file).map(\.lastPathComponent) == [
+                "Data track.iso", "Data track",
+            ])
+        for report in [file, albumReport] {
+            #expect(throws: EncodingError.exists(image)) {
+                try encoder.saveDataTrack(3, reportAt: report, drive: drive)
+            }
+        }
+        #expect(try Data(contentsOf: image) == original)
+        #expect(FileManager.default.fileExists(atPath: userFile.path))
+        #expect(!FileManager.default.fileExists(atPath: rip.appending(path: "Track 03.iso").path))
+
+        encoder.overwrites = true
+        let saved = try encoder.saveDataTrack(3, reportAt: file, drive: drive)
+        #expect(try Data(contentsOf: image) == Data(contentsOf: rip.appending(path: saved.file)))
+        // Once the rip's report lists the image, it is the rip's own.
+        #expect(try DiscEncoder(format: .flac).dataTrackConflicts(3, reportAt: file).isEmpty)
+    }
+
     @Test func keepsTheAudioWhenTheDataTrackFailsAndSavesItLater() async throws {
         let (toc, samples) = try Self.disc()
         let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")

@@ -504,12 +504,11 @@ public struct RipReport: Codable, Equatable, Sendable {
         try encoder.encode(self).write(to: url, options: .atomic)
     }
 
-    /// Reads a report: a rip's disc.json, or an archive manifest that holds one under
-    /// "ripReport" (the manifest's release fills in for a report without one). A manifest
-    /// from before rips had reports has none to read, and throws.
     /// Changes the report in `url`, a rip's disc.json or an album folder's report, and keeps
     /// the file's keys that a report does not have, such as "edits"; a key that the change
-    /// empties goes. Returns the report as changed.
+    /// empties goes. In an archive manifest, the report under "ripReport" changes, as
+    /// `RippedDisc` and the encoding's record read it there. Only the keys that the change
+    /// changes are written. Returns the report as changed.
     @discardableResult
     public static func update(reportAt url: URL, _ change: (inout RipReport) throws -> Void) throws -> RipReport {
         var report = try read(from: url)
@@ -522,14 +521,21 @@ public struct RipReport: Codable, Equatable, Sendable {
         try change(&report)
         let after = try keys(report)
         var object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any] ?? [:]
-        for key in before.keys where after[key] == nil { object[key] = nil }
-        object.merge(after) { $1 }
+        let nested = object["ripReport"] as? [String: Any]
+        var target = nested ?? object
+        for key in before.keys where after[key] == nil { target[key] = nil }
+        // A manifest's release fills in for its report's, so an unchanged one stays where it is.
+        for (key, value) in after where (before[key] as? NSObject)?.isEqual(value) != true { target[key] = value }
+        if nested != nil { object["ripReport"] = target } else { object = target }
         let data = try JSONSerialization.data(
             withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         try data.write(to: url, options: .atomic)
         return report
     }
 
+    /// Reads a report: a rip's disc.json, or an archive manifest that holds one under
+    /// "ripReport" (the manifest's release fills in for a report without one). A manifest
+    /// from before rips had reports has none to read, and throws.
     public static func read(from url: URL) throws -> RipReport {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

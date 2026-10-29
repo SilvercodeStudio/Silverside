@@ -697,9 +697,12 @@ public struct DiscRip {
             // The WAV files go only if every track is verified and encoded; the report is in the album folder.
             if !options.keepsRip {
                 if result.encodedFiles.count == disc.tracks.count && disc.isFinished {
-                    try disc.deleteRipFiles(albumFolder: record.map { URL(filePath: $0.folder) })
-                    result.deletedRip = true
-                    events(.ripDeleted)
+                    if try disc.deleteRipFiles(albumFolder: record.map { URL(filePath: $0.folder) }) {
+                        result.deletedRip = true
+                        events(.ripDeleted)
+                    } else {
+                        events(.ripKept(folder))
+                    }
                 } else {
                     events(.ripKept(folder))
                 }

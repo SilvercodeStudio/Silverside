@@ -198,6 +198,12 @@ struct DiscRepairerTests {
         let proved = repairer.provedTracks(
             changes, of: damaged, entry: entry, shift: shift, layout: layout, trackStarts: starts)
         #expect(proved.tracks == [2] && proved.changed == [middle])
+        // A frame corrected in both channels counts once.
+        damaged[middle] ^= 0x0001_0000
+        let both = [CTDB.Change(sample: middle, mask: 1), CTDB.Change(sample: middle, mask: 0x0001_0000)]
+        let twice = repairer.provedTracks(
+            both, of: damaged, entry: entry, shift: shift, layout: layout, trackStarts: starts)
+        #expect(twice.changed == [middle] && twice.audio[middle] == samples[middle])
         #expect(proved.audio[middle] == samples[middle] && proved.audio[edge] == damaged[edge])
     }
 

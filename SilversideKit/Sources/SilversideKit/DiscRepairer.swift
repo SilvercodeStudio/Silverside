@@ -433,7 +433,8 @@ public struct DiscRepairer {
         partial = audio
         for change in kept { partial[change.sample] ^= change.mask }
         let tracks = Set(kept.map { track(of: $0.sample) }).sorted().map { toc.audioTracks[$0].number }
-        return (tracks, kept.map(\.sample).sorted(), partial)
+        // A frame corrected in both channels is two changes, but one sample.
+        return (tracks, Set(kept.map(\.sample)).sorted(), partial)
     }
 
     /// True if AccurateRip matches the track at `index` as it is: at shift 0, or at another

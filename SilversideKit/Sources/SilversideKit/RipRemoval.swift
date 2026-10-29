@@ -16,7 +16,10 @@ public enum RipRemoval {
         if let encoding = (try? RipReport.read(from: reportFile))?.encoding {
             let others = otherReportsFiles(in: folder, besides: reportFile)
             files += ownFiles(of: encoding, in: folder).filter { !others.contains($0.standardizedFileURL.path) }
-            files += CueSheet.sheets(in: folder, namingOnly: Set(encoding.files.map(\.file)))
+            let shared = Set(others.map { URL(filePath: $0).lastPathComponent })
+            files += CueSheet.sheets(in: folder, namingOnly: Set(encoding.files.map(\.file))).filter {
+                !CueSheet.sheet($0, namesOnly: shared)
+            }
         }
         // The reports last: if a move fails, the report is still there to try again with.
         files += [reportFile, reportFile.deletingPathExtension().appendingPathExtension("md")]

@@ -144,12 +144,23 @@ extension CueSheet {
         let quotedNames = Set(names.map(quoted))
         let files = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
         return files.filter { $0.hasSuffix(".cue") }.map { folder.appending(path: $0) }.filter { sheet in
-            guard let text = try? String(contentsOf: sheet, encoding: .utf8) else { return false }
-            let named = text.split(whereSeparator: \.isNewline).compactMap { line -> String? in
-                guard line.hasPrefix("FILE "), let end = line.lastIndex(of: "\"") else { return nil }
-                return String(line[line.index(line.startIndex, offsetBy: 5)...end])
-            }
+            let named = quotedFileNames(in: sheet)
             return !named.isEmpty && named.allSatisfy(quotedNames.contains)
+        }
+    }
+
+    /// True if every file the sheet names is in `names`: a sheet that names only files that
+    /// another rip shares may be that rip's.
+    public static func sheet(_ sheet: URL, namesOnly names: Set<String>) -> Bool {
+        Set(quotedFileNames(in: sheet)).isSubset(of: names.map(quoted))
+    }
+
+    /// The FILE lines' names, in quotes, as the sheet has them.
+    static func quotedFileNames(in sheet: URL) -> [String] {
+        guard let text = try? String(contentsOf: sheet, encoding: .utf8) else { return [] }
+        return text.split(whereSeparator: \.isNewline).compactMap { line -> String? in
+            guard line.hasPrefix("FILE "), let end = line.lastIndex(of: "\"") else { return nil }
+            return String(line[line.index(line.startIndex, offsetBy: 5)...end])
         }
     }
 }

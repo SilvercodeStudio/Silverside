@@ -337,24 +337,34 @@ extension DiscEncoder {
         of encoding: RipReport.Encoding, discPart: String, from source: URL, to destination: URL
     ) throws {
         let manager = FileManager.default
-        var moving = RipRemoval.ownFiles(of: encoding, in: source).filter {
+        // Files that another report in the folder lists too stay for it: this rip gets copies.
+        let report = source.appending(path: "Rip Report\(discPart).json")
+        let shared = RipRemoval.otherReportsFiles(in: source, besides: report)
+        let sharedNames = Set(shared.map { URL(filePath: $0).lastPathComponent })
+        var own = RipRemoval.ownFiles(of: encoding, in: source).filter {
             $0.deletingLastPathComponent().standardizedFileURL == source.standardizedFileURL
         }
-        moving += CueSheet.sheets(in: source, namingOnly: Set(encoding.files.map(\.file)))
+        own += CueSheet.sheets(in: source, namingOnly: Set(encoding.files.map(\.file)))
+        own = own.filter { manager.fileExists(atPath: $0.path) }
+        let copying = own.filter {
+            shared.contains($0.standardizedFileURL.path)
+                || ($0.pathExtension == "cue" && CueSheet.sheet($0, namesOnly: sharedNames))
+        }
+        var moving = own.filter { !copying.contains($0) }
         moving += ["json", "md"].map { source.appending(path: "Rip Report\(discPart).\($0)") }
         moving = moving.filter { manager.fileExists(atPath: $0.path) }
         let covers = ((try? manager.contentsOfDirectory(atPath: source.path)) ?? [])
             .filter { $0.hasPrefix("cover") && ["jpg", "png"].contains(($0 as NSString).pathExtension) }
             .map { source.appending(path: $0) }
             .filter { !manager.fileExists(atPath: destination.appending(path: $0.lastPathComponent).path) }
-        for file in moving {
+        for file in moving + copying {
             let target = destination.appending(path: file.lastPathComponent)
             if manager.fileExists(atPath: target.path) { throw EncodingError.exists(target) }
         }
         try manager.createDirectory(at: destination, withIntermediateDirectories: true)
         for file in moving { try manager.moveItem(at: file, to: destination.appending(path: file.lastPathComponent)) }
-        for cover in covers {
-            try manager.copyItem(at: cover, to: destination.appending(path: cover.lastPathComponent))
+        for file in copying + covers {
+            try manager.copyItem(at: file, to: destination.appending(path: file.lastPathComponent))
         }
     }
 

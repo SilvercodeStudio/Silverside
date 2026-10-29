@@ -30,9 +30,13 @@ public struct RippedDisc: Sendable {
     /// folder already, from an earlier attempt, or that a change of cover wrote later, is not
     /// listed, but the library keeps it. Nothing else goes. Then the Artwork folder and the
     /// rip's folder go too, if nothing else is in them. A rip from before reports listed their
-    /// files loses the files that a rip writes, by name.
-    public func deleteRipFiles(albumFolder: URL? = nil) throws {
+    /// files loses the files that a rip writes, by name. Nothing goes when the album folder is
+    /// the rip's folder, or holds it, or is in it (with a template or a folder of the user's):
+    /// the album's files would go with the rip's. Returns true if the rip's files went.
+    @discardableResult
+    public func deleteRipFiles(albumFolder: URL? = nil) throws -> Bool {
         let manager = FileManager.default
+        if let albumFolder, Self.overlap(folder, albumFolder) { return false }
         var files: [URL]
         if let listed = report?.files {
             files = listed.map { folder.appending(path: $0) }
@@ -57,6 +61,15 @@ public struct RippedDisc: Sendable {
             let contents = try? manager.contentsOfDirectory(atPath: directory.path)
             if contents?.allSatisfy({ $0 == ".DS_Store" }) == true { try manager.removeItem(at: directory) }
         }
+        return true
+    }
+
+    /// True if the two folders are one, or one is inside the other.
+    static func overlap(_ first: URL, _ second: URL) -> Bool {
+        if DiscEncoder.sameFile(first, second) { return true }
+        let a = first.standardizedFileURL.resolvingSymlinksInPath().path
+        let b = second.standardizedFileURL.resolvingSymlinksInPath().path
+        return a.hasPrefix(b + "/") || b.hasPrefix(a + "/")
     }
 
     /// The files in `folder` and its subfolders that `album` has at the same place, byte for
@@ -74,7 +87,7 @@ public struct RippedDisc: Sendable {
             let path = file.standardizedFileURL.resolvingSymlinksInPath().path
             guard path.hasPrefix(base + "/") else { continue }
             let counterpart = album.appending(path: String(path.dropFirst(base.count + 1)))
-            if manager.fileExists(atPath: counterpart.path),
+            if manager.fileExists(atPath: counterpart.path), !DiscEncoder.sameFile(file, counterpart),
                 manager.contentsEqual(atPath: path, andPath: counterpart.path)
             {
                 copies.append(file)

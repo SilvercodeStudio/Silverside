@@ -20,7 +20,8 @@ command-line tool.
   titles too). The names are kept for the release, and the sidebar and Rip
   History show them. A set's are still edited in the set's view. When two
   editions were encoded into one album folder, renaming one moves only its
-  own files, and the other keeps its folder, report, and CUE sheet.
+  own files, and the other keeps its folder, report, and CUE sheet; a file
+  that both list is copied.
 - **Save Data Track…** on an earlier rip reads its Enhanced CD data track from
   the disc in a drive, when the rip did not save it: it failed, or the rip left
   it out. It goes into the rip's folder, and into the album folder with its
@@ -132,7 +133,8 @@ command-line tool.
 - After an encode deletes a rip's WAV files, the rip's folder goes too. A cover
   or artwork that the rip found in its folder already, or that a later change
   of cover wrote there, stayed behind with the folder; now each such file goes
-  when the album folder has the same file. Files of your own stay.
+  when the album folder has the same file. Files of your own stay, and nothing
+  goes when the album folder is the rip's folder or inside it.
 - A track whose re-reads never agreed on a sector, on a rip that CTDB then
   verified as it was, stayed "not accurate" in AccurateRip, though its audio
   was right. It is now checked again, at another pressing's offset too, as a

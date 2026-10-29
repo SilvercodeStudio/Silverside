@@ -302,6 +302,19 @@ struct EncodingTests {
         #expect(!FileManager.default.fileExists(atPath: folder.path))
     }
 
+    /// An album folder that is the rip's folder, or inside it, would lose its files with the
+    /// rip's: nothing goes.
+    @Test func keepsARipThatTheAlbumFolderOverlaps() throws {
+        let (folder, _) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        let before = try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()
+        for album in [folder, folder.appending(path: "Album"), folder.deletingLastPathComponent()] {
+            #expect(try !disc.deleteRipFiles(albumFolder: album))
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted() == before)
+    }
+
     /// A file that exists stops the encoding before any file is written.
     @Test func checksEveryFileBeforeWritingAny() throws {
         let (folder, library) = try makeRip()
@@ -449,7 +462,10 @@ extension EncodingTests {
         // The other edition: a report of another release, its file, and its CUE sheet.
         var other = try RipReport.read(from: oldAlbum.appending(path: "Rip Report (Disc 2).json"))
         other.release?.id = "other-edition"
-        other.encoding?.files = [.init(track: 1, file: "01-01 Other.flac")]
+        // It shares this rip's first file, which must stay for it.
+        other.encoding?.files = [
+            .init(track: 1, file: "01-01 Other.flac"), .init(track: 2, file: files[0].lastPathComponent),
+        ]
         try other.write(to: oldAlbum.appending(path: "Rip Report (Disc 1).json"))
         try Data("x".utf8).write(to: oldAlbum.appending(path: "01-01 Other.flac"))
         try Data("FILE \"01-01 Other.flac\" WAVE\n".utf8).write(to: oldAlbum.appending(path: "Other (Disc 1).cue"))
@@ -469,7 +485,7 @@ extension EncodingTests {
         #expect(moved.contains("cover.jpg") && stayed.contains("cover.jpg"))
         #expect(
             Set(stayed).isSuperset(of: ["Rip Report (Disc 1).json", "01-01 Other.flac", "Other (Disc 1).cue"]))
-        #expect(!stayed.contains { $0.hasSuffix(".flac") && $0 != "01-01 Other.flac" })
+        #expect(Set(stayed.filter { $0.hasSuffix(".flac") }) == ["01-01 Other.flac", files[0].lastPathComponent])
         #expect(!stayed.contains("Rip Report (Disc 2).json") && stayed.filter { $0.hasSuffix(".cue") }.count == 1)
     }
 

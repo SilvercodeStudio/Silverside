@@ -18,14 +18,15 @@ public enum CDDA {
     /// The gap between the audio session and the data session of an enhanced CD.
     public static let sessionGapSectors = 11400
 
-    /// Converts raw sector bytes to samples.
+    /// Converts raw sector bytes to samples: a copy, since the drive's byte order is the
+    /// processor's. A sample at a time was most of the CPU time of a rip's reads.
     public static func samples(fromSectorBytes bytes: [UInt8]) -> [UInt32] {
         precondition(bytes.count % bytesPerSample == 0)
         let count = bytes.count / bytesPerSample
-        return bytes.withUnsafeBytes { raw in
-            (0..<count).map {
-                UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: $0 * bytesPerSample, as: UInt32.self))
-            }
+        return [UInt32](unsafeUninitializedCapacity: count) { buffer, initialized in
+            bytes.withUnsafeBytes { UnsafeMutableRawBufferPointer(buffer).copyMemory(from: $0) }
+            for index in 0..<count { buffer[index] = UInt32(littleEndian: buffer[index]) }
+            initialized = count
         }
     }
 }

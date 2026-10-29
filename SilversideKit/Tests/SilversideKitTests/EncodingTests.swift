@@ -79,6 +79,27 @@ struct EncodingTests {
 
     /// A disc image: every track in one file, beside the library, checked, with a CUE sheet
     /// that names the one file and the album's tags.
+    /// The lanes finish in any order, but the log names the files in the tracks' order.
+    @Test func logsTheFilesInTrackOrder() throws {
+        final class Lines: @unchecked Sendable {
+            private let lock = NSLock()
+            private var all = [String]()
+            func append(_ line: String) { lock.withLock { all.append(line) } }
+            var lines: [String] { lock.withLock { all } }
+        }
+        let (folder, library) = try makeRip(disc1: true)
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        for _ in 0..<10 {
+            try? FileManager.default.removeItem(at: library)
+            let lines = Lines()
+            var encoder = DiscEncoder(format: .flac)
+            encoder.parallelTracks = 3
+            encoder.log = { lines.append($0) }
+            let files = try encoder.encode(try RippedDisc(folder: folder), into: library)
+            #expect(lines.lines.filter { $0.hasSuffix(".flac") } == files.map(\.lastPathComponent))
+        }
+    }
+
     @Test func writesADiscImage() throws {
         let (folder, library) = try makeRip()
         let root = folder.deletingLastPathComponent()

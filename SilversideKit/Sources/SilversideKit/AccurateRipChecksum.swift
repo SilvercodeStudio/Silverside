@@ -44,14 +44,17 @@ public struct AccurateRipAccumulator: Sendable {
     public mutating func add(_ samples: ArraySlice<UInt32>) {
         precondition(Int(nextPosition) - 1 + samples.count <= sampleCount, "More samples than the track has")
         var position = nextPosition
-        for index in samples.indices {
-            if position >= firstPosition && position <= lastPosition {
-                let sample = samples[index]
-                v1 &+= sample &* position
-                let product = UInt64(sample) * UInt64(position)
-                v2 &+= UInt32(truncatingIfNeeded: product) &+ UInt32(truncatingIfNeeded: product >> 32)
+        // Through a buffer, with no bounds check on each sample: a track's offset search
+        // adds it many times.
+        samples.withUnsafeBufferPointer { samples in
+            for sample in samples {
+                if position >= firstPosition && position <= lastPosition {
+                    v1 &+= sample &* position
+                    let product = UInt64(sample) * UInt64(position)
+                    v2 &+= UInt32(truncatingIfNeeded: product) &+ UInt32(truncatingIfNeeded: product >> 32)
+                }
+                position &+= 1
             }
-            position &+= 1
         }
         nextPosition = position
     }

@@ -726,7 +726,7 @@ public struct DiscEncoder: Sendable {
         // way; the files written stay, as they did when the tracks went one by one, except
         // when they would replace the source.
         let encodingLanes = min(lanes, max(1, jobs.count))
-        let outcomes = EncodeOutcomes()
+        let outcomes = EncodeOutcomes(log: log)
         let encoder = self
         let laneJobs = jobs
         DispatchQueue.concurrentPerform(iterations: encodingLanes) { lane in
@@ -734,12 +734,15 @@ public struct DiscEncoder: Sendable {
                 do {
                     let staged = try encoder.encode(
                         laneJobs[index], of: disc, decodes: decodes, cover: cover, lame: lame, staging: replacesSource)
-                    outcomes.finish(index, staged: staged)
+                    // A staged file is named once it replaces its source, below.
+                    outcomes.finish(
+                        index, staged: staged, line: staged == nil ? laneJobs[index].file.lastPathComponent : nil)
                 } catch {
                     outcomes.fail(index, error)
                 }
             }
         }
+        outcomes.logTheRest()
         defer {
             for staged in outcomes.staged.values { try? FileManager.default.removeItem(at: staged) }
         }
@@ -1040,7 +1043,6 @@ public struct DiscEncoder: Sendable {
         }
         if FileManager.default.fileExists(atPath: job.file.path) { try FileManager.default.removeItem(at: job.file) }
         try FileManager.default.moveItem(at: partial, to: job.file)
-        log("\(job.file.lastPathComponent)")
         trackEncoded(job.ripped.number, job.file)
         return nil
     }
@@ -1060,25 +1062,59 @@ public struct DiscEncoder: Sendable {
     }
 }
 
-/// Which tracks the encoding lanes finished, and the errors of those that failed.
+/// Which tracks the encoding lanes finished, and the errors of those that failed. Each
+/// finished track's line goes to the log in the tracks' order, as soon as the tracks before
+/// it are done: the lanes finish in any order.
 private final class EncodeOutcomes: @unchecked Sendable {
     private let lock = NSLock()
     private var done = Set<Int>()
     private var errors = [Int: any Error]()
+    private let log: @Sendable (String) -> Void
+    /// The lines of the jobs that ended, by job, until the jobs before them end too; nil for a
+    /// job with no line (it failed, or its file is named later).
+    private var lines = [Int: String?]()
+    private var nextLine = 0
 
     private var partials = [Int: URL]()
+
+    init(log: @escaping @Sendable (String) -> Void) {
+        self.log = log
+    }
 
     var hasFailed: Bool { lock.withLock { !errors.isEmpty } }
     /// The checked partial files of a staged encoding, by job.
     var staged: [Int: URL] { lock.withLock { partials } }
-    func finish(_ index: Int, staged: URL?) {
+    func finish(_ index: Int, staged: URL?, line: String?) {
         lock.withLock {
             done.insert(index)
             if let staged { partials[index] = staged }
+            settle(index, line: line)
         }
     }
     func finished(_ index: Int) -> Bool { lock.withLock { done.contains(index) } }
-    func fail(_ index: Int, _ error: any Error) { lock.withLock { errors[index] = error } }
+    func fail(_ index: Int, _ error: any Error) {
+        lock.withLock {
+            errors[index] = error
+            settle(index, line: nil)
+        }
+    }
+
+    /// Logs the lines still waiting, in order: after a failure, the jobs before them never ran.
+    func logTheRest() {
+        lock.withLock {
+            for index in lines.keys.sorted() { if let line = lines[index] ?? nil { log(line) } }
+            lines = [:]
+        }
+    }
+
+    private func settle(_ index: Int, line: String?) {
+        lines[index] = .some(line)
+        while let entry = lines[nextLine] {
+            if let entry { log(entry) }
+            lines[nextLine] = nil
+            nextLine += 1
+        }
+    }
     /// The error of the first job that failed, in the jobs' order.
     var firstError: (any Error)? { lock.withLock { errors.min { $0.key < $1.key }?.value } }
 }

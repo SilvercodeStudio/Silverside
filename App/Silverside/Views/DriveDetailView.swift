@@ -270,13 +270,14 @@ struct AlbumHeader: View {
                 HStack(alignment: .top, spacing: 16) {
                     EditableField(
                         label: "Album", text: field(\.album, original: disc.baseRelease?.title),
-                        shown: disc.title(from: source), editable: editable)
+                        shown: disc.title(from: source), editable: editable, field: .album,
+                        pending: slot.pendingNames)
                     EditableField(
                         label: disc.yearIsFirstRelease ? "First Release" : "Date",
                         text: field(\.date, original: disc.baseRelease?.date),
                         shown: disc.shownRelease?.date ?? disc.release?.releaseGroup?.firstReleaseDate ?? "—",
                         prompt: disc.yearIsFirstRelease ? disc.release?.releaseGroup?.firstReleaseDate : nil,
-                        editable: editable
+                        editable: editable, field: .date, pending: slot.pendingNames
                     )
                     .frame(width: 120)
                     .help(
@@ -287,7 +288,8 @@ struct AlbumHeader: View {
                 HStack(alignment: .top, spacing: 16) {
                     EditableField(
                         label: "Album Artist", text: field(\.albumArtist, original: disc.baseRelease?.artist),
-                        shown: disc.artist(from: source).isEmpty ? "—" : disc.artist(from: source), editable: editable)
+                        shown: disc.artist(from: source).isEmpty ? "—" : disc.artist(from: source), editable: editable,
+                        field: .albumArtist, pending: slot.pendingNames)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Tracks").font(.caption).foregroundStyle(.secondary)
                         Text("\(disc.toc.audioTracks.count) · \(Format.duration(sectors: disc.totalSectors))")
@@ -545,13 +547,102 @@ struct AlbumHeader: View {
     }
 }
 
-/// A name field of an earlier rip, for saving the names when the focus leaves one.
+/// A name field: the album's, or a track's, for its focus and for Tab.
 enum NameField: Hashable {
     case album, albumArtist, date
     case title(Int)
     case artist(Int)
 
-    var isAlbumField: Bool { [.album, .albumArtist, .date].contains(self) }
+    /// The track fields in the order Tab goes through them: each track's title, then its
+    /// artist where that field shows.
+    static func trackOrder(_ numbers: [Int], showsArtist: (Int) -> Bool) -> [NameField] {
+        numbers.flatMap { [.title($0)] + (showsArtist($0) ? [.artist($0)] : []) }
+    }
+
+    /// The field that Tab (or Shift-Tab, `backward`) goes to from this one; nil past either end.
+    func next(in order: [NameField], backward: Bool) -> NameField? {
+        guard let index = order.firstIndex(of: self) else { return nil }
+        let next = backward ? index - 1 : index + 1
+        return order.indices.contains(next) ? order[next] : nil
+    }
+}
+
+/// Names typed and not yet accepted, by field, each with what accepting it does: so that a rip
+/// that starts while a field is still being typed in gets its text.
+final class PendingNames {
+    private var accepts: [NameField: () -> Void] = [:]
+
+    func set(_ field: NameField, accept: (() -> Void)?) { accepts[field] = accept }
+
+    /// Accepts every name still being typed.
+    func acceptAll() {
+        let all = accepts.values
+        accepts = [:]
+        for accept in all { accept() }
+    }
+}
+
+/// A text field for a name that changes nothing else while it is typed. The text stays in the
+/// field until it is accepted, with Return, Tab, or by leaving the field; then `commit` gets it,
+/// and the window redraws from it. A change for each key redrew the whole drive page and its
+/// table, which made typing slow and could lose a key. `pending` keeps the text as typed.
+struct NameTextField: View {
+    var value: String
+    var prompt: String?
+    var field: NameField
+    var focus: FocusState<NameField?>.Binding
+    /// The track fields in Tab's order, for a field in a track table.
+    var tabOrder: (() -> [NameField])?
+    var pending: PendingNames?
+    var commit: (String) -> Void
+    /// The text as typed, until it is accepted; nil shows `value`.
+    @State private var draft: String?
+
+    var body: some View {
+        let text = Binding(
+            get: { draft ?? value },
+            set: { typed in
+                draft = typed
+                pending?.set(field) { commit(typed) }
+            })
+        TextField("", text: text, prompt: prompt.map { Text($0) })
+            .textFieldStyle(.plain)
+            .focused(focus, equals: field)
+            .onSubmit(accept)
+            .onChange(of: focus.wrappedValue) { left, now in
+                if left == field, now != field { accept() }
+            }
+            .onDisappear(perform: accept)
+            .modifier(TabsThroughTracks(field: field, order: tabOrder, focus: focus))
+    }
+
+    private func accept() {
+        guard let typed = draft else { return }
+        draft = nil
+        pending?.set(field, accept: nil)
+        if typed != value { commit(typed) }
+    }
+}
+
+/// Tab and Shift-Tab go from one track field to the next, as in a spreadsheet. A table's
+/// rows are not in the window's key view loop, so Tab would leave the table for the sidebar.
+private struct TabsThroughTracks: ViewModifier {
+    var field: NameField
+    var order: (() -> [NameField])?
+    var focus: FocusState<NameField?>.Binding
+
+    func body(content: Content) -> some View {
+        if let order {
+            content.onKeyPress(keys: [.tab, KeyEquivalent("\u{19}")]) { press in
+                let backward = press.modifiers.contains(.shift) || press.key == KeyEquivalent("\u{19}")
+                guard let next = field.next(in: order(), backward: backward) else { return .ignored }
+                focus.wrappedValue = next
+                return .handled
+            }
+        } else {
+            content
+        }
+    }
 }
 
 /// A field the user can edit, laid out like `Field`. `shown` is the text when it is not editable.
@@ -565,16 +656,18 @@ struct EditableField: View {
     /// Where the field reports its focus, if anywhere.
     var focus: FocusState<NameField?>.Binding?
     var field = NameField.album
+    /// Where the text waits while it is typed, for a rip that starts before it is accepted.
+    var pending: PendingNames?
+    @FocusState private var ownFocus: NameField?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label).font(.caption).foregroundStyle(.secondary)
             Group {
-                if editable, let focus {
-                    TextField("", text: $text, prompt: prompt.map { Text($0) }).textFieldStyle(.plain)
-                        .focused(focus, equals: field)
-                } else if editable {
-                    TextField("", text: $text, prompt: prompt.map { Text($0) }).textFieldStyle(.plain)
+                if editable {
+                    NameTextField(
+                        value: text, prompt: prompt, field: field, focus: focus ?? $ownFocus, pending: pending
+                    ) { text = $0 }
                 } else {
                     Text(shown).lineLimit(1)
                 }

@@ -3,6 +3,17 @@ import SilversideKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// The rip report as a page. SwiftUI compares the report before it builds the page again, so
+/// typing a name in the track table does not render the Markdown at each keystroke.
+private struct ReportPage: View, Equatable {
+    var report: RipReport
+
+    var body: some View {
+        HelpWebView(
+            html: MarkdownHTML.page(MarkdownHTML.render(ResultsView.withoutTrackTable(report.markdown)), compact: true))
+    }
+}
+
 /// An earlier rip: the headline, each track's result, and the report as text.
 struct ResultsView: View {
     @Environment(AppModel.self) private var model
@@ -60,6 +71,16 @@ struct ResultsView: View {
         return shown.markdown
     }
 
+    /// The report with the names as last saved, for the report pane: the pane is built again
+    /// when a name is saved, not at each keystroke.
+    private var savedReport: RipReport {
+        var shown = report
+        if let toc, let release = report.release {
+            shown.release = savedEdits.merged(with: savedKeptEdits).applied(to: release, toc: toc)
+        }
+        return shown
+    }
+
     /// The release with the names as they are now: the rip's edits, and the kept album edits.
     private var shownRelease: MusicBrainzRelease? {
         guard let toc, let release = report.release else { return report.release }
@@ -99,9 +120,7 @@ struct ResultsView: View {
                 }
                 .padding(12)
                 Divider()
-                HelpWebView(
-                    html: MarkdownHTML.page(MarkdownHTML.render(Self.withoutTrackTable(markdown)), compact: true)
-                )
+                ReportPage(report: savedReport).equatable()
             }
             .frame(minWidth: 300, idealWidth: 380, maxWidth: 560)
             .background(Color.secondary.opacity(0.04))
@@ -121,14 +140,9 @@ struct ResultsView: View {
             }
             loadAlbumFields()
         }
-        // A name is saved, and the encoded files follow it, when Return is pressed or the field
-        // is left, so that the files and the album folder are not renamed while it is half typed.
-        .onSubmit { saveNames() }
-        .onChange(of: focusedName) { left, _ in
-            guard let left else { return }
-            if left.isAlbumField { keepAlbumFields() }
-            saveNames()
-        }
+        // A name is saved, and the encoded files follow it, when it is accepted (Return, Tab,
+        // or leaving the field: `NameTextField`), so that the files and the album folder are
+        // not renamed while it is half typed.
         .onDisappear {
             keepAlbumFields()
             saveNames()
@@ -296,22 +310,30 @@ struct ResultsView: View {
         if let release = report.release, model.set(for: release) == nil {
             HStack(alignment: .top, spacing: 12) {
                 EditableField(
-                    label: "Album", text: $albumText, shown: shownRelease?.title ?? release.title,
+                    label: "Album", text: accepting($albumText), shown: shownRelease?.title ?? release.title,
                     editable: canEditNames, focus: $focusedName, field: .album)
                 EditableField(
-                    label: "Album Artist", text: $albumArtistText, shown: shownRelease?.artist ?? release.artist,
+                    label: "Album Artist", text: accepting($albumArtistText),
+                    shown: shownRelease?.artist ?? release.artist,
                     editable: canEditNames, focus: $focusedName, field: .albumArtist)
                 EditableField(
-                    label: "Date", text: $dateText, shown: shownRelease?.date ?? release.date ?? "",
+                    label: "Date", text: accepting($dateText), shown: shownRelease?.date ?? release.date ?? "",
                     editable: canEditNames, focus: $focusedName, field: .date
                 )
                 .frame(width: 140)
             }
-            .onSubmit {
+        }
+    }
+
+    /// An album field's text, kept and saved when the field's text is accepted.
+    private func accepting(_ text: Binding<String>) -> Binding<String> {
+        Binding(
+            get: { text.wrappedValue },
+            set: { typed in
+                text.wrappedValue = typed
                 keepAlbumFields()
                 saveNames()
-            }
-        }
+            })
     }
 
     private var canRepair: Bool {
@@ -509,18 +531,38 @@ struct ResultsView: View {
         .customizationID("info").disabledCustomizationBehavior(.all)
     }
 
+    /// The track fields in Tab's order: those with a track to name.
+    private var fieldOrder: [NameField] {
+        let shown = tracks(of: shownRelease)
+        return NameField.trackOrder(report.tracks.map(\.number).filter { shown[$0] != nil }) { number in
+            shown[number].map { $0.artist != shownRelease?.artist } == true || artistRows.contains(number)
+        }
+    }
+
     /// A track's title, and its artist when it has one of its own, editable as in a drive's table.
     @ViewBuilder private func titleCell(_ track: RipReport.Track) -> some View {
         let shown = tracks(of: shownRelease)[track.number]
         let ownArtist = shown.flatMap { $0.artist != shownRelease?.artist ? $0.artist : nil }
         VStack(alignment: .leading, spacing: 1) {
             if canEditNames, shown != nil {
-                TextField("", text: title(of: track.number)).textFieldStyle(.plain)
-                    .focused($focusedName, equals: .title(track.number))
+                let title = title(of: track.number)
+                NameTextField(
+                    value: title.wrappedValue, field: .title(track.number), focus: $focusedName,
+                    tabOrder: { fieldOrder }
+                ) {
+                    title.wrappedValue = $0
+                    saveNames()
+                }
                 if ownArtist != nil || artistRows.contains(track.number) {
-                    TextField("", text: artist(of: track.number), prompt: Text("Track artist"))
-                        .textFieldStyle(.plain).font(.caption).foregroundStyle(.secondary)
-                        .focused($focusedName, equals: .artist(track.number))
+                    let artist = artist(of: track.number)
+                    NameTextField(
+                        value: artist.wrappedValue, prompt: "Track artist", field: .artist(track.number),
+                        focus: $focusedName, tabOrder: { fieldOrder }
+                    ) {
+                        artist.wrappedValue = $0
+                        saveNames()
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
                 }
             } else {
                 Text(titles[track.number] ?? track.file)

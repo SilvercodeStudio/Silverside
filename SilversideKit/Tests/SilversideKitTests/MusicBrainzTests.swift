@@ -102,6 +102,40 @@ struct MusicBrainzTests {
         #expect(await transport.requests.count == 1)
     }
 
+    /// *KUTX Live! Volume 3* (2026-10-29): MusicBrainz did not know the disc, and its fuzzy match
+    /// gave eight 20-track compilations of about 80 minutes whose tracks are not the disc's. Only a
+    /// release with a disc whose tracks each come within 3 seconds stays; an exact match keeps all.
+    @Test func keepsOnlyTheFuzzyMatchesWhoseTracksFit() throws {
+        // The disc's first tracks: 4:49, 3:45, 2:48, 4:42; then 16 tracks of 4:00.
+        let seconds = [289, 225, 168, 282] + Array(repeating: 240, count: 16)
+        var starts = [0]
+        for length in seconds.dropLast() { starts.append(starts.last! + length * 75) }
+        let toc = try TOC(audioTrackStarts: starts, leadOutLBA: starts.last! + seconds.last! * 75)
+        func release(_ id: String, _ lengths: [Int?]) -> MusicBrainzRelease {
+            MusicBrainzRelease(
+                id: id, title: id, artistCredit: [], date: nil, country: nil, status: nil, barcode: nil,
+                disambiguation: nil, labels: [], releaseGroup: nil,
+                media: [
+                    .init(
+                        position: 1, format: "CD", title: nil, discIDs: [],
+                        tracks: lengths.enumerated().map {
+                            .init(
+                                position: $0.offset + 1, number: String($0.offset + 1), title: "T",
+                                length: $0.element.map { $0 * 1000 }, artistCredit: [], recordingID: nil)
+                        })
+                ], hasFrontCover: false)
+        }
+        // Another pressing, a second or two off; the same lengths in another order (as long in
+        // all); and one whose lengths MusicBrainz does not know.
+        let pressing = release("pressing", seconds.map { $0 + 2 })
+        let shuffled = release("shuffled", [225, 289, 282, 168] + Array(repeating: 240, count: 16))
+        let unknown = release("unknown", Array(repeating: nil, count: 20))
+        let fuzzy = MusicBrainzLookup(releases: [shuffled, pressing, unknown], isExact: false)
+        #expect(fuzzy.fitting(toc).releases.map(\.id) == ["pressing"])
+        let exact = MusicBrainzLookup(releases: [shuffled, unknown], isExact: true)
+        #expect(exact.fitting(toc) == exact)
+    }
+
     /// *Saint of Circumstance*: MusicBrainz has no disc IDs for its discs (8, 9, and 5 tracks).
     /// A fuzzy match must still give each disc its own medium.
     @Test func findsTheDiscOfAFuzzyMatchByItsTracks() throws {

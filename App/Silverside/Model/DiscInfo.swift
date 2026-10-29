@@ -92,10 +92,17 @@ struct DiscInfo {
     var shownRelease: MusicBrainzRelease? { baseRelease.map { edits.applied(to: $0, toc: toc) } }
 
     /// The disc's medium in `shownRelease`.
-    var shownMedium: MusicBrainzRelease.Medium? {
-        guard let shown = shownRelease else { return nil }
-        if let found = shown.medium(for: toc) { return found }
-        return medium.flatMap { known in shown.media.first { $0.position == known.position } }
+    var shownMedium: MusicBrainzRelease.Medium? { medium(in: shownRelease) }
+
+    /// The disc's medium in `release` (the base release, or the shown one): the one found when
+    /// the release was chosen, since edits do not change which it is, else the one the TOC
+    /// finds. The view asks for it at every keystroke in a name, so it does not look first.
+    private func medium(in release: MusicBrainzRelease?) -> MusicBrainzRelease.Medium? {
+        guard let release else { return nil }
+        if let known = medium, let found = release.media.first(where: { $0.position == known.position }) {
+            return found
+        }
+        return release.medium(for: toc)
     }
 
     /// The album's title: from MusicBrainz, else CD-Text, else the disc ID.
@@ -116,23 +123,17 @@ struct DiscInfo {
 
     /// A track's title before the edits, for the table's editing.
     func baseTitle(ofTrack number: Int) -> String? {
-        guard let base = baseRelease, let index = toc.audioTracks.firstIndex(where: { $0.number == number }) else {
-            return nil
-        }
-        let medium =
-            base.medium(for: toc) ?? medium.flatMap { known in base.media.first { $0.position == known.position } }
-        guard let medium, index < medium.tracks.count else { return nil }
+        guard let index = toc.audioTracks.firstIndex(where: { $0.number == number }),
+            let medium = medium(in: baseRelease), index < medium.tracks.count
+        else { return nil }
         return medium.tracks[index].title
     }
 
     /// The track's artist as the release has it, before any edit.
     func baseArtist(ofTrack number: Int) -> String? {
-        guard let base = baseRelease, let index = toc.audioTracks.firstIndex(where: { $0.number == number }) else {
-            return nil
-        }
-        let medium =
-            base.medium(for: toc) ?? medium.flatMap { known in base.media.first { $0.position == known.position } }
-        guard let medium, index < medium.tracks.count else { return nil }
+        guard let index = toc.audioTracks.firstIndex(where: { $0.number == number }),
+            let medium = medium(in: baseRelease), index < medium.tracks.count
+        else { return nil }
         return medium.tracks[index].artist
     }
 
@@ -184,7 +185,9 @@ struct DiscInfo {
     var tracks: [Track] { tracks(from: .musicBrainz) }
 
     func tracks(from source: Source) -> [Track] {
-        toc.audioTracks.enumerated().map { index, track in
+        let shownRelease = shownRelease
+        let shownMedium = medium(in: shownRelease)
+        return toc.audioTracks.enumerated().map { index, track in
             var row = Track(
                 number: track.number, title: "Track \(track.number)", sectors: toc.sectorRange(of: track).count)
             if source == .cdText, let title = cdText?.titles[track.number] {

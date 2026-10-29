@@ -225,6 +225,17 @@ public struct MusicBrainzLookup: Equatable, Sendable {
     /// True if MusicBrainz knows the disc ID. False if it found the releases by a fuzzy
     /// match of the TOC: other pressings, whose track lengths are nearly the same.
     public var isExact: Bool
+
+    /// The lookup without the fuzzy matches whose tracks are not the disc's. MusicBrainz's
+    /// fuzzy match goes by the number of tracks and about the disc's length, so a 20-track
+    /// compilation of 80 minutes matches others with nothing in common (*KUTX Live! Volume 3*:
+    /// *Formel Eins: Boys Edition* and seven more). A release stays if a disc of it has each
+    /// track within 3 seconds of this disc's (`ReleaseRanking.fits`), as another pressing has.
+    public func fitting(_ toc: TOC) -> MusicBrainzLookup {
+        guard !isExact else { return self }
+        let fitting = releases.filter { release in release.media.contains { ReleaseRanking.fits($0, toc: toc) } }
+        return MusicBrainzLookup(releases: fitting, isExact: false)
+    }
 }
 
 /// Looks up discs and releases in MusicBrainz, through `WebClient`: a rate limit, retries
@@ -248,19 +259,20 @@ public struct MusicBrainzClient: Sendable {
     }
 
     /// The releases with a disc that has this TOC. If MusicBrainz does not know the disc ID,
-    /// the same request finds releases with nearly the same TOC. `useCache: false` asks again,
-    /// for a disc just added to MusicBrainz: the cache keeps a "not found" for a day.
+    /// the same request finds releases with nearly the same TOC; only those whose tracks fit
+    /// the disc are kept (`MusicBrainzLookup.fitting`). `useCache: false` asks again, for a
+    /// disc just added to MusicBrainz: the cache keeps a "not found" for a day.
     public func lookup(_ toc: TOC, useCache: Bool = true) async throws -> MusicBrainzLookup {
         guard let data = try await client.data(from: Self.lookupURL(for: toc), useCache: useCache) else {
             return MusicBrainzLookup(releases: [], isExact: false)
         }
-        return try Self.lookup(fromJSON: data)
+        return try Self.lookup(fromJSON: data).fitting(toc)
     }
 
     /// The releases with this disc from an earlier lookup in the cache, with no request; nil if
     /// the disc was never looked up (or MusicBrainz did not know it).
     public func cachedLookup(_ toc: TOC) -> MusicBrainzLookup? {
-        client.cachedData(from: Self.lookupURL(for: toc)).flatMap { try? Self.lookup(fromJSON: $0) }
+        client.cachedData(from: Self.lookupURL(for: toc)).flatMap { try? Self.lookup(fromJSON: $0).fitting(toc) }
     }
 
     /// One release, by its MusicBrainz ID, with its recordings' relationships: the composers.

@@ -8,6 +8,8 @@ struct TrackTable: View {
     @State private var tableSelection: Set<Int> = []
     /// Tracks whose artist field is open although the track has no artist of its own yet.
     @State private var artistRows: Set<Int> = []
+    /// The track field being edited, for Tab to go to the next.
+    @FocusState private var focusedName: NameField?
     @AppStorage("driveTrackColumns") private var columns = TableColumnCustomization<DiscInfo.Track>()
     @AppStorage("ripTrackColumns") private var ripColumns = TableColumnCustomization<RipReport.Track>()
 
@@ -96,14 +98,20 @@ struct TrackTable: View {
         TableColumn("Title") { track in
             VStack(alignment: .leading, spacing: 1) {
                 if canEdit {
-                    TextField("", text: title(of: track.number, shown: track.title))
-                        .textFieldStyle(.plain)
+                    let title = title(of: track.number, shown: track.title)
+                    NameTextField(
+                        value: title.wrappedValue, field: .title(track.number), focus: $focusedName,
+                        tabOrder: { fieldOrder }, pending: slot.pendingNames
+                    ) { title.wrappedValue = $0 }
                     // The artist's field shows when the track has an artist of its own, or on request.
                     if track.artist != nil || artistRows.contains(track.number) {
-                        TextField("", text: artist(of: track.number), prompt: Text("Track artist"))
-                            .textFieldStyle(.plain)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        let artist = artist(of: track.number)
+                        NameTextField(
+                            value: artist.wrappedValue, prompt: "Track artist", field: .artist(track.number),
+                            focus: $focusedName, tabOrder: { fieldOrder }, pending: slot.pendingNames
+                        ) { artist.wrappedValue = $0 }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                 } else {
                     Text(track.title)
@@ -151,10 +159,18 @@ struct TrackTable: View {
         slot.rip?.isRunning != true && slot.namesSource == .musicBrainz && slot.disc?.baseRelease != nil
     }
 
+    /// The track fields in Tab's order.
+    private var fieldOrder: [NameField] {
+        let rows = rows
+        return NameField.trackOrder(rows.map(\.number)) { number in
+            rows.first { $0.number == number }?.artist != nil || artistRows.contains(number)
+        }
+    }
+
     /// A binding to a track's title edit: the original title clears the edit.
     private func title(of number: Int, shown: String) -> Binding<String> {
         Binding(
-            get: { slot.disc?.tracks(from: .musicBrainz).first { $0.number == number }?.title ?? shown },
+            get: { slot.disc.flatMap { $0.edits.tracks[number]?.title ?? $0.baseTitle(ofTrack: number) } ?? shown },
             set: { text in
                 let trimmed = text.trimmingCharacters(in: .whitespaces)
                 let original = slot.disc?.baseTitle(ofTrack: number)
@@ -168,7 +184,9 @@ struct TrackTable: View {
             get: {
                 guard let disc = slot.disc else { return "" }
                 if let edited = disc.edits.tracks[number]?.artist { return edited }
-                return disc.tracks(from: .musicBrainz).first { $0.number == number }?.artist ?? ""
+                // The release's artist for the track, when it is not the album's.
+                let artist = disc.baseArtist(ofTrack: number)
+                return artist != disc.shownRelease?.artist ? artist ?? "" : ""
             },
             set: { text in
                 let trimmed = text.trimmingCharacters(in: .whitespaces)

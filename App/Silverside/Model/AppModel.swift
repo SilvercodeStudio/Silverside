@@ -377,6 +377,8 @@ final class AppModel {
     // MARK: Rips
 
     func startRip(_ slot: DriveSlot) {
+        // A name still being typed (with ⌘R, say) goes into the rip.
+        slot.pendingNames.acceptAll()
         guard slot.rip?.isRunning != true, !slot.isBusy, let disc = slot.disc else { return }
         slot.ripOnInsertDate = nil
         slot.ripOnInsertNote = nil

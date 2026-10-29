@@ -51,6 +51,8 @@ final class DriveSlot: Identifiable {
     private let customDrive: (@Sendable () throws -> any CDDrive)?
     let isDemo: Bool
     /// The disc the `disc` was read from, so a swapped disc is read again.
+    /// Names typed in the drive page and not yet accepted, for a rip that starts first.
+    @ObservationIgnored let pendingNames = PendingNames()
     @ObservationIgnored private var discBSDName: String?
     @ObservationIgnored private var readTask: Task<Void, Never>?
 

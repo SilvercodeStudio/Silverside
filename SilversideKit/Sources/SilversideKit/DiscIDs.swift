@@ -29,11 +29,20 @@ extension TOC {
         for track in idTracks {
             offsets[track.number] = track.startLBA + CDDA.leadInSectors
         }
-        var text = String(format: "%02X%02X", idTracks.first!.number, idTracks.last!.number)
-        for offset in offsets {
-            text += String(format: "%08X", offset)
+        // Upper-case hex, digit by digit: the app names the disc's medium often, as names are
+        // typed, and String(format:) for each of the 101 numbers was most of the time.
+        var text = [UInt8]()
+        text.reserveCapacity(4 + 8 * offsets.count)
+        let digits = Array("0123456789ABCDEF".utf8)
+        func hex(_ value: Int, digits count: Int) {
+            for shift in stride(from: (count - 1) * 4, through: 0, by: -4) {
+                text.append(digits[(value >> shift) & 0xF])
+            }
         }
-        let digest = Data(Insecure.SHA1.hash(data: Data(text.utf8)))
+        hex(idTracks.first!.number, digits: 2)
+        hex(idTracks.last!.number, digits: 2)
+        for offset in offsets { hex(offset, digits: 8) }
+        let digest = Data(Insecure.SHA1.hash(data: text))
         return digest.base64EncodedString()
             .replacingOccurrences(of: "+", with: ".")
             .replacingOccurrences(of: "/", with: "_")

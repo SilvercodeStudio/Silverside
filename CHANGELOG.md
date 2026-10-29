@@ -19,6 +19,18 @@ command-line tool.
 
 ### Fixed
 
+- Typing a name was slow, and could drop a key, more so on a disc with many
+  tracks: each key redrew the whole page. Now the rest of the page changes
+  when you accept the name (Return, Tab, or clicking elsewhere), and a rip
+  started while you type still gets the name.
+- Tab in a track's title or artist went to the sidebar. Now Tab and
+  Shift-Tab go to the next and previous track's fields, before a rip and in
+  an earlier rip.
+- A disc that MusicBrainz does not know could get the names of an unrelated
+  album with as many tracks and about the same length, such as another
+  20-track compilation. Now a release that MusicBrainz finds this way is
+  offered only if each of its tracks is within 3 seconds of the disc's;
+  else the disc counts as not in MusicBrainz.
 - Stop during the CTDB check could still lose the rip when it came while CTDB's
   repair data was downloading. Now the rip is kept then too.
 - **Save Data Track…** replaced a data track image, and the folder of its

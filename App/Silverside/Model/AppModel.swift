@@ -69,6 +69,8 @@ final class AppModel {
     /// Work on the library under way, or the last, shown in a sheet.
     private(set) var library: LibraryRun?
     var libraryShown = false
+    /// The rip whose release the Change Release sheet chooses.
+    var changingRelease: RecentRip?
 
     /// False until the first look at the drives: a disc in a drive at launch is not ripped by itself.
     @ObservationIgnored private var hasListedDrives = false
@@ -692,6 +694,43 @@ final class AppModel {
                 refreshRecentRips()
             } catch {
                 alert = AppAlert(title: "The cover could not be changed", message: "\(error)")
+            }
+        }
+    }
+
+    /// True while nothing else works on the rip's files, as for Move to Trash, and no other
+    /// library work runs.
+    func canChangeRelease(_ rip: RecentRip) -> Bool {
+        rip.report.release != nil && canMoveToTrash(rip) && library?.isRunning != true
+    }
+
+    /// Change Release: gives an earlier rip another release that has its disc, and brings its
+    /// files up to date (`DiscEncoder.changeRelease`), with the release's cover if the Cover Art
+    /// Archive has one. The other encoded discs of the old and the new release are brought up to
+    /// date after it, for their album gain. The selection follows a report that moved.
+    func changeRelease(of rip: RecentRip, to chosen: MusicBrainzRelease) {
+        guard canChangeRelease(rip) else { return }
+        let old = rip.report.release?.id
+        let others = recentRips.filter { other in
+            other.file != rip.file && (other.report.encoding != nil || !other.hasAudio)
+                && [old, chosen.id].contains(other.report.release?.id)
+        }
+        Task { @MainActor in
+            // The picker's releases are the disc lookup's; the details (writers, genre) come by ID.
+            let release = ((try? await MusicBrainzClient().release(id: chosen.id)) ?? nil) ?? chosen
+            var cover = ReleaseCoverStore().cover(forReleaseID: release.id)
+            if cover == nil, release.hasFrontCover {
+                cover = try? await CoverArtClient().frontCover(releaseID: release.id)
+            }
+            let run = LibraryRun(
+                title: rip.title, encode: [], update: others,
+                change: .init(rip: rip, release: release, cover: cover))
+            library = run
+            libraryShown = true
+            run.start(settings: settings, cover: nil) { [self] in
+                if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
+                coverVersion += 1
+                refreshRecentRips()
             }
         }
     }

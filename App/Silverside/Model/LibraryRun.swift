@@ -23,12 +23,23 @@ final class LibraryRun: Identifiable {
         var suffix = " (HDCD)"
     }
 
+    /// Change Release: another release for an earlier rip, with its cover if it has one.
+    struct ReleaseChange {
+        var rip: RecentRip
+        var release: MusicBrainzRelease
+        var cover: CoverImage?
+    }
+
     let id = UUID()
     let title: String
     /// The rips to encode, and the rips whose files to bring up to date.
     let encode: [RecentRip]
     let update: [RecentRip]
     let hdcd: HDCDDecode?
+    let change: ReleaseChange?
+    /// The changed rip's report, where it is after the change (an album folder's report moves
+    /// when its name or folder changes).
+    private(set) var changedReport: (from: URL, to: URL)?
     private(set) var phase = Phase.running
     private(set) var log: [String] = []
     private(set) var encodedDiscs = 0
@@ -38,11 +49,15 @@ final class LibraryRun: Identifiable {
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private let stopToken = StopToken()
 
-    init(title: String, encode: [RecentRip], update: [RecentRip], hdcd: HDCDDecode? = nil) {
+    init(
+        title: String, encode: [RecentRip], update: [RecentRip], hdcd: HDCDDecode? = nil,
+        change: ReleaseChange? = nil
+    ) {
         self.title = title
         self.encode = encode
         self.update = update
         self.hdcd = hdcd
+        self.change = change
     }
 
     var isRunning: Bool { phase == .running }
@@ -50,11 +65,13 @@ final class LibraryRun: Identifiable {
     var headline: String {
         switch phase {
         case .running:
+            if change != nil { return "Changing the release…" }
             return hdcd != nil ? "Decoding HDCD…" : encode.isEmpty ? "Updating the library…" : "Encoding…"
         case .stopped: return "Stopped after the disc under way."
         case .failed(let message): return "Failed: \(message)"
         case .finished:
             var parts = [String]()
+            if change != nil, changedReport != nil { parts.append("Release changed") }
             if !encode.isEmpty { parts.append("\(Format.count(encodedDiscs, "disc")) encoded") }
             if !update.isEmpty { parts.append("\(Format.count(updatedDiscs, "disc")) brought up to date") }
             if hdcd != nil { parts.append("\(Format.count(decodedDiscs, "disc")) decoded") }
@@ -71,12 +88,39 @@ final class LibraryRun: Identifiable {
     ) {
         let run = self
         let stop = self.stopToken
-        let (encode, update, hdcd) = (self.encode, self.update, self.hdcd)
+        let (encode, update, hdcd, change) = (self.encode, self.update, self.hdcd, self.change)
         task = Task.detached {
             @Sendable func onMain(_ body: @escaping @MainActor () -> Void) {
                 DispatchQueue.main.async { MainActor.assumeIsolated(body) }
             }
             let library = settings.libraryURL
+            // The other discs are brought up to date only after the change, for their album gain.
+            if let change {
+                let rip = change.rip
+                do {
+                    var encoder = DiscEncoder(settings: settings)
+                    encoder.log = { line in onMain { run.add("  \(line)") } }
+                    let result = try encoder.changeRelease(
+                        reportAt: rip.file, to: change.release, cover: change.cover, library: library)
+                    onMain {
+                        run.changedReport = (rip.file, result.report)
+                        run.add(
+                            "\(rip.title): now \(change.release.artist) – \(change.release.title)"
+                                + (result.albumFolder == nil
+                                    ? "; not encoded yet, so the files get the names when it is."
+                                    : "; wrote the tags of \(Format.count(result.files.count, "file"))"
+                                        + (result.renamed > 0 ? ", renamed \(result.renamed)." : ".")))
+                    }
+                } catch {
+                    onMain {
+                        run.problems += 1
+                        run.add("\(rip.title): the release was not changed: \(error)")
+                        run.end(.failed("\(error)"))
+                        onFinish()
+                    }
+                    return
+                }
+            }
             // Every disc first takes the set's current names and the cover; an encoded one has
             // its files written again, a rip that is not encoded yet keeps them in its disc.json.
             for rip in update + encode where !stop.isStopped {

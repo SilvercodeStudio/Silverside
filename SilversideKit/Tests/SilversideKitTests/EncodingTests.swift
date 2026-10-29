@@ -597,4 +597,98 @@ extension EncodingTests {
         let saved = try RipReport.read(from: report)
         #expect(saved.encoding?.file(ofTrack: 1) == "02-01 Help on the Way (Live).flac")
     }
+
+    /// Change Release: disc 2 of a 2-disc release becomes a 1-disc edition with other names.
+    /// The files, the album folder, the CUE sheet, and the album's report take the new names;
+    /// the rip's own edits go, and the choice is kept for the disc.
+    @Test func changesTheReleaseOfAnEncodedRip() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = try DiscEncoder(format: .flac).encode(try RippedDisc(folder: folder), into: library)
+        let oldAlbum = files[0].deletingLastPathComponent()
+        let discJSON = folder.appending(path: "disc.json")
+        try MetadataEdits(tracks: [1: .init(title: "Help on the Way (Live)")]).save(inReportAt: discJSON)
+        let toc = try TOC(ctdbTOCString: try RipReport.read(from: discJSON).toc)
+        var single = try #require(try RipReport.read(from: discJSON).release)
+        single.id = "single"
+        single.title = "Giants Stadium 1991"
+        single.barcode = "081227900000"
+        single.media = [single.media[1]]
+        single.media[0].position = 1
+        single.media[0].discIDs = [toc.musicBrainzDiscID]
+        let choices = ReleaseChoiceStore(url: root.appending(path: "choices.json"))
+
+        let update = try DiscEncoder(format: .flac).changeRelease(
+            reportAt: discJSON, to: single, library: library,
+            editsStore: ReleaseEditsStore(url: root.appending(path: "edits.json")),
+            coverStore: ReleaseCoverStore(folder: root.appending(path: "covers")), choiceStore: choices)
+        let album = library.appending(path: "Grateful Dead/Giants Stadium 1991")
+        #expect(update.albumFolder?.standardizedFileURL == album.standardizedFileURL)
+        #expect(update.report == discJSON && !FileManager.default.fileExists(atPath: oldAlbum.path))
+        let contents = Set(try FileManager.default.contentsOfDirectory(atPath: album.path))
+        #expect(contents.isSuperset(of: ["Rip Report.json", "Rip Report.md", "Giants Stadium 1991.cue", "cover.jpg"]))
+        #expect(!contents.contains { $0.contains("(Disc 2)") })
+        #expect(update.files.map(\.lastPathComponent) == ["01 Help on the Way.flac", "02 Slipknot!.flac"])
+        let tags = try FLACTags.read(update.files[0])
+        #expect(tags.contains { $0.key == "MUSICBRAINZ_ALBUMID" && $0.value == "single" })
+        #expect(tags.contains { $0.key == "ALBUM" && $0.value == "Giants Stadium 1991" })
+        #expect(tags.contains { $0.key == "TITLE" && $0.value == "Help on the Way >" })
+        #expect(
+            try RipReport.read(from: discJSON).release?.id == "single"
+                && MetadataEdits.read(fromDiscJSONOf: folder) == nil)
+        let albumReport = try RipReport.read(from: album.appending(path: "Rip Report.json"))
+        #expect(albumReport.release?.id == "single" && albumReport.encoding?.folder == album.path)
+        #expect(choices.choices(forDiscID: toc.musicBrainzDiscID) == ["single"])
+    }
+
+    /// No disc of the release has the rip's TOC: nothing changes.
+    @Test func refusesAReleaseWithoutTheDisc() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let discJSON = folder.appending(path: "disc.json")
+        var other = try #require(try RipReport.read(from: discJSON).release)
+        other.id = "other"
+        other.media = [other.media[0]]
+        let before = try Data(contentsOf: discJSON)
+        #expect(throws: EncodingError.self) {
+            try DiscEncoder(format: .flac).changeRelease(
+                reportAt: discJSON, to: other, library: library,
+                choiceStore: ReleaseChoiceStore(url: root.appending(path: "choices.json")))
+        }
+        #expect(try Data(contentsOf: discJSON) == before)
+    }
+
+    /// *Let It Be… Naked*: disc 1 tagged as the Japanese edition, disc 2 as the US one, in one
+    /// album folder. Disc 1's report in the library changes to the US edition: it stays where it
+    /// is, its CUE sheet is written again, and its album gain is now over both discs.
+    @Test func changesOneDiscOfASetToTheOtherDiscsEdition() throws {
+        let (folder2, library) = try makeRip()
+        let root = folder2.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (folder1, _) = try makeRip(disc1: true)
+        defer { try? FileManager.default.removeItem(at: folder1.deletingLastPathComponent()) }
+        try RipReport.update(reportAt: folder1.appending(path: "disc.json")) { $0.release?.id = "japan" }
+        let encoder = DiscEncoder(format: .flac)
+        let files2 = try encoder.encode(try RippedDisc(folder: folder2), into: library)
+        let files1 = try encoder.encode(try RippedDisc(folder: folder1), into: library)
+        let album = files2[0].deletingLastPathComponent()
+        #expect(files1[0].deletingLastPathComponent() == album)
+        let report1 = album.appending(path: "Rip Report (Disc 1).json")
+        #expect(try RipReport.read(from: report1).encoding?.replayGain?.release == nil)
+        let release = try #require(try RipReport.read(from: folder2.appending(path: "disc.json")).release)
+
+        let update = try encoder.changeRelease(
+            reportAt: report1, to: release, library: library,
+            editsStore: ReleaseEditsStore(url: root.appending(path: "edits.json")),
+            coverStore: ReleaseCoverStore(folder: root.appending(path: "covers")),
+            choiceStore: ReleaseChoiceStore(url: root.appending(path: "choices.json")))
+        #expect(update.report == report1 && update.albumFolder == album && update.renamed == 0)
+        let saved = try RipReport.read(from: report1)
+        #expect(saved.release?.id == "rel" && saved.encoding?.replayGain?.releaseDiscs == 2)
+        let sheets = try FileManager.default.contentsOfDirectory(atPath: album.path).filter { $0.hasSuffix(".cue") }
+        #expect(sheets.count == 2 && sheets.contains { $0.hasSuffix("(Disc 1).cue") })
+        #expect(try FLACTags.read(files1[0]).contains { $0.key == "MUSICBRAINZ_ALBUMID" && $0.value == "rel" })
+    }
 }

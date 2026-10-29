@@ -437,11 +437,22 @@ struct ResultsView: View {
                         Text("Writing the names into the encoded files…").font(.callout).foregroundStyle(.secondary)
                     }
                 }
-                if let set = model.set(for: report.release) {
-                    Button(setText(set)) { model.selection = .set(set.releaseID) }
-                        .buttonStyle(.link).font(.callout)
-                        .help("The whole set: each disc's state, the album's names, and the work left")
+                HStack(spacing: 14) {
+                    if let set = model.set(for: report.release) {
+                        Button(setText(set)) { model.selection = .set(set.releaseID) }
+                            .help("The whole set: each disc's state, the album's names, and the work left")
+                    }
+                    if report.release != nil {
+                        // The model's rip knows whether its files are still there.
+                        let rip = model.allRips.first { $0.file == recentRip.file } ?? recentRip
+                        Button("Change Release…") { model.changingRelease = rip }
+                            .disabled(!model.canChangeRelease(rip))
+                            .help(
+                                "Choose another release of this disc in MusicBrainz, such as the edition you have, and retag and rename the files to match"
+                            )
+                    }
                 }
+                .buttonStyle(.link).font(.callout)
             }
         }
     }

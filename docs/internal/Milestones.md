@@ -345,7 +345,7 @@ Versions (decided 2026-10-28): 0.9 is tagged on 2026-10-28; the work after it is
 
 Next, for 0.9.1 (asked 2026-10-28):
 
-- **Change Release…** for an earlier rip: choose another release of the disc (another edition, or a release MusicBrainz found after the rip), and retag and rename its encoded files in place, with no new rip. The test: *Let It Be… Naked*, whose disc 1 was ripped as the Japanese edition (TOCP-67300) and disc 2 as the US one (CDP 7243 5 95713 2 4), so the app shows two sets of one disc each.
+- Done (2026-10-29, not yet tried in the app on the real discs): **Change Release…** for an earlier rip (`DiscEncoder.changeRelease`; the app's sheet, from the rip's header, the Disc menu, and the rips' menus). It retags and renames the encoded files in place, renames the album report when the disc's number changes, drops the rip's own edits, keeps the choice for the disc, and brings the other encoded discs of the old and new release up to date for their album gain. The test: *Let It Be… Naked*, whose disc 1 was ripped as the Japanese edition (TOCP-67300) and disc 2 as the US one (CDP 7243 5 95713 2 4), so the app shows two sets of one disc each (on a copy of the album folder: the tags, the CUE sheet, and the album gain over both discs came out right). Not done: the CLI (`metadata -i … --release … --retag` still writes only the disc.json's release).
 - Possibly, from the Feist *Metals* repairs (2026-10-28): Repair stops its re-reads after a round that leaves as many columns failing (the ASUS and the BU50N each gave new versions in 4 rounds, and 12 columns failed every time), and the log lists the failing columns' suspects for up to 16 columns, not 8.
 
 The rest of 1.0, besides signing and notarization:

@@ -53,6 +53,8 @@ struct AppCommands: Commands {
             Button("Repair Rip…") { if let rip = model.selectedRip { model.startRepair(rip) } }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(!canRepair)
+            Button("Change Release…") { model.changingRelease = model.selectedRip }
+                .disabled(model.selectedRip.map(model.canChangeRelease) != true)
             Divider()
             Button("Eject") { if let slot = model.selectedDrive { model.eject(slot) } }
                 .keyboardShortcut("e", modifiers: .command)

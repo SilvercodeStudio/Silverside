@@ -81,6 +81,9 @@ public struct LibraryUpdate: Sendable {
     public var renamed: Int
     /// The album folder after the update; nil when the rip has not been encoded.
     public var albumFolder: URL?
+    /// The rip's report after the update: its disc.json, or the album folder's report, which
+    /// moves with the album folder.
+    public var report: URL
 }
 
 extension DiscEncoder {
@@ -106,11 +109,12 @@ extension DiscEncoder {
     /// removes the disc's own cover, which its files embed in place of the album's. A rip's `disc.json`
     /// records its encoding only when the rip itself encoded; for one encoded later, the album
     /// folder in `library`, named as this encoder names it, is looked at. A rip not yet
-    /// encoded gets the cover file only.
+    /// encoded gets the cover file only. `encoding`, if given, is the album's encoding record
+    /// for a disc.json that lacks one.
     public func updateLibrary(
         reportAt file: URL, cover: CoverImage? = nil, remember: Bool = true, discCover: DiscCoverChange = .keep,
         library: URL? = nil, editsStore: ReleaseEditsStore = ReleaseEditsStore(),
-        coverStore: ReleaseCoverStore = ReleaseCoverStore()
+        coverStore: ReleaseCoverStore = ReleaseCoverStore(), encoding found: RipReport.Encoding? = nil
     ) throws -> LibraryUpdate {
         var report = try RipReport.read(from: file)
         let folder = file.deletingLastPathComponent()
@@ -124,22 +128,12 @@ extension DiscEncoder {
         guard let medium = release.medium(for: toc) else { throw EncodingError.unknownMedium(folder) }
         let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
 
-        // The album folder: the encoding's, or for a rip encoded from the terminal, the one the
-        // templates name: with the names as they are now, else as the rip alone had them, else
-        // as MusicBrainz has them, since the album may have been renamed since it was encoded.
-        if report.encoding == nil, let library {
-            let ripEdits = MetadataEdits.read(fromReportAt: file) ?? MetadataEdits()
-            for candidate in [release, ripEdits.applied(to: original, toc: toc), original] {
-                guard let candidateMedium = candidate.medium(for: toc), let first = candidateMedium.tracks.first
-                else { continue }
-                let values = metadata(release: candidate, medium: candidateMedium, track: first, isrc: nil).nameValues
-                let album = library.appending(path: folderTemplate.name(values), directoryHint: .isDirectory)
-                let saved = album.appending(path: "Rip Report\(discPart).json")
-                if let encoding = (try? RipReport.read(from: saved))?.encoding {
-                    report.encoding = encoding
-                    break
+        if report.encoding == nil {
+            report.encoding =
+                found
+                ?? library.flatMap {
+                    encodingByName(reportAt: file, release: original, named: release, toc: toc, library: $0)
                 }
-            }
         }
         var albumFolder = report.encoding.map { URL(filePath: $0.folder, directoryHint: .isDirectory) }
         // A decoded copy beside the album keeps its title's suffix, and so its own folder.
@@ -173,7 +167,7 @@ extension DiscEncoder {
         }
         if isRipFolder, !edits.isEmpty { try edits.save(inDiscJSONOf: folder) }
         guard var encoding = report.encoding, let current = albumFolder else {
-            return LibraryUpdate(files: [], renamed: 0, albumFolder: nil)
+            return LibraryUpdate(files: [], renamed: 0, albumFolder: nil, report: file)
         }
         var renamed = 0
 
@@ -315,7 +309,92 @@ extension DiscEncoder {
             try Data(shown.markdown.utf8).write(to: album.appending(path: "Rip Report\(discPart).md"))
         }
         if isRipFolder, report.encoding != nil { try encoding.save(inReportAt: file) }
-        return LibraryUpdate(files: files, renamed: renamed, albumFolder: album)
+        return LibraryUpdate(
+            files: files, renamed: renamed, albumFolder: album, report: isRipFolder ? file : albumReport)
+    }
+
+    /// The encoding of a rip encoded from the terminal, which its disc.json does not record:
+    /// the record in the album folder that the templates name, with the names as they are now
+    /// (`named`), else as the rip alone had them, else as MusicBrainz has them, since the album
+    /// may have been renamed since it was encoded.
+    private func encodingByName(
+        reportAt file: URL, release original: MusicBrainzRelease, named release: MusicBrainzRelease, toc: TOC,
+        library: URL
+    ) -> RipReport.Encoding? {
+        let ripEdits = MetadataEdits.read(fromReportAt: file) ?? MetadataEdits()
+        for candidate in [release, ripEdits.applied(to: original, toc: toc), original] {
+            guard let medium = candidate.medium(for: toc), let first = medium.tracks.first else { continue }
+            let discPart = candidate.media.count > 1 ? " (Disc \(medium.position))" : ""
+            let values = metadata(release: candidate, medium: medium, track: first, isrc: nil).nameValues
+            let album = library.appending(path: folderTemplate.name(values), directoryHint: .isDirectory)
+            let saved = album.appending(path: "Rip Report\(discPart).json")
+            if let encoding = (try? RipReport.read(from: saved))?.encoding { return encoding }
+        }
+        return nil
+    }
+
+    /// Change Release: gives an earlier rip another release that has its disc (another
+    /// edition, or a release MusicBrainz found after the rip), and brings its files up to date
+    /// as `updateLibrary` does, with no new rip: the tags, the names of the files and the album
+    /// folder, and the CUE sheet. The rip's own edits go, as they changed the other release's
+    /// names; the album edits kept for the new release apply. The album folder's report gets
+    /// the release too, under its new name when the disc's number in the set changes, and the
+    /// choice is kept for the disc (`ReleaseChoiceStore`). `cover`, if given, becomes the cover;
+    /// else the rip keeps its own. Throws before it changes anything when no disc of `release`
+    /// is the rip's, or when the album folder has another report under the new name.
+    public func changeRelease(
+        reportAt file: URL, to release: MusicBrainzRelease, cover: CoverImage? = nil, library: URL? = nil,
+        editsStore: ReleaseEditsStore = ReleaseEditsStore(), coverStore: ReleaseCoverStore = ReleaseCoverStore(),
+        choiceStore: ReleaseChoiceStore = ReleaseChoiceStore()
+    ) throws -> LibraryUpdate {
+        let report = try RipReport.read(from: file)
+        let folder = file.deletingLastPathComponent()
+        guard let original = report.release else { throw EncodingError.noRelease(folder) }
+        let toc = try TOC(ctdbTOCString: report.toc)
+        guard release.medium(for: toc) != nil else { throw EncodingError.notOnRelease(folder) }
+        let isRipFolder = file.lastPathComponent == "disc.json"
+
+        // The album folder's report, under the name the disc has in each release.
+        var encoding = report.encoding
+        if isRipFolder, encoding == nil, let library {
+            let named = MetadataEdits.current(forReportAt: file, release: original, store: editsStore)
+                .applied(to: original, toc: toc)
+            encoding = encodingByName(reportAt: file, release: original, named: named, toc: toc, library: library)
+        }
+        let album = isRipFolder ? encoding.map { URL(filePath: $0.folder, directoryHint: .isDirectory) } : folder
+        var changed = report
+        changed.release = release
+        let (oldPart, newPart) = (try Self.discPart(of: report), try Self.discPart(of: changed))
+        let albumReport = album.map { $0.appending(path: "Rip Report\(oldPart).json") }.flatMap {
+            FileManager.default.fileExists(atPath: $0.path) ? $0 : nil
+        }
+        let renamedReport = albumReport?.deletingLastPathComponent().appending(path: "Rip Report\(newPart).json")
+        if oldPart != newPart, let renamedReport, FileManager.default.fileExists(atPath: renamedReport.path) {
+            throw EncodingError.exists(renamedReport)
+        }
+
+        // The release in each report, without the rip's own edits.
+        for target in Set([file, albumReport].compactMap { $0?.standardizedFileURL }) {
+            try RipReport.update(reportAt: target) { $0.release = release }
+            try MetadataEdits().save(inReportAt: target)
+        }
+        var updated = file
+        if let albumReport, let renamedReport, oldPart != newPart {
+            try FileManager.default.moveItem(at: albumReport, to: renamedReport)
+            // The Markdown report is written again under the new name.
+            try? FileManager.default.removeItem(at: albumReport.deletingPathExtension().appendingPathExtension("md"))
+            if !isRipFolder { updated = renamedReport }
+        }
+        // The rip's CUE sheets, which are written again with the new names.
+        if let album, let encoding {
+            for sheet in CueSheet.sheets(in: album, namingOnly: Set(encoding.files.map(\.file))) {
+                try FileManager.default.removeItem(at: sheet)
+            }
+        }
+        try choiceStore.remember(release)
+        return try updateLibrary(
+            reportAt: updated, cover: cover, remember: false, library: library, editsStore: editsStore,
+            coverStore: coverStore, encoding: encoding)
     }
 
     /// True if the album folder holds the report of a rip of another release: another edition

@@ -75,6 +75,9 @@ struct MainWindow: View {
         .sheet(isPresented: $model.libraryShown) {
             if let run = model.library { LibrarySheet(run: run) }
         }
+        .sheet(item: $model.changingRelease) { rip in
+            ChangeReleaseSheet(rip: rip)
+        }
         .onAppear {
             // The first launch opens the welcome. `-welcomeDone 0` opens it again, and `-welcomeDone 1` keeps it shut.
             if !UserDefaults.standard.bool(forKey: WelcomeView.doneKey) { openWindow(id: "welcome") }
@@ -224,6 +227,8 @@ struct SidebarView: View {
                     .help(rip.details)
                     .contextMenu {
                         Button("Show in Finder") { model.revealInFinder(rip.folder) }
+                        Button("Change Release…") { model.changingRelease = rip }
+                            .disabled(!model.canChangeRelease(rip))
                         Divider()
                         Button("Move to Trash…") { model.moveToTrash(rip) }.disabled(!model.canMoveToTrash(rip))
                     }

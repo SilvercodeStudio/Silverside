@@ -20,7 +20,7 @@ struct ReleasePickerSheet: View {
             List(disc.releases, id: \.id, selection: $selected) { release in
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(release.artist) – \(release.title)").font(.body.weight(.medium))
-                    Text(details(of: release)).font(.callout).foregroundStyle(.secondary)
+                    Text(Self.details(of: release, toc: disc.toc)).font(.callout).foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 2)
                 .tag(release.id)
@@ -56,12 +56,13 @@ struct ReleasePickerSheet: View {
         .onAppear { selected = disc.release?.id ?? disc.releases.first?.id }
     }
 
-    private func details(of release: MusicBrainzRelease) -> String {
+    /// "2003-11-18 · US · disc 1 of 2 · barcode … · Capitol CDP 7243 5 95713 2 4": what tells editions apart.
+    static func details(of release: MusicBrainzRelease, toc: TOC) -> String {
         var parts = [String]()
         if let date = release.date { parts.append(date) }
         if let country = release.country { parts.append(country) }
         if release.media.count > 1 {
-            if let medium = release.medium(for: disc.toc) {
+            if let medium = release.medium(for: toc) {
                 parts.append("disc \(medium.position) of \(release.media.count)")
             } else {
                 parts.append("\(release.media.count) discs")
@@ -77,6 +78,112 @@ struct ReleasePickerSheet: View {
         if let status = release.status, status != "Official" { parts.append(status.lowercased()) }
         if let disambiguation = release.disambiguation, !disambiguation.isEmpty { parts.append(disambiguation) }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// Change Release: another release of MusicBrainz's for an earlier rip's disc.
+struct ChangeReleaseSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    var rip: RecentRip
+    @State private var releases: [MusicBrainzRelease] = []
+    @State private var isFuzzy = false
+    @State private var isLookingUp = true
+    @State private var failure: String?
+    @State private var selected: String?
+
+    private var toc: TOC? { try? TOC(ctdbTOCString: rip.report.toc) }
+    private var current: MusicBrainzRelease? { rip.report.release }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Change the release of “\(rip.title)”").font(.headline)
+            Text(
+                "The encoded files get the release's names, tags, and cover, and are renamed to match. The audio "
+                    + "does not change. Names you changed on this rip go back to the release's. The other discs of a "
+                    + "set keep their release."
+            )
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            if let current, current.isManual {
+                Text("This rip has no MusicBrainz release: its names were typed in.").font(.callout)
+            }
+            if isLookingUp {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Looking up the disc in MusicBrainz…").foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 220)
+            } else if releases.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(failure.map { "The lookup failed: \($0)" } ?? "MusicBrainz has no release with this disc.")
+                    if let toc, failure == nil {
+                        Link(
+                            "Add this disc ID to a release in MusicBrainz",
+                            destination: MusicBrainzRelease.submissionURL(for: toc))
+                        Text("Then click Look Up Again.").foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
+            } else {
+                if isFuzzy {
+                    Text("MusicBrainz does not know this disc ID. These releases have nearly the same TOC.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                List(releases, id: \.id, selection: $selected) { release in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(
+                            "\(release.artist) – \(release.title)"
+                                + (release.id == current?.id ? " (this rip's release)" : "")
+                        )
+                        .font(.body.weight(.medium))
+                        if let toc {
+                            Text(ReleasePickerSheet.details(of: release, toc: toc)).font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                    .tag(release.id)
+                }
+                .frame(minHeight: 220)
+            }
+            HStack {
+                Button("Look Up Again") { Task { await lookUp(fresh: true) } }
+                    .disabled(isLookingUp)
+                    .help("Ask MusicBrainz again, for a release or a disc ID added since the rip")
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Change Release") {
+                    if let release = releases.first(where: { $0.id == selected }) {
+                        model.changeRelease(of: rip, to: release)
+                    }
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(selected == nil || selected == current?.id || !model.canChangeRelease(rip))
+            }
+        }
+        .padding(20)
+        .frame(width: 640, height: 460)
+        .task { await lookUp(fresh: false) }
+    }
+
+    /// The releases with the disc, from the cache unless `fresh`: the rip looked the disc up.
+    private func lookUp(fresh: Bool) async {
+        guard let toc else { return }
+        isLookingUp = true
+        failure = nil
+        do {
+            let result = try await ReleaseLookup.find(toc: toc, mcn: rip.report.mcn, useCache: !fresh)
+            releases = result.ranked
+            isFuzzy = !result.isExact
+        } catch {
+            failure = "\(error)"
+        }
+        isLookingUp = false
+        if !releases.contains(where: { $0.id == selected }) {
+            selected = releases.first { $0.id != current?.id }?.id
+        }
     }
 }
 

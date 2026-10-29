@@ -54,6 +54,8 @@ struct HistoryView: View {
                         Button("Remove from History") { model.forget(rip) }
                     } else {
                         Button("Show in Finder") { model.revealInFinder(rip.folder) }
+                        Button("Change Release…") { model.changingRelease = rip }
+                            .disabled(!model.canChangeRelease(rip))
                         Divider()
                         Button("Move to Trash…") { model.moveToTrash(rip) }.disabled(!model.canMoveToTrash(rip))
                     }

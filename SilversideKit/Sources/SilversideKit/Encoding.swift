@@ -240,6 +240,8 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
     case deEmphasized(URL)
     case sourceChanged(URL)
     case duplicateDestination(URL)
+    /// No disc of the release has the rip's TOC.
+    case notOnRelease(URL)
 
     public var description: String {
         switch self {
@@ -260,6 +262,7 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
         case .duplicateDestination(let file):
             "Several tracks would write to \(file.path). Choose a template with unique track names."
         case .sourceChanged(let file): "\(file.path) no longer decodes to the audio that was ripped and verified."
+        case .notOnRelease(let folder): "No disc of that release is the disc that \(folder.path) holds."
         }
     }
 }

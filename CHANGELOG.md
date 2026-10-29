@@ -5,6 +5,18 @@ command-line tool.
 
 ## 0.9.1 (not released yet)
 
+### Added
+
+- **Change Release…** for an earlier rip: choose another release of the disc
+  in MusicBrainz, such as your edition, or one added since the rip. The
+  rip's encoded files get the release's tags, names, and cover, with no new
+  rip.
+
+### Changed
+
+- The AccurateRip chip no longer says "other pressing": tracks that match
+  another pressing count with the accurate ones, and the tooltip says which.
+
 ### Fixed
 
 - Stop during the CTDB check could still lose the rip when it came while CTDB's

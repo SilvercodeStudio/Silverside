@@ -1074,20 +1074,18 @@ enum ResultChips {
         } else {
             let matched = accurate + others
             let tone: Chip.Tone = matched == total ? .good : .warning
-            if others == 0 {
-                chips.append(Chip(text: "AccurateRip \(accurate) / \(total)", tone: tone))
-            } else {
-                // One count, so "0 / 13" next to "12 match other pressings" does not read as a failure.
-                chips.append(
-                    Chip(
-                        text: "AccurateRip \(matched) / \(total) · "
-                            + (accurate == 0
-                                ? "other pressing" : "\(others) other pressing" + (others == 1 ? "" : "s")),
-                        tone: tone,
-                        help: (others == 1 ? "1 track matches" : "\(others) tracks match")
-                            + " AccurateRip at another pressing's offset: the audio is right, but a few samples earlier"
-                            + " or later than on the discs in the database. A CD-R copy of a disc often is."))
-            }
+            // One count for both, so "0 / 13" does not read as a failure; the tooltip tells them apart.
+            chips.append(
+                Chip(
+                    text: "AccurateRip \(matched) / \(total)", tone: tone,
+                    help: others == 0
+                        ? nil
+                        : (others == 1 ? "1 track matches" : "\(others) tracks match")
+                            + " AccurateRip at another pressing's offset. The audio is the same, but it sits some"
+                            + " samples earlier or later on this disc than on the discs in the database. The drive's"
+                            + " own offset is already corrected, so the difference is in the disc: pressings from"
+                            + " other plants or years often differ this way. Burned CD-R copies are sometimes offset"
+                            + " by a few samples."))
             if noChecksum > 0 {
                 chips.append(
                     Chip(

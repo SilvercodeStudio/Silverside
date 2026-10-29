@@ -4,7 +4,7 @@ A rip is only as good as the check that proves it. Silverside uses two databases
 
 ## AccurateRip
 
-AccurateRip holds checksums of each track from many people's rips of the same disc. A track that matches is **accurate**: the data is bit for bit what other drives read. The number after it (conf 52) is how many rips agree. A track can also match **another pressing**: the same audio at a different alignment, which also proves it free of errors. A CD-R copy of a disc usually matches this way, because the copy's audio is shifted by a few samples.
+AccurateRip holds checksums of each track from many people's rips of the same disc. A track that matches is **accurate**: the data is bit for bit what other drives read. The number after it (conf 52) is how many rips agree. A track can also match **another pressing**: the same audio at a different alignment, which also proves it free of errors. The drive's own offset is already corrected, so the difference is in the disc: pressings from other plants or years often differ this way, and burned CD-R copies are sometimes offset by a few samples. The AccurateRip chip counts these tracks with the accurate ones; its tooltip, and each track's status, tell them apart.
 
 A disc that is not in AccurateRip cannot be proved this way. Then Silverside reads each track twice and reports whether the reads agree.
 

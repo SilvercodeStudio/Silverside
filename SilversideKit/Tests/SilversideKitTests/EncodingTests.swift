@@ -353,7 +353,7 @@ struct EncodingTests {
         #expect(accepted.unverifiedTracks == [2] && accepted.advice == nil)
         let markdown = try String(contentsOf: folder.appending(path: "Rip Report.md"), encoding: .utf8)
         #expect(
-            markdown.contains("Accepted as it is 2027-01-15T08:00:00Z") && markdown.contains("track 2 is not verified"))
+            markdown.contains("Accepted as-is 2027-01-15T08:00:00Z") && markdown.contains("track 2 is not verified"))
         let disc = try RippedDisc(folder: folder)
         #expect(disc.isAccepted && disc.isFinished)
         let files = try DiscEncoder(format: .flac).encode(disc, into: library)

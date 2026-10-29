@@ -41,7 +41,7 @@ The result banner says what is most likely to help next. In short:
 - Rip in another drive. Each drive reads damage differently, so two drives together often get what one cannot.
 - Repair the rip.
 - For a new release, wait, then use Check Again (below).
-- Accept the rip as it is. When nothing verifies a few tracks, listen to them: damage that no drive can read is often a short spot you cannot hear. **Encode…** on the earlier rip asks you to accept it, then encodes it into the library as a verified rip is, and the rip's WAV files go unless Settings keep them. The report says that you accepted it and which tracks are not verified, and the rip shows an "Accepted as it is" chip. Check Again can still verify it later.
+- Accept the rip as-is. When nothing verifies a few tracks, listen to them: damage that no drive can read is often a short spot you cannot hear. **Encode…** on the earlier rip asks you to accept it, then encodes it into the library as a verified rip is, and the rip's WAV files go unless Settings keep them. The report says that you accepted it and which tracks are not verified, and the rip shows an "Accepted as-is" chip. Check Again can still verify it later.
 
 ## Repair
 

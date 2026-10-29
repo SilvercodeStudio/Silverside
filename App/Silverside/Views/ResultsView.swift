@@ -221,7 +221,7 @@ struct ResultsView: View {
 
     private var encodeHelp: String {
         if !report.isVerified && report.accepted == nil {
-            return "Encode the rip although it is not verified, once you accept it as it is: listen to its "
+            return "Encode the rip although it is not verified, once you accept it as-is: listen to its "
                 + "unverified tracks first. Repair, or a rip in another drive, may still verify it."
         }
         return "Encode the rip into the library as \(model.settings.format.name), with the names as they are now."

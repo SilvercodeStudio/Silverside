@@ -36,7 +36,7 @@ extension RipReport {
             let unverified = unverifiedTracks
             lines += [
                 "",
-                "Accepted as it is \(ISO8601DateFormatter().string(from: accepted)), and encoded as a verified rip is"
+                "Accepted as-is \(ISO8601DateFormatter().string(from: accepted)), and encoded as a verified rip is"
                     + (unverified.isEmpty
                         ? "."
                         : ": \(unverified.count == 1 ? "track" : "tracks") \(RipSet.list(unverified)) "

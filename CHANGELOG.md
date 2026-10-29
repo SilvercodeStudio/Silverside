@@ -26,11 +26,11 @@ command-line tool.
   the disc in a drive, when the rip did not save it: it failed, or the rip left
   it out. It goes into the rip's folder, and into the album folder with its
   files if the rip was encoded.
-- **Accept a rip as it is:** an earlier rip that is not verified can be
+- **Accept a rip as-is:** an earlier rip that is not verified can be
   encoded with Encode…, after you accept it. It goes into the library as a
-  verified rip does, and its report and an "Accepted as it is" chip say which
+  verified rip does, and its report and an "Accepted as-is" chip say which
   tracks are not verified.
-- A disc you ripped before shows a "Ripped before" chip in its header, which
+- A disc you ripped before shows a "Previously ripped" chip in its header, which
   says whether that rip is verified and opens it when clicked.
 - **Move to Trash…** for an earlier rip, from its menu in Recent Rips and Rip
   History: the rip's folder with its WAV files, or for a rip in the library, its

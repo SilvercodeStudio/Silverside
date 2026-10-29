@@ -593,7 +593,7 @@ final class AppModel {
         let unverified = rip.report.unverifiedTracks
         let tracks = "\(unverified.count == 1 ? "Track" : "Tracks") \(RipSet.list(unverified))"
         let alert = NSAlert()
-        alert.messageText = "Accept this rip as it is, and encode it?"
+        alert.messageText = "Accept this rip as-is, and encode it?"
         alert.informativeText =
             "\(tracks) \(unverified.count == 1 ? "is" : "are") not verified: AccurateRip and CTDB do not prove "
             + (unverified.count == 1 ? "it" : "them") + ", so there can be errors. Listen to "

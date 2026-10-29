@@ -483,7 +483,7 @@ struct AlbumHeader: View {
             let date = rip.date.formatted(date: .abbreviated, time: .omitted)
             let place = "\(date) on \(rip.driveName), in the \(rip.location.lowercased())"
             Chip(
-                text: rip.isVerified ? "Ripped before · verified" : "Ripped before · not verified",
+                text: rip.isVerified ? "Previously ripped (verified)" : "Previously ripped (not verified)",
                 tone: rip.isVerified ? .good : .warning, systemImage: "clock.arrow.circlepath",
                 help: rip.isVerified
                     ? "You have a verified rip of this disc, from \(place). Click to open it."
@@ -1050,7 +1050,7 @@ enum ResultChips {
             let unverified = report.unverifiedTracks
             chips.append(
                 Chip(
-                    text: "Accepted as it is", tone: .warning, systemImage: "hand.thumbsup",
+                    text: "Accepted as-is", tone: .warning, systemImage: "hand.thumbsup",
                     help: "You accepted this rip on \(accepted.formatted(date: .abbreviated, time: .shortened)), with "
                         + "\(unverified.count == 1 ? "track" : "tracks") \(RipSet.list(unverified)) not verified, "
                         + "and it was encoded as a verified rip is. Check Again can still verify it later."))

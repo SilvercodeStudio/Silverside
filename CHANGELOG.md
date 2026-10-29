@@ -14,11 +14,18 @@ command-line tool.
 
 ### Changed
 
+- "Various Artists" is recognized as typed in other ways too ("various
+  artists", "Various Artist", "Various"; not "VA"), and spelled as
+  MusicBrainz has it. The Album Artist field then says Compilation, and
+  every track shows its artist field to fill in.
 - The AccurateRip chip no longer says "other pressing": tracks that match
   another pressing count with the accurate ones, and the tooltip says which.
 
 ### Fixed
 
+- On a disc that MusicBrainz does not know, a track with no artist of its
+  own was tagged "Unknown Artist" after you typed the album artist. Now it
+  takes the album artist.
 - Typing a name was slow, and could drop a key, more so on a disc with many
   tracks: each key redrew the whole page. Now the rest of the page changes
   when you accept the name (Return, Tab, or clicking elsewhere), and a rip

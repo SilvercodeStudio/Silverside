@@ -75,17 +75,22 @@ public struct MetadataEdits: Equatable, Sendable {
     public func applied(to release: MusicBrainzRelease, toc: TOC) -> MusicBrainzRelease {
         var edited = release
         if let album { edited.title = album }
-        if let albumArtist { edited.artistCredit = [.init(name: albumArtist)] }
+        if let albumArtist { edited.artistCredit = [.init(name: MusicBrainzRelease.albumArtist(typed: albumArtist))] }
         if let date { edited.date = date }
-        guard !tracks.isEmpty, let medium = release.medium(for: toc),
+        // A release Silverside made credits each track to its placeholder album artist ("Unknown
+        // Artist"), so a track with no artist of its own takes the album artist as typed.
+        let followsAlbum = release.isManual && albumArtist != nil
+        guard !tracks.isEmpty || followsAlbum, let medium = release.medium(for: toc),
             let index = edited.media.firstIndex(where: { $0.position == medium.position })
         else { return edited }
         let numbers = toc.audioTracks.map(\.number)
         for (position, track) in edited.media[index].tracks.enumerated() {
-            guard position < numbers.count, let edit = tracks[numbers[position]] else { continue }
             var changed = track
-            if let title = edit.title { changed.title = title }
-            if let artist = edit.artist { changed.artistCredit = [.init(name: artist)] }
+            if followsAlbum, track.artistCredit == release.artistCredit { changed.artistCredit = edited.artistCredit }
+            if position < numbers.count, let edit = tracks[numbers[position]] {
+                if let title = edit.title { changed.title = title }
+                if let artist = edit.artist { changed.artistCredit = [.init(name: artist)] }
+            }
             edited.media[index].tracks[position] = changed
         }
         return edited

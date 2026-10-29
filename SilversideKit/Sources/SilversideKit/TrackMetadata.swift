@@ -57,10 +57,25 @@ public enum SegueMarks: String, Codable, CaseIterable, Sendable {
 extension MusicBrainzRelease {
     /// MusicBrainz's "Various Artists".
     public static let variousArtistsID = "89ad4ac3-39f7-470e-963a-56509c546377"
+    public static let variousArtists = "Various Artists"
 
     /// True for a release credited to Various Artists.
     public var isCompilation: Bool {
-        artistCredit.contains { $0.artistID == Self.variousArtistsID || $0.name == "Various Artists" }
+        artistCredit.contains { $0.artistID == Self.variousArtistsID || Self.isVariousArtists($0.name) }
+    }
+
+    /// True if a name, as typed, means Various Artists: in any case, with other spaces or
+    /// punctuation, and "Various Artist" or "Various" (Discogs' name). Not "VA", which can be a
+    /// band's name.
+    public static func isVariousArtists(_ name: String) -> Bool {
+        let words = name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .split { !$0.isLetter }
+        return [["various", "artists"], ["various", "artist"], ["various"]].contains(words.map(String.init))
+    }
+
+    /// The album artist as typed, with a name that means Various Artists spelled as MusicBrainz has it.
+    public static func albumArtist(typed name: String) -> String {
+        isVariousArtists(name) ? variousArtists : name
     }
 }
 

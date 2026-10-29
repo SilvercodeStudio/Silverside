@@ -299,7 +299,7 @@ struct ResultsView: View {
             }
         }
         keep(albumText, \.album, original: release.title)
-        keep(albumArtistText, \.albumArtist, original: release.artist)
+        keep(MusicBrainzRelease.albumArtist(typed: albumArtistText), \.albumArtist, original: release.artist)
         keep(dateText, \.date, original: release.date)
         loadAlbumFields()
     }
@@ -315,7 +315,8 @@ struct ResultsView: View {
                 EditableField(
                     label: "Album Artist", text: accepting($albumArtistText),
                     shown: shownRelease?.artist ?? release.artist,
-                    editable: canEditNames, focus: $focusedName, field: .albumArtist)
+                    editable: canEditNames, focus: $focusedName, field: .albumArtist,
+                    isCompilation: shownRelease?.isCompilation == true)
                 EditableField(
                     label: "Date", text: accepting($dateText), shown: shownRelease?.date ?? release.date ?? "",
                     editable: canEditNames, focus: $focusedName, field: .date
@@ -536,6 +537,7 @@ struct ResultsView: View {
         let shown = tracks(of: shownRelease)
         return NameField.trackOrder(report.tracks.map(\.number).filter { shown[$0] != nil }) { number in
             shown[number].map { $0.artist != shownRelease?.artist } == true || artistRows.contains(number)
+                || shownRelease?.isCompilation == true
         }
     }
 
@@ -553,7 +555,7 @@ struct ResultsView: View {
                     title.wrappedValue = $0
                     saveNames()
                 }
-                if ownArtist != nil || artistRows.contains(track.number) {
+                if ownArtist != nil || artistRows.contains(track.number) || shownRelease?.isCompilation == true {
                     let artist = artist(of: track.number)
                     NameTextField(
                         value: artist.wrappedValue, prompt: "Track artist", field: .artist(track.number),
@@ -571,7 +573,7 @@ struct ResultsView: View {
         }
         .contextMenu {
             if canEditNames, shown != nil {
-                if ownArtist == nil && !artistRows.contains(track.number) {
+                if ownArtist == nil && !artistRows.contains(track.number) && shownRelease?.isCompilation != true {
                     Button("Add Track Artist") { artistRows.insert(track.number) }
                 }
                 Button("Clear This Track's Edits") {

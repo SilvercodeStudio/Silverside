@@ -120,4 +120,31 @@ struct MetadataEditsTests {
         #expect(tags["ALBUM"] == "Giants Stadium 1991" && tags["TITLE"] == "Help on the Way")
         #expect(tags["MUSICBRAINZ_ALBUMID"] == "rel" && tags["MUSICBRAINZ_TRACKID"] == "rec1")
     }
+
+    /// "Various Artists" as typed in other ways is MusicBrainz's Various Artists: the release is a
+    /// compilation, with the name spelled as MusicBrainz has it. "VA" is not.
+    @Test func recognizesVariousArtistsAsTyped() throws {
+        for name in [
+            "Various Artists", "various artists", "VARIOUS  ARTISTS", " Various-Artists ", "Various Artist", "Various",
+            "Vàrious Artists",
+        ] {
+            #expect(MusicBrainzRelease.isVariousArtists(name), "\(name)")
+        }
+        for name in ["VA", "va", "V.A.", "Various Artists Band", "The Various Artists", "Artists"] {
+            #expect(!MusicBrainzRelease.isVariousArtists(name), "\(name)")
+        }
+        let toc = try TOC(audioTrackStarts: [0, 1000], leadOutLBA: 2000)
+        let edited = MetadataEdits(albumArtist: "various artists").applied(to: .manual(toc: toc), toc: toc)
+        #expect(edited.artist == "Various Artists" && edited.isCompilation)
+        #expect(MusicBrainzRelease.albumArtist(typed: "VA") == "VA")
+    }
+
+    /// A release Silverside made credits its tracks to "Unknown Artist": a track with no artist
+    /// of its own takes the album artist as typed, and one with its own keeps it.
+    @Test func tracksOfATypedInReleaseFollowItsAlbumArtist() throws {
+        let toc = try TOC(audioTrackStarts: [0, 1000], leadOutLBA: 2000)
+        let edits = MetadataEdits(albumArtist: "Feist", tracks: [2: .init(artist: "Guest")])
+        let tracks = try #require(edits.applied(to: .manual(toc: toc), toc: toc).media.first?.tracks)
+        #expect(tracks.map(\.artist) == ["Feist", "Guest"])
+    }
 }

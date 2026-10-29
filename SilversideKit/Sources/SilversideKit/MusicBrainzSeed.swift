@@ -13,7 +13,7 @@ import Foundation
 public enum MusicBrainzSeed {
     public static let addReleaseURL = URL(string: "https://musicbrainz.org/release/add")!
     /// MusicBrainz's "Various Artists".
-    public static let variousArtistsID = "89ad4ac3-39f7-470e-963a-56509c546377"
+    public static let variousArtistsID = MusicBrainzRelease.variousArtistsID
 
     /// The form's fields, in order. Names that Silverside made up ("Unknown Album", "Track 3")
     /// are left out, so the editor shows them as missing.
@@ -61,7 +61,7 @@ public enum MusicBrainzSeed {
             // of "Various Artists" gets none, so the editor asks for it.
             if track.artist != albumArtist, track.artist != placeholder.artist {
                 fields += credit(track.artistCredit, prefix: "\(prefix).artist_credit")
-            } else if albumArtist != placeholder.artist, albumArtist != "Various Artists" {
+            } else if albumArtist != placeholder.artist, !MusicBrainzRelease.isVariousArtists(albumArtist) {
                 fields += credit(release.artistCredit, prefix: "\(prefix).artist_credit")
             }
         }
@@ -85,7 +85,7 @@ public enum MusicBrainzSeed {
         credit.enumerated().flatMap { index, part -> [(name: String, value: String)] in
             let key = "\(prefix).names.\(index)"
             var fields = [("\(key).name", part.name), ("\(key).artist.name", part.name)]
-            let id = part.artistID ?? (part.name == "Various Artists" ? variousArtistsID : nil)
+            let id = part.artistID ?? (MusicBrainzRelease.isVariousArtists(part.name) ? variousArtistsID : nil)
             if let id { fields.append(("\(key).mbid", id)) }
             if !part.joinPhrase.isEmpty { fields.append(("\(key).join_phrase", part.joinPhrase)) }
             return fields

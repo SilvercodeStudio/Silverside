@@ -289,7 +289,8 @@ struct AlbumHeader: View {
                     EditableField(
                         label: "Album Artist", text: field(\.albumArtist, original: disc.baseRelease?.artist),
                         shown: disc.artist(from: source).isEmpty ? "—" : disc.artist(from: source), editable: editable,
-                        field: .albumArtist, pending: slot.pendingNames)
+                        field: .albumArtist, pending: slot.pendingNames,
+                        isCompilation: disc.shownRelease?.isCompilation == true)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Tracks").font(.caption).foregroundStyle(.secondary)
                         Text("\(disc.toc.audioTracks.count) · \(Format.duration(sectors: disc.totalSectors))")
@@ -449,7 +450,8 @@ struct AlbumHeader: View {
         Binding(
             get: { slot.disc?.edits[keyPath: key] ?? original ?? "" },
             set: { text in
-                let trimmed = text.trimmingCharacters(in: .whitespaces)
+                var trimmed = text.trimmingCharacters(in: .whitespaces)
+                if key == \MetadataEdits.albumArtist { trimmed = MusicBrainzRelease.albumArtist(typed: trimmed) }
                 slot.disc?.edits[keyPath: key] = trimmed.isEmpty || trimmed == original ? nil : trimmed
             })
     }
@@ -679,12 +681,14 @@ struct EditableField: View {
     var field = NameField.album
     /// Where the text waits while it is typed, for a rip that starts before it is accepted.
     var pending: PendingNames?
+    /// True when the album artist is Various Artists: the field says that the album is a compilation.
+    var isCompilation = false
     @FocusState private var ownFocus: NameField?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label).font(.caption).foregroundStyle(.secondary)
-            Group {
+            HStack(spacing: 6) {
                 if editable {
                     NameTextField(
                         value: text, prompt: prompt, field: field, focus: focus ?? $ownFocus, pending: pending
@@ -692,6 +696,7 @@ struct EditableField: View {
                 } else {
                     Text(shown).lineLimit(1)
                 }
+                if isCompilation { CompilationBadge() }
             }
             .font(.title3)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -699,6 +704,20 @@ struct EditableField: View {
             .padding(.vertical, 4)
             .background(Color.secondary.opacity(editable ? 0.12 : 0.08), in: RoundedRectangle(cornerRadius: 6))
         }
+    }
+}
+
+/// "Compilation", in the album artist's field when it is Various Artists.
+struct CompilationBadge: View {
+    var body: some View {
+        Label("Compilation", systemImage: "person.3.fill")
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .fixedSize()
+            .help(
+                "Various Artists, as MusicBrainz names it: the files are tagged as a compilation, the album goes in a "
+                    + "Various Artists folder (or Settings › Naming › Compilations folder), and each track takes its own "
+                    + "artist.")
     }
 }
 

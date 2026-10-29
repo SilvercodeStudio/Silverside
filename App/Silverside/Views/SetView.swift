@@ -366,7 +366,7 @@ struct SetView: View {
         }
         var edits = self.edits
         edits.album = value(album, original: release?.title)
-        edits.albumArtist = value(albumArtist, original: release?.artist)
+        edits.albumArtist = value(MusicBrainzRelease.albumArtist(typed: albumArtist), original: release?.artist)
         edits.date = value(date, original: release?.date)
         do {
             try ReleaseEditsStore().remember(edits, forReleaseID: ripSet.releaseID)

@@ -104,7 +104,7 @@ struct TrackTable: View {
                         tabOrder: { fieldOrder }, pending: slot.pendingNames
                     ) { title.wrappedValue = $0 }
                     // The artist's field shows when the track has an artist of its own, or on request.
-                    if track.artist != nil || artistRows.contains(track.number) {
+                    if track.artist != nil || artistRows.contains(track.number) || isCompilation {
                         let artist = artist(of: track.number)
                         NameTextField(
                             value: artist.wrappedValue, prompt: "Track artist", field: .artist(track.number),
@@ -120,7 +120,7 @@ struct TrackTable: View {
             }
             .contextMenu {
                 if canEdit {
-                    if track.artist == nil && !artistRows.contains(track.number) {
+                    if track.artist == nil && !artistRows.contains(track.number) && !isCompilation {
                         Button("Add Track Artist") { artistRows.insert(track.number) }
                     }
                     Button("Clear This Track's Edits") {
@@ -159,11 +159,14 @@ struct TrackTable: View {
         slot.rip?.isRunning != true && slot.namesSource == .musicBrainz && slot.disc?.baseRelease != nil
     }
 
+    /// On a compilation (Various Artists), every track shows its artist's field, to fill in.
+    private var isCompilation: Bool { slot.disc?.shownRelease?.isCompilation == true }
+
     /// The track fields in Tab's order.
     private var fieldOrder: [NameField] {
         let rows = rows
         return NameField.trackOrder(rows.map(\.number)) { number in
-            rows.first { $0.number == number }?.artist != nil || artistRows.contains(number)
+            rows.first { $0.number == number }?.artist != nil || artistRows.contains(number) || isCompilation
         }
     }
 

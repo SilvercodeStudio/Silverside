@@ -205,16 +205,19 @@ public enum DataTrackReader {
 
     /// The end of an Apple partition map's partitions, in 2048-byte sectors. The map's blocks
     /// are the size that the driver descriptor ("ER" in block 0) gives, 512 or 2048 bytes on
-    /// a CD, and 512 without a descriptor, as Apple's partition scheme reads them; the entries
-    /// ("PM") fill blocks 1 on, and count their partitions in those blocks.
+    /// a CD. Without a descriptor, Apple's partition scheme takes the medium's block size,
+    /// 2048 on a CD; a map in 512-byte blocks is found too. The entries ("PM") fill blocks 1
+    /// on, and count their partitions in those blocks.
     static func appleMapEnd(of bytes: [UInt8]) -> AppleMapEnd {
         func uint32(_ offset: Int) -> Int { bytes[offset..<(offset + 4)].reduce(0) { $0 << 8 | Int($1) } }
         func isEntry(_ offset: Int) -> Bool {
             offset + 16 <= bytes.count && bytes[offset] == 0x50 && bytes[offset + 1] == 0x4D
         }
         let hasDescriptor = bytes.count >= 4 && bytes[0] == 0x45 && bytes[1] == 0x52
-        let size = hasDescriptor ? Int(bytes[2]) << 8 | Int(bytes[3]) : 512
-        guard isEntry(size) || hasDescriptor else { return .none }
+        // A 512-byte map has its fourth entry at 2048, so 512 goes first.
+        let found = [512, 2048].first(where: isEntry)
+        guard hasDescriptor || found != nil else { return .none }
+        let size = hasDescriptor ? Int(bytes[2]) << 8 | Int(bytes[3]) : found ?? 512
         // A descriptor whose map is not where its block size puts it: the blocks are not known.
         guard [512, 1024, 2048, 4096].contains(size), isEntry(size) else { return .uncertain }
         let entries = uint32(size + 4)

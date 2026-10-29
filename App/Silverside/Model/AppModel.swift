@@ -758,17 +758,26 @@ final class AppModel {
     @ObservationIgnored private var namesUpdate: Task<Void, Never>?
     /// The rips whose files are being brought up to date with their names.
     private(set) var updatingNames: Set<URL> = []
+    /// The rips whose album names are being written: the album folder, with the report, can
+    /// move, so no other name can be saved to the report's place until it is done.
+    private(set) var renamingAlbums: Set<URL> = []
+    /// The newest edits of each rip whose update waits for the one before it.
+    @ObservationIgnored private var waitingEdits: [URL: MetadataEdits] = [:]
 
     /// Saves an earlier rip's own edits (its track titles and artists) in its report, then
     /// writes the names into its encoded files and renames them, as Update the Library does.
-    /// The selection follows a report that moved with its album folder.
-    func saveNames(_ edits: MetadataEdits, of rip: RecentRip) {
+    /// The selection follows a report that moved with its album folder. Names saved while an
+    /// update waits go into that update, so Tab through ten titles writes the files once or twice.
+    func saveNames(_ edits: MetadataEdits, of rip: RecentRip, renamesAlbum: Bool) {
+        if renamesAlbum { renamingAlbums.insert(rip.file) }
+        updatingNames.insert(rip.file)
+        guard waitingEdits.updateValue(edits, forKey: rip.file) == nil else { return }
         let settings = settings
         let previous = namesUpdate
-        updatingNames.insert(rip.file)
         namesUpdate = Task { @MainActor in
             // The update before this one writes the report too, so the save waits for it.
             await previous?.value
+            guard let edits = waitingEdits.removeValue(forKey: rip.file) else { return }
             do {
                 try edits.save(inReportAt: rip.file)
                 let update = try await Task.detached {
@@ -780,7 +789,10 @@ final class AppModel {
             } catch {
                 alert = AppAlert(title: "The library could not be updated", message: "\(error)")
             }
-            updatingNames.remove(rip.file)
+            if waitingEdits[rip.file] == nil {
+                updatingNames.remove(rip.file)
+                renamingAlbums.remove(rip.file)
+            }
             refreshRecentRips()
         }
     }

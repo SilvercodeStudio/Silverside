@@ -44,7 +44,8 @@ command-line tool.
   started while you type still gets the name.
 - Tab in a track's title or artist went to the sidebar. Now Tab and
   Shift-Tab go to the next and previous track's fields, before a rip and in
-  an earlier rip.
+  an earlier rip. In an earlier rip, the track names stay open to typing
+  while the encoded files take the names before them.
 - A disc that MusicBrainz does not know could get the names of an unrelated
   album with as many tracks and about the same length, such as another
   20-track compilation. Now a release that MusicBrainz finds this way is

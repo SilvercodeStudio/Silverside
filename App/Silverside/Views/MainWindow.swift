@@ -126,7 +126,9 @@ struct DetailView: View {
     var body: some View {
         Group {
             if let slot = model.selectedDrive {
-                DriveDetailView(slot: slot)
+                // A view of its own for each drive: a name still being typed for one drive is
+                // accepted for that drive as its field goes, not kept for the next drive's field.
+                DriveDetailView(slot: slot).id(slot.id)
             } else if model.selection == .history {
                 HistoryView()
             } else if let set = model.selectedSet {

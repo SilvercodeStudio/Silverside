@@ -530,7 +530,8 @@ public struct RipReport: Codable, Equatable, Sendable {
     /// Changes the report in `url`, a rip's disc.json or an album folder's report, and keeps
     /// the file's keys that a report does not have, such as "edits"; a key that the change
     /// empties goes. In an archive manifest, the report under "ripReport" changes, as
-    /// `RippedDisc` and the encoding's record read it there. Only the keys that the change
+    /// `RippedDisc` and the encoding's record read it there, and the manifest's own release
+    /// with it, which `RippedDisc` encodes from. Only the keys that the change
     /// changes are written. Returns the report as changed.
     @discardableResult
     public static func update(reportAt url: URL, _ change: (inout RipReport) throws -> Void) throws -> RipReport {
@@ -549,7 +550,15 @@ public struct RipReport: Codable, Equatable, Sendable {
         for key in before.keys where after[key] == nil { target[key] = nil }
         // A manifest's release fills in for its report's, so an unchanged one stays where it is.
         for (key, value) in after where (before[key] as? NSObject)?.isEqual(value) != true { target[key] = value }
-        if nested != nil { object["ripReport"] = target } else { object = target }
+        if nested != nil {
+            object["ripReport"] = target
+            // `RippedDisc` takes the manifest's own release, so a changed one goes there too.
+            if object["release"] != nil, (before["release"] as? NSObject)?.isEqual(after["release"]) != true {
+                object["release"] = after["release"]
+            }
+        } else {
+            object = target
+        }
         let data = try JSONSerialization.data(
             withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         try data.write(to: url, options: .atomic)

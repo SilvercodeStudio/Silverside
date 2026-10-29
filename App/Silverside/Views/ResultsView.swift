@@ -95,8 +95,10 @@ struct ResultsView: View {
 
     private var titles: [Int: String] { tracks(of: shownRelease).mapValues(\.title) }
 
-    /// Names can change while the rip has a release, and no library update for it is under way.
-    private var canEditNames: Bool { report.release != nil && !model.updatingNames.contains(recentRip.file) }
+    /// Names can change while the rip has a release, and no update of its album names is under
+    /// way: that update can move the album folder and the report with it. Track names can change
+    /// during an update of track names, so Tab goes on to the next track.
+    private var canEditNames: Bool { report.release != nil && !model.renamingAlbums.contains(recentRip.file) }
 
     var body: some View {
         HSplitView {
@@ -290,9 +292,15 @@ struct ResultsView: View {
                 return
             }
         }
+        func album(_ edits: MetadataEdits) -> MetadataEdits {
+            var album = edits
+            album.tracks = [:]
+            return album
+        }
+        let renamesAlbum = album(edits) != album(savedEdits) || keptEdits != savedKeptEdits
         savedEdits = edits
         savedKeptEdits = keptEdits
-        model.saveNames(edits, of: recentRip)
+        model.saveNames(edits, of: recentRip, renamesAlbum: renamesAlbum)
     }
 
     private func loadAlbumFields() {

@@ -139,7 +139,34 @@ extension DiscEncoder {
         // A decoded copy beside the album keeps its title's suffix, and so its own folder.
         if let suffix = report.encoding?.albumSuffix { release.title += suffix }
 
+        var renamed = 0
+
+        // The album folder, as the templates name it now. A set shares one folder, so a move
+        // into a folder that exists merges into it. A folder that another release's rip shares
+        // (another edition, encoded into it before its names changed) keeps that rip's files:
+        // only this rip's go.
+        if let encoding = report.encoding, let current = albumFolder, let library, let first = medium.tracks.first {
+            let values = metadata(release: release, medium: medium, track: first, isrc: nil).nameValues
+            let planned = library.appending(path: folderTemplate.name(values), directoryHint: .isDirectory)
+            if planned.standardizedFileURL != current.standardizedFileURL,
+                FileManager.default.fileExists(atPath: current.path)
+            {
+                if Self.holdsOtherRelease(current, than: original.id) {
+                    try Self.moveOwnFiles(of: encoding, discPart: discPart, from: current, to: planned)
+                } else if FileManager.default.fileExists(atPath: planned.path) {
+                    try Self.mergeAlbum(from: current, into: planned)
+                } else {
+                    try FileManager.default.createDirectory(
+                        at: planned.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try FileManager.default.moveItem(at: current, to: planned)
+                }
+                albumFolder = planned
+                renamed += 1
+            }
+        }
+
         // The cover: the new one into every folder the album has, else the one there already.
+        // It goes after the move, so that a folder this rip leaves keeps the other rip's cover.
         var coverFile: URL?
         if let cover {
             for destination in [isRipFolder ? folder : nil, albumFolder].compactMap({ $0 })
@@ -166,35 +193,9 @@ extension DiscEncoder {
             }
         }
         if isRipFolder, !edits.isEmpty { try edits.save(inDiscJSONOf: folder) }
-        guard var encoding = report.encoding, let current = albumFolder else {
+        guard var encoding = report.encoding, let album = albumFolder else {
             return LibraryUpdate(files: [], renamed: 0, albumFolder: nil, report: file)
         }
-        var renamed = 0
-
-        // The album folder, as the templates name it now. A set shares one folder, so a move
-        // into a folder that exists merges into it. A folder that another release's rip shares
-        // (another edition, encoded into it before its names changed) keeps that rip's files:
-        // only this rip's go.
-        if let library, let first = medium.tracks.first {
-            let values = metadata(release: release, medium: medium, track: first, isrc: nil).nameValues
-            let planned = library.appending(path: folderTemplate.name(values), directoryHint: .isDirectory)
-            if planned.standardizedFileURL != current.standardizedFileURL,
-                FileManager.default.fileExists(atPath: current.path)
-            {
-                if Self.holdsOtherRelease(current, than: original.id) {
-                    try Self.moveOwnFiles(of: encoding, discPart: discPart, from: current, to: planned)
-                } else if FileManager.default.fileExists(atPath: planned.path) {
-                    try Self.mergeAlbum(from: current, into: planned)
-                } else {
-                    try FileManager.default.createDirectory(
-                        at: planned.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    try FileManager.default.moveItem(at: current, to: planned)
-                }
-                albumFolder = planned
-                renamed += 1
-            }
-        }
-        let album = albumFolder ?? current
         coverFile = CoverFiles.embedded(forDisc: medium.position, in: album) ?? coverFile
         let embedded = try coverFile.map { try EmbeddedCover(CoverImage(data: Data(contentsOf: $0))) }
 
@@ -288,7 +289,10 @@ extension DiscEncoder {
         // release's rip shares, only the sheets that name this rip's files are its own.
         if Self.holdsOtherRelease(album, than: original.id) {
             let names = Set(report.encoding?.files.map(\.file) ?? []).union(encoding.files.map(\.file))
-            for sheet in CueSheet.sheets(in: album, namingOnly: names) { try FileManager.default.removeItem(at: sheet) }
+            let report = album.appending(path: "Rip Report\(discPart).json")
+            for sheet in Self.ownSheets(in: album, naming: names, besides: report) {
+                try FileManager.default.removeItem(at: sheet)
+            }
         } else {
             for name in (try? FileManager.default.contentsOfDirectory(atPath: album.path)) ?? []
             where name.hasSuffix(".cue") && (discPart.isEmpty || name.hasSuffix(discPart + ".cue")) {
@@ -374,28 +378,71 @@ extension DiscEncoder {
             throw EncodingError.exists(renamedReport)
         }
 
-        // The release in each report, without the rip's own edits.
-        for target in Set([file, albumReport].compactMap { $0?.standardizedFileURL }) {
-            try RipReport.update(reportAt: target) { $0.release = release }
-            try MetadataEdits().save(inReportAt: target)
-        }
-        var updated = file
-        if let albumReport, let renamedReport, oldPart != newPart {
-            try FileManager.default.moveItem(at: albumReport, to: renamedReport)
-            // The Markdown report is written again under the new name.
-            try? FileManager.default.removeItem(at: albumReport.deletingPathExtension().appendingPathExtension("md"))
-            if !isRipFolder { updated = renamedReport }
-        }
-        // The rip's CUE sheets, which are written again with the new names.
-        if let album, let encoding {
-            for sheet in CueSheet.sheets(in: album, namingOnly: Set(encoding.files.map(\.file))) {
-                try FileManager.default.removeItem(at: sheet)
+        // The rip's CUE sheets, which are written again with the new names; a sheet that names
+        // only files another report lists too is that rip's, and stays.
+        let sheets =
+            if let album, let encoding {
+                Self.ownSheets(
+                    in: album, naming: Set(encoding.files.map(\.file)),
+                    besides: albumReport ?? album.appending(path: "Rip Report\(oldPart).json"))
+            } else {
+                [URL]()
             }
+        // What the change replaces, put back if it fails: a file the album folder holds
+        // already, for one, leaves the rip as it was.
+        let reports = Set([file, albumReport].compactMap { $0?.standardizedFileURL })
+        let markdown = albumReport?.deletingPathExtension().appendingPathExtension("md")
+        var saved = [URL: Data]()
+        for original in Array(reports) + sheets + [markdown].compactMap({ $0 }) {
+            saved[original] = try? Data(contentsOf: original)
         }
-        try choiceStore.remember(release)
-        return try updateLibrary(
-            reportAt: updated, cover: cover, remember: false, library: library, editsStore: editsStore,
-            coverStore: coverStore, encoding: encoding)
+        let audio = (album.flatMap { album in encoding?.files.map { album.appending(path: $0.file) } } ?? [])
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        do {
+            // The release in each report, without the rip's own edits.
+            for target in reports {
+                try RipReport.update(reportAt: target) { $0.release = release }
+                try MetadataEdits().save(inReportAt: target)
+            }
+            var updated = file
+            if let albumReport, let renamedReport, oldPart != newPart {
+                try FileManager.default.moveItem(at: albumReport, to: renamedReport)
+                // The Markdown report is written again under the new name.
+                if let markdown { try? FileManager.default.removeItem(at: markdown) }
+                if !isRipFolder { updated = renamedReport }
+            }
+            for sheet in sheets { try FileManager.default.removeItem(at: sheet) }
+            let update = try updateLibrary(
+                reportAt: updated, cover: cover, remember: false, library: library, editsStore: editsStore,
+                coverStore: coverStore, encoding: encoding)
+            try choiceStore.remember(release)
+            return update
+        } catch {
+            // Put back only while the rip's files are where they were: the moves check every
+            // collision first, so a failure there moves nothing. Past them, the files have the
+            // new release's names, and the reports must say so.
+            guard audio.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else {
+                try? choiceStore.remember(release)
+                throw error
+            }
+            if let albumReport, let renamedReport, oldPart != newPart,
+                FileManager.default.fileExists(atPath: renamedReport.path),
+                !FileManager.default.fileExists(atPath: albumReport.path)
+            {
+                try? FileManager.default.moveItem(at: renamedReport, to: albumReport)
+            }
+            for (original, data) in saved { try? data.write(to: original, options: .atomic) }
+            throw error
+        }
+    }
+
+    /// The CUE sheets in an album folder that are this rip's: those that name only its files
+    /// (`names`), less those that name only files another report there lists too, which can
+    /// be that rip's own sheet.
+    static func ownSheets(in album: URL, naming names: Set<String>, besides report: URL) -> [URL] {
+        let shared = Set(
+            RipRemoval.otherReportsFiles(in: album, besides: report).map { URL(filePath: $0).lastPathComponent })
+        return CueSheet.sheets(in: album, namingOnly: names).filter { !CueSheet.sheet($0, namesOnly: shared) }
     }
 
     /// True if the album folder holds the report of a rip of another release: another edition

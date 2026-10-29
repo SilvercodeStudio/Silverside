@@ -712,4 +712,109 @@ extension EncodingTests {
         #expect(sheets.count == 2 && sheets.contains { $0.hasSuffix("(Disc 1).cue") })
         #expect(try FLACTags.read(files1[0]).contains { $0.key == "MUSICBRAINZ_ALBUMID" && $0.value == "rel" })
     }
+
+    private func change(
+        _ file: URL, to release: MusicBrainzRelease, root: URL, library: URL, cover: CoverImage? = nil
+    ) throws -> LibraryUpdate {
+        try DiscEncoder(format: .flac).changeRelease(
+            reportAt: file, to: release, cover: cover, library: library,
+            editsStore: ReleaseEditsStore(url: root.appending(path: "edits.json")),
+            coverStore: ReleaseCoverStore(folder: root.appending(path: "covers")),
+            choiceStore: ReleaseChoiceStore(url: root.appending(path: "choices.json")))
+    }
+
+    /// A Change Release that fails, here at a file of the same name in the new album folder,
+    /// leaves the reports, the rip's edits, and the CUE sheet as they were (review of 9d515ed).
+    @Test func putsBackAChangeOfReleaseThatFails() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = folder.appending(path: "disc.json")
+        let files = try DiscEncoder(format: .flac).encode(try RippedDisc(folder: folder), into: library)
+        let album = files[0].deletingLastPathComponent()
+        let albumReport = album.appending(path: "Rip Report (Disc 2).json")
+        try MetadataEdits(album: "My Original Name").save(inReportAt: file)
+        let (rip, albumBefore) = (try Data(contentsOf: file), try Data(contentsOf: albumReport))
+        let sheets = CueSheet.sheets(in: album, namingOnly: Set(files.map(\.lastPathComponent)))
+        #expect(!sheets.isEmpty)
+        var release = try #require(try RipReport.read(from: file).release)
+        release.id = "new-release"
+        release.title = "Destination"
+        let destination = library.appending(path: "Grateful Dead/Destination")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("Not this rip's".utf8).write(to: destination.appending(path: files[0].lastPathComponent))
+        #expect(throws: EncodingError.self) { try change(file, to: release, root: root, library: library) }
+        #expect(try Data(contentsOf: file) == rip && Data(contentsOf: albumReport) == albumBefore)
+        #expect(sheets.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    /// Disc 2 of two in one album folder changes to another edition, with a new cover: the
+    /// new cover goes into disc 2's new folder, and disc 1 keeps its own (review of 9d515ed).
+    @Test func leavesTheOtherDiscsCoverWhenOneDiscChanges() throws {
+        let (folder2, library) = try makeRip()
+        let (folder1, _) = try makeRip(disc1: true)
+        let root = folder2.deletingLastPathComponent()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: folder1.deletingLastPathComponent())
+        }
+        let encoder = DiscEncoder(format: .flac)
+        let files2 = try encoder.encode(try RippedDisc(folder: folder2), into: library)
+        _ = try encoder.encode(try RippedDisc(folder: folder1), into: library)
+        let album = files2[0].deletingLastPathComponent()
+        let originalCover = try Data(contentsOf: album.appending(path: "cover.jpg"))
+        let file = album.appending(path: "Rip Report (Disc 2).json")
+        var release = try #require(try RipReport.read(from: file).release)
+        release.id = "different-edition"
+        release.title = "Different Edition"
+        let newCover = try makeJPEG(width: 80, height: 80)
+        let update = try change(file, to: release, root: root, library: library, cover: newCover)
+        #expect(try RipReport.read(from: album.appending(path: "Rip Report (Disc 1).json")).release?.id == "rel")
+        #expect(try Data(contentsOf: album.appending(path: "cover.jpg")) == originalCover)
+        let moved = try #require(update.albumFolder)
+        #expect(try Data(contentsOf: moved.appending(path: "cover.jpg")) == newCover.data)
+    }
+
+    /// A CUE sheet that names only files another report in the folder lists too is that rip's:
+    /// Change Release leaves it (review of 9d515ed).
+    @Test func keepsAnotherRipsCueSheetWhenTheReleaseChanges() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = try DiscEncoder(format: .flac).encode(try RippedDisc(folder: folder), into: library)
+        let album = files[0].deletingLastPathComponent()
+        let file = album.appending(path: "Rip Report (Disc 2).json")
+        var other = try RipReport.read(from: file)
+        other.release?.id = "other-edition"
+        other.encoding?.files = [.init(track: 1, file: files[0].lastPathComponent)]
+        try other.write(to: album.appending(path: "Rip Report (Disc 1).json"))
+        let cue = album.appending(path: "Other (Disc 1).cue")
+        let cueData = Data("FILE \"\(files[0].lastPathComponent)\" WAVE\n".utf8)
+        try cueData.write(to: cue)
+        var release = try #require(try RipReport.read(from: file).release)
+        release.id = "changed-edition"
+        release.title = "Changed Edition"
+        _ = try change(file, to: release, root: root, library: library)
+        #expect(FileManager.default.fileExists(atPath: files[0].path))
+        #expect((try? Data(contentsOf: cue)) == cueData)
+    }
+
+    /// An archive manifest has the release twice, its own and its report's: Change Release
+    /// changes both, so that an encoding from the manifest takes the new one (review of 9d515ed).
+    @Test func changesTheReleaseOfAManifestForItsEncoding() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = folder.appending(path: "disc.json")
+        let original = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        try JSONSerialization.data(withJSONObject: [
+            "toc": original["toc"]!, "release": original["release"]!, "ripReport": original,
+        ]).write(to: file)
+        var release = try #require(try RipReport.read(from: file).release)
+        release.id = "changed"
+        release.title = "Changed"
+        _ = try change(file, to: release, root: root, library: library)
+        #expect(try RipReport.read(from: file).release?.id == "changed")
+        #expect(try RippedDisc(folder: folder).release?.id == "changed")
+    }
 }

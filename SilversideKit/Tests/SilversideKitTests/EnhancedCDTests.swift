@@ -163,6 +163,11 @@ struct EnhancedCDTests {
         other = header
         other.replaceSubrange((2048 + 4)..<(2048 + 8), with: [0, 0, 0, 40])  // 40 entries, past the bytes read
         #expect(DataTrackReader.fileSystemEnd(of: other, startLBA: track.startLBA, sectors: 300) == nil)
+
+        // With no descriptor, Apple's partition scheme takes the CD's 2048-byte blocks (review of 9d515ed).
+        other = header
+        other.replaceSubrange(0..<4, with: [0, 0, 0, 0])
+        #expect(DataTrackReader.fileSystemEnd(of: other, startLBA: track.startLBA, sectors: 300) == 240)
     }
 
     /// A drive that cannot read the data session fails every sector of it: the reader stops

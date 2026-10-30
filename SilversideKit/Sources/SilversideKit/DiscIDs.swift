@@ -69,10 +69,10 @@ extension TOC {
 
     /// The AccurateRip disc IDs.
     ///
-    /// Verified against the AccurateRip database for audio-only discs, and for an Enhanced CD
-    /// (*Mirrorball*, 2026-10-26: the real lead-out, audio tracks only). For a data track before
-    /// the audio (mixed mode), the same rule finds the disc (*The Freedom Sessions*, 2026-10-29:
-    /// 11 records); the checksums of such a rip are not verified yet.
+    /// Verified against the AccurateRip database for audio-only discs, for an Enhanced CD
+    /// (*Mirrorball*, 2026-10-26: the real lead-out, audio tracks only), and for a data track
+    /// before the audio (mixed mode: *The Freedom Sessions*, 2026-10-29, 11 records, and its
+    /// rip's 8 audio tracks accurate).
     public var accurateRipDiscID: AccurateRipDiscID {
         var id1: UInt32 = 0
         var id2: UInt32 = 0
@@ -106,9 +106,8 @@ extension TOC {
     /// The TOC string for CUETools DB lookups: track starts, then the lead-out, separated by colons.
     ///
     /// Verified against CTDB for audio-only discs, and for an Enhanced CD, whose data track has
-    /// a "-" prefix (*Mirrorball*, 2026-10-26). A data track before the audio has it too, and
-    /// the disc is found (*The Freedom Sessions*, 2026-10-29: "-0:148584:…", confidence 569);
-    /// the checksums of such a rip are not verified yet.
+    /// a "-" prefix (*Mirrorball*, 2026-10-26). A data track before the audio has it too
+    /// (*The Freedom Sessions*, 2026-10-29: "-0:148584:…", its rip verified with 569 at shift -2).
     public var ctdbTOCString: String {
         let starts = tracks.map { ($0.kind == .data ? "-" : "") + String($0.startLBA) }
         return (starts + [String(leadOutLBA)]).joined(separator: ":")

@@ -936,6 +936,13 @@ struct ResultBanner: View {
                     Text("Not encoded: the library keeps the files it had. The rip is in the rips folder.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
+                if rip.notEncodedUnverified {
+                    Text(
+                        "Not encoded, because the rip is not verified. Listen to it first; if it sounds right, "
+                            + "Encode… accepts it as it is."
+                    )
+                    .font(.callout).foregroundStyle(.secondary)
+                }
                 if let music = rip.musicResult {
                     Text(music).font(.callout).foregroundStyle(.secondary)
                 }
@@ -945,6 +952,13 @@ struct ResultBanner: View {
                 Button("Repair…") { model.startRepair(RecentRip(folder: folder, report: report)) }
                     .help("Check the rip against CTDB again, pooled with the other rips of this disc, and repair it")
                     .disabled(model.repair?.isRunning == true)
+            }
+            if let folder, rip.notEncodedUnverified {
+                Button("Encode…") {
+                    if model.acceptAndEncode(RecentRip(folder: folder, report: report)) { rip.acceptedForEncoding() }
+                }
+                .help("Accept this rip as it is, and encode it into the library")
+                .disabled(model.library?.isRunning == true)
             }
             if let folder {
                 Button("Show in Finder") { model.revealInFinder(folder) }

@@ -47,6 +47,11 @@ command-line tool.
   track 2 was "[data track]". Now the data track is left out of the names,
   and the songs are numbered from 1, as MusicBrainz numbers them. Add to
   MusicBrainz lists the data track first, as MusicBrainz needs it.
+- A rip that no database verifies, such as one of a disc that AccurateRip
+  and CTDB do not have, said "Failed" and "rip failed" when it was not
+  encoded, and named only track 1. Now the rip counts as done, and Encode…
+  in the banner accepts it as it is and encodes it. It no longer asks about
+  HDCD, pre-emphasis, or DTS first, for an encoding that does not happen.
 - A label that MusicBrainz lists twice, with two catalog numbers, was in the
   Label tag twice. Now each label and each catalog number is there once.
 - On a disc that MusicBrainz does not know, a track with no artist of its

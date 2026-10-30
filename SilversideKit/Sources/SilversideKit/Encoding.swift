@@ -547,6 +547,14 @@ public struct DiscEncoder: Sendable {
         var extraComments: [(key: String, value: String)] = []
     }
 
+    /// Throws `EncodingError.notVerified` for the disc's first track that AccurateRip and CTDB
+    /// do not verify, unless the encoder allows that or the user accepted the rip as it is.
+    public func checkVerified(_ disc: RippedDisc) throws {
+        if !allowsUnverified, !disc.isAccepted, let track = disc.tracks.first(where: { !$0.isVerified }) {
+            throw EncodingError.notVerified(track: track.number)
+        }
+    }
+
     /// Every track's names, before any file is written.
     private func plan(_ disc: RippedDisc, into library: URL) throws -> (
         release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium, jobs: [Job]
@@ -554,9 +562,7 @@ public struct DiscEncoder: Sendable {
         guard var release = disc.release else { throw EncodingError.noRelease(disc.folder) }
         if let albumSuffix { release.title += albumSuffix }
         guard let medium = release.medium(for: disc.toc) else { throw EncodingError.unknownMedium(disc.folder) }
-        if !allowsUnverified, !disc.isAccepted, let track = disc.tracks.first(where: { !$0.isVerified }) {
-            throw EncodingError.notVerified(track: track.number)
-        }
+        try checkVerified(disc)
         let audioTracks = disc.toc.audioTracks
         var jobs = [Job]()
         for ripped in disc.tracks {

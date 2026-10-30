@@ -35,10 +35,10 @@ MP3 needs the LAME encoder (see Encoding under Settings). Install it with `brew 
 The rip stays in the rips folder, and the banner or the status bar says why:
 
 - The library already had the album, and you chose Keep the Files.
-- A track is not verified by AccurateRip or CTDB. Silverside encodes only verified rips; see Verification for what to try.
+- A track is not verified by AccurateRip or CTDB, or no database has the disc. Silverside encodes only verified rips; see Verification for what to try. To encode it as it is, listen to it, then click **Encode…** in the banner.
 - MP3 is the format, but LAME is not installed.
 
-To encode a kept rip later, select it in Recent Rips and click **Encode**, or for a set, use **Encode Discs** in the set's view. A rip with tracks that no database verifies can be encoded only from the command line: `silverside encode -i "<rip folder>" --allow-unverified`.
+To encode a kept rip later, select it in Recent Rips and click **Encode**, or for a set, use **Encode Discs** in the set's view. For a rip with tracks that no database verifies, **Encode…** asks you to accept it as it is first (see Verification).
 
 ## A disc was not ripped when it went in
 

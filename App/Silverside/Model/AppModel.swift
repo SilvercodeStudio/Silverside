@@ -628,8 +628,9 @@ final class AppModel {
 
     /// Encodes a rip that is not verified, after the user accepts it as it is
     /// (`RipReport.accept`). The report keeps the acceptance; the rip then goes as a verified
-    /// one does, unless Settings keep it.
-    func acceptAndEncode(_ rip: RecentRip) {
+    /// one does, unless Settings keep it. Returns false if the user cancels, or the rip cannot
+    /// be accepted.
+    @discardableResult func acceptAndEncode(_ rip: RecentRip) -> Bool {
         let unverified = rip.report.unverifiedTracks
         let tracks = "\(unverified.count == 1 ? "Track" : "Tracks") \(RipSet.list(unverified))"
         let alert = NSAlert()
@@ -643,15 +644,16 @@ final class AppModel {
                 ? "" : " Then the rip's WAV files are deleted, so it can no longer be repaired.")
         alert.addButton(withTitle: "Accept and Encode")
         alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard alert.runModal() == .alertFirstButtonReturn else { return false }
         do {
             try RipReport.accept(reportAt: rip.file)
         } catch {
             self.alert = AppAlert(title: "The rip could not be accepted", message: "\(error)")
-            return
+            return false
         }
         refreshRecentRips()
         startLibraryRun(title: rip.title, encode: [rip], update: [])
+        return true
     }
 
     /// True while nothing else works on the rip's files: no repair, no name update, and no rip,

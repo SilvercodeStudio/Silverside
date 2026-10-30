@@ -134,6 +134,9 @@ final class RipRun {
     private(set) var encodeStates: [Int: EncodeState] = [:]
     /// The files that the library already had and the user kept, so the rip was not encoded.
     private(set) var keptFiles: [URL]?
+    /// True when the rip was not encoded because AccurateRip and CTDB do not verify it: the rip
+    /// itself is done, and the user can accept it as it is and encode it.
+    private(set) var notEncodedUnverified = false
     /// What became of adding the files to Music: "Added 12 tracks to Music", or why not.
     private(set) var musicResult: String?
     /// True if the encoded files go into Music.
@@ -305,6 +308,16 @@ final class RipRun {
                         onFinish()
                     }
                 }
+            } catch EncodingError.notVerified {
+                // Not a failure: the rip is done and kept, only not encoded.
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        run.notEncodedUnverified = true
+                        run.add("Not encoded: the rip is not verified. It is in the rips folder.")
+                        run.end(.finished)
+                        onFinish()
+                    }
+                }
             } catch {
                 let message = RipRun.message(for: error)
                 DispatchQueue.main.async {
@@ -332,6 +345,13 @@ final class RipRun {
         default:
             return "\(error)"
         }
+    }
+
+    /// The user accepted the rip as it is, and it goes to the library (`AppModel.acceptAndEncode`).
+    func acceptedForEncoding() {
+        notEncodedUnverified = false
+        report?.accepted = Date()
+        add("Accepted as-is; encoding it into the library.")
     }
 
     /// Stops after the read under way. The tracks ripped so far stay in the folder.
@@ -514,6 +534,7 @@ final class RipRun {
             let format = encodingFormat?.rawValue.uppercased() ?? ""
             return "Encoding as \(format) · track \(min(encodedCount + 1, tracksToRip.count)) of \(tracksToRip.count)"
         case .finished:
+            if notEncodedUnverified { return "Not encoded: the rip is not verified. It is in the rips folder." }
             if let report { return RipRun.headline(for: report) }
             return "Done"
         case .stopped: return "Stopped"

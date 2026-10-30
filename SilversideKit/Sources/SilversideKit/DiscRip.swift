@@ -670,6 +670,8 @@ public struct DiscRip {
         if var encoder {
             try stop.check()
             let disc = try RippedDisc(folder: folder)
+            // Before any question: a rip that is not verified is not encoded, whatever the answers.
+            try encoder.checkVerified(disc)
             let library = self.library
             if !encoder.overwrites, let confirmOverwrite {
                 let existing = try encoder.plannedFiles(disc, into: library).filter {

@@ -220,6 +220,37 @@ struct DiscRipTests {
         await #expect(throws: EncodingError.exists(first.encodedFiles[0])) { try await rip(replaces: nil) }
     }
 
+    /// A rip that no database verifies is not encoded, and it asks nothing about the encoding
+    /// first: the answers would not count.
+    @Test func doesNotAskAboutAnEncodingOfAnUnverifiedRip() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900])
+        var settings = Settings()
+        settings.rips = root.appending(path: "rips").path
+        var options = DiscRipOptions(settings: settings)
+        options.offline = true
+        options.readOffset = 6
+        options.manualRelease = .manual(toc: toc)
+        options.preEmphasis = .ask
+        var drive = SimulatedDrive(toc: toc, samples: samples, readOffset: 6)
+        drive.qControl = [2: 0x1]
+        var rip = DiscRip(
+            drive: drive, identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"),
+            settings: settings, options: options,
+            profiles: try DriveProfileStore(url: root.appending(path: "DriveProfiles.json")))
+        rip.encoder = DiscEncoder(format: .wav)
+        rip.library = root.appending(path: "library")
+        let asked = DiscRipEvents()
+        rip.choosePreEmphasis = { _, _ in
+            asked.append(.ripDeleted)
+            return true
+        }
+        await #expect(throws: EncodingError.notVerified(track: 1)) { try await rip.run() }
+        #expect(asked.list.isEmpty)
+    }
+
     @Test func verifiesWithAccurateRipAndCTDB() async throws {
         let (toc, samples) = try makeDisc(trackSectors: [800, 900])
         let web = Self.web(toc: toc, samples: samples)

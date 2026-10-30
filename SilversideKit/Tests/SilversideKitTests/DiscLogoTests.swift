@@ -6,7 +6,7 @@ import Testing
 struct DiscLogoTests {
     let audio = try! TOC(audioTrackStarts: [0, 20000], leadOutLBA: 40000)
 
-    /// One logo: the first that fits, in the order DTS, HDCD, SACD, CD+G, Enhanced CD, CD-R,
+    /// One logo: the first that fits, in the order DTS, HDCD, SACD, CD+G, Copy Control, Enhanced CD, CD-R,
     /// CD-Text, Compact Disc.
     @Test func choosesTheMostTellingLogo() {
         #expect(DiscLogo.logo(toc: audio, format: "CD") == .compactDisc)
@@ -16,6 +16,7 @@ struct DiscLogoTests {
         #expect(DiscLogo.logo(toc: audio, format: "Enhanced CD", media: .recordable) == .compactDiscPlus)
         #expect(DiscLogo.logo(toc: audio, format: "CD+G") == .cdGraphics)
         #expect(DiscLogo.logo(toc: audio, format: "Hybrid SACD (CD layer)") == .sacd)
+        #expect(DiscLogo.logo(toc: audio, format: "Copy Control CD") == .copyControl)
         // What the audio is goes before what the disc is.
         #expect(DiscLogo.logo(toc: audio, format: "CD", media: .recordable, probe: DiscProbe(hdcd: true)) == .hdcd)
         #expect(DiscLogo.logo(toc: audio, format: "HDCD", probe: DiscProbe(hdcd: true, dts: true)) == .dts)
@@ -41,6 +42,8 @@ struct DiscLogoTests {
             tracks: [.init(number: 1, startLBA: 0, kind: .data), .init(number: 2, startLBA: 20000)], leadOutLBA: 40000)
         #expect(DiscLogo.logo(toc: mixed, format: "Mixed Mode CD") == .mixedMode)
         #expect(DiscLogo.logo(toc: mixed, format: nil) == .mixedMode)
+        // A Copy Control CD's data session is for its own player (Radiohead *Hail to the Thief*, TOCP-66200).
+        #expect(DiscLogo.logo(toc: enhanced, format: "Copy Control CD") == .copyControl)
     }
 }
 

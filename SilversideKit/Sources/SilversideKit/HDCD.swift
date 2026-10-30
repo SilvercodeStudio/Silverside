@@ -198,7 +198,7 @@ extension HDCDStatus {
             ? "every track has" : "\(coded.count) of \(tracks.count) tracks \(coded.count == 1 ? "has" : "have")"
         guard let features = features(of: tracks) else {
             return "HDCD: \(which) HDCD codes, but they ask for no peak extend or gain adjustment,"
-                + " so an HDCD decoder would play the same audio."
+                + " so an HDCD decoder would play the same audio. Any benefit of the HDCD mastering process is already in the audio."
         }
         return "HDCD: \(which) HDCD codes, and an HDCD decoder would change the audio (\(features))."
             + (decodedFormat.map {

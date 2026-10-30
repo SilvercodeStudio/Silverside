@@ -146,4 +146,26 @@ struct CoverArtListingTests {
                 "Artwork/medium.jpg",
             ])
     }
+
+    /// When the archive's list of images fails, the rip still gets the front cover, which the
+    /// app fetched as the disc was read.
+    @Test func savesTheFrontWhenTheListFails() async throws {
+        let jpeg: [UInt8] = [0xFF, 0xD8, 0xFF, 0xE0]
+        let transport = FakeTransport([.status(502), .bytes(jpeg)])
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let client = CoverArtClient(
+            client: WebClient(
+                directory: directory.appending(path: "cache"), transport: transport,
+                policies: ["coverartarchive.org": .init(interval: .zero, lifetime: .seconds(60))]))
+        var archived = MusicBrainzRelease.manual(toc: try TOC(audioTrackStarts: [0], leadOutLBA: 1000))
+        archived.id = "r"
+        archived.hasFrontCover = true
+        let result = try await client.saveArtwork(.all, of: archived, in: directory.appending(path: "album"))
+        guard case .saved(let files) = result else {
+            Issue.record("Not saved: \(result)")
+            return
+        }
+        #expect(files.map(\.lastPathComponent) == ["cover.jpg"])
+    }
 }

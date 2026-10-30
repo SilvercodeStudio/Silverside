@@ -10,6 +10,9 @@ public struct RippedDisc: Sendable {
         /// (the rule of `RipReport.isVerified`).
         public var isVerified: Bool
         public var isrc: String?
+        /// True for a track of digital silence that an album's encoding left out: it has no
+        /// file, and its audio is zeros (`RipReport.Encoding.silentTracksLeftOut`).
+        public var isLeftOutSilence = false
     }
 
     public var folder: URL
@@ -202,13 +205,26 @@ extension RippedDisc {
                 Track(number: 0, file: folder.appending(path: $0), isVerified: hidden.readsAgree, isrc: nil)
             }
         }
-        self.tracks = (hidden.map { [$0] } ?? []) + tracks
+        // The tracks of digital silence left out of the album are still the disc's: a disc
+        // image, a check against CTDB, and an encoding that keeps them have them as zeros.
+        let leftOut = Set(encoding.silentTracksLeftOut ?? [])
+        let all = report.tracks.compactMap { track in
+            tracks.first { $0.number == track.number }
+                ?? (leftOut.contains(track.number) && track.isSilent
+                    ? Track(
+                        number: track.number, file: folder.appending(path: track.file), isVerified: true,
+                        isrc: track.isrc, isLeftOutSilence: true) : nil)
+        }
+        self.tracks = (hidden.map { [$0] } ?? []) + all
     }
 
     /// A track's ripped audio: its WAV file, or a lossless encoded file, which must decode to
     /// the CRC-32 the report has for the track. A report too old to have the CRC-32 cannot
     /// check the file, and its audio is taken as it is.
     func audio(of track: Track) throws -> [UInt32] {
+        if track.isLeftOutSilence, let toc = toc.track(track.number) {
+            return [UInt32](repeating: 0, count: self.toc.sectorRange(of: toc).count * CDDA.samplesPerSector)
+        }
         let samples =
             try track.file.pathExtension.lowercased() == "wav"
             ? WAVFile.read(track.file) : AudioEncoder.decode(track.file)
@@ -306,6 +322,10 @@ public struct DiscEncoder: Sendable {
     /// Added to the album's title in names and tags, as " (HDCD)" for a decoded copy beside
     /// the album: the copy gets a folder of its own, and players list it apart.
     public var albumSuffix: String?
+    /// Leave out the tracks that are all digital silence (`RipReport.silentTracks`), such as the
+    /// short silent tracks before a disc's hidden songs: no file and no line in the album's CUE
+    /// sheet. The other tracks keep the disc's numbers, and a disc image keeps every track.
+    public var leavesOutSilentTracks = false
     /// Where disc images go (see `writeImage`), or nil for none.
     public var images: URL?
     /// How many tracks encode at once. Each track in flight holds its audio twice (the rip and
@@ -321,6 +341,8 @@ public struct DiscEncoder: Sendable {
     public var log: @Sendable (String) -> Void = { _ in }
     /// Hears each track when its file is written and checked: the track's number and the file.
     public var trackEncoded: @Sendable (_ number: Int, _ file: URL) -> Void = { _, _ in }
+    /// Hears the tracks of digital silence left out (`leavesOutSilentTracks`), before the first file.
+    public var tracksLeftOut: @Sendable (_ numbers: [Int]) -> Void = { _ in }
 
     public init(format: AudioFormat) {
         self.format = format
@@ -341,6 +363,7 @@ public struct DiscEncoder: Sendable {
         replayGain = settings.replayGain
         decodesHDCD = settings.hdcd == .decode
         deEmphasizes = settings.preEmphasis != .keep
+        leavesOutSilentTracks = settings.silentTracks != .keep
         images = settings.writeImages ? settings.imagesURL : nil
     }
 
@@ -348,7 +371,7 @@ public struct DiscEncoder: Sendable {
     /// does for a disc that cannot be encoded, but not for files that exist, so a caller can
     /// ask before it replaces them (see `overwrites`).
     public func plannedFiles(_ disc: RippedDisc, into library: URL) throws -> [URL] {
-        let (release, medium, jobs) = try plan(disc, into: library)
+        let (release, medium, jobs, _) = try plan(disc, into: library)
         let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
         let data = jobs.first.map { dataTrackCopies(of: disc, into: $0.folder, discPart: discPart) } ?? []
         // A data track's image, and the folder its files go into.
@@ -555,16 +578,20 @@ public struct DiscEncoder: Sendable {
         }
     }
 
-    /// Every track's names, before any file is written.
+    /// Every track's names, before any file is written, and the tracks of digital silence left
+    /// out (`leavesOutSilentTracks`), with their names for the disc image's CUE sheet.
     private func plan(_ disc: RippedDisc, into library: URL) throws -> (
-        release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium, jobs: [Job]
+        release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium, jobs: [Job], leftOut: [Job]
     ) {
         guard var release = disc.release else { throw EncodingError.noRelease(disc.folder) }
         if let albumSuffix { release.title += albumSuffix }
         guard let medium = release.medium(for: disc.toc) else { throw EncodingError.unknownMedium(disc.folder) }
         try checkVerified(disc)
         let audioTracks = disc.toc.audioTracks
+        // The report says which tracks are silent; their samples say it for certain.
+        let silent = Set(disc.report?.silentTracks ?? [])
         var jobs = [Job]()
+        var leftOut = [Job]()
         for ripped in disc.tracks {
             // Track 0 is the audio before track 1: MusicBrainz's pregap track, if it lists one.
             let index = ripped.number == 0 ? 0 : audioTracks.firstIndex { $0.number == ripped.number }
@@ -585,7 +612,14 @@ public struct DiscEncoder: Sendable {
             let values = metadata.nameValues
             let folder = library.appending(path: folderTemplate.name(values), directoryHint: .isDirectory)
             let file = folder.appending(path: trackTemplate.name(values) + "." + format.fileExtension)
-            jobs.append(Job(ripped: ripped, index: index, metadata: metadata, folder: folder, file: file))
+            let job = Job(ripped: ripped, index: index, metadata: metadata, folder: folder, file: file)
+            if try leavesOutSilentTracks && silent.contains(ripped.number)
+                && (ripped.isLeftOutSilence || disc.audio(of: ripped).allSatisfy { $0 == 0 })
+            {
+                leftOut.append(job)
+            } else {
+                jobs.append(job)
+            }
         }
         try Self.checkUniqueDestinations(jobs.map(\.file))
         // Pre-emphasis, from the report's flags (the TOC's or the Q subchannel's). The audio
@@ -604,7 +638,7 @@ public struct DiscEncoder: Sendable {
             jobs[position].previousDeEmphasizes = jobs[position - 1].deEmphasizes
             jobs[position - 1].next = jobs[position].ripped
         }
-        return (release, medium, jobs)
+        return (release, medium, jobs, leftOut)
     }
 
     /// Conservative across case-sensitive and case-insensitive libraries, including canonical Unicode aliases.
@@ -645,7 +679,16 @@ public struct DiscEncoder: Sendable {
         _ disc: RippedDisc, into library: URL
     ) throws -> (files: [URL], encoding: RipReport.Encoding?) {
         let encodingStarted = Date()
-        var (release, medium, jobs) = try plan(disc, into: library)
+        let planned = try plan(disc, into: library)
+        var (release, medium, jobs) = (planned.release, planned.medium, planned.jobs)
+        let silentTracksLeftOut = planned.leftOut.map(\.ripped.number)
+        if !silentTracksLeftOut.isEmpty {
+            log(
+                (silentTracksLeftOut.count == 1 ? "Track " : "Tracks ") + RipReport.list(silentTracksLeftOut)
+                    + (silentTracksLeftOut.count == 1 ? " is" : " are")
+                    + " digital silence: left out of the album. A disc image keeps every track.")
+            tracksLeftOut(silentTracksLeftOut)
+        }
         let lame = format == .mp3 ? MP3Encoder.lame() : nil
         if format == .mp3 && lame == nil { throw MP3Error.lameNotFound }
         // A DTS-CD's tracks: decoded, or kept as the stream, which only a lossless format keeps.
@@ -779,7 +822,9 @@ public struct DiscEncoder: Sendable {
         // every track is written and checked before the first original goes, so a failure
         // leaves the album as it was, and a later try can read it again; and no track reads
         // the track before (for the HDCD decoder or the de-emphasis filter) after it changed.
-        let sources = disc.tracks.map { $0.file.standardizedFileURL.resolvingSymlinksInPath() }
+        let sources = disc.tracks.filter { !$0.isLeftOutSilence }.map {
+            $0.file.standardizedFileURL.resolvingSymlinksInPath()
+        }
         let replacesSource =
             (disc.isAlbum && jobs.first.map { Self.sameFile($0.folder, disc.folder) } == true)
             || jobs.contains { job in sources.contains { Self.sameFile(job.file, $0) } }
@@ -819,28 +864,30 @@ public struct DiscEncoder: Sendable {
         var albumFolder: URL?
         var cueTracks = [CueSheet.Track]()
         var hiddenTrackFile: String?
+        func cueTrack(_ job: Job) -> CueSheet.Track {
+            let tocTrack = audioTracks[job.index]
+            // The report's flags include the Q subchannel's, which can set a flag that the TOC does not.
+            let reported = disc.report?.tracks.first { $0.number == tocTrack.number }
+            return CueSheet.Track(
+                number: tocTrack.number, file: job.file.lastPathComponent,
+                sectors: disc.toc.sectorRange(of: tocTrack).count, pregapSectors: reported?.pregapSectors ?? 0,
+                indexes: reported?.indexes ?? [],
+                title: job.metadata.title, performer: job.metadata.vorbisComments.first { $0.key == "ARTIST" }?.value,
+                isrc: job.ripped.isrc, preEmphasis: tocTrack.hasPreEmphasis || reported?.preEmphasis == true,
+                copyPermitted: tocTrack.isCopyPermitted || reported?.isCopyPermitted == true)
+        }
         for (position, job) in jobs.enumerated() where outcomes.finished(position) {
-            let (ripped, index, metadata, folder, file) = (job.ripped, job.index, job.metadata, job.folder, job.file)
+            let (ripped, folder, file) = (job.ripped, job.folder, job.file)
             albumFolder = folder
             written.append(file)
             encodedFiles.append(.init(track: ripped.number, file: file.lastPathComponent))
-            let tocTrack = audioTracks[index]
             if ripped.number == 0 {
                 hiddenTrackFile = file.lastPathComponent
                 continue
             }
-            // The report's flags include the Q subchannel's, which can set a flag that the TOC does not.
-            let reported = disc.report?.tracks.first { $0.number == tocTrack.number }
-            let preEmphasis = tocTrack.hasPreEmphasis || reported?.preEmphasis == true
-            cueTracks.append(
-                CueSheet.Track(
-                    number: tocTrack.number, file: file.lastPathComponent,
-                    sectors: disc.toc.sectorRange(of: tocTrack).count, pregapSectors: reported?.pregapSectors ?? 0,
-                    indexes: reported?.indexes ?? [],
-                    title: metadata.title, performer: metadata.vorbisComments.first { $0.key == "ARTIST" }?.value,
-                    isrc: ripped.isrc, preEmphasis: preEmphasis,
-                    copyPermitted: tocTrack.isCopyPermitted || reported?.isCopyPermitted == true))
-            if preEmphasis && !job.deEmphasizes {
+            let track = cueTrack(job)
+            cueTracks.append(track)
+            if track.preEmphasis && !job.deEmphasizes {
                 log(
                     "  This track has pre-emphasis: the audio is as on the disc, and sounds too bright in a player"
                         + " that does not de-emphasize it. It is tagged PRE_EMPHASIS=yes, and the CUE sheet marks it"
@@ -849,8 +896,10 @@ public struct DiscEncoder: Sendable {
         }
         func writeDiscImage() throws -> URL? {
             guard let images, albumSuffix == nil, let albumFolder else { return nil }
+            // The image is the whole disc, with the tracks of digital silence left out of the album.
+            let imageTracks = (cueTracks + planned.leftOut.map(cueTrack)).sorted { $0.number < $1.number }
             let sheet = cueSheet(
-                cueTracks, hiddenTrackFile: nil, release: release, medium: medium, toc: disc.toc,
+                imageTracks, hiddenTrackFile: nil, release: release, medium: medium, toc: disc.toc,
                 mcn: disc.report?.mcn)
             return try writeImage(
                 of: disc, sheet: sheet, name: NameTemplate.safeComponent(sheet.title ?? "Disc") + discPart,
@@ -941,6 +990,7 @@ public struct DiscEncoder: Sendable {
             encoding.hdcdDecoded = decodes ? true : nil
             encoding.dtsDecoded = dtsDecoder != nil ? outcomes.surroundLayout : nil
             encoding.deEmphasizedTracks = deEmphasized.isEmpty ? nil : deEmphasized
+            encoding.silentTracksLeftOut = silentTracksLeftOut.isEmpty ? nil : silentTracksLeftOut
             encoding.albumSuffix = albumSuffix
             encoding.dataTrackFiles = dataTrackFiles.isEmpty ? nil : dataTrackFiles
             return encoding

@@ -115,6 +115,7 @@ struct Rip: AsyncParsableCommand {
         options.hdcd = encoding.hdcdChoice(settings)
         options.preEmphasis = encoding.preEmphasisChoice(settings)
         options.dts = encoding.dtsChoice(settings)
+        options.silentTracks = encoding.silentTrackChoice(settings)
         options.dataTracks = dataTracks ?? settings.dataTracks
 
         var rip = DiscRip(
@@ -138,6 +139,10 @@ struct Rip: AsyncParsableCommand {
             rip.choosePreEmphasis = { [printer] report, format in
                 printer.progress.clear()
                 return Self.askToDeEmphasize(report, format: format)
+            }
+            rip.chooseSilentTracks = { [printer] report in
+                printer.progress.clear()
+                return Self.askToLeaveOutSilentTracks(report)
             }
             rip.chooseDTS = { [printer] report, format, canDecode in
                 printer.progress.clear()
@@ -244,6 +249,18 @@ struct Rip: AsyncParsableCommand {
                 + (format.isLossless ? "\(format.wideBits)-bit \(format.name) files" : "\(format.name) files")
                 + " tagged DE_EMPHASIZED=yes. Kept, the files are bit for bit the disc, tagged PRE_EMPHASIS=yes.")
         print("De-emphasize? [Y/n] ", terminator: "")
+        fflush(stdout)
+        let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        return answer.isEmpty || answer == "y" || answer == "yes"
+    }
+
+    static func askToLeaveOutSilentTracks(_ report: RipReport) -> Bool {
+        print()
+        if let text = report.silentTracksText { print(text) }
+        print(
+            "Left out, they get no files, and the other tracks keep the disc's numbers. A disc image keeps every"
+                + " track.")
+        print("Leave them out? [Y/n] ", terminator: "")
         fflush(stdout)
         let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
         return answer.isEmpty || answer == "y" || answer == "yes"
@@ -396,7 +413,7 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print()
         case .encodedTrack(let line):
             Swift.print("  \(line)")
-        case .trackEncoded:
+        case .trackEncoded, .silentTracksLeftOut:
             break
         case .encodingDeclined(let existing):
             let folder = existing.first?.deletingLastPathComponent().path ?? ""

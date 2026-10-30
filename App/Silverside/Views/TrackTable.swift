@@ -491,6 +491,9 @@ struct EncodeCell: View {
             CheckedText(text: format?.rawValue.uppercased() ?? "Encoded").help(file.path)
         case .notEncoded:
             Text("Not encoded").foregroundStyle(.secondary)
+        case .leftOut:
+            Text("Left out").foregroundStyle(.secondary)
+                .help("Digital silence: the album has no file for it. A disc image keeps it.")
         case .failed:
             Text("Failed").foregroundStyle(Theme.bad)
         case nil:

@@ -84,6 +84,14 @@ them as pressed, tagged `PRE_EMPHASIS=yes`. With `ask`, the default, `rip` asks
 at a terminal (yes by default), and `encode` de-emphasizes. The CUE sheet marks
 the tracks kept as pressed (`FLAGS PRE`), not the de-emphasized ones.
 
+Tracks that are all digital silence (Nine Inch Nails *Broken* has 91, before
+its hidden tracks 98 and 99) are left out by `--silent-tracks leave-out` (or the
+`silentTracks` setting): no files, and no lines in the album's CUE sheet. The
+other tracks keep the disc's numbers, and a disc image keeps every track.
+`--silent-tracks keep` encodes them as any track. With `ask`, the default, `rip`
+asks at a terminal (yes by default), and `encode` leaves them out. The rip
+always reads and verifies every track.
+
 A DTS-CD's tracks hold a DTS stream (surround sound that plays as static
 without a DTS decoder), which the report names. `--dts decode` (or the `dts`
 setting) encodes the album as the disc has it, the stream bit for bit, and a
@@ -181,6 +189,7 @@ silverside config unset aac.mode                     # back to the default
 | `ripOnInsert` | `false` | the app rips a disc when it goes in, if its release is certain and it is not ripped yet |
 | `hdcd` | `ask` | for a disc whose HDCD codes ask for peak extend or a gain: `decode` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--hdcd`) |
 | `preEmphasis` | `ask` | for tracks with pre-emphasis: `deemphasize` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--pre-emphasis`) |
+| `silentTracks` | `ask` | for tracks that are all digital silence: `leave-out` (no files; the other tracks keep the disc's numbers), `keep`, or `ask` (`--silent-tracks`) |
 | `dts` | `ask` | for a DTS-CD: `decode` (the stream, and a decoded copy beside it), `decode-only`, `keep` the stream, or `ask` (`--dts`); decoding needs ffmpeg |
 | `dataTracks` | `ask` | for a disc with a data track (an Enhanced CD's extras): `save` it as an ISO image, copied into the album folder as `Data track.iso` with its files in a `Data track` folder; `skip` it; or `ask` at a terminal, saving otherwise (`rip --data-tracks`) |
 | `writeImages` | `false` | also write a disc image when a disc is encoded (`--image`) |

@@ -472,6 +472,49 @@ struct PreEmphasisQuestionSheet: View {
     }
 }
 
+/// After a rip with tracks that are all digital silence, before encoding: leave them out of the
+/// album, or keep them. Leaving them out is the advice: they are filler, such as the short
+/// silent tracks before a disc's hidden songs.
+struct SilentTracksQuestionSheet: View {
+    @Environment(AppModel.self) private var model
+    var rip: RipRun
+    var question: RipRun.SilentTracksQuestion
+    @State private var remembers = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("“\(question.album)” has silent tracks").font(.title3.bold())
+            Text(
+                question.text
+                    + " Discs use such tracks to place hidden songs at a high track number, or as gaps on a test disc."
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(
+                    .init(
+                        "**Leave out:** no files for them. The other tracks keep the disc's numbers, so a hidden song stays track 99."
+                    ))
+                Text(.init("**Keep:** a file for each, as for any track."))
+                Text("The rip has every track either way, and a disc image keeps them.").foregroundStyle(.secondary)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Toggle("Use this answer for every disc with silent tracks (Settings › Encoding)", isOn: $remembers)
+            HStack {
+                Spacer()
+                Button("Keep") { answer(leavesOut: false) }
+                Button("Leave Out") { answer(leavesOut: true) }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
+    }
+
+    private func answer(leavesOut: Bool) {
+        if remembers { model.settings.silentTracks = leavesOut ? .leaveOut : .keep }
+        rip.answerSilentTracks(leavesOut: leavesOut)
+    }
+}
+
 /// As a rip of a disc with a data track starts (an Enhanced CD's extras for a computer): save
 /// it, or rip the audio only. Saving is the advice; it does not change the audio.
 struct DataTrackQuestionSheet: View {

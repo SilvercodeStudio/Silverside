@@ -12,6 +12,30 @@ command-line tool.
   the codes ask for (peak extend, gain), or that the files hold the decode;
   for DTS, that the files hold the decode. Sort by it, or search for
   "HDCD" or "Enhanced", to find the rips of a kind.
+- Silent tracks: a disc with tracks of nothing but digital silence, such as
+  the 91 one-second tracks before the hidden songs of Nine Inch Nails
+  *Broken*, can leave them out of the album. Silverside rips and verifies
+  every track, then asks before encoding: **Leave Out** writes no files for
+  them, and the other tracks keep the disc's numbers (the hidden songs stay
+  tracks 98 and 99); **Keep** encodes them as any track. A disc image keeps
+  every track. The answer can be set in Settings › Encoding, and the command
+  line has `--silent-tracks`.
+- A Copy Control CD (a copy-protected disc, such as some EMI releases of
+  2001 to 2004) shows the Copy Control logo, when MusicBrainz names the
+  release's format so.
+
+### Changed
+
+- The disc's logo beside the Rip button sits on glass, as on an earlier rip,
+  so that the tracks under it do not show through.
+- Tracks that AccurateRip has no checksum for because they are silence are
+  named so: "91 silent tracks (no AccurateRip checksum)".
+
+### Fixed
+
+- A rip got no cover when the Cover Art Archive's list of a release's images
+  could not be read. Now it gets the front cover, which Silverside showed as
+  the disc was read.
 
 ## 0.9.1 (2026-10-29)
 

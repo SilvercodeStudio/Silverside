@@ -56,6 +56,10 @@ What to do with a disc whose HDCD codes ask for peak extend or gain: **Ask each 
 
 What to do with tracks mastered with pre-emphasis: **Ask each time** (the default), **De-emphasize** (as a CD player plays them: 20-bit FLAC and Apple Lossless, 24-bit AIFF and WAV), or **Keep as pressed** (files bit for bit the disc). See Pre-emphasis and other flags under Ripping a Disc.
 
+### Silent tracks
+
+What to do with tracks that are all digital silence: **Ask each time** (the default), **Leave out**, or **Keep**. See Silent tracks under Ripping a Disc.
+
 ### Disc image
 
 With **Also write a disc image** on, each disc that is encoded is also written as one file, with a CUE sheet: the image. A burner (such as cdrdao) can make the disc again from it, and some players (foobar2000, for one) show its tracks. The image is lossless: in the library's format, or FLAC when the library is AAC or MP3. It goes into the images folder, in folders named as the library's, and the album's tracks are written as usual. Like every file, it is decoded again and compared with the rip. A FLAC image also holds its CUE sheet in its tags.

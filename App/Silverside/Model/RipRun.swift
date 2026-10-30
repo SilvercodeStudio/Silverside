@@ -34,6 +34,8 @@ final class RipRun {
         case encoded(URL)
         /// Not encoded: the files in the library were kept, or the rip stopped first.
         case notEncoded
+        /// A track of digital silence that the encoding left out.
+        case leftOut
         case failed
     }
 
@@ -64,6 +66,14 @@ final class RipRun {
         var format: AudioFormat
         /// True if ffmpeg is there to decode it.
         var canDecode: Bool
+    }
+
+    /// The rip found tracks of digital silence: it waits for `answerSilentTracks(leavesOut:)`.
+    struct SilentTracksQuestion: Identifiable {
+        let id = UUID()
+        var album: String
+        /// "Tracks 7-97 are digital silence (91 of 99 tracks, 1:31 in all)."
+        var text: String
     }
 
     /// The rip found tracks with pre-emphasis: it waits for `answerPreEmphasis(deEmphasizes:)`.
@@ -144,6 +154,7 @@ final class RipRun {
     private(set) var overwriteQuestion: OverwriteQuestion?
     private(set) var hdcdQuestion: HDCDQuestion?
     private(set) var preEmphasisQuestion: PreEmphasisQuestion?
+    private(set) var silentTracksQuestion: SilentTracksQuestion?
     private(set) var dtsQuestion: DTSQuestion?
     private(set) var dataTrackQuestion: DataTrackQuestion?
     private(set) var startDate = Date()
@@ -165,6 +176,7 @@ final class RipRun {
     @ObservationIgnored private var overwriteAnswer: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var hdcdAnswer: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var preEmphasisAnswer: CheckedContinuation<Bool, Never>?
+    @ObservationIgnored private var silentTracksAnswer: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var dtsAnswer: CheckedContinuation<DTSChoice, Never>?
     @ObservationIgnored private var dataTrackAnswer: CheckedContinuation<Bool, Never>?
     /// Hears the question about files in the library, so the app can show the drive and ask for attention.
@@ -284,6 +296,13 @@ final class RipRun {
                         }
                     }
                 }
+                rip.chooseSilentTracks = { report in
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated { run.askSilentTracks(report, answer: continuation) }
+                        }
+                    }
+                }
                 rip.choosePreEmphasis = { report, format in
                     await withCheckedContinuation { continuation in
                         DispatchQueue.main.async {
@@ -363,6 +382,7 @@ final class RipRun {
         if overwriteQuestion != nil { answer(replaces: false) }
         if hdcdQuestion != nil { answerHDCD(decodes: false) }
         if preEmphasisQuestion != nil { answerPreEmphasis(deEmphasizes: false) }
+        if silentTracksQuestion != nil { answerSilentTracks(leavesOut: false) }
         if dtsQuestion != nil { answerDTS(.keep) }
         if dataTrackQuestion != nil { answerDataTracks(saves: false) }
     }
@@ -425,6 +445,22 @@ final class RipRun {
         case .keep, .ask: add("Keeping the DTS stream as the disc has it.")
         }
         dtsAnswer.resume(returning: choice)
+    }
+
+    private func askSilentTracks(_ report: RipReport, answer: CheckedContinuation<Bool, Never>) {
+        silentTracksAnswer = answer
+        silentTracksQuestion = SilentTracksQuestion(album: disc.title, text: report.silentTracksText ?? "")
+        add("Tracks of digital silence. Waiting for an answer: leave them out of the album, or keep them...")
+        onQuestion?()
+    }
+
+    /// Answers the silent tracks question: true leaves them out of the album.
+    func answerSilentTracks(leavesOut: Bool) {
+        guard let silentTracksAnswer else { return }
+        self.silentTracksAnswer = nil
+        silentTracksQuestion = nil
+        add(leavesOut ? "Leaving the silent tracks out of the album." : "Keeping the silent tracks.")
+        silentTracksAnswer.resume(returning: leavesOut)
     }
 
     private func askPreEmphasis(_ report: RipReport, format: AudioFormat, answer: CheckedContinuation<Bool, Never>) {
@@ -506,6 +542,7 @@ final class RipRun {
             if overwriteQuestion != nil { return "Waiting for your answer about the library…" }
             if hdcdQuestion != nil { return "Waiting for your answer about HDCD…" }
             if preEmphasisQuestion != nil { return "Waiting for your answer about pre-emphasis…" }
+            if silentTracksQuestion != nil { return "Waiting for your answer about the silent tracks…" }
             if dtsQuestion != nil { return "Waiting for your answer about DTS…" }
             if dataTrackQuestion != nil { return "Waiting for your answer about the data track…" }
             // The data track is read after the audio, while the last audio track is still current.
@@ -703,6 +740,9 @@ final class RipRun {
             add("Encoding as \(format.rawValue.uppercased())...")
         case .encodedTrack(let line):
             add("  \(line)")
+        case .silentTracksLeftOut(let numbers):
+            for number in numbers { encodeStates[number] = .leftOut }
+            startNextEncode()
         case .trackEncoded(let number, let file):
             encodedCount += 1
             encodeStates[number] = .encoded(file)

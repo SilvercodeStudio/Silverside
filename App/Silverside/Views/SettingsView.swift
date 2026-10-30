@@ -440,6 +440,17 @@ struct EncodingSettings: View {
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Silent tracks") {
+                Picker("Tracks that are all digital silence", selection: $model.settings.silentTracks) {
+                    Text("Ask each time").tag(SilentTrackChoice.ask)
+                    Text("Leave out").tag(SilentTrackChoice.leaveOut)
+                    Text("Keep").tag(SilentTrackChoice.keep)
+                }
+                Text(
+                    "Some discs have many short tracks of digital silence, to put hidden songs at a high track number. Leave out writes no files for them; the other tracks keep the disc's numbers. The rip always has every track, so AccurateRip and CTDB check the whole disc, and a disc image keeps them."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+            }
             Section("DTS-CD") {
                 Picker("Discs whose tracks hold a DTS stream", selection: $model.settings.dts) {
                     Text("Ask each time").tag(DTSChoice.ask)

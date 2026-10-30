@@ -178,7 +178,9 @@ final class LibraryRun: Identifiable {
                         }
                     }
                     let deletes =
-                        !settings.keepRipAfterEncoding && files.count == disc.tracks.count && disc.isFinished
+                        !settings.keepRipAfterEncoding
+                        && files.count + (record?.silentTracksLeftOut?.count ?? 0) == disc.tracks.count
+                        && disc.isFinished
                     let deleted =
                         try deletes && disc.deleteRipFiles(albumFolder: record.map { URL(filePath: $0.folder) })
                     onMain {

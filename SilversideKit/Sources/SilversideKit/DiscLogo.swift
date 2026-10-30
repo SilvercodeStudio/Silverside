@@ -9,6 +9,9 @@ public enum DiscLogo: String, CaseIterable, Sendable {
     case sacd
     /// CD+Graphics.
     case cdGraphics
+    /// A Copy Control CD: a copy-protected disc, which does not meet the Compact Disc standard
+    /// and carries this logo in place of the Compact Disc's. Known from MusicBrainz's format only.
+    case copyControl
     /// The "disc+" logo of an Enhanced CD (Blue Book, CD Extra): music, then data in a second session.
     case compactDiscPlus
     /// A Mixed Mode CD: data in track 1, then music. It has no logo of its own; it gets the
@@ -28,7 +31,8 @@ public enum DiscLogo: String, CaseIterable, Sendable {
     case ultraHDBluRay
 
     /// The disc's logo: the first in this order that fits. What the audio is goes before what
-    /// the disc is, so a CD-R of an HDCD disc gets the HDCD logo. `format` is MusicBrainz's
+    /// the disc is, so a CD-R of an HDCD disc gets the HDCD logo. Copy Control goes before
+    /// Enhanced CD: such a disc often has a data session too, for its own player. `format` is MusicBrainz's
     /// format for the disc's medium, `media` what the drive says the disc is, and `probe` what
     /// a look at the audio found (`DiscProbe`), or a rip: what is found counts, and
     /// MusicBrainz's format where nothing could be.
@@ -43,6 +47,7 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         if found.hdcd || (!looked && format == "HDCD") { return .hdcd }
         if format.contains("SACD") { return .sacd }
         if found.cdGraphics ?? (format == "CD+G") { return .cdGraphics }
+        if format == "COPY CONTROL CD" { return .copyControl }
         if toc.isEnhanced || format == "ENHANCED CD" { return .compactDiscPlus }
         if toc.tracks.first?.kind == .data || format == "MIXED MODE CD" { return .mixedMode }
         if media == .recordable || format == "CD-R" { return .recordable }
@@ -112,6 +117,7 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         case .hdcd: "HDCD"
         case .sacd: "Super Audio CD, its CD layer"
         case .cdGraphics: "CD+Graphics"
+        case .copyControl: "Copy Control CD: copy protected, and not a Compact Disc by the standard"
         case .compactDiscPlus: "Enhanced CD (CD Extra): music, then data in a session of its own"
         case .mixedMode: "Mixed Mode CD: data in track 1, then music"
         case .recordable: "Compact Disc Recordable (CD-R)"
@@ -131,6 +137,7 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         case .hdcd: "HDCD"
         case .sacd: "SACD"
         case .cdGraphics: "CD+G"
+        case .copyControl: "Copy Control"
         case .compactDiscPlus: "Enhanced CD"
         case .mixedMode: "Mixed Mode"
         case .recordable: "CD-R"

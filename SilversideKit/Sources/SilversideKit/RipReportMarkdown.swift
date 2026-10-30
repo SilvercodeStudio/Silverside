@@ -260,6 +260,13 @@ extension RipReport {
                 lines.append("")
                 lines.append("Data tracks: " + files.map { "`\($0)`" }.joined(separator: ", "))
             }
+            if let silent = encoding.silentTracksLeftOut, !silent.isEmpty {
+                lines.append("")
+                lines.append(
+                    (silent.count == 1 ? "Track " : "Tracks ") + Self.list(silent)
+                        + (silent.count == 1 ? " is" : " are")
+                        + " digital silence, left out of the album: no file, and no line in its CUE sheet.")
+            }
             lines.append("")
             lines.append("| Track | File |")
             lines.append("|---:|---|")
@@ -374,7 +381,7 @@ extension RipReport {
         }
     }
 
-    static func list(_ sectors: [Int]) -> String {
+    public static func list(_ sectors: [Int]) -> String {
         DiscRepairer.ranges(of: sectors.sorted()).map {
             $0.count == 1 ? String($0.lowerBound) : "\($0.lowerBound)-\($0.upperBound - 1)"
         }.joined(separator: ", ")

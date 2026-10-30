@@ -16,6 +16,10 @@ struct MainWindow: View {
     private var dataTrackRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.dataTrackQuestion != nil } }
     /// A rip that waits to hear what to do with its DTS stream.
     private var dtsRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.dtsQuestion != nil } }
+    /// A rip that waits to hear whether to leave its silent tracks out of the album.
+    private var silentTracksRip: RipRun? {
+        model.drives.lazy.compactMap(\.rip).first { $0.silentTracksQuestion != nil }
+    }
     /// A rip that waits to hear whether to de-emphasize its tracks with pre-emphasis.
     private var preEmphasisRip: RipRun? {
         model.drives.lazy.compactMap(\.rip).first { $0.preEmphasisQuestion != nil }
@@ -67,6 +71,11 @@ struct MainWindow: View {
         .sheet(isPresented: Binding(get: { dataTrackRip != nil }, set: { _ in })) {
             if let rip = dataTrackRip, let question = rip.dataTrackQuestion {
                 DataTrackQuestionSheet(rip: rip, question: question)
+            }
+        }
+        .sheet(isPresented: Binding(get: { silentTracksRip != nil }, set: { _ in })) {
+            if let rip = silentTracksRip, let question = rip.silentTracksQuestion {
+                SilentTracksQuestionSheet(rip: rip, question: question)
             }
         }
         .sheet(isPresented: Binding(get: { preEmphasisRip != nil }, set: { _ in })) {

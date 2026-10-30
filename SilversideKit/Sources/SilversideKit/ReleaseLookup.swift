@@ -155,7 +155,15 @@ extension CoverArtClient {
     {
         guard choice != .none else { return .notWanted }
         guard release.hasFrontCover || (release.artworkCount ?? 0) > 0 else { return .noneInArchive }
-        let files = try await save(releaseID: release.id, in: folder, all: choice == .all)
-        return files.isEmpty ? .noneInArchive : .saved(files)
+        do {
+            let files = try await save(releaseID: release.id, in: folder, all: choice == .all)
+            return files.isEmpty ? .noneInArchive : .saved(files)
+        } catch let error where !(error is CancellationError) {
+            // The archive's list of images can fail (archive.org behind it is busy) when its front
+            // cover does not; the app showed that cover as the disc was read, and the web cache
+            // keeps it. Nine Inch Nails *Broken* (2026-10-30) got no cover when the list failed.
+            guard let front = try? await frontCover(releaseID: release.id) else { throw error }
+            return .saved([try front.write(to: folder)])
+        }
     }
 }

@@ -97,6 +97,15 @@ struct EncodingOptions: ParsableArguments {
             """)
     var dts: DTSChoice?
 
+    @Option(
+        help: """
+            For tracks that are all digital silence, such as the short silent tracks before a disc's hidden \
+            songs: leave-out writes no file for them, and the other tracks keep the disc's numbers; keep writes \
+            them as any track. A disc image keeps every track. ask (the setting's default) asks in rip at a \
+            terminal, and leaves them out otherwise.
+            """)
+    var silentTracks: SilentTrackChoice?
+
     /// The HDCD choice: the option, else the setting.
     func hdcdChoice(_ settings: Settings) -> HDCDChoice {
         hdcd ?? settings.hdcd
@@ -105,6 +114,11 @@ struct EncodingOptions: ParsableArguments {
     /// The pre-emphasis choice: the option, else the setting.
     func preEmphasisChoice(_ settings: Settings) -> PreEmphasisChoice {
         preEmphasis ?? settings.preEmphasis
+    }
+
+    /// The silent tracks choice: the option, else the setting.
+    func silentTrackChoice(_ settings: Settings) -> SilentTrackChoice {
+        silentTracks ?? settings.silentTracks
     }
 
     /// The DTS choice: the option, else the setting.
@@ -137,6 +151,7 @@ struct EncodingOptions: ParsableArguments {
         if let replayGain { encoder.replayGain = replayGain }
         encoder.decodesHDCD = hdcdChoice(settings) == .decode
         encoder.deEmphasizes = preEmphasisChoice(settings) != .keep
+        encoder.leavesOutSilentTracks = silentTrackChoice(settings) != .keep
         if image ?? settings.writeImages {
             encoder.images = images.map(Settings.expand) ?? settings.imagesURL
         } else {
@@ -155,3 +170,4 @@ extension HDCDChoice: ExpressibleByArgument {}
 extension PreEmphasisChoice: ExpressibleByArgument {}
 extension DataTrackChoice: ExpressibleByArgument {}
 extension DTSChoice: ExpressibleByArgument {}
+extension SilentTrackChoice: ExpressibleByArgument {}

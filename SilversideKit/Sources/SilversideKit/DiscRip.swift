@@ -62,6 +62,9 @@ public struct DiscRipOptions: Sendable {
     /// For a DTS-CD: keep the stream, decode it beside the album or in its place, or ask
     /// `DiscRip.chooseDTS`.
     public var dts: DTSChoice
+    /// For a disc with tracks of digital silence: leave them out of the album, keep them, or
+    /// ask `DiscRip.chooseSilentTracks`.
+    public var silentTracks: SilentTrackChoice
     /// For a disc with data tracks (an Enhanced CD's extras): save them as ISO images beside
     /// the audio, skip them, or ask `DiscRip.chooseDataTracks`.
     public var dataTracks: DataTrackChoice
@@ -78,6 +81,7 @@ public struct DiscRipOptions: Sendable {
         hdcd = settings.hdcd
         preEmphasis = settings.preEmphasis
         dts = settings.dts
+        silentTracks = settings.silentTracks
         dataTracks = settings.dataTracks
     }
 }
@@ -144,6 +148,8 @@ public enum DiscRipEvent: Sendable {
     case encoding(AudioFormat)
     /// A line from the encoder, for people to read.
     case encodedTrack(String)
+    /// The tracks of digital silence that the encoding leaves out, before the first file.
+    case silentTracksLeftOut([Int])
     /// A track's file is written and checked.
     case trackEncoded(number: Int, file: URL)
     /// The library already had these files of the disc, and `confirmOverwrite` kept them:
@@ -222,6 +228,10 @@ public struct DiscRip {
     /// the stream is kept.
     public var chooseDTS:
         (@Sendable (_ report: RipReport, _ format: AudioFormat, _ canDecode: Bool) async -> DTSChoice)?
+    /// With `options.silentTracks` at `.ask`, for a disc with tracks of digital silence: called
+    /// after the rip, before encoding. True leaves them out of the album. Nil asks nothing, and
+    /// they are left out.
+    public var chooseSilentTracks: (@Sendable (_ report: RipReport) async -> Bool)?
     /// For a disc with data tracks and `DiscRipOptions.dataTracks` ask: true saves them. Asked
     /// as the rip starts, so the answer is not awaited after the audio. Without it, they are saved.
     public var chooseDataTracks: (@Sendable (_ tracks: [TOC.Track]) async -> Bool)?
@@ -677,6 +687,17 @@ public struct DiscRip {
             // Before any question: a rip that is not verified is not encoded, whatever the answers.
             try encoder.checkVerified(disc)
             let library = self.library
+            // Before the files in the library are looked at: the answer changes which files there are.
+            switch options.silentTracks {
+            case .leaveOut: encoder.leavesOutSilentTracks = true
+            case .keep: encoder.leavesOutSilentTracks = false
+            case .ask:
+                encoder.leavesOutSilentTracks = true
+                if !report.silentTracks.isEmpty, let chooseSilentTracks {
+                    encoder.leavesOutSilentTracks = await chooseSilentTracks(report)
+                    try stop.check()
+                }
+            }
             if !encoder.overwrites, let confirmOverwrite {
                 let existing = try encoder.plannedFiles(disc, into: library).filter {
                     FileManager.default.fileExists(atPath: $0.path)
@@ -725,6 +746,7 @@ public struct DiscRip {
             events(.encoding(encoder.format))
             encoder.log = { events(.encodedTrack($0)) }
             encoder.trackEncoded = { events(.trackEncoded(number: $0, file: $1)) }
+            encoder.tracksLeftOut = { events(.silentTracksLeftOut($0)) }
             let encoded = try await blocking { [encoder, dts] in
                 try encoder.encodeWithRecord(disc, into: library, dts: dts)
             }
@@ -749,7 +771,8 @@ public struct DiscRip {
             }
             // The WAV files go only if every track is verified and encoded; the report is in the album folder.
             if !options.keepsRip {
-                if result.encodedFiles.count == disc.tracks.count && disc.isFinished {
+                let leftOut = record?.silentTracksLeftOut?.count ?? 0
+                if result.encodedFiles.count + leftOut == disc.tracks.count && disc.isFinished {
                     if try disc.deleteRipFiles(albumFolder: record.map { URL(filePath: $0.folder) }) {
                         result.deletedRip = true
                         events(.ripDeleted)

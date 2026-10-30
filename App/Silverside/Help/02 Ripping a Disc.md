@@ -74,7 +74,7 @@ HDCD (High Definition Compatible Digital) discs were mastered to hold more dynam
 The HDCD mastering process hides inaudible control codes in the lowest bit of the audio samples. A decoder that understands these can restore more dynamic range, up to approximately 20 bits worth of resolution. Only a player with an HDCD decoder reads these codes, and there are two types of changes they can ask for:
 
 - **Peak extend:** the loudest peaks were compressed by up to 9 dB to fit on the disc. The decoder expands them again.
-- **Gain:** passages were raised by up to 7.5 dB to fit on the disc. The decoder lowers them again, and their finest detail goes below the 16 bits that a CD holds.
+- **Gain** (also called Low Level Range Extend): passages were raised by up to 7.5 dB to fit on the disc. The decoder lowers them again, and their finest detail goes below the 16 bits that a CD holds.
 
 On a standalone CD player that doesn't support HDCD, which is most of them, or in a typical CD ripping app, you hear the standard 16-bit version of the disc, which is slightly compressed in dynamic range if the disc uses peak extend. HDCD decoding unlocks the full 20-bit dynamic range when applicable. However, it's important to note that HDCD is a proprietary mastering process that includes more than just the dynamic range extension; it includes psychoacoustic noise-shaping and specialized dithering algorithms that improve the sound even on standard 16-bit playback, generally by reducing audible noise. Technically, it increases the total noise slightly, but moves most of it to inaudible regions of the spectrum. Often, CD releases that carry the HDCD logo have been through this mastering process but don't necessarily enable the peak extend or gain features discussed above. In these cases, Silverside encodes the files as standard 16-bit audio that still benefits from the HDCD mastering process.
 
@@ -135,6 +135,15 @@ The decoded files:
 AAC and MP3 would turn the stream itself into noise, so with those formats Silverside writes the decode alone, or keeps the rip and encodes nothing.
 
 **Decode DTS…** in an earlier rip's toolbar decodes it later: a copy beside the album, in any format that holds surround sound, or in place of the album's files.
+
+## Silent tracks
+
+Some discs have tracks of nothing but digital silence. Nine Inch Nails *Broken* has 91 tracks of a second each, so that its two hidden songs are tracks 98 and 99; some test discs have them too. Silverside rips and verifies every track, so AccurateRip and CTDB check the whole disc. Then, before it encodes, it asks whether to leave the silent tracks out of the album:
+
+- **Leave out:** no files for them, and no lines in the album's CUE sheet. The other tracks keep the disc's numbers, so the hidden songs stay tracks 98 and 99.
+- **Keep:** a file for each, as for any track.
+
+A disc image keeps every track either way. An album encoded again later can take the other answer: the silent tracks' audio is zeros, so nothing is lost.
 
 ## Pre-emphasis and other flags
 

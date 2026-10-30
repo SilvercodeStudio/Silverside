@@ -384,6 +384,9 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// The tracks whose pre-emphasis the encoding took out, at the format's `wideBits`, tagged
         /// DE_EMPHASIZED=yes. Nil when none was.
         public var deEmphasizedTracks: [Int]?
+        /// The tracks of digital silence that the encoding left out: no file, and no line in the
+        /// album's CUE sheet (a disc image keeps them). Nil when none was.
+        public var silentTracksLeftOut: [Int]?
         /// Added to the album's title in the names and tags, as " (HDCD)" for a decoded copy
         /// beside the album as it is on the disc. Nil for the album itself.
         public var albumSuffix: String?

@@ -183,14 +183,16 @@ struct DiscView: View {
                         // on it, and the logos built on that one with their tops in line.
                         if let logo = slot.discLogo, !DiscLogoPlace.atTableCorner {
                             let top = (RipButton.size - DiscLogo.compactDiscHeight) / 2
-                            DiscLogoView(logo: logo)
+                            // On glass, as at an earlier rip's table corner, so that the rows under it
+                            // do not show through; the logo stays where it was, inside the glass's padding.
+                            DiscLogoView(logo: logo).discLogoBackdrop()
                                 .padding(
                                     .bottom,
-                                    RipButton.inset
+                                    RipButton.inset - DiscLogo.backdropPadding
                                         + (logo.hangsFromTop
                                             ? RipButton.size - top - logo.height : (RipButton.size - logo.height) / 2)
                                 )
-                                .padding(.trailing, 4)
+                                .padding(.trailing, 6)
                         }
                         RipButton(slot: slot)
                             .padding([.top, .bottom, .leading], RipButton.inset)
@@ -1252,7 +1254,8 @@ enum ResultChips {
         let accurate = report.tracks.filter { $0.accurateRip == .accurate }.count
         let others = report.tracks.filter { $0.accurateRip == .otherPressings }.count
         // AccurateRip cannot check a track it has no checksum for (a silent one), so it is not counted.
-        let noChecksum = report.tracks.filter { $0.accurateRip == .noChecksum }.count
+        let noChecksumTracks = report.tracks.filter { $0.accurateRip == .noChecksum }
+        let noChecksum = noChecksumTracks.count
         let total = report.tracks.count - noChecksum
         if report.tracks.allSatisfy({ $0.accurateRip == .notInDatabase }) {
             chips.append(Chip(text: "Not in AccurateRip"))
@@ -1272,9 +1275,13 @@ enum ResultChips {
                             + " other plants or years often differ this way. Burned CD-R copies are sometimes offset"
                             + " by a few samples."))
             if noChecksum > 0 {
+                // AccurateRip keeps no checksum for silence: say so when that is why.
+                let allSilent = noChecksumTracks.allSatisfy(\.isSilent)
                 chips.append(
                     Chip(
-                        text: Format.count(noChecksum, "track") + " with no checksum",
+                        text: allSilent
+                            ? Format.count(noChecksum, "silent track") + " (no AccurateRip checksum)"
+                            : Format.count(noChecksum, "track") + " with no checksum",
                         help: "AccurateRip has this disc, but no checksum for "
                             + (noChecksum == 1
                                 ? "this track, so it cannot check it" : "these tracks, so it cannot check them")
@@ -1369,7 +1376,8 @@ enum ResultChips {
                         + " Save Data Track… in the toolbar; another drive may read it."))
         }
         if let encoding = report.encoding {
-            let all = encoding.files.count >= report.tracks.count
+            let leftOut = encoding.silentTracksLeftOut ?? []
+            let all = encoding.files.count + leftOut.count >= report.tracks.count
             chips.append(
                 Chip(
                     text: "Encoded · \(encoding.format.rawValue.uppercased())"
@@ -1378,12 +1386,25 @@ enum ResultChips {
                         + (encoding.deEmphasizedTracks?.isEmpty == false ? " · de-emphasized" : "")
                         + (all ? "" : " · \(encoding.files.count) tracks"),
                     tone: all ? .good : .warning, systemImage: "music.note",
-                    // "FLAC · DTS 5.1" is not a DTS stream in FLAC: say so.
-                    help: encoding.dtsDecoded.map {
-                        "\(encoding.format.name) files of \($0) audio, decoded from the disc's DTS stream: each "
-                            + "channel is plain audio, which any player plays with no DTS decoder."
-                    }))
+                    help: Self.encodedHelp(encoding)))
         }
         return chips
+    }
+
+    /// The Encoded chip's tooltip: what a DTS decode is, and the silent tracks left out. Nil if neither.
+    private static func encodedHelp(_ encoding: RipReport.Encoding) -> String? {
+        var parts = [String]()
+        // "FLAC · DTS 5.1" is not a DTS stream in FLAC: say so.
+        if let layout = encoding.dtsDecoded {
+            parts.append(
+                "\(encoding.format.name) files of \(layout) audio, decoded from the disc's DTS stream: each "
+                    + "channel is plain audio, which any player plays with no DTS decoder.")
+        }
+        if let leftOut = encoding.silentTracksLeftOut, !leftOut.isEmpty {
+            parts.append(
+                (leftOut.count == 1 ? "Track " : "Tracks ") + RipReport.list(leftOut)
+                    + ": digital silence, left out of the album.")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 }

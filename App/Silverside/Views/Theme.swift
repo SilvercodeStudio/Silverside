@@ -228,7 +228,7 @@ extension View {
     /// A backdrop for a disc's logo over the track table, so that the rows that scroll under it
     /// do not show through its lines: Liquid Glass on macOS 26, else a material.
     @ViewBuilder func discLogoBackdrop() -> some View {
-        let padded = padding(.horizontal, 10).padding(.vertical, 8)
+        let padded = padding(.horizontal, 10).padding(.vertical, DiscLogo.backdropPadding)
         if #available(macOS 26, *) {
             padded.glassEffect(.regular, in: .rect(cornerRadius: 12))
         } else {
@@ -244,6 +244,7 @@ extension DiscLogo {
         case .hdcd: "HDCD"
         case .sacd: "DiscLogoSACD"
         case .cdGraphics: "DiscLogoCDG"
+        case .copyControl: "DiscLogoCopyControl"
         case .compactDiscPlus, .mixedMode: "DiscLogoCDExtra"
         case .recordable: "DiscLogoCDR"
         case .cdText: "DiscLogoCDText"
@@ -254,6 +255,9 @@ extension DiscLogo {
         case .ultraHDBluRay: "DiscLogoUltraHDBluRay"
         }
     }
+
+    /// The space between a logo and the edge of its backdrop, above and below (`discLogoBackdrop`).
+    static let backdropPadding: CGFloat = 8
 
     /// The Compact Disc logo's height, beside the Rip button.
     static let compactDiscHeight: CGFloat = 48
@@ -274,6 +278,7 @@ extension DiscLogo {
         case .hdcd: return 30
         case .dts: return 34
         case .sacd: return 56
+        case .copyControl: return 42
         case .dvd, .dvdAudio, .bluRay, .ultraHDBluRay: return 48
         }
     }
@@ -283,7 +288,7 @@ extension DiscLogo {
     var hangsFromTop: Bool {
         switch self {
         case .compactDisc, .compactDiscPlus, .mixedMode, .cdGraphics, .cdText, .recordable: true
-        case .hdcd, .dts, .sacd, .dvd, .dvdAudio, .bluRay, .ultraHDBluRay: false
+        case .hdcd, .dts, .sacd, .copyControl, .dvd, .dvdAudio, .bluRay, .ultraHDBluRay: false
         }
     }
 }

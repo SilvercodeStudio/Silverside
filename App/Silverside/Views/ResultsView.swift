@@ -691,6 +691,9 @@ struct ResultsView: View {
                 TableColumn("Encoding") { track in
                     if let file = encoding.file(ofTrack: track.number) {
                         CheckedText(text: encoding.format.rawValue.uppercased()).help(file)
+                    } else if encoding.silentTracksLeftOut?.contains(track.number) == true {
+                        Text("Left out").foregroundStyle(.secondary)
+                            .help("Digital silence: the album has no file for it. A disc image keeps it.")
                     } else {
                         Text("Not encoded").foregroundStyle(.secondary)
                     }

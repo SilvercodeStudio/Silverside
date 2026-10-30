@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The Copy Control mark, drawn from its proportions (2026-10-30): a circle with a white triangle
+     from its center out past its right edge, and inside the triangle a smaller copy of the same. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+<path fill="#000000" d="M100,28 L199.519,90.199 A100,100 0 1 0 199.519,109.801 L100,172 Z M133.4,78.184 L163.554,97.03 A30.3,30.3 0 1 0 163.554,102.97 L133.4,121.816 Z"/>
+</svg>

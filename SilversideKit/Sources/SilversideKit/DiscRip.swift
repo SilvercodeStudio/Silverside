@@ -65,6 +65,9 @@ public struct DiscRipOptions: Sendable {
     /// For a disc with data tracks (an Enhanced CD's extras): save them as ISO images beside
     /// the audio, skip them, or ask `DiscRip.chooseDataTracks`.
     public var dataTracks: DataTrackChoice
+    /// What a look at the disc before the rip found of CD+G graphics (`DiscProbe.cdGraphics`),
+    /// for the report. Nil if no one looked.
+    public var cdGraphics: Bool?
 
     public init(settings: Settings) {
         artwork = settings.artwork
@@ -604,6 +607,7 @@ public struct DiscRip {
         report.ctdbSeconds = ctdbSeconds
         report.mcn = mcn
         report.media = media
+        report.cdGraphics = options.cdGraphics
         report.hiddenTrack = hiddenTrack
         report.hiddenAreaUnreadableSectors = hiddenAreaUnreadable
         let padded = Self.paddedEdges(

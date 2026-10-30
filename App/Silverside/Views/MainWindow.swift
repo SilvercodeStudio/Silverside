@@ -113,12 +113,15 @@ struct MainWindow: View {
                         }
                     }
                 }
-                // `-selectRecent 1` shows the newest earlier rip, for screenshots of the results;
-                // with `-repair 1` too, its repair starts, and with `-hdcdDecode 1`, Decode HDCD opens.
-                if UserDefaults.standard.bool(forKey: "selectRecent") {
+                // `-selectRecent 1` shows the newest earlier rip, for screenshots of the results, and
+                // `-selectRecentTitle KUTX` the newest whose title has that text; with `-repair 1` too,
+                // its repair starts, and with `-hdcdDecode 1`, Decode HDCD opens.
+                let recentTitle = UserDefaults.standard.string(forKey: "selectRecentTitle")
+                if UserDefaults.standard.bool(forKey: "selectRecent") || recentTitle != nil {
                     Task { @MainActor in
                         try? await Task.sleep(for: .seconds(1))
-                        guard let rip = model.recentRips.first else { return }
+                        guard let rip = model.recentRips.first(where: { recentTitle.map($0.title.contains) ?? true })
+                        else { return }
                         model.selection = .rip(rip.file)
                         if UserDefaults.standard.bool(forKey: "repair") { model.startRepair(rip) }
                     }

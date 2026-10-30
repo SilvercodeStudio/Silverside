@@ -224,6 +224,19 @@ struct DiscLogoView: View {
     }
 }
 
+extension View {
+    /// A backdrop for a disc's logo over the track table, so that the rows that scroll under it
+    /// do not show through its lines: Liquid Glass on macOS 26, else a material.
+    @ViewBuilder func discLogoBackdrop() -> some View {
+        let padded = padding(.horizontal, 10).padding(.vertical, 8)
+        if #available(macOS 26, *) {
+            padded.glassEffect(.regular, in: .rect(cornerRadius: 12))
+        } else {
+            padded.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+}
+
 extension DiscLogo {
     var assetName: String {
         switch self {

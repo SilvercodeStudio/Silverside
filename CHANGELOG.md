@@ -11,7 +11,9 @@ command-line tool.
   besides (CD-Text, CD-R, Enhanced CD, CD+G, Super Audio CD, HDCD, DTS).
   As a disc is read, Silverside listens to a few seconds of its first
   tracks for HDCD codes and a DTS stream, and, in drives that give it, looks
-  for CD+G graphics, so the logo is right before you rip.
+  for CD+G graphics, so the logo is right before you rip. An earlier rip
+  shows its disc's logo too, at the track table's lower left, on glass so
+  that the tracks that scroll under it do not show through.
 - A DVD, DVD-Audio, Blu-ray, or Ultra HD Blu-ray disc in a drive is named,
   with its logo, in place of "Insert an audio CD", and Eject works for it.
   `silverside drives` names it too.

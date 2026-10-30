@@ -100,6 +100,16 @@ struct ResultsView: View {
     /// during an update of track names, so Tab goes on to the next track.
     private var canEditNames: Bool { report.release != nil && !model.renamingAlbums.contains(recentRip.file) }
 
+    /// The disc's logo, from the report. `-discLogo cdText` shows that one, for a screenshot.
+    private var discLogo: DiscLogo? {
+        #if DEBUG
+            if let name = UserDefaults.standard.string(forKey: "discLogo"), let logo = DiscLogo(rawValue: name) {
+                return logo
+            }
+        #endif
+        return DiscLogo.logo(for: report)
+    }
+
     var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 0) {
@@ -108,7 +118,18 @@ struct ResultsView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
                 Divider()
+                // The disc's logo at the table's lower left, where the last tracks scroll out from under it.
                 table
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if let logo = discLogo {
+                            HStack {
+                                DiscLogoView(logo: logo).discLogoBackdrop()
+                                    .padding(.leading, 10).padding(.bottom, RipButton.inset - 4)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                    }
+                    .background(ScrollersPastInset(table: true))
             }
             .frame(minWidth: 640)
             .layoutPriority(1)

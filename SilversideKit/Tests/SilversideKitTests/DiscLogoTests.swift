@@ -116,3 +116,39 @@ struct DiscProbeTests {
         #expect(DiscProbe.probe(drive, toc: toc).cdGraphics == nil)
     }
 }
+
+extension DiscLogoTests {
+    /// An earlier rip's logo comes from its report: the tracks' HDCD codes and DTS stream,
+    /// CD+G graphics found before the rip, the medium, and CD-Text.
+    @Test func choosesTheLogoOfARip() throws {
+        let drive = RipReport.Drive(
+            vendor: "SIM", product: "DRIVE", revision: "1.0", readOffset: 6, offsetSource: "--offset")
+        let tracks = [
+            RipReport.Track(
+                number: 1, file: "Track 01.wav", startLBA: 0, sectors: 20000, preEmphasis: false,
+                accurateRip: .accurate),
+            RipReport.Track(
+                number: 2, file: "Track 02.wav", startLBA: 20000, sectors: 20000, preEmphasis: false,
+                accurateRip: .accurate),
+        ]
+        var report = RipReport(drive: drive, secure: true, toc: audio, tracks: tracks, ctdb: .init(status: .verified))
+        #expect(DiscLogo.logo(for: report) == .compactDisc)
+        var cdText = CDText()
+        cdText.titles = [0: "Paris '49"]
+        report.cdText = cdText
+        #expect(DiscLogo.logo(for: report) == .cdText)
+        report.media = .recordable
+        #expect(DiscLogo.logo(for: report) == .recordable)
+        report.cdGraphics = true
+        #expect(DiscLogo.logo(for: report) == .cdGraphics)
+        report.tracks[1].dts = true
+        #expect(DiscLogo.logo(for: report) == .dts)
+
+        let mixed = try TOC(
+            tracks: [.init(number: 1, startLBA: 0, kind: .data), .init(number: 2, startLBA: 20000)],
+            leadOutLBA: 40000)
+        let data = RipReport(
+            drive: drive, secure: true, toc: mixed, tracks: [tracks[1]], ctdb: .init(status: .verified))
+        #expect(DiscLogo.logo(for: data) == .mixedMode)
+    }
+}

@@ -175,7 +175,8 @@ struct DiscView: View {
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     HStack(alignment: .bottom, spacing: 0) {
                         if let logo = slot.discLogo, DiscLogoPlace.atTableCorner {
-                            DiscLogoView(logo: logo).padding(.leading, 20).padding(.bottom, RipButton.inset + 4)
+                            DiscLogoView(logo: logo).discLogoBackdrop()
+                                .padding(.leading, 10).padding(.bottom, RipButton.inset - 4)
                         }
                         Spacer(minLength: 0)
                         // The disc's logo beside the button: the Compact Disc logo centered

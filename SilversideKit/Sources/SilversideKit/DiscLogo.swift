@@ -50,6 +50,20 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         return .compactDisc
     }
 
+    /// The logo of a ripped disc, from its report: the HDCD codes and the DTS stream of the
+    /// tracks, and CD+G graphics if the look before the rip found them, else MusicBrainz's
+    /// format. Nil if the report's TOC cannot be read.
+    public static func logo(for report: RipReport) -> DiscLogo? {
+        guard let toc = try? TOC(ctdbTOCString: report.toc) else { return nil }
+        let found = DiscProbe(
+            hdcd: report.tracks.contains { $0.hdcd != nil } || [.codesOnly, .featuresUsed].contains(report.hdcd),
+            dts: report.tracks.contains { $0.dts == true } || report.dts == .stream,
+            cdGraphics: report.cdGraphics, tracksRead: report.tracks.count)
+        return logo(
+            toc: toc, format: report.release?.medium(for: toc)?.format, media: report.media,
+            hasCDText: report.cdText.map { !$0.titles.isEmpty || !$0.performers.isEmpty } ?? false, probe: found)
+    }
+
     /// The logo of a disc that is not a CD, from the medium and its mounted volume. A Blu-ray
     /// disc is Ultra HD when its BDMV/index.bdmv says version 0300, as the Ultra HD Blu-ray
     /// format has it ("INDX0300": *Oppenheimer*; "INDX0200" on a Blu-ray disc, 2026-10-29). A

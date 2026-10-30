@@ -293,6 +293,10 @@ public struct RipReport: Codable, Equatable, Sendable {
     public var media: DiscMediaType?
     /// The disc's CD-Text, if it has any.
     public var cdText: CDText?
+    /// True if CD+G graphics were found in the subchannel as the disc was read (`DiscProbe`),
+    /// false if none were. Nil if no one looked, the drive did not give the subchannel, and in
+    /// reports from before 0.9.1.
+    public var cdGraphics: Bool?
     /// Audio before track 1 (hidden track one audio), if the disc has it.
     public var hiddenTrack: HiddenTrack?
     /// Sectors before track 1 that could not be read, when what could be read is silence:

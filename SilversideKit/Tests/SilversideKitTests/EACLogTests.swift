@@ -153,4 +153,20 @@ extension EACLogTests {
             #expect(text.contains("     Peak level ") && text.contains("     Extraction speed "))
         }
     }
+
+    /// De-emphasized tracks are 20-bit in a lossless album, so the sample format says so; an
+    /// album with only some of them has both widths.
+    @Test(arguments: [([1, 2, 3], "20 Bit"), ([2], "16 and 20 Bit"), ([], "16 Bit")] as [(Set<Int>, String)])
+    func sampleFormatOfDeEmphasizedTracks(emphasized: Set<Int>, bits: String) throws {
+        let (folder, library) = try PreEmphasisTests().makeRip(emphasized: emphasized)
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        var encoder = DiscEncoder(format: .flac)
+        encoder.writesEACLog = true
+        let (files, record) = try encoder.encodeWithRecord(try RippedDisc(folder: folder), into: library)
+        #expect(Set(record?.deEmphasizedTracks ?? []) == emphasized)
+        let log = try String(
+            contentsOf: try #require(files.first).deletingLastPathComponent().appending(path: "Rip Report.log"),
+            encoding: .utf8)
+        #expect(log.contains("44.100 Hz; \(bits); Stereo"))
+    }
 }

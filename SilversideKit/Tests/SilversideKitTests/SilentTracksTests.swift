@@ -150,4 +150,31 @@ extension SilentTracksTests {
         #expect(result.encodedFiles.count == (leavesOut ? 2 : 3))
         #expect(result.deletedRip)
     }
+
+    /// Check Again reads an album whose silent tracks were left out, with its rip deleted: the
+    /// left-out tracks are zeros, not missing files.
+    @Test(arguments: [true, false])
+    func checksAgainWithoutTheSilentTracks(leavesOut: Bool) async throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // Accepted unverified: CTDB did not have the disc yet, so the silent tracks are not verified.
+        let reportFile = folder.appending(path: "disc.json")
+        var report = try RipReport.read(from: reportFile)
+        report.ctdb = .init(status: .notInDatabase)
+        report.accepted = Date()
+        try report.write(to: reportFile)
+        let disc = try RippedDisc(folder: folder)
+        var encoder = DiscEncoder(format: .flac)
+        encoder.leavesOutSilentTracks = leavesOut
+        let (files, _) = try encoder.encodeWithRecord(disc, into: library)
+        let album = try #require(files.first).deletingLastPathComponent()
+        try disc.deleteRipFiles(albumFolder: album)
+        let albumReport = album.appending(path: "Rip Report.json")
+        #expect(try RipReport.read(from: albumReport).mayCheckAgain)
+        var check = RipCheck(reportAt: albumReport)
+        check.webClient = await FakeWeb().client(in: root.appending(path: "cache"))
+        let result = try await check.run()
+        #expect(result.after.checkedAgain != nil)
+    }
 }

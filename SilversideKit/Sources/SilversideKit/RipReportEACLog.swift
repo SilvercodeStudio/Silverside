@@ -89,8 +89,14 @@ extension RipReport {
             ]
         }
         let format = encoding.format
+        // De-emphasis widens only its own tracks, so an album can have both widths.
+        let encoded = Set(tracks.map(\.number)).subtracting(encoding.silentTracksLeftOut ?? [])
+        let deEmphasized = Set(encoding.deEmphasizedTracks ?? []).intersection(encoded)
         let bits =
-            (encoding.hdcdDecoded == true || encoding.dtsDecoded != nil) && format.isLossless ? format.wideBits : 16
+            !format.isLossless || deEmphasized.isEmpty && encoding.hdcdDecoded != true && encoding.dtsDecoded == nil
+            ? "16"
+            : encoding.hdcdDecoded == true || encoding.dtsDecoded != nil || deEmphasized == encoded
+                ? "\(format.wideBits)" : "16 and \(format.wideBits)"
         var lines = [
             Self.field("Used output format", format.name, width: 32),
             Self.field("Encoder", encoding.encoder, width: 32),

@@ -90,8 +90,9 @@ public struct RipCheck {
         let toc = disc.toc
         let audioTracks = toc.audioTracks
         let tracks = before.tracks.compactMap { reported in disc.tracks.first { $0.number == reported.number } }
+        // A silent track left out of an album has no file: its audio is zeros.
         guard tracks.count == before.tracks.count,
-            tracks.allSatisfy({ FileManager.default.fileExists(atPath: $0.file.path) })
+            tracks.allSatisfy({ $0.isLeftOutSilence || FileManager.default.fileExists(atPath: $0.file.path) })
         else { throw RipCheckError.noRippedAudio(disc.folder) }
 
         // A new request each, not the cache's answer from the rip.

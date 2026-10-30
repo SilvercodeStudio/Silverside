@@ -311,7 +311,7 @@ extension DiscEncoder {
             var shown = report
             shown.release = release
             shown.encoding = encoding
-            try Data(shown.markdown.utf8).write(to: album.appending(path: "Rip Report\(discPart).md"))
+            try shown.writeReadable(to: album.appending(path: "Rip Report\(discPart).md"))
         }
         if isRipFolder, report.encoding != nil { try encoding.save(inReportAt: file) }
         return LibraryUpdate(
@@ -392,8 +392,9 @@ extension DiscEncoder {
         // already, for one, leaves the rip as it was.
         let reports = Set([file, albumReport].compactMap { $0?.standardizedFileURL })
         let markdown = albumReport?.deletingPathExtension().appendingPathExtension("md")
+        let log = markdown.map(RipReport.eacLogFile(besides:))
         var saved = [URL: Data]()
-        for original in Array(reports) + sheets + [markdown].compactMap({ $0 }) {
+        for original in Array(reports) + sheets + [markdown, log].compactMap({ $0 }) {
             saved[original] = try? Data(contentsOf: original)
         }
         let audio = (album.flatMap { album in encoding?.files.map { album.appending(path: $0.file) } } ?? [])
@@ -407,8 +408,12 @@ extension DiscEncoder {
             var updated = file
             if let albumReport, let renamedReport, oldPart != newPart {
                 try FileManager.default.moveItem(at: albumReport, to: renamedReport)
-                // The Markdown report is written again under the new name.
+                // The Markdown report is written again under the new name, and the log with it.
                 if let markdown { try? FileManager.default.removeItem(at: markdown) }
+                if let log, FileManager.default.fileExists(atPath: log.path) {
+                    try FileManager.default.moveItem(
+                        at: log, to: renamedReport.deletingPathExtension().appendingPathExtension("log"))
+                }
                 if !isRipFolder { updated = renamedReport }
             }
             for sheet in sheets { try FileManager.default.removeItem(at: sheet) }
@@ -478,7 +483,7 @@ extension DiscEncoder {
                 || ($0.pathExtension == "cue" && CueSheet.sheet($0, namesOnly: sharedNames))
         }
         var moving = own.filter { !copying.contains($0) }
-        moving += ["json", "md"].map { source.appending(path: "Rip Report\(discPart).\($0)") }
+        moving += ["json", "md", "log"].map { source.appending(path: "Rip Report\(discPart).\($0)") }
         moving = moving.filter { manager.fileExists(atPath: $0.path) }
         let covers = ((try? manager.contentsOfDirectory(atPath: source.path)) ?? [])
             .filter { $0.hasPrefix("cover") && ["jpg", "png"].contains(($0 as NSString).pathExtension) }

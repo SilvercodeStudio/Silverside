@@ -106,6 +106,14 @@ struct EncodingOptions: ParsableArguments {
             """)
     var silentTracks: SilentTrackChoice?
 
+    @Flag(
+        inversion: .prefixedNo,
+        help: """
+            Write an EAC-style log beside the report, as Rip Report.log: Exact Audio Copy's layout, for people and \
+            tools that read its logs (the writeEACLog setting, on by default).
+            """)
+    var eacLog: Bool?
+
     /// The HDCD choice: the option, else the setting.
     func hdcdChoice(_ settings: Settings) -> HDCDChoice {
         hdcd ?? settings.hdcd
@@ -152,6 +160,7 @@ struct EncodingOptions: ParsableArguments {
         encoder.decodesHDCD = hdcdChoice(settings) == .decode
         encoder.deEmphasizes = preEmphasisChoice(settings) != .keep
         encoder.leavesOutSilentTracks = silentTrackChoice(settings) != .keep
+        encoder.writesEACLog = eacLog ?? settings.writeEACLog
         if image ?? settings.writeImages {
             encoder.images = images.map(Settings.expand) ?? settings.imagesURL
         } else {

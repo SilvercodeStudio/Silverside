@@ -150,6 +150,8 @@ public struct DiscRepairer {
         public var trackConfidences: [Int]
         /// The number of entries that match the rip's alignment, but have no repair data.
         public var entriesWithoutRepairData = 0
+        /// The submissions of every entry for the disc.
+        public var submissions = 0
         /// Other values for suspect samples, by index in `audio`, with the ones that re-reads added.
         public var alternatives: [Int: [UInt32]] = [:]
 
@@ -243,6 +245,7 @@ public struct DiscRepairer {
         }
         let suspects = Self.ranges(of: alternatives.keys.sorted())
         var result = Result(outcome: .notVerified, audio: audio, trackStarts: trackStarts, trackConfidences: [])
+        result.submissions = entries.map(\.confidence).reduce(0, +)
         // Entries that match the rip's alignment but have no repair data: often single
         // submissions, each with its own errors.
         var withoutRepairData = Set<Int>()

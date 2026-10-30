@@ -27,7 +27,7 @@ struct RipRepairTests {
         #expect(written.tracks.map(\.repairedSamples) == [0, 588])
         #expect(written.tracks.map(\.ctdbConfidence) == [5, 5])
         #expect(written.isVerified)
-        #expect(written.files == ["Rip Report.md", "Track 01.wav", "Track 02.wav", "disc.json"])
+        #expect(written.files == ["Rip Report.log", "Rip Report.md", "Track 01.wav", "Track 02.wav", "disc.json"])
         #expect(FileManager.default.fileExists(atPath: repair.output.appending(path: "Rip Report.md").path))
         let disc = try RippedDisc(folder: repair.output)
         #expect(disc.tracks.allSatisfy { $0.isVerified })

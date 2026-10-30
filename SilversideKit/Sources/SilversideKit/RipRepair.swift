@@ -283,7 +283,7 @@ public struct RipRepair {
         if let edits { try edits.save(inDiscJSONOf: folder) }
         var shown = report
         if let edits, let release = report.release { shown.release = edits.applied(to: release, toc: toc) }
-        try Data(shown.markdown.utf8).write(to: folder.appending(path: "Rip Report.md"))
+        try shown.writeReadable(to: folder.appending(path: "Rip Report.md"))
         events(.reportWritten(folder))
     }
 

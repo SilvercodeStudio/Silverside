@@ -20,6 +20,12 @@ command-line tool.
   tracks 98 and 99); **Keep** encodes them as any track. A disc image keeps
   every track. The answer can be set in Settings › Encoding, and the command
   line has `--silent-tracks`.
+- An EAC-style log: beside each rip's report, `Rip Report.log` has the rip in
+  the layout of Exact Audio Copy's logs, for people and tools that read those.
+  Its CRC-32s and AccurateRip checksums are the same as EAC's for the same
+  disc (checked on four discs). It names Silverside as the program that wrote
+  it, and has no EAC log checksum. On by default; Settings › Ripping turns it
+  off, as does `--no-eac-log`.
 - A Copy Control CD (a copy-protected disc, such as some EMI releases of
   2001 to 2004) shows the Copy Control logo, when MusicBrainz names the
   release's format so.

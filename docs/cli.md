@@ -59,6 +59,10 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
 - `Track NN.suspects`, for tracks that are not verified: the other values that
   reads gave for their suspect samples, for a later `silverside repair`
 - `Rip Report.md`, and `Track 00.wav` if the disc has hidden track one audio
+- `Rip Report.log`: the rip in the layout of Exact Audio Copy's logs (UTF-8,
+  CR LF), for people and tools that read those; the encoding writes one beside
+  the album's report too. `--no-eac-log` (or the `writeEACLog` setting) leaves it
+  out. It names Silverside as its program, and has no EAC log checksum
 - `Track 15.iso` and so on, for a data track (an Enhanced CD's extras), if it is
   saved (`--data-tracks`, or the `dataTracks` setting). The encoding copies it
   into the album folder as `Data track.iso`, and the files of its ISO 9660 file
@@ -180,6 +184,7 @@ silverside config unset aac.mode                     # back to the default
 | `plainPunctuation` | `false` | ASCII quotes and dashes in names and tags |
 | `artwork` | `front` | `front`, `all`, or `none` |
 | `readC2` | `true` | ask the drive for C2 error flags |
+| `writeEACLog` | `true` | write `Rip Report.log` beside each report, in the layout of Exact Audio Copy's logs (`--eac-log`, `--no-eac-log`) |
 | `testAndCopy` | `false` | after each track, read it once more and keep both CRC-32s in the report (`rip --test`) |
 | `encodeAfterRip` | `false` | `rip` encodes when it finishes |
 | `keepRipAfterEncoding` | `false` | keep the WAV files after `rip --encode` |

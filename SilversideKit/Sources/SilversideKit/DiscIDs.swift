@@ -112,4 +112,19 @@ extension TOC {
         let starts = tracks.map { ($0.kind == .data ? "-" : "") + String($0.startLBA) }
         return (starts + [String(leadOutLBA)]).joined(separator: ":")
     }
+
+    /// The disc's ID in CUETools DB, as its pages and EAC's CTDB plugin name it: SHA-1 of the
+    /// audio tracks' starts after the first and the audio's lead-out, each as eight hex digits
+    /// counted from the first audio track, padded with "0" to 800 characters, in Base64 with
+    /// "+/=" as "._-". Verified against EAC's logs of four audio-only discs (2026-10-30).
+    public var ctdbTOCID: String {
+        let audio = audioTracks
+        let first = audio.first?.startLBA ?? 0
+        let text = (audio.dropFirst().map(\.startLBA) + [audioLeadOutLBA])
+            .map { String(format: "%08X", $0 - first) }.joined()
+        let padded = text.padding(toLength: 800, withPad: "0", startingAt: 0)
+        return Data(Insecure.SHA1.hash(data: Data(padded.utf8))).base64EncodedString()
+            .replacingOccurrences(of: "+", with: ".").replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "-")
+    }
 }

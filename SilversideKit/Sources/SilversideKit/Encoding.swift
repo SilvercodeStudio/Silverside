@@ -47,7 +47,7 @@ public struct RippedDisc: Sendable {
             files = tracks.flatMap { track in
                 [track.file, folder.appending(path: TrackAudio.alternativesFileName(track: track.number))]
             }
-            files += ["disc.json", "Rip Report.md", "cover.jpg", "cover.png", "Artwork"].map {
+            files += ["disc.json", "Rip Report.md", "Rip Report.log", "cover.jpg", "cover.png", "Artwork"].map {
                 folder.appending(path: $0)
             }
         }
@@ -326,6 +326,8 @@ public struct DiscEncoder: Sendable {
     /// short silent tracks before a disc's hidden songs: no file and no line in the album's CUE
     /// sheet. The other tracks keep the disc's numbers, and a disc image keeps every track.
     public var leavesOutSilentTracks = false
+    /// Write an EAC-style log beside the album's report ("Rip Report.log", `RipReport.eacStyleLog`).
+    public var writesEACLog = false
     /// Where disc images go (see `writeImage`), or nil for none.
     public var images: URL?
     /// How many tracks encode at once. Each track in flight holds its audio twice (the rip and
@@ -364,6 +366,7 @@ public struct DiscEncoder: Sendable {
         decodesHDCD = settings.hdcd == .decode
         deEmphasizes = settings.preEmphasis != .keep
         leavesOutSilentTracks = settings.silentTracks != .keep
+        writesEACLog = settings.writeEACLog
         images = settings.writeImages ? settings.imagesURL : nil
     }
 
@@ -494,7 +497,7 @@ public struct DiscEncoder: Sendable {
                 record(saved, in: &report)
                 report.files = Array(Set((report.files ?? []) + [name])).sorted()
             }
-            try Data(updated.markdown.utf8).write(to: folder.appending(path: "Rip Report.md"))
+            try updated.writeReadable(to: folder.appending(path: "Rip Report.md"))
             // An encoded rip's album gets it as an encoding would have put it there.
             if let encoding = updated.encoding, FileManager.default.fileExists(atPath: encoding.folder) {
                 let album = URL(filePath: encoding.folder, directoryHint: .isDirectory)
@@ -509,7 +512,7 @@ public struct DiscEncoder: Sendable {
                         record(saved, in: &report)
                         report.encoding?.dataTrackFiles = names.isEmpty ? nil : names
                     }
-                    try Data(shown.markdown.utf8).write(to: album.appending(path: "Rip Report\(discPart).md"))
+                    try shown.writeReadable(to: album.appending(path: "Rip Report\(discPart).md"))
                 }
             }
             return saved
@@ -525,7 +528,7 @@ public struct DiscEncoder: Sendable {
             let names = (report.encoding?.dataTrackFiles ?? []).filter { $0 != target.lastPathComponent }
             report.encoding?.dataTrackFiles = names + [target.lastPathComponent]
         }
-        try Data(shown.markdown.utf8).write(to: folder.appending(path: "Rip Report\(discPart).md"))
+        try shown.writeReadable(to: folder.appending(path: "Rip Report\(discPart).md"))
         return saved
     }
 
@@ -1014,7 +1017,8 @@ public struct DiscEncoder: Sendable {
                 if report.dts == nil { Self.recordDTS(dtsTracks, in: &report) }
                 report.release = release
                 report.encoding = encoding
-                try Data(report.markdown.utf8).write(to: albumFolder.appending(path: "Rip Report\(discPart).md"))
+                try report.writeReadable(
+                    to: albumFolder.appending(path: "Rip Report\(discPart).md"), eacLog: writesEACLog)
             }
             let listeningTracks = cueTracks.map { track in
                 var track = track

@@ -65,6 +65,8 @@ public struct Settings: Codable, Equatable, Sendable {
     public var dts = DTSChoice.ask
     /// What to do with tracks that are all digital silence: leave them out of the album, keep them, or ask.
     public var silentTracks = SilentTrackChoice.ask
+    /// Write an EAC-style log beside each rip's report, for people and tools that read EAC's logs.
+    public var writeEACLog = true
     /// Also write a disc image when a disc is encoded: the whole disc in one lossless file, with
     /// a CUE sheet, in `images`.
     public var writeImages = false
@@ -217,6 +219,7 @@ public struct Settings: Codable, Equatable, Sendable {
         preEmphasis = try value(.preEmphasis, defaults.preEmphasis)
         dts = try value(.dts, defaults.dts)
         silentTracks = try value(.silentTracks, defaults.silentTracks)
+        writeEACLog = try value(.writeEACLog, defaults.writeEACLog)
         writeImages = try value(.writeImages, defaults.writeImages)
         images = try value(.images, defaults.images)
         dataTracks = try value(.dataTracks, defaults.dataTracks)

@@ -68,6 +68,8 @@ public struct DiscRipOptions: Sendable {
     /// For a disc with data tracks (an Enhanced CD's extras): save them as ISO images beside
     /// the audio, skip them, or ask `DiscRip.chooseDataTracks`.
     public var dataTracks: DataTrackChoice
+    /// Write an EAC-style log beside the report ("Rip Report.log", `RipReport.eacStyleLog`).
+    public var writesEACLog: Bool
     /// What a look at the disc before the rip found of CD+G graphics (`DiscProbe.cdGraphics`),
     /// for the report. Nil if no one looked.
     public var cdGraphics: Bool?
@@ -82,6 +84,7 @@ public struct DiscRipOptions: Sendable {
         preEmphasis = settings.preEmphasis
         dts = settings.dts
         silentTracks = settings.silentTracks
+        writesEACLog = settings.writeEACLog
         dataTracks = settings.dataTracks
     }
 }
@@ -484,7 +487,9 @@ public struct DiscRip {
             }
             var summary = ripSummary
             var report = ripped
-            report.seconds = Int((ContinuousClock.now - start).components.seconds)
+            let took = ContinuousClock.now - start
+            report.seconds = Int(took.components.seconds)
+            report.readSeconds = Double(took.components.seconds) + Double(took.components.attoseconds) / 1e18
             discOffsets.formUnion(report.matchingOffsets)
             if checksCTDB { trackAudio.append(audio) }
             if !audio.alternatives.isEmpty { written.insert(TrackAudio.alternativesFileName(track: track.number)) }
@@ -629,13 +634,13 @@ public struct DiscRip {
         report.cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         report.release = chosen
         func writeReport() throws {
-            written.formUnion(["disc.json", "Rip Report.md"])
+            written.formUnion(["disc.json", "Rip Report.md"] + (options.writesEACLog ? ["Rip Report.log"] : []))
             report.files = written.sorted()
             try report.write(to: folder.appending(path: "disc.json"))
             if !edits.isEmpty { try edits.save(inDiscJSONOf: folder) }
             var shown = report
             shown.release = named
-            try Data(shown.markdown.utf8).write(to: folder.appending(path: "Rip Report.md"))
+            try shown.writeReadable(to: folder.appending(path: "Rip Report.md"), eacLog: options.writesEACLog)
         }
         // The audio's rip is whole before the data tracks are read: a drive can fail there, or
         // stop answering, and the rip is then usable all the same.
@@ -850,6 +855,7 @@ public struct DiscRip {
         // The status when the track matches no checksum: not in AccurateRip, no checksum for it, or not accurate.
         let unmatched = RipReport.AccurateRipStatus.unmatched(
             trackAt: toc.audioTracks.firstIndex(of: track) ?? 0, records: records)
+        report.accurateRipTop = .top(trackAt: toc.audioTracks.firstIndex(of: track) ?? 0, records: records)
         if options.singlePass {
             let rip = try ripper.rip(track) { events(.reading($0)) }
             report.matchingOffsets = rip.matchingOffsets

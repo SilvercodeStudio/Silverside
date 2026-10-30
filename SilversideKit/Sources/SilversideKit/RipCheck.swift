@@ -136,6 +136,7 @@ public struct RipCheck {
             checked.accurateRipConfidence = nil
             checked.matchingOffsets = []
             checked.accurateRip = .unmatched(trackAt: index, records: records)
+            checked.accurateRipTop = .top(trackAt: index, records: records)
             if case .accurate(let v1, let v2) = RipPool.verification(
                 of: samples[position], track: audioTracks[index], toc: toc, records: records)
             {
@@ -210,6 +211,6 @@ public struct RipCheck {
             ? file.deletingLastPathComponent().appending(path: "Rip Report.md")
             : file.deletingPathExtension().appendingPathExtension("md")
         // An archive's folder has none, and gets none.
-        if FileManager.default.fileExists(atPath: markdown.path) { try Data(shown.markdown.utf8).write(to: markdown) }
+        if FileManager.default.fileExists(atPath: markdown.path) { try shown.writeReadable(to: markdown) }
     }
 }

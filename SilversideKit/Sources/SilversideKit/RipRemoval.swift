@@ -22,7 +22,9 @@ public enum RipRemoval {
             }
         }
         // The reports last: if a move fails, the report is still there to try again with.
-        files += [reportFile, reportFile.deletingPathExtension().appendingPathExtension("md")]
+        files += ["", "md", "log"].map {
+            $0.isEmpty ? reportFile : reportFile.deletingPathExtension().appendingPathExtension($0)
+        }
         return files.filter { FileManager.default.fileExists(atPath: $0.path) }
     }
 

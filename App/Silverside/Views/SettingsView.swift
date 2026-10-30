@@ -360,6 +360,13 @@ struct RippingSettings: View {
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Reports") {
+                Toggle("Write EAC-style log", isOn: $model.settings.writeEACLog)
+                Text(
+                    "Beside each rip's report, Rip Report.log has the same facts in the layout of Exact Audio Copy's logs, for people and tools that read those. It names Silverside as the program that wrote it."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+            }
             Section("How a rip works") {
                 Text(
                     "Each track is read once with the drive's offset corrected, and checked against AccurateRip. A track that does not match is read again, and the sectors that differ are re-read until they agree. Then the whole disc is checked against CUETools DB and, if it has errors, repaired with CTDB's data. Fast mode in the toolbar reads each track once, with no re-reads."

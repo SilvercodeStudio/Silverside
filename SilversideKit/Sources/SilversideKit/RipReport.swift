@@ -51,6 +51,10 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var accurateRip: AccurateRipStatus
         /// The submissions for the v1 and the v2 checksum, when the track is accurate.
         public var accurateRipConfidence: [Int]?
+        /// AccurateRip's checksum with the most submissions for the track, in any record, as
+        /// EAC's log names it for a track that does not match ("AccurateRip returned"). Nil if
+        /// AccurateRip has none, and in reports from before 0.9.2.
+        public var accurateRipTop: AccurateRipEntry?
         /// The drive offsets at which the first read matches AccurateRip.
         public var matchingOffsets: [Int]
         /// Reads of the whole track, the first included.
@@ -93,6 +97,10 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var accurateRipChecksums: [String]?
         /// The time the track's rip took, in seconds: every read and re-read. Nil in older reports.
         public var seconds: Int?
+        /// The same, to the millisecond, for the read speed. Nil in reports from before 0.9.2.
+        public var readSeconds: Double?
+        /// The largest sample value, as a 16-bit magnitude (0 to 32768). Nil in reports from before 0.9.2.
+        public var peak: Int?
         /// The track's HDCD codes. Nil if it has none, and in older reports (see `RipReport.hdcd`).
         public var hdcd: HDCDCodes?
         /// True if the track's audio is a DTS stream (a DTS-CD), not PCM. Nil if it is not, and
@@ -114,6 +122,11 @@ public struct RipReport: Codable, Equatable, Sendable {
         public mutating func recordChecksums(of samples: [UInt32], isFirstTrack: Bool, isLastTrack: Bool) {
             crc32 = CRC32.hex(CRC32.checksum(of: samples[...]))
             crc32SkipZero = CRC32.hex(CRC32.checksumSkippingZeros(of: samples[...]))
+            peak = samples.reduce(0) { peak, sample in
+                max(
+                    peak, abs(Int(Int16(truncatingIfNeeded: sample))), abs(Int(Int16(truncatingIfNeeded: sample >> 16)))
+                )
+            }
             let checksum = AccurateRipAccumulator.checksum(
                 of: samples[...], isFirstTrack: isFirstTrack, isLastTrack: isLastTrack)
             accurateRipChecksums = [CRC32.hex(checksum.v1), CRC32.hex(checksum.v2)]
@@ -167,6 +180,25 @@ public struct RipReport: Codable, Equatable, Sendable {
             self.unresolvedSectors = unresolvedSectors
             self.ctdbConfidence = ctdbConfidence
             self.repairedSamples = repairedSamples
+        }
+    }
+
+    /// One AccurateRip checksum for a track and its submissions.
+    public struct AccurateRipEntry: Codable, Equatable, Sendable {
+        /// Eight hex digits.
+        public var checksum: String
+        public var confidence: Int
+
+        public init(checksum: String, confidence: Int) {
+            self.checksum = checksum
+            self.confidence = confidence
+        }
+
+        /// The checksum with the most submissions for the audio track at `index`, in any record.
+        public static func top(trackAt index: Int, records: [AccurateRipRecord]) -> Self? {
+            records.entries(forTrackAt: index).max { $0.confidence < $1.confidence }.map {
+                AccurateRipEntry(checksum: CRC32.hex($0.checksum), confidence: $0.confidence)
+            }
         }
     }
 
@@ -238,6 +270,9 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var shift: Int?
         /// Entries that match the rip's alignment but have no repair data.
         public var entriesWithoutRepairData = 0
+        /// The submissions of every entry for the disc, as EAC's CTDB plugin counts them ("132/137").
+        /// Nil if the disc is not in CTDB, and in reports from before 0.9.2.
+        public var submissions: Int?
 
         public init(status: Status, entry: Int? = nil, confidence: Int? = nil, shift: Int? = nil) {
             self.status = status
@@ -258,6 +293,7 @@ public struct RipReport: Codable, Equatable, Sendable {
                 self.init(status: .notVerified)
             }
             entriesWithoutRepairData = result.entriesWithoutRepairData
+            submissions = result.submissions
         }
     }
 
@@ -626,7 +662,7 @@ extension RipReport {
         try data.write(to: url, options: .atomic)
         let markdown = url.deletingLastPathComponent().appending(path: "Rip Report.md")
         if url.lastPathComponent == "disc.json", FileManager.default.fileExists(atPath: markdown.path) {
-            try Data(read(from: url).markdown.utf8).write(to: markdown, options: .atomic)
+            try read(from: url).writeReadable(to: markdown)
         }
     }
 

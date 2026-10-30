@@ -116,6 +116,7 @@ struct Rip: AsyncParsableCommand {
         options.preEmphasis = encoding.preEmphasisChoice(settings)
         options.dts = encoding.dtsChoice(settings)
         options.silentTracks = encoding.silentTrackChoice(settings)
+        options.writesEACLog = encoding.eacLog ?? settings.writeEACLog
         options.dataTracks = dataTracks ?? settings.dataTracks
 
         var rip = DiscRip(

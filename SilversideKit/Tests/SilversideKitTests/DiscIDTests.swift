@@ -116,4 +116,20 @@ struct DiscIDTests {
         let toc = try TOC(musicBrainzOffsets: disc.offsets, sectors: disc.sectors)
         #expect(toc.ctdbTOCString == "0:34912:70733:100050:130000:161643:184516:208463:258755:287785:308305")
     }
+
+    /// The CTDB TOC IDs that EAC's CTDB plugin logged for four discs (2026-10-30): *Paris '49*,
+    /// *Steppin' Out* disc 2, *Without a Net*, and Mingus *Thirteen Pictures*, whose first track
+    /// starts at sector 32.
+    @Test(arguments: [
+        (
+            "0:16433:36146:58282:75617:98909:120500:138300:157260:171056:184452:198128:209330",
+            "P91tlRZWnqejqvViZqAWfNqtj5Y-"
+        ),
+        ("0:92325:122462:150000:165755:197350:256040:293750:315812:336075:350055", "gRRvzrwRUxbPtvShKYS.2juX5Tw-"),
+        ("0:46830:83125:156185:192520:277860:299635:325490", "2hK9L_HXGvDoWkVsgMcEuhFvh_w-"),
+        ("32:47735:62782:96150:208097:222677:243980:275255", "SklljrZhQLU2i9UunYMdtFqSJ7E-"),
+    ])
+    func ctdbTOCID(toc: String, id: String) throws {
+        #expect(try TOC(ctdbTOCString: toc).ctdbTOCID == id)
+    }
 }

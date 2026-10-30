@@ -453,7 +453,8 @@ struct DiscRipTests {
         }
         // The claim on the folder ends with the rip, and the report lists what the rip wrote.
         #expect(!FileManager.default.fileExists(atPath: result.folder.appending(path: RipFolder.claimFile).path))
-        #expect(result.report.files == ["Rip Report.md", "Track 01.wav", "Track 02.wav", "disc.json"])
+        #expect(
+            result.report.files == ["Rip Report.log", "Rip Report.md", "Track 01.wav", "Track 02.wav", "disc.json"])
 
         // The steps, in order.
         let steps = events.compactMap { event -> String? in

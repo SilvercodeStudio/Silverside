@@ -79,7 +79,7 @@ struct Info: AsyncParsableCommand {
         let started = Date()
         let probe = DiscProbe.probe(drive, toc: toc)
         var found = [String]()
-        if probe.hdcd { found.append("HDCD codes") }
+        if let features = probe.hdcdFeatures { found.append("HDCD codes (asking for \(features))") }
         if probe.dts { found.append("a DTS stream") }
         switch probe.cdGraphics {
         case true?: found.append("CD+G graphics")

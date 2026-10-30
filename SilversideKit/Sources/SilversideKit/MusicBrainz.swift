@@ -204,6 +204,22 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
     }
 }
 
+extension MusicBrainzRelease {
+    /// The genre with the most votes in the first list that has any, as "Rock" or "Hip Hop".
+    /// "non-music" (spoken word, sound effects) counts only where it is the list's one genre:
+    /// on *The Traveling Wilburys Collection* (2007, with a DVD) it had the most votes, 3, over
+    /// rock and folk rock with 2 each.
+    static func topGenre(_ lists: [[(name: String, count: Int)]?]) -> String? {
+        for list in lists {
+            guard let list, !list.isEmpty else { continue }
+            let music = list.filter { $0.name.lowercased() != "non-music" }
+            guard let best = (music.isEmpty ? list : music).max(by: { $0.count < $1.count }) else { continue }
+            return best.name.capitalized
+        }
+        return nil
+    }
+}
+
 extension MusicBrainzRelease.Track {
     // Releases saved before Silverside kept composers and lyricists have none.
     public init(from decoder: any Decoder) throws {
@@ -536,7 +552,8 @@ private struct RawRelease: Decodable {
                     tracks: Self.audioTracks((medium.tracks ?? []).map(track)), hiddenTrack: medium.pregap.map(track))
             },
             hasFrontCover: coverArtArchive?.front ?? false, artworkCount: coverArtArchive?.count,
-            genre: Self.topGenre([releaseGroup?.genres, genres]))
+            genre: MusicBrainzRelease.topGenre(
+                [releaseGroup?.genres, genres].map { $0?.map { (name: $0.name, count: $0.count ?? 0) } }))
     }
 
     /// The tracks with audio. On a Mixed Mode CD, the data track is track 1, and the disc ID
@@ -577,14 +594,5 @@ private struct RawRelease: Decodable {
             }
         }
         return (composers, lyricists)
-    }
-
-    /// The genre with the most votes in the first list that has any, as "Rock" or "Hip Hop".
-    static func topGenre(_ lists: [[RawGenre]?]) -> String? {
-        for list in lists {
-            guard let best = list?.max(by: { ($0.count ?? 0) < ($1.count ?? 0) }) else { continue }
-            return best.name.capitalized
-        }
-        return nil
     }
 }

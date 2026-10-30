@@ -246,6 +246,17 @@ struct MusicBrainzTests {
         #expect(release.artistCredit[0].sortName == "Davis, Miles")
     }
 
+    /// "non-music" is the genre only where it is the one genre: *The Traveling Wilburys
+    /// Collection*'s release group (2026-10-29, from the cache) had it with 3 votes.
+    @Test func leavesOutNonMusicAsAGenre() {
+        let wilburys = [
+            ("classic rock", 1), ("folk rock", 2), ("non-music", 3), ("pop", 1), ("pop rock", 1), ("rock", 2),
+        ].map { (name: $0.0, count: $0.1) }
+        #expect(["Folk Rock", "Rock"].contains(MusicBrainzRelease.topGenre([wilburys, nil])))
+        #expect(MusicBrainzRelease.topGenre([[(name: "non-music", count: 1)]]) == "Non-Music")
+        #expect(MusicBrainzRelease.topGenre([[], [(name: "jazz", count: 1)]]) == "Jazz")
+    }
+
     /// A release saved by an older Silverside has no composers, lyricists, or genre.
     @Test func readsAReleaseSavedWithoutWriters() throws {
         let json = """

@@ -528,6 +528,19 @@ struct AlbumHeader: View {
         }
         if let chip = ResultChips.hdcd(ripped.sorted { $0.number < $1.number }) {
             chip
+        } else if ripped.isEmpty, let features = slot.probe?.hdcdFeatures {
+            // From the few seconds of the first tracks read as the disc went in (`DiscProbe`).
+            Chip(
+                text: features == "nothing" ? "codes only" : features, logo: "HDCD",
+                help: "HDCD codes in the first tracks, from a few seconds of each read when the disc went in. "
+                    + (features == "nothing"
+                        ? "There they ask for no peak extend or gain adjustment, so an HDCD decoder would play "
+                            + "the same audio. "
+                        : "They ask for "
+                            + features.replacingOccurrences(of: "gain", with: "a gain adjustment")
+                            .replacingOccurrences(of: ", ", with: " and ")
+                            + ", so an HDCD decoder would change the audio. ")
+                    + "The rip reads every track, and says what the whole disc asks for.")
         } else if ripped.isEmpty, disc.shownMedium?.format?.uppercased() == "HDCD" {
             Chip(
                 text: "per MusicBrainz", logo: "HDCD",

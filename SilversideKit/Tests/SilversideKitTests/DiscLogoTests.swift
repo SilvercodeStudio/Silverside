@@ -91,7 +91,12 @@ struct DiscProbeTests {
     @Test func findsHDCDCodesAndADTSStream() throws {
         let hdcd = HDCDTests().track(.a(0), seconds: 20)
         let (drive, toc) = try self.drive { _ in Array(hdcd.prefix(1500 * 588)) }
-        #expect(DiscProbe.probe(drive, toc: toc).hdcd)
+        let plain = DiscProbe.probe(drive, toc: toc)
+        #expect(plain.hdcd && plain.hdcdCodes.count == 3 && plain.hdcdFeatures == "nothing")
+        // What the codes ask for shows before a rip: peak extend and a gain of -3.0 dB.
+        let extended = HDCDTests().track(.a(0x10 | 3), seconds: 20)
+        let (extendedDrive, _) = try self.drive { _ in Array(extended.prefix(1500 * 588)) }
+        #expect(DiscProbe.probe(extendedDrive, toc: toc).hdcdFeatures == "peak extend, gain")
         let stream = DTSTests.samples(DTSTests.stream(frames: 1500 * 588 * 4 / 4096 + 1))
         let (dtsDrive, dtsTOC) = try self.drive { _ in Array(stream.prefix(1500 * 588)) }
         let found = DiscProbe.probe(dtsDrive, toc: dtsTOC)

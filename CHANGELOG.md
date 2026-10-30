@@ -14,6 +14,8 @@ command-line tool.
   for CD+G graphics, so the logo is right before you rip. An earlier rip
   shows its disc's logo too, at the track table's lower left, on glass so
   that the tracks that scroll under it do not show through.
+- The HDCD chip shows before a rip too, with what the codes in the first
+  tracks ask for (peak extend, gain), from the same few seconds.
 - A DVD, DVD-Audio, Blu-ray, or Ultra HD Blu-ray disc in a drive is named,
   with its logo, in place of "Insert an audio CD", and Eject works for it.
   `silverside drives` names it too.
@@ -54,6 +56,9 @@ command-line tool.
   encoded, and named only track 1. Now the rip counts as done, and Encode…
   in the banner accepts it as it is and encodes it. It no longer asks about
   HDCD, pre-emphasis, or DTS first, for an encoding that does not happen.
+- The genre was "Non-Music" when that had the most votes in MusicBrainz, as
+  for *The Traveling Wilburys Collection*. Now it is the music's genre with
+  the most votes, and "Non-Music" only where it is the one genre.
 - A label that MusicBrainz lists twice, with two catalog numbers, was in the
   Label tag twice. Now each label and each catalog number is there once.
 - On a disc that MusicBrainz does not know, a track with no artist of its

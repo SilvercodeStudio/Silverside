@@ -59,6 +59,8 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     /// Where the rip is: its folder with the audio, or the library with its encoded files.
     var location: String { isMissing ? "Moved or deleted" : hasAudio ? "Rips folder" : "Library" }
     var driveName: String { "\(report.drive.vendor) \(report.drive.product)" }
+    /// What the disc is: "CD", "Enhanced CD", "HDCD, decoded".
+    var medium: String { DiscLogo.medium(of: report) ?? "" }
     var date: Date { report.date }
 
     /// A rip that a database did not have, or that is not verified, with its audio to check

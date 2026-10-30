@@ -3,6 +3,16 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.9.2 (not released yet)
+
+### Added
+
+- A Medium column in Rip History: what each disc is, as its logo says (CD,
+  CD-Text, CD-R, Enhanced CD, HDCD, DTS, and so on). For HDCD it says what
+  the codes ask for (peak extend, gain), or that the files hold the decode;
+  for DTS, that the files hold the decode. Sort by it, or search for
+  "HDCD" or "Enhanced", to find the rips of a kind.
+
 ## 0.9.1 (2026-10-29)
 
 ### Added

@@ -190,7 +190,7 @@ public actor WebClient {
 
 /// The version that Silverside reports, as in its User-Agent.
 public enum SilversideVersion {
-    public static let string = "0.9.1"
+    public static let string = "0.9.2"
 
     /// The Git commit of the build, abbreviated, with "-dirty" if the build had changes that were
     /// not committed (`scripts/commit-id.sh`): from the app's Info.plist, where a build phase

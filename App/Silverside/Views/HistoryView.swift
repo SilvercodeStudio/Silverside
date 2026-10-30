@@ -17,6 +17,7 @@ struct HistoryView: View {
             : model.allRips.filter {
                 $0.title.lowercased().contains(needle) || $0.artist.lowercased().contains(needle)
                     || $0.report.drive.product.lowercased().contains(needle)
+                    || $0.medium.lowercased().contains(needle)
             }
         return found.sorted(using: sortOrder)
     }
@@ -42,6 +43,7 @@ struct HistoryView: View {
                 TableColumn("Artist", value: \.artist).width(min: 120, ideal: 200)
                 TableColumn("Result", value: \.verifiedCount) { rip in ResultCell(rip: rip) }.width(
                     min: 120, ideal: 160)
+                TableColumn("Medium", value: \.medium).width(min: 80, ideal: 130)
                 TableColumn("Drive", value: \.driveName).width(min: 150, ideal: 220)
                 TableColumn("Where", value: \.location).width(min: 80, ideal: 100)
             }
@@ -65,7 +67,7 @@ struct HistoryView: View {
             }
         }
         .navigationTitle("Rip History")
-        .searchable(text: $search, placement: .toolbar, prompt: "Album, artist, or drive")
+        .searchable(text: $search, placement: .toolbar, prompt: "Album, artist, medium, or drive")
     }
 
     private var summary: String {

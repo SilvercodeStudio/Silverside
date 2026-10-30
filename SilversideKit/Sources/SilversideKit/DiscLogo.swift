@@ -64,6 +64,27 @@ public enum DiscLogo: String, CaseIterable, Sendable {
             hasCDText: report.cdText.map { !$0.titles.isEmpty || !$0.performers.isEmpty } ?? false, probe: found)
     }
 
+    /// What a ripped disc is, for a table column that sorts and searches rips by kind: the
+    /// logo's short name, and for HDCD and DTS, what the codes ask for or what the files hold:
+    /// "HDCD, peak extend", "HDCD, decoded", "DTS, decoded". Nil if the report's TOC cannot
+    /// be read.
+    public static func medium(of report: RipReport) -> String? {
+        guard let logo = logo(for: report) else { return nil }
+        switch logo {
+        case .hdcd:
+            if report.encoding?.hdcdDecoded == true { return "HDCD, decoded" }
+            let codes = report.tracks.compactMap(\.hdcd)
+            var features = [String]()
+            if codes.contains(where: { $0.peakExtend != .never }) { features.append("peak extend") }
+            if codes.contains(where: { $0.maxGainAdjustment < 0 }) { features.append("gain") }
+            return (["HDCD"] + features).joined(separator: ", ")
+        case .dts:
+            return report.encoding?.dtsDecoded != nil ? "DTS, decoded" : "DTS"
+        default:
+            return logo.shortName
+        }
+    }
+
     /// The logo of a disc that is not a CD, from the medium and its mounted volume. A Blu-ray
     /// disc is Ultra HD when its BDMV/index.bdmv says version 0300, as the Ultra HD Blu-ray
     /// format has it ("INDX0300": *Oppenheimer*; "INDX0200" on a Blu-ray disc, 2026-10-29). A
@@ -99,6 +120,25 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         case .dvd: "DVD"
         case .dvdAudio: "DVD-Audio"
         case .bluRay: "Blu-ray Disc"
+        case .ultraHDBluRay: "Ultra HD Blu-ray"
+        }
+    }
+
+    /// What the logo says in a few words, for a table column.
+    public var shortName: String {
+        switch self {
+        case .dts: "DTS"
+        case .hdcd: "HDCD"
+        case .sacd: "SACD"
+        case .cdGraphics: "CD+G"
+        case .compactDiscPlus: "Enhanced CD"
+        case .mixedMode: "Mixed Mode"
+        case .recordable: "CD-R"
+        case .cdText: "CD-Text"
+        case .compactDisc: "CD"
+        case .dvd: "DVD"
+        case .dvdAudio: "DVD-Audio"
+        case .bluRay: "Blu-ray"
         case .ultraHDBluRay: "Ultra HD Blu-ray"
         }
     }

@@ -155,5 +155,34 @@ extension DiscLogoTests {
         let data = RipReport(
             drive: drive, secure: true, toc: mixed, tracks: [tracks[1]], ctdb: .init(status: .verified))
         #expect(DiscLogo.logo(for: data) == .mixedMode)
+        #expect(DiscLogo.medium(of: data) == "Mixed Mode")
+    }
+
+    /// The column says what HDCD codes ask for, and whether the files hold the HDCD or DTS decode.
+    @Test func namesTheMediumOfARip() {
+        let drive = RipReport.Drive(
+            vendor: "SIM", product: "DRIVE", revision: "1.0", readOffset: 6, offsetSource: "--offset")
+        let tracks = [1, 2].map {
+            RipReport.Track(
+                number: $0, file: "Track 0\($0).wav", startLBA: ($0 - 1) * 20000, sectors: 20000, preEmphasis: false,
+                accurateRip: .accurate)
+        }
+        var report = RipReport(drive: drive, secure: true, toc: audio, tracks: tracks, ctdb: .init(status: .verified))
+        #expect(DiscLogo.medium(of: report) == "CD")
+        report.tracks[0].hdcd = HDCDCodes(packets: 200)
+        #expect(DiscLogo.medium(of: report) == "HDCD")
+        report.tracks[1].hdcd = HDCDCodes(packets: 200, peakExtend: .always, maxGainAdjustment: -3)
+        #expect(DiscLogo.medium(of: report) == "HDCD, peak extend, gain")
+        report.encoding = .init(format: .flac, encoder: "Apple AudioToolbox", folder: "Album", files: [])
+        report.encoding?.hdcdDecoded = true
+        #expect(DiscLogo.medium(of: report) == "HDCD, decoded")
+
+        report.tracks[0].hdcd = nil
+        report.tracks[1].hdcd = nil
+        report.encoding?.hdcdDecoded = nil
+        report.tracks[0].dts = true
+        #expect(DiscLogo.medium(of: report) == "DTS")
+        report.encoding?.dtsDecoded = "5.1"
+        #expect(DiscLogo.medium(of: report) == "DTS, decoded")
     }
 }

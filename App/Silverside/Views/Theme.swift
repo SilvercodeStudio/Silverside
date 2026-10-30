@@ -210,3 +210,99 @@ struct CoverView: View {
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.2)))
     }
 }
+
+/// A disc's logo (`DiscLogo`), in one color, as printed on a disc's label: as high as its
+/// `height`, and as wide as it is.
+struct DiscLogoView: View {
+    var logo: DiscLogo
+
+    var body: some View {
+        Image(logo.assetName).resizable().scaledToFit().frame(height: logo.height)
+            .foregroundStyle(.secondary)
+            .help(logo.name)
+            .accessibilityLabel(logo.name)
+    }
+}
+
+extension DiscLogo {
+    var assetName: String {
+        switch self {
+        case .dts: "DiscLogoDTS"
+        case .hdcd: "HDCD"
+        case .sacd: "DiscLogoSACD"
+        case .cdGraphics: "DiscLogoCDG"
+        case .compactDiscPlus, .mixedMode: "DiscLogoCDExtra"
+        case .recordable: "DiscLogoCDR"
+        case .cdText: "DiscLogoCDText"
+        case .compactDisc: "DiscLogoCDDA"
+        case .dvd: "DiscLogoDVD"
+        case .dvdAudio: "DiscLogoDVDAudio"
+        case .bluRay: "DiscLogoBluRay"
+        case .ultraHDBluRay: "DiscLogoUltraHDBluRay"
+        }
+    }
+
+    /// The Compact Disc logo's height, beside the Rip button.
+    static let compactDiscHeight: CGFloat = 48
+
+    /// The logo's height, so that the Compact Disc part of the logos built on it ("disc" and
+    /// its words) is the same size in each, whatever they add below it: measured from the
+    /// SVGs (2026-10-29), where "COMPACT disc" ends at 79.3% of the plain logo's ink, the
+    /// plain logo's words at 69.3% of CD+G's, 72.5% of CD-Text's, and "COMPACT disc" at 65.5%
+    /// of CD-R's. The other logos are sized by eye to weigh about the same.
+    var height: CGFloat {
+        let base = Self.compactDiscHeight
+        switch self {
+        case .compactDisc: return base
+        case .compactDiscPlus, .mixedMode: return base * 49.2 / 48
+        case .cdGraphics: return base * 70.3 / 48
+        case .cdText: return base * 66.1 / 48
+        case .recordable: return base * 58.6 / 48
+        case .hdcd: return 30
+        case .dts: return 34
+        case .sacd: return 56
+        case .dvd, .dvdAudio, .bluRay, .ultraHDBluRay: return 48
+        }
+    }
+
+    /// True for the logos built on the Compact Disc's: their tops line up with its top, and
+    /// what they add hangs below. The others are centered on it.
+    var hangsFromTop: Bool {
+        switch self {
+        case .compactDisc, .compactDiscPlus, .mixedMode, .cdGraphics, .cdText, .recordable: true
+        case .hdcd, .dts, .sacd, .dvd, .dvdAudio, .bluRay, .ultraHDBluRay: false
+        }
+    }
+}
+
+/// Where the disc's logo goes: beside the Rip button, or `-discLogoPlace table` at the
+/// track table's lower left, to compare.
+enum DiscLogoPlace {
+    static var atTableCorner: Bool { UserDefaults.standard.string(forKey: "discLogoPlace") == "table" }
+}
+
+extension DriveSlot {
+    /// The disc's logo: from the look at its audio, the tracks ripped so far, and MusicBrainz's
+    /// format. `-discLogo cdText` shows that one, for a screenshot.
+    var discLogo: DiscLogo? {
+        #if DEBUG
+            if let name = UserDefaults.standard.string(forKey: "discLogo"), let logo = DiscLogo(rawValue: name) {
+                return logo
+            }
+        #endif
+        guard let disc else { return nil }
+        let ripped = (rip?.trackStates.values ?? [:].values).compactMap { state -> RipReport.Track? in
+            if case .finished(let track) = state { track } else { nil }
+        }
+        var found = probe
+        if !ripped.isEmpty {
+            var merged = found ?? DiscProbe(tracksRead: 0)
+            merged.tracksRead += ripped.count
+            merged.hdcd = merged.hdcd || ripped.contains { $0.hdcd != nil }
+            merged.dts = merged.dts || ripped.contains { $0.dts == true }
+            found = merged
+        }
+        return DiscLogo.logo(
+            toc: disc.toc, format: disc.shownMedium?.format, media: disc.media, hasCDText: disc.hasCDText, probe: found)
+    }
+}

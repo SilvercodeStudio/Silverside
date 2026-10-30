@@ -15,7 +15,7 @@ struct DriveDetailView: View {
         Group {
             switch slot.discState {
             case .empty:
-                NoDiscView(driveName: slot.name)
+                NoDiscView(driveName: slot.name, otherDisc: slot.device.otherDisc)
             case .reading:
                 ProgressView("Reading the disc…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -83,7 +83,7 @@ struct DriveDetailView: View {
                 Label("Eject", systemImage: "eject").padding(.horizontal, 4)
             }
             .help("Eject the disc (may take a few seconds)")
-            .disabled(slot.device.discBSDName == nil || isRipping)
+            .disabled((slot.device.discBSDName ?? slot.device.otherDiscBSDName) == nil || isRipping)
 
             Button {
                 slot.lookUpAgain()
@@ -173,10 +173,28 @@ struct DiscView: View {
             // table does not take content margins), it lets the last tracks scroll out from under it.
             TrackTable(slot: slot)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    RipButton(slot: slot)
-                        .padding([.top, .bottom, .leading], RipButton.inset)
-                        .padding(.trailing, RipButton.trailingInset)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    HStack(alignment: .bottom, spacing: 0) {
+                        if let logo = slot.discLogo, DiscLogoPlace.atTableCorner {
+                            DiscLogoView(logo: logo).padding(.leading, 20).padding(.bottom, RipButton.inset + 4)
+                        }
+                        Spacer(minLength: 0)
+                        // The disc's logo beside the button: the Compact Disc logo centered
+                        // on it, and the logos built on that one with their tops in line.
+                        if let logo = slot.discLogo, !DiscLogoPlace.atTableCorner {
+                            let top = (RipButton.size - DiscLogo.compactDiscHeight) / 2
+                            DiscLogoView(logo: logo)
+                                .padding(
+                                    .bottom,
+                                    RipButton.inset
+                                        + (logo.hangsFromTop
+                                            ? RipButton.size - top - logo.height : (RipButton.size - logo.height) / 2)
+                                )
+                                .padding(.trailing, 4)
+                        }
+                        RipButton(slot: slot)
+                            .padding([.top, .bottom, .leading], RipButton.inset)
+                            .padding(.trailing, RipButton.trailingInset)
+                    }
                 }
                 .background(ScrollersPastInset(table: slot.rip != nil))
             Divider()
@@ -471,11 +489,17 @@ struct AlbumHeader: View {
                         + " folder with the files on it, ready to open."
                 case .skip: "The rip leaves it out (Settings › Ripping)."
                 }
+            let first = disc.toc.tracks.first?.kind == .data
             Chip(
-                text: disc.toc.isEnhanced ? "Enhanced CD · data track" : "Data track", systemImage: "externaldrive",
+                text: disc.toc.isEnhanced
+                    ? "Enhanced CD · data track" : first ? "Mixed Mode CD · data track" : "Data track",
+                systemImage: "externaldrive",
                 help: (disc.toc.isEnhanced
-                    ? "After the music, this disc has a data track with extras for a computer. "
-                    : "This disc has a data track for a computer. ") + choice)
+                    ? "After the music, in a session of its own, this disc has a data track with extras for a computer. "
+                    : first
+                        ? "Track 1 of this disc is data for a computer (a Mixed Mode CD), so the music starts at track 2. "
+                            + "Most CD players skip it. "
+                        : "This disc has a data track for a computer. ") + choice)
         }
     }
 

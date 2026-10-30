@@ -46,13 +46,29 @@ public enum MusicBrainzSeed {
             }
         }
         let medium = release.medium(for: toc) ?? release.media.first
-        fields.append(("mediums.0.format", newRelease ? medium?.format ?? "CD" : "CD"))
+        // A Mixed Mode CD's data track is track 1, and the disc ID counts it, so the tracklist
+        // has it too, as MusicBrainz names a data track, numbered 0 so that the songs keep the
+        // sleeve's numbers (as *The Freedom Sessions* has it).
+        let dataFirst = Array(toc.tracks.prefix { $0.kind == .data })
+        let format = dataFirst.isEmpty ? "CD" : "Mixed Mode CD"
+        fields.append(("mediums.0.format", newRelease ? medium?.format ?? format : format))
         // The TOC adds the disc ID, and gives MusicBrainz the tracks' exact lengths.
         fields.append(("mediums.0.toc", toc.musicBrainzTOCString.replacingOccurrences(of: "+", with: " ")))
-        for (index, (track, tocTrack)) in zip(medium?.tracks ?? [], toc.audioTracks).enumerated() {
+        for (index, tocTrack) in dataFirst.enumerated() {
+            let prefix = "mediums.0.track.\(index)"
+            fields.append(("\(prefix).name", "[data track]"))
+            fields.append(("\(prefix).number", "0"))
+            fields.append(
+                ("\(prefix).length", String(toc.sectorRange(of: tocTrack).count * 1000 / CDDA.sectorsPerSecond)))
+            if albumArtist != placeholder.artist, !MusicBrainzRelease.isVariousArtists(albumArtist) {
+                fields += credit(release.artistCredit, prefix: "\(prefix).artist_credit")
+            }
+        }
+        for (audioIndex, (track, tocTrack)) in zip(medium?.tracks ?? [], toc.audioTracks).enumerated() {
+            let index = dataFirst.count + audioIndex
             let prefix = "mediums.0.track.\(index)"
             if track.title != "Track \(tocTrack.number)" { fields.append(("\(prefix).name", track.title)) }
-            fields.append(("\(prefix).number", String(index + 1)))
+            fields.append(("\(prefix).number", String(audioIndex + 1)))
             // The same recordings: the new release is another edition of the same audio.
             if newRelease, let recording = track.recordingID { fields.append(("\(prefix).recording", recording)) }
             fields.append(

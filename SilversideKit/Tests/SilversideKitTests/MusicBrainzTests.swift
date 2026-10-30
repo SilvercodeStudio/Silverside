@@ -294,4 +294,20 @@ struct MusicBrainzTests {
         #expect(tracks[8].composers.map(\.tagName) == ["Antônio Carlos Jobim"])
         #expect(tracks[8].lyricists.map(\.tagName) == ["Chico Buarque"])
     }
+
+    /// A saved answer from MusicBrainz (2026-10-29) for Sarah McLachlan *The Freedom Sessions*,
+    /// a Mixed Mode CD: the data track is track 1, and the tracklist has it as "[data track]".
+    /// The audio tracks 2 to 9 get the songs, numbered from 1, not the songs one track early.
+    @Test func leavesOutTheDataTrackOfAMixedModeCD() throws {
+        let starts = [0, 148_584, 169_332, 184_647, 202_455, 217_583, 248_108, 259_838, 277_928]
+        let toc = try TOC(
+            tracks: starts.enumerated().map { .init(number: $0 + 1, startLBA: $1, kind: $0 == 0 ? .data : .audio) },
+            leadOutLBA: 320_378)
+        #expect(toc.musicBrainzDiscID == "xYH60C0oTAOYn7y3CWYvrD7RMH4-")
+        let lookup = try MusicBrainzClient.lookup(fromJSON: fixture("freedom-sessions"))
+        let medium = try #require(lookup.releases.first?.medium(for: toc))
+        #expect(medium.tracks.count == toc.audioTracks.count)
+        #expect(medium.tracks.first?.title == "Elsewhere" && medium.tracks.first?.position == 1)
+        #expect(medium.tracks.last?.title == "Ol’55 / Hold On (acoustic)" && medium.tracks.last?.position == 8)
+    }
 }

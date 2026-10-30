@@ -70,6 +70,15 @@ public final class SimulatedDrive: CDDrive {
     /// What the disc is. Nil makes the drive one that cannot tell.
     public var mediaType: DiscMediaType? = .pressed
 
+    /// The raw P–W subchannel of sectors by LBA, 96 bytes each, such as a CD+G disc's; other
+    /// sectors read as zeros. Nil when the drive refuses raw subchannel reads, as the BU50N does.
+    public var subchannelPW: [Int: [UInt8]]? = [:]
+
+    public func readSubchannelPW(at lba: Int, count: Int) throws -> [UInt8] {
+        guard let subchannelPW, lba >= 0, lba + count <= toc.leadOutLBA else { throw DriveError.readFailed(lba: lba) }
+        return (lba..<(lba + count)).flatMap { subchannelPW[$0] ?? [UInt8](repeating: 0, count: 96) }
+    }
+
     public func readMediaType() throws -> DiscMediaType? { mediaType }
 
     /// The simulated user data of a data sector: byte `index` of sector `lba`.

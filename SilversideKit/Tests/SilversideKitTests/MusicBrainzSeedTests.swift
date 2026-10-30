@@ -36,6 +36,21 @@ struct MusicBrainzSeedTests {
         #expect(page.contains("value=\"Ambisonic &amp; Channel Ident\""))
     }
 
+    /// A Mixed Mode CD's data track is track 1, which the disc ID counts: the tracklist starts
+    /// with it as "[data track]", numbered 0, and the songs follow from 1.
+    @Test func listsTheDataTrackOfAMixedModeCD() throws {
+        let toc = try TOC(
+            tracks: [.init(number: 1, startLBA: 0, kind: .data), .init(number: 2, startLBA: 3000)], leadOutLBA: 5000)
+        let edits = MetadataEdits(albumArtist: "Sarah McLachlan", tracks: [2: .init(title: "Elsewhere")])
+        let fields = MusicBrainzSeed.fields(for: edits.applied(to: .manual(toc: toc), toc: toc), toc: toc)
+        let value = { (name: String) in fields.first { $0.name == name }?.value }
+        #expect(value("mediums.0.format") == "Mixed Mode CD" && value("mediums.0.toc") == "1 2 5150 150 3150")
+        #expect(value("mediums.0.track.0.name") == "[data track]" && value("mediums.0.track.0.number") == "0")
+        #expect(value("mediums.0.track.0.length") == String(3000 * 1000 / 75))
+        #expect(value("mediums.0.track.1.name") == "Elsewhere" && value("mediums.0.track.1.number") == "1")
+        #expect(value("mediums.0.track.1.artist_credit.names.0.name") == "Sarah McLachlan")
+    }
+
     /// MusicBrainz needs an artist on every track: an album by one artist gives it to each.
     @Test func givesEachTrackTheAlbumsArtist() throws {
         let toc = try TOC(audioTrackStarts: [0, 1000], leadOutLBA: 2000)

@@ -281,7 +281,9 @@ final class AppModel {
             if UserDefaults.standard.bool(forKey: "demoOnly") { return }
         #endif
         let devices = OpticalDrive.all()
-        let hadDisc = Set(drives.filter { $0.device.discBSDName != nil }.map(\.id))
+        // A DVD or Blu-ray disc counts too: its drive comes into view, to say what it is.
+        let hasMedium = { (device: OpticalDrive) in device.discBSDName != nil || device.otherDisc != nil }
+        let hadDisc = Set(drives.filter { hasMedium($0.device) }.map(\.id))
         var slots = drives.filter(\.isDemo)
         var seen = [String: Int]()
         for device in devices {
@@ -297,14 +299,14 @@ final class AppModel {
             }
         }
         // Drives with a disc first, then the empty ones, each in the registry's order.
-        let hasDisc = { (slot: DriveSlot) in slot.isDemo || slot.device.discBSDName != nil }
+        let hasDisc = { (slot: DriveSlot) in slot.isDemo || hasMedium(slot.device) }
         drives = slots.enumerated()
             .sorted { hasDisc($0.element) != hasDisc($1.element) ? hasDisc($0.element) : $0.offset < $1.offset }
             .map(\.element)
         // A disc that goes in while the window shows an empty drive (or none) brings its drive
         // into view. A drive with a disc or a rip keeps the view.
-        if let arrived = drives.first(where: { $0.device.discBSDName != nil && !hadDisc.contains($0.id) }),
-            selection == nil || selectedDrive.map({ $0.device.discBSDName == nil && $0.rip?.isRunning != true }) == true
+        if let arrived = drives.first(where: { hasMedium($0.device) && !hadDisc.contains($0.id) }),
+            selection == nil || selectedDrive.map({ !hasMedium($0.device) && $0.rip?.isRunning != true }) == true
         {
             selection = .drive(arrived.id)
         }
@@ -379,7 +381,7 @@ final class AppModel {
     }
 
     func eject(_ slot: DriveSlot) {
-        guard let bsdName = slot.device.discBSDName else { return }
+        guard let bsdName = slot.device.discBSDName ?? slot.device.otherDiscBSDName else { return }
         player.stop(drive: slot.id)
         Task { @MainActor in
             do {
@@ -397,6 +399,7 @@ final class AppModel {
         // A name still being typed (with ⌘R, say) goes into the rip.
         slot.pendingNames.acceptAll()
         guard slot.rip?.isRunning != true, !slot.isBusy, let disc = slot.disc else { return }
+        slot.stopProbe()
         slot.ripOnInsertDate = nil
         slot.ripOnInsertNote = nil
         player.stop(drive: slot.id)

@@ -75,6 +75,20 @@ struct Info: AsyncParsableCommand {
             print("This is a data disc, with no audio tracks to rip.")
             return
         }
+        // A few seconds of the first tracks, as the app looks at a disc for its logo.
+        let started = Date()
+        let probe = DiscProbe.probe(drive, toc: toc)
+        var found = [String]()
+        if probe.hdcd { found.append("HDCD codes") }
+        if probe.dts { found.append("a DTS stream") }
+        switch probe.cdGraphics {
+        case true?: found.append("CD+G graphics")
+        case false?: break
+        case nil: found.append("no subchannel for CD+G from this drive")
+        }
+        print(
+            "In the audio         \(found.isEmpty ? "nothing unusual" : found.joined(separator: ", "))"
+                + String(format: " (%d tracks looked at, %.1f s)", probe.tracksRead, Date().timeIntervalSince(started)))
         print("AccurateRip          \(toc.accurateRipDiscID.databaseURL)")
         print("CTDB TOC             \(toc.ctdbTOCString)")
 

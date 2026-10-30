@@ -533,10 +533,24 @@ private struct RawRelease: Decodable {
                 .init(
                     position: medium.position, format: medium.format,
                     title: medium.title.flatMap { $0.isEmpty ? nil : $0 }, discIDs: (medium.discs ?? []).map(\.id),
-                    tracks: (medium.tracks ?? []).map(track), hiddenTrack: medium.pregap.map(track))
+                    tracks: Self.audioTracks((medium.tracks ?? []).map(track)), hiddenTrack: medium.pregap.map(track))
             },
             hasFrontCover: coverArtArchive?.front ?? false, artworkCount: coverArtArchive?.count,
             genre: Self.topGenre([releaseGroup?.genres, genres]))
+    }
+
+    /// The tracks with audio. On a Mixed Mode CD, the data track is track 1, and the disc ID
+    /// counts it, so MusicBrainz lists it as "[data track]" (*The Freedom Sessions*). It goes,
+    /// and the audio tracks are numbered from 1, as MusicBrainz numbers them, so that they
+    /// match the TOC's audio tracks in order.
+    static func audioTracks(_ tracks: [MusicBrainzRelease.Track]) -> [MusicBrainzRelease.Track] {
+        let audio = tracks.filter { $0.title != "[data track]" }
+        guard audio.count < tracks.count else { return tracks }
+        return audio.enumerated().map { index, track in
+            var track = track
+            track.position = index + 1
+            return track
+        }
     }
 
     /// The composers and lyricists of a recording: from the works it performs (their

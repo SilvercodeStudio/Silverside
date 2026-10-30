@@ -25,6 +25,12 @@ public protocol CDDrive {
     /// What the disc is: pressed, or written in a drive (CD-R or CD-RW). Nil if the drive cannot tell.
     func readMediaType() throws -> DiscMediaType?
 
+    /// Reads the raw P–W subchannel of `count` audio sectors, 96 bytes each (one bit of each
+    /// channel in each byte: P is bit 7, Q bit 6, R to W bits 5 to 0), for CD+G graphics.
+    /// Not every drive gives it: the HL-DT-ST BU50N refuses it, and the MATSHITA gave garbage
+    /// on a damaged disc (2026-10-29), so a failure means only that this drive cannot tell.
+    func readSubchannelPW(at lba: Int, count: Int) throws -> [UInt8]
+
     /// The mode of the data sector at `lba`, from its header.
     func readDataMode(at lba: Int) throws -> DataSectorMode
 
@@ -77,6 +83,9 @@ extension CDDrive {
     }
 
     public func readMediaType() throws -> DiscMediaType? { nil }
+
+    /// A drive that cannot read the raw subchannel fails every read of it.
+    public func readSubchannelPW(at lba: Int, count: Int) throws -> [UInt8] { throw DriveError.readFailed(lba: lba) }
 
     /// A drive that cannot read data sectors fails every read of one.
     public func readDataMode(at lba: Int) throws -> DataSectorMode { throw DriveError.readFailed(lba: lba) }

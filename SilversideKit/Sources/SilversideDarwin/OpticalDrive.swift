@@ -1,6 +1,7 @@
 import Foundation
 import IOKit
 import IOKit.storage
+import SilversideKit
 
 /// An optical drive that macOS knows about, from the IOKit registry.
 public struct OpticalDrive: Equatable, Sendable {
@@ -13,6 +14,10 @@ public struct OpticalDrive: Equatable, Sendable {
     public var location: String
     /// The BSD name of the CD in the drive, such as "disk14". Nil if there is no CD.
     public var discBSDName: String?
+    /// A disc in the drive that is not a CD (a DVD, DVD-Audio, or Blu-ray disc), which
+    /// Silverside does not rip, and its BSD name, for Eject.
+    public var otherDisc: DiscLogo?
+    public var otherDiscBSDName: String?
     /// What the registry says of the drive, as text: its device and protocol characteristics
     /// (such as "CD Features" and "Retry Count"), and the USB bridge's names, IDs, and speed.
     /// Serial numbers are left out.
@@ -54,8 +59,50 @@ public struct OpticalDrive: Equatable, Sendable {
                     interconnect: protocolInfo["Physical Interconnect"] as? String ?? "",
                     location: protocolInfo["Physical Interconnect Location"] as? String ?? "",
                     discBSDName: cdBSDName(below: service), registry: registry(device, protocolInfo, service)))
+            if drives[drives.count - 1].discBSDName == nil, let other = otherMedia(below: service) {
+                drives[drives.count - 1].otherDiscBSDName = other.bsdName
+                drives[drives.count - 1].otherDisc = DiscLogo.otherDisc(
+                    isBluRay: other.isBluRay, volume: mountPoint(of: other.bsdName))
+            }
         }
         return drives
+    }
+
+    /// The DVD or Blu-ray medium below a drive, if one is in it.
+    private static func otherMedia(below service: io_service_t) -> (bsdName: String, isBluRay: Bool)? {
+        var iterator: io_iterator_t = 0
+        guard
+            IORegistryEntryCreateIterator(
+                service, kIOServicePlane, IOOptionBits(kIORegistryIterateRecursively), &iterator) == KERN_SUCCESS
+        else { return nil }
+        defer { IOObjectRelease(iterator) }
+        while case let entry = IOIteratorNext(iterator), entry != 0 {
+            defer { IOObjectRelease(entry) }
+            let isBluRay = IOObjectConformsTo(entry, "IOBDMedia") != 0
+            if isBluRay || IOObjectConformsTo(entry, "IODVDMedia") != 0,
+                let name = property(entry, kIOBSDNameKey) as? String
+            {
+                return (name, isBluRay)
+            }
+        }
+        return nil
+    }
+
+    /// Where the disc's file system is mounted, if it is: the whole disc, or its first slice.
+    private static func mountPoint(of bsdName: String) -> URL? {
+        var mounts: UnsafeMutablePointer<statfs>?
+        let count = getmntinfo(&mounts, MNT_NOWAIT)
+        guard count > 0, let mounts else { return nil }
+        for index in 0..<Int(count) {
+            var entry = mounts[index]
+            let from = withUnsafeBytes(of: &entry.f_mntfromname) {
+                String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self)
+            }
+            guard from == "/dev/\(bsdName)" || from.hasPrefix("/dev/\(bsdName)s") else { continue }
+            let on = withUnsafeBytes(of: &entry.f_mntonname) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+            return URL(filePath: on, directoryHint: .isDirectory)
+        }
+        return nil
     }
 
     /// Finds the IOCDMedia object below a drive. DVD and Blu-ray media are other classes.

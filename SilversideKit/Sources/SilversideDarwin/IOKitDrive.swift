@@ -152,6 +152,29 @@ public final class IOKitDrive: CDDrive {
         return read
     }
 
+    /// Reads the user area with the raw P–W subchannel, in one command: the ASUS gives the
+    /// subchannel only with the user area (EINVAL without), and the BU50N refuses both (EIO).
+    public func readSubchannelPW(at lba: Int, count: Int) throws -> [UInt8] {
+        guard lba >= 0 else { throw DriveError.sectorOutOfRange(lba: lba) }
+        let sectorSize = CDDA.bytesPerSector + 96
+        var bytes = [UInt8](repeating: 0, count: count * sectorSize)
+        var request = dk_cd_read_t()
+        request.offset = UInt64(lba * sectorSize)
+        request.sectorArea = UInt8(kCDSectorAreaUser.rawValue | kCDSectorAreaSubChannel.rawValue)
+        request.sectorType = UInt8(kCDSectorTypeCDDA.rawValue)
+        do {
+            try bytes.withUnsafeMutableBytes { buffer in
+                request.buffer = buffer.baseAddress
+                request.bufferLength = UInt32(buffer.count)
+                try control(Ioctl.read, &request)
+            }
+        } catch IOKitDriveError.ioctlFailed {
+            throw DriveError.readFailed(lba: lba)
+        }
+        guard request.bufferLength == bytes.count else { throw DriveError.readFailed(lba: lba) }
+        return (0..<count).flatMap { bytes[($0 * sectorSize + CDDA.bytesPerSector)..<(($0 + 1) * sectorSize)] }
+    }
+
     /// Reads the whole sector raw, for its mode: byte 15 (the header's last), and for Mode 2
     /// the Form 2 bit (0x20) of the submode, byte 18. The header alone gives EINVAL (MATSHITA).
     public func readDataMode(at lba: Int) throws -> DataSectorMode {

@@ -55,6 +55,9 @@ final class DriveSlot: Identifiable {
     @ObservationIgnored let pendingNames = PendingNames()
     @ObservationIgnored private var discBSDName: String?
     @ObservationIgnored private var readTask: Task<Void, Never>?
+    /// What a short look at the disc's audio found, as it was read (`DiscProbe`); nil until then.
+    private(set) var probe: DiscProbe?
+    @ObservationIgnored private var probeStop: StopToken?
 
     init(id: String, device: OpticalDrive) {
         self.id = id
@@ -105,6 +108,8 @@ final class DriveSlot: Identifiable {
             ripOnInsertDate = nil
             ripOnInsertNote = nil
             readTask?.cancel()
+            stopProbe()
+            probe = nil
             // A finished rip stays on show until the next disc.
             if rip?.isRunning == true { rip?.stop() }
         }
@@ -123,6 +128,8 @@ final class DriveSlot: Identifiable {
         ripOnInsertNote = nil
         let make = makeDrive
         readTask?.cancel()
+        stopProbe()
+        probe = nil
         readTask = Task { @MainActor in
             do {
                 let read = try await DiscInfo.read(makeDrive: make, bsdName: bsdName)
@@ -134,6 +141,7 @@ final class DriveSlot: Identifiable {
                 disc = info
                 selectedTracks = Set(info.toc.audioTracks.map(\.number))
                 discState = .ready
+                startProbe(make, toc: info.toc)
                 await info.lookUpRelease()
                 guard !Task.isCancelled else { return }
                 disc = info
@@ -142,6 +150,24 @@ final class DriveSlot: Identifiable {
                 discState = .failed("\(error)")
             }
         }
+    }
+
+    /// Looks at a few seconds of the first tracks, for the disc's logo, while the lookup runs.
+    private func startProbe(_ make: @escaping @Sendable () throws -> any CDDrive, toc: TOC) {
+        guard !toc.audioTracks.isEmpty else { return }
+        let stop = StopToken()
+        probeStop = stop
+        Task { @MainActor in
+            let found = await Task.detached { (try? make()).map { DiscProbe.probe($0, toc: toc, stop: stop) } }.value
+            guard !stop.isStopped else { return }
+            probe = found
+        }
+    }
+
+    /// Stops the look at the audio, so that a rip has the drive to itself.
+    func stopProbe() {
+        probeStop?.stop()
+        probeStop = nil
     }
 
     /// Uses another of the releases that have the disc.

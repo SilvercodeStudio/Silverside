@@ -104,6 +104,15 @@ struct MainWindow: View {
                         }
                     }
                 }
+                // `-selectDrive BU50N` shows the first drive whose name has that text.
+                if let name = UserDefaults.standard.string(forKey: "selectDrive") {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(1))
+                        if let slot = model.drives.first(where: { $0.name.contains(name) }) {
+                            model.selection = .drive(slot.id)
+                        }
+                    }
+                }
                 // `-selectRecent 1` shows the newest earlier rip, for screenshots of the results;
                 // with `-repair 1` too, its repair starts, and with `-hdcdDecode 1`, Decode HDCD opens.
                 if UserDefaults.standard.bool(forKey: "selectRecent") {
@@ -297,7 +306,7 @@ struct SidebarView: View {
             }
         }
         switch slot.discState {
-        case .empty: return "No disc"
+        case .empty: return slot.device.otherDisc.map { "\($0.name) · not a CD" } ?? "No disc"
         case .reading: return "Reading the disc…"
         case .failed: return "Cannot read the disc"
         case .ready:
@@ -379,18 +388,39 @@ struct SidebarRow: View {
 /// The main window before a disc is loaded.
 struct NoDiscView: View {
     var driveName: String?
+    /// A disc in the drive that is not a CD.
+    var otherDisc: DiscLogo?
 
     var body: some View {
         VStack(spacing: 14) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 180, height: 180)
-            Text("Insert an audio CD").font(.title2.weight(.semibold))
-            Text(driveName.map { "\($0) is empty." } ?? "Choose a drive in the sidebar.")
-                .foregroundStyle(.secondary)
+            if let otherDisc {
+                Image(otherDisc.assetName).resizable().scaledToFit().frame(maxWidth: 220, maxHeight: 110)
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 10)
+                    .accessibilityLabel(otherDisc.name)
+                Text("This is \(Self.article(otherDisc))").font(.title2.weight(.semibold))
+                Text("Silverside rips audio CDs. Eject this disc and insert a CD.")
+                    .foregroundStyle(.secondary)
+            } else {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 180, height: 180)
+                Text("Insert an audio CD").font(.title2.weight(.semibold))
+                Text(driveName.map { "\($0) is empty." } ?? "Choose a drive in the sidebar.")
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private static func article(_ disc: DiscLogo) -> String {
+        switch disc {
+        case .dvdAudio: "a DVD-Audio disc"
+        case .bluRay: "a Blu-ray disc"
+        case .ultraHDBluRay: "an Ultra HD Blu-ray disc"
+        default: "a DVD"
+        }
     }
 }
 

@@ -7,6 +7,15 @@ command-line tool.
 
 ### Added
 
+- A disc's logo beside the Rip button: Compact Disc, or what the disc is
+  besides (CD-Text, CD-R, Enhanced CD, CD+G, Super Audio CD, HDCD, DTS).
+  As a disc is read, Silverside listens to a few seconds of its first
+  tracks for HDCD codes and a DTS stream, and, in drives that give it, looks
+  for CD+G graphics, so the logo is right before you rip.
+- A DVD, DVD-Audio, Blu-ray, or Ultra HD Blu-ray disc in a drive is named,
+  with its logo, in place of "Insert an audio CD", and Eject works for it.
+  `silverside drives` names it too.
+
 - **Change Release…** for an earlier rip: choose another release of the disc
   in MusicBrainz, such as your edition, or one added since the rip. The
   rip's encoded files get the release's tags, names, and cover, with no new
@@ -33,6 +42,11 @@ command-line tool.
 
 ### Fixed
 
+- On a Mixed Mode CD, whose first track is data (Sarah McLachlan, *The
+  Freedom Sessions*), every song had the name of the track before it, and
+  track 2 was "[data track]". Now the data track is left out of the names,
+  and the songs are numbered from 1, as MusicBrainz numbers them. Add to
+  MusicBrainz lists the data track first, as MusicBrainz needs it.
 - A label that MusicBrainz lists twice, with two catalog numbers, was in the
   Label tag twice. Now each label and each catalog number is there once.
 - On a disc that MusicBrainz does not know, a track with no artist of its

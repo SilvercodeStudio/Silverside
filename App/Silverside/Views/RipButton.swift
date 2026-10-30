@@ -8,8 +8,10 @@ import SwiftUI
 struct RipButton: View {
     @Environment(AppModel.self) private var model
     var slot: DriveSlot
-    var size: CGFloat = 120
+    var size: CGFloat = RipButton.size
     @State private var stopAsked = false
+
+    static let size: CGFloat = 120
 
     /// Its distance from the track table's edges.
     static let inset: CGFloat = 16

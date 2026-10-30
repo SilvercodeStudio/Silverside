@@ -120,6 +120,8 @@ struct Drives: ParsableCommand {
                 } else {
                     print("  CD: \(bsdName) (its TOC cannot be read)")
                 }
+            } else if let other = drive.otherDisc, let bsdName = drive.otherDiscBSDName {
+                print("  \(other.name): \(bsdName), not a CD")
             } else {
                 print("  No CD")
             }

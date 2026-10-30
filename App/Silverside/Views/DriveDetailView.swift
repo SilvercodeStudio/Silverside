@@ -351,6 +351,7 @@ struct AlbumHeader: View {
                         }
                         if let discLabel = disc.discLabel { Chip(text: discLabel, help: disc.discLabelHelp) }
                         earlierRipChip
+                        earlierCopiesChip
                         if let set = model.set(for: disc.release) {
                             Button {
                                 model.selection = .set(set.releaseID)
@@ -415,8 +416,57 @@ struct AlbumHeader: View {
                     }
                 }
                 .padding(.top, 2)
+                .task(id: copiesKey) { await model.findEarlierCopies(for: slot, stamp: copiesKey.stamp) }
             }
         }
+    }
+
+    /// What the earlier copies depend on: the folders, and the rip, which can leave tracks.
+    private var copiesKey: CopiesKey {
+        CopiesKey(
+            folders: model.earlierCopyFolders(for: slot).all,
+            stamp: slot.rip.map { "\($0.phase)" } ?? "", offline: slot.choices.offline)
+    }
+
+    private struct CopiesKey: Hashable {
+        var folders: [URL]
+        var stamp: String
+        var offline: Bool
+    }
+
+    /// The tracks that earlier rips have accurate copies of, which the rip keeps: a stopped
+    /// rip's, or another drive's. Not shown while a rip runs, or after one finishes.
+    @ViewBuilder private var earlierCopiesChip: some View {
+        let tracks = disc.toc.audioTracks.map(\.number)
+        let kept =
+            slot.earlierCopies.map { copies in
+                tracks.filter { number in
+                    copies.copies[number].map { slot.choices.poolsEarlierRips || copies.own.contains($0) } ?? false
+                }
+            } ?? []
+        if !kept.isEmpty, !slot.choices.readsEveryTrack,
+            slot.rip.map({ !$0.isRunning && $0.phase != .finished }) ?? true
+        {
+            let rest = tracks.filter { !kept.contains($0) }
+            Chip(
+                text: rest.isEmpty
+                    ? "All \(tracks.count) tracks ripped before"
+                    : "\(kept.count) of \(tracks.count) tracks ripped before",
+                tone: .good, systemImage: "arrow.uturn.down.circle",
+                help: "An earlier rip has copies of " + Self.tracks(kept)
+                    + " that AccurateRip says are accurate. "
+                    + (rest.isEmpty
+                        ? "Rip keeps them all and reads no track again; it checks the whole disc with CTDB and writes the report. "
+                        : "Rip keeps them and reads only \(Self.tracks(rest)), then checks the whole disc with CTDB. ")
+                    + "To read every track again, turn on Read every track again in the rip options.")
+        }
+    }
+
+    /// "track 3", "tracks 1–14", "tracks 1–4 and 9".
+    private static func tracks(_ numbers: [Int]) -> String {
+        (numbers.count == 1 ? "track " : "tracks ")
+            + RipSet.list(RipReport.list(numbers).components(separatedBy: ", "))
+            .replacingOccurrences(of: "-", with: "–")
     }
 
     /// A release of earlier rips with a disc of this disc's track lengths, which the lookup did
@@ -1113,6 +1163,12 @@ struct RipOptionsView: View {
             .disabled(earlierRips.isEmpty)
             Text(
                 "Sectors that an earlier rip read right are kept, and where the rips disagree, the re-reads and the CTDB repair have more to work with."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+            Divider()
+            Toggle("Read every track again", isOn: $slot.choices.readsEveryTrack)
+            Text(
+                "Without it, a track that an earlier rip has a copy of that AccurateRip says is accurate is kept, not read again: a stopped rip's tracks, or another drive's."
             )
             .font(.caption).foregroundStyle(.secondary)
             Divider()

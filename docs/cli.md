@@ -69,6 +69,12 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
   system into a `Data track` folder. The image holds the track exactly; its
   file system counts from the start of the disc, which the report gives
 
+A rip that is stopped keeps the tracks it finished in its folder. The next rip
+of the disc, in any drive, goes into the same folder and keeps each track that
+AccurateRip says is accurate there (or in a `--pool` folder): it reads only the
+others, then checks the whole disc with CTDB as usual. `--read-all` reads every
+track again.
+
 The report also says whether the tracks have HDCD codes, and what they ask of
 a decoder (peak extend, a gain adjustment, or nothing), and the encoded files
 of such a disc are tagged `MEDIA=HDCD`. For a disc whose codes

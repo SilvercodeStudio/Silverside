@@ -39,6 +39,10 @@ public struct DiscRipOptions: Sendable {
     public var testAndCopy: Bool
     /// Earlier rips of the disc, from any drive, to pool with this one.
     public var pool: [URL] = []
+    /// Keep a track's copy from an earlier rip, in this rip's folder (where a stopped rip
+    /// leaves its tracks) or in `pool`, when AccurateRip says it is accurate, and do not read
+    /// the track again. False reads every track.
+    public var keepsAccurateTracks = true
     /// After encoding, keep the rip's WAV files.
     public var keepsRip: Bool
     /// Changes to the release's names, on top of the ones kept for the release (`ReleaseEditsStore`).
@@ -383,13 +387,7 @@ public struct DiscRip {
                 nil
             }
         defer { sleeveTask?.cancel() }
-        let name =
-            named.map {
-                NameTemplate(settings.ripFolderTemplate).name(
-                    NameTemplate.values(release: $0, medium: $0.medium(for: toc)))
-            } ?? "Silverside \(toc.musicBrainzDiscID)"
-        let wanted =
-            options.folder ?? settings.ripsURL.appending(path: name, directoryHint: .isDirectory)
+        let wanted = options.folder ?? Self.folder(for: named, toc: toc, settings: settings)
         let folder = try RipFolder.claim(wanted, toc: toc)
         defer { RipFolder.release(folder) }
         events(.folder(folder, insteadOf: folder == wanted ? nil : wanted))
@@ -458,8 +456,9 @@ public struct DiscRip {
             let start = ContinuousClock.now
             // The track's rip, with the pooling and the files, on the reading thread.
             let (audio, ripped, ripSummary) = try await blocking { [self] in
-                var (samples, summary, audio, report) = try ripTrack(
-                    track, toc: toc, ripper: ripper, secure: secure, records: records)
+                var (samples, summary, audio, report) =
+                    try keptTrack(track, toc: toc, folders: [folder] + options.pool, records: records)
+                    ?? ripTrack(track, toc: toc, ripper: ripper, secure: secure, records: records)
                 pool(
                     track, toc: toc, records: records, samples: &samples, audio: &audio, report: &report,
                     summary: &summary)
@@ -467,7 +466,7 @@ public struct DiscRip {
                 report.recordChecksums(
                     of: samples, isFirstTrack: index == 0, isLastTrack: index == toc.audioTracks.count - 1)
                 report.recordDTS(in: samples)
-                if options.testAndCopy {
+                if options.testAndCopy && report.keptFrom == nil {
                     let test = try testRead(track, toc: toc, reader: reader, cacheFlushSectors: flushSectors)
                     report.testCRC32 = CRC32.hex(test.crc)
                     report.testReadMatches = test.independent ? report.testCRC32 == report.crc32 : nil
@@ -489,7 +488,10 @@ public struct DiscRip {
             var report = ripped
             let took = ContinuousClock.now - start
             report.seconds = Int(took.components.seconds)
-            report.readSeconds = Double(took.components.seconds) + Double(took.components.attoseconds) / 1e18
+            // A kept track was not read, so it has no read speed.
+            if report.keptFrom == nil {
+                report.readSeconds = Double(took.components.seconds) + Double(took.components.attoseconds) / 1e18
+            }
             discOffsets.formUnion(report.matchingOffsets)
             if checksCTDB { trackAudio.append(audio) }
             if !audio.alternatives.isEmpty { written.insert(TrackAudio.alternativesFileName(track: track.number)) }
@@ -830,12 +832,69 @@ public struct DiscRip {
         return path.dropFirst(base.count).joined(separator: "/")
     }
 
+    /// The folder that a rip names from the release (with the user's edits applied), in the
+    /// settings' rips folder; "Silverside <disc ID>" with no release.
+    public static func folder(for named: MusicBrainzRelease?, toc: TOC, settings: Settings) -> URL {
+        let name =
+            named.map {
+                NameTemplate(settings.ripFolderTemplate).name(
+                    NameTemplate.values(release: $0, medium: $0.medium(for: toc)))
+            } ?? "Silverside \(toc.musicBrainzDiscID)"
+        return settings.ripsURL.appending(path: name, directoryHint: .isDirectory)
+    }
+
     private func selectedTracks(of toc: TOC) throws -> [TOC.Track] {
         guard let numbers = options.tracks else { return toc.audioTracks }
         let tracks = toc.audioTracks.filter { numbers.contains($0.number) }
         let missing = numbers.filter { number in !toc.tracks.contains { $0.number == number } }
         guard missing.isEmpty else { throw DiscRipError.noSuchTracks(missing) }
         return tracks
+    }
+
+    /// An earlier copy of the track that AccurateRip says is accurate, kept in place of a read
+    /// (`keepsAccurateTracks`), from the first of `folders` that has one. The ISRC, pregap,
+    /// index points, and Q control bits come from that rip's report when it has the same
+    /// audio; else (a stopped rip has no report) the ISRC and pregap are read from the Q
+    /// subchannel. Nil reads the track.
+    private func keptTrack(
+        _ track: TOC.Track, toc: TOC, folders: [URL], records: [AccurateRipRecord]
+    ) -> (samples: [UInt32], summary: String, audio: TrackAudio, report: RipReport.Track)? {
+        guard options.keepsAccurateTracks,
+            let copy = RipPool.accurateCopy(of: track, toc: toc, in: folders, records: records)
+        else { return nil }
+        var report = RipReport.Track(
+            number: track.number, file: String(format: "Track %02d.wav", track.number), startLBA: track.startLBA,
+            sectors: toc.sectorRange(of: track).count, preEmphasis: track.hasPreEmphasis, accurateRip: .accurate,
+            accurateRipConfidence: copy.confidence, fullReads: 0)
+        report.tocFlags = RipReport.ControlFlags(track)
+        report.accurateRipTop = .top(trackAt: toc.audioTracks.firstIndex(of: track) ?? 0, records: records)
+        report.keptFrom = copy.folder.lastPathComponent
+        let crc = CRC32.hex(CRC32.checksum(of: copy.samples[...]))
+        if let earlier = try? RipReport.read(from: copy.folder.appending(path: "disc.json")),
+            let same = earlier.tracks.first(where: { $0.number == track.number && $0.crc32 == crc })
+        {
+            report.isrc = same.isrc
+            report.pregapSectors = same.pregapSectors
+            report.pregapUnknown = same.pregapUnknown
+            report.indexes = same.indexes
+            report.recordSubchannel(same.subchannel)
+        } else {
+            report.isrc = try? SubchannelCodes.isrc(of: track, in: toc, drive: drive)
+            do {
+                report.pregapSectors = try PregapFinder.pregap(of: track, in: toc, drive: drive)
+            } catch {
+                report.pregapUnknown = true
+            }
+        }
+        // In this rip's folder, suspects that an older read left cannot change an accurate track.
+        if copy.folder == folders.first {
+            try? FileManager.default.removeItem(
+                at: copy.folder.appending(path: TrackAudio.alternativesFileName(track: track.number)))
+        }
+        let summary =
+            "accurate (v1 \(copy.confidence[0]), v2 \(copy.confidence[1]) submissions) in the earlier rip in "
+            + "\"\(copy.folder.lastPathComponent)\", which is kept: the track was not read again"
+        return (copy.samples, summary, TrackAudio(samples: copy.samples), report)
     }
 
     /// Rips one track, once (single pass) or securely, and fills in its report.

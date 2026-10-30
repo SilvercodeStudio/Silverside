@@ -29,6 +29,12 @@ command-line tool.
 - A Copy Control CD (a copy-protected disc, such as some EMI releases of
   2001 to 2004) shows the Copy Control logo, when MusicBrainz names the
   release's format so.
+- A rip keeps what an earlier rip got right. When a rip is stopped, or a
+  drive gives up on a damaged disc, the next rip of the disc, in any drive,
+  keeps each track that AccurateRip says is accurate and reads only the
+  rest; CTDB still checks the whole disc. A chip says how many tracks were
+  ripped before, and those tracks show "From an earlier rip". Read every
+  track again in the rip options (or `rip --read-all`) turns it off.
 
 ### Changed
 

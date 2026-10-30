@@ -41,6 +41,38 @@ public enum RipPool {
         return (versions, alternatives, skipped)
     }
 
+    /// A copy of a track from an earlier rip that AccurateRip says is accurate.
+    public struct AccurateCopy: Sendable {
+        /// The earlier rip's folder.
+        public var folder: URL
+        public var samples: [UInt32]
+        /// The submissions for the v1 and the v2 checksum.
+        public var confidence: [Int]
+    }
+
+    /// The first "Track NN.wav" in `folders` that AccurateRip says is accurate, checked here
+    /// from its samples, not taken from a report: a rip keeps it in place of a read
+    /// (`DiscRipOptions.keepsAccurateTracks`). The folders are read one at a time, so only one
+    /// copy of the track is in memory. Nil if none is, or there are no AccurateRip records.
+    public static func accurateCopy(
+        of track: TOC.Track, toc: TOC, in folders: [URL], records: [AccurateRipRecord]
+    ) -> AccurateCopy? {
+        guard !records.isEmpty else { return nil }
+        let length = toc.sectorRange(of: track).count * CDDA.samplesPerSector
+        let name = String(format: "Track %02d.wav", track.number)
+        var seen = Set<String>()
+        for folder in folders where seen.insert(folder.standardizedFileURL.resolvingSymlinksInPath().path).inserted {
+            let url = folder.appending(path: name)
+            guard FileManager.default.fileExists(atPath: url.path), let samples = try? WAVFile.read(url),
+                samples.count == length
+            else { continue }
+            if case .accurate(let v1, let v2) = verification(of: samples, track: track, toc: toc, records: records) {
+                return AccurateCopy(folder: folder, samples: samples, confidence: [v1, v2])
+            }
+        }
+        return nil
+    }
+
     /// How a version of an audio track compares with AccurateRip.
     public static func verification(
         of samples: [UInt32], track: TOC.Track, toc: TOC, records: [AccurateRipRecord]
@@ -104,10 +136,19 @@ public enum RipFolder {
     /// disc.json, claims "<folder> [<disc ID>]" instead. Returns the folder claimed.
     public static func claim(_ folder: URL, toc: TOC) throws -> URL {
         if try claimIfFree(folder, toc: toc) { return folder }
-        let other = folder.deletingLastPathComponent().appending(
-            path: "\(folder.lastPathComponent) [\(toc.musicBrainzDiscID)]", directoryHint: .isDirectory)
+        let other = otherName(of: folder, toc: toc)
         guard try claimIfFree(other, toc: toc) else { throw RipFolderError.taken(folder, other) }
         return other
+    }
+
+    /// The folders that `claim` can give a rip of the disc: `folder`, then its other name.
+    public static func candidates(_ folder: URL, toc: TOC) -> [URL] {
+        [folder, otherName(of: folder, toc: toc)]
+    }
+
+    private static func otherName(of folder: URL, toc: TOC) -> URL {
+        folder.deletingLastPathComponent().appending(
+            path: "\(folder.lastPathComponent) [\(toc.musicBrainzDiscID)]", directoryHint: .isDirectory)
     }
 
     /// Claims exactly `folder`, for work that must not run beside a rip into it, such as

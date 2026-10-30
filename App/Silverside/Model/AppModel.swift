@@ -411,6 +411,7 @@ final class AppModel {
         if slot.choices.poolsEarlierRips {
             options.pool = earlierRips(of: disc.toc.ctdbTOCString).map(\.folder)
         }
+        options.keepsAccurateTracks = !slot.choices.readsEveryTrack
         let selected = slot.selectedTracks
         if selected.count != disc.toc.audioTracks.count {
             options.tracks = disc.toc.audioTracks.map(\.number).filter { selected.contains($0) }
@@ -468,6 +469,47 @@ final class AppModel {
     }
 
     // MARK: Repairs
+
+    /// The folders where a rip of the disc in the slot looks for earlier copies of its tracks:
+    /// the folder it would write into (a stopped rip leaves its tracks there), then the earlier
+    /// rips that it pools with.
+    func earlierCopyFolders(for slot: DriveSlot) -> (all: [URL], own: [URL]) {
+        guard let disc = slot.disc else { return ([], []) }
+        let wanted = slot.choices.folder ?? DiscRip.folder(for: disc.shownRelease, toc: disc.toc, settings: settings)
+        let own = RipFolder.candidates(wanted, toc: disc.toc)
+        return (own + earlierRips(of: disc.toc.ctdbTOCString).map(\.folder), own)
+    }
+
+    /// Looks for earlier copies of the slot's tracks that AccurateRip says are accurate, for
+    /// the chip that says a rip keeps them. Only when a folder has track files: AccurateRip's
+    /// answer is cached, so the rip itself asks no second time.
+    func findEarlierCopies(for slot: DriveSlot, stamp: String) async {
+        guard let disc = slot.disc, !slot.isDemo, !slot.choices.offline else {
+            slot.earlierCopies = nil
+            return
+        }
+        let (folders, own) = earlierCopyFolders(for: slot)
+        if let found = slot.earlierCopies, found.folders == folders, found.stamp == stamp { return }
+        let toc = disc.toc
+        let copies = await Task.detached { () -> [Int: URL] in
+            let names = toc.audioTracks.map { String(format: "Track %02d.wav", $0.number) }
+            let hasTracks = folders.contains { folder in
+                names.contains { FileManager.default.fileExists(atPath: folder.appending(path: $0).path) }
+            }
+            guard hasTracks, let records = try? await AccurateRipRecord.download(for: toc.accurateRipDiscID) else {
+                return [:]
+            }
+            var copies = [Int: URL]()
+            for track in toc.audioTracks {
+                if let copy = RipPool.accurateCopy(of: track, toc: toc, in: folders, records: records) {
+                    copies[track.number] = copy.folder
+                }
+            }
+            return copies
+        }.value
+        guard slot.disc?.toc == toc else { return }
+        slot.earlierCopies = EarlierCopies(folders: folders, own: own, copies: copies, stamp: stamp)
+    }
 
     /// Repairs an earlier rip with CTDB's data, pooled with the other rips of the disc,
     /// and with re-reads when the disc is in a drive that is free.

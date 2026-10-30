@@ -306,6 +306,7 @@ extension RipReport {
             notes.append(
                 "Track quality is the share of the track's sectors that read the same the first time, with no re-read.")
         }
+        if let keptText { notes.append(keptText) }
         if let preEmphasisText { notes.append(preEmphasisText) }
         if let deEmphasized = encoding?.deEmphasizedTracks, !deEmphasized.isEmpty {
             notes.append(

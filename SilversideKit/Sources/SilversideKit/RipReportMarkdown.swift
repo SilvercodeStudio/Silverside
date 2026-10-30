@@ -154,7 +154,10 @@ extension RipReport {
             cells.append(accurateRip)
             cells.append(track.ctdbConfidence.map { $0 > 0 ? String($0) : "no match" } ?? "")
             cells.append(
-                track.rereadRounds > 0 ? "\(track.fullReads) + \(track.rereadRounds) rounds" : String(track.fullReads))
+                track.keptFrom != nil
+                    ? "kept"
+                    : track.rereadRounds > 0
+                        ? "\(track.fullReads) + \(track.rereadRounds) rounds" : String(track.fullReads))
             let suspect = track.suspectSectors.isEmpty ? "" : String(track.suspectSectors.count)
             cells.append(suspect + (unresolved > 0 ? " (\(unresolved) unresolved)" : ""))
             cells.append(track.c2Sectors.map { $0.isEmpty ? "" : String($0.count) } ?? "not read")
@@ -168,6 +171,10 @@ extension RipReport {
             "Reads: whole reads of the track, then rounds of re-reads of its suspect sectors. Suspect, C2, and"
                 + " unreadable: sectors. Repaired: samples.")
         lines.append("")
+        if let kept = keptText {
+            lines.append(kept)
+            lines.append("")
+        }
 
         if tracks.contains(where: { $0.crc32 != nil }) {
             lines.append("## Checksums")
@@ -385,6 +392,19 @@ extension RipReport {
         DiscRepairer.ranges(of: sectors.sorted()).map {
             $0.count == 1 ? String($0.lowerBound) : "\($0.lowerBound)-\($0.upperBound - 1)"
         }.joined(separator: ", ")
+    }
+
+    /// "Tracks 1-14 were not read again: …", for the tracks kept from earlier rips. Nil if none were.
+    public var keptText: String? {
+        let kept = tracks.filter { $0.keptFrom != nil }
+        guard !kept.isEmpty else { return nil }
+        let folders = Array(Set(kept.compactMap(\.keptFrom))).sorted().map { "\"\($0)\"" }
+        return (kept.count == 1 ? "Track " : "Tracks ") + Self.list(kept.map(\.number))
+            + (kept.count == 1 ? " was" : " were") + " not read again: the earlier "
+            + (folders.count == 1 ? "rip in " : "rips in ") + RipSet.list(folders)
+            + (kept.count == 1 ? " has a copy" : " have copies") + " that AccurateRip says"
+            + (kept.count == 1 ? " is" : " are") + " accurate, and this rip kept"
+            + (kept.count == 1 ? " it." : " them.")
     }
 
     /// Text that cannot break a Markdown table.

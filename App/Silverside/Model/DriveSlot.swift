@@ -11,6 +11,22 @@ struct RipChoices: Equatable {
     var poolsEarlierRips = true
     /// Look nothing up: no AccurateRip, CTDB, or drive offset list.
     var offline = false
+    /// Read every track, even one that an earlier rip has an accurate copy of.
+    var readsEveryTrack = false
+}
+
+/// The tracks that earlier rips have copies of that AccurateRip says are accurate, which a rip
+/// keeps in place of a read (`DiscRipOptions.keepsAccurateTracks`), and the folders looked in.
+struct EarlierCopies: Equatable {
+    /// The folders, in the order the rip looks: its own folder's names first, then the pool.
+    var folders: [URL]
+    /// The folders that the rip writes into, which it looks in with pooling off too.
+    var own: [URL]
+    /// The folder of each track's copy, by track number.
+    var copies: [Int: URL]
+    /// What else the look depended on, such as the state of the slot's rip: a stopped rip
+    /// leaves tracks without changing the folders.
+    var stamp: String
 }
 
 /// One drive in the sidebar: the hardware, the disc in it, and its rip.
@@ -37,6 +53,8 @@ final class DriveSlot: Identifiable {
     }
     /// Choices for the next rip. The folder is forgotten with the disc.
     var choices = RipChoices()
+    /// The accurate copies that earlier rips have of this disc's tracks. Nil until looked for.
+    var earlierCopies: EarlierCopies?
     /// True while a repair or a drive test holds the drive.
     var isBusy = false
     /// Which names the header and the table show.
@@ -123,6 +141,7 @@ final class DriveSlot: Identifiable {
         discState = .reading
         disc = nil
         rip = nil
+        earlierCopies = nil
         choices.folder = nil
         ripOnInsertDate = nil
         ripOnInsertNote = nil

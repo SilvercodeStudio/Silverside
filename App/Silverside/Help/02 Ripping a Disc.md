@@ -56,6 +56,7 @@ The Options button in the toolbar holds choices for the next rip only:
 
 - **Folder.** By default a rip's folder is named from the release, in the rips folder. Choose another for this rip.
 - **Pool earlier rips of this disc.** On by default when the rips folder has a rip of the same disc. A track that an earlier rip got accurate replaces one that is not, and where the rips disagree, the CTDB repair has more versions to work with.
+- **Read every track again.** Off by default: a track that an earlier rip has a copy of that AccurateRip says is accurate is kept, not read again (see below). Turn it on for a fresh read of every track.
 - **Offline.** No AccurateRip, CTDB, or drive offset list. The names come from the lookup already made. Repair (see Verification) can check the rip later.
 
 The Secure or Fast choice is kept between launches.
@@ -66,7 +67,7 @@ The status column shows each track's progress: the read, later reads (up to four
 
 Behind another app, the Dock icon shows a progress bar, and when the rip is done, the icon bounces and a notification says how it went (macOS asks once whether Silverside may send notifications).
 
-Stop ends the rip after the read under way. The tracks ripped so far stay in the folder, and a later rip of the same disc can use them.
+Stop ends the rip after the read under way. The tracks ripped so far stay in the folder. A later rip of the same disc, in this drive or another, goes into the same folder and keeps each of those tracks that AccurateRip says is accurate: it reads only the others, then checks the whole disc with CTDB as usual. So a disc that one drive struggles with can be finished in another, without reading again what is already right. When the disc goes in, a chip such as **14 of 16 tracks ripped before** says so; the status column marks those tracks "From an earlier rip". It works the same for the copies in earlier rips that pool with this one. A disc that is not in AccurateRip has every track read.
 
 ## HDCD
 

@@ -343,6 +343,7 @@ struct FinishedStatus: View {
     /// What the track needed, under its verdict: the samples CTDB repaired, and the re-reads.
     private var note: String? {
         var parts = [String]()
+        if track.keptFrom != nil { parts.append("From an earlier rip") }
         if showsRereads {
             let rereads = track.suspectSectors.count
             let unreadable = track.unreadableSectors?.count ?? 0

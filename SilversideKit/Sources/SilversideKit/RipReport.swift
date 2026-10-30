@@ -112,6 +112,11 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// read them, and in reports from before 0.8.
         public var subchannel: SubchannelControl?
 
+        /// The folder name of the earlier rip whose copy of the track, accurate in AccurateRip,
+        /// this rip kept in place of a read (`DiscRipOptions.keepsAccurateTracks`). Nil if the
+        /// track was read, and in reports from before 0.9.2.
+        public var keptFrom: String?
+
         /// Whether the test read gave the same audio as the copy, as read: a repair can change
         /// the copy after the test. Nil without a test read.
         public var testReadMatches: Bool?

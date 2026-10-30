@@ -91,6 +91,13 @@ struct Rip: AsyncParsableCommand {
             """)
     var pool: [String] = []
 
+    @Flag(
+        help: """
+            Read every track. Without it, a track that an earlier rip in the folder (a stopped rip leaves its \
+            tracks there) or the pool has an accurate copy of, by AccurateRip, is kept and not read again.
+            """)
+    var readAll = false
+
     func run() async throws {
         let settings = try Settings.load()
         let bsdName = try deviceOptions.bsdName()
@@ -110,6 +117,7 @@ struct Rip: AsyncParsableCommand {
         options.readsC2 = !noC2 && settings.readC2
         if let test { options.testAndCopy = test }
         options.pool = pool.map { URL(filePath: $0, directoryHint: .isDirectory) }
+        options.keepsAccurateTracks = !readAll
         if let keepRip { options.keepsRip = keepRip }
         options.addsToMusic = encoding.addsToMusic(settings)
         options.hdcd = encoding.hdcdChoice(settings)

@@ -64,7 +64,7 @@
           </a>
           <a class="ss-btn ss-btn--ghost" href="#how">How it works</a>
         </div>
-        <p class="ss-detail">Version 0.8 · Free and open source · macOS 15 or later · Apple silicon and Intel</p>
+        <p class="ss-detail">Version 0.9.1 · Free and open source · macOS 15 or later · Apple silicon and Intel</p>
       </div>
       <div class="ss-iris edge-bottom" aria-hidden="true"></div>
     </section>
@@ -226,6 +226,30 @@
       </div>
     </section>
 
+    <section id="dts" class="section gutter" aria-labelledby="dts-title">
+      <div class="wrap spotlight">
+        <div class="spotlight-text">
+          <span class="dts-logo dts-logo--large" role="img" aria-label="DTS"></span>
+          <h2 id="dts-title" class="ss-display spotlight-title">DTS-CDs, decoded to surround sound.</h2>
+          <p>A DTS-CD holds multichannel surround sound instead of stereo: a DTS stream that a compatible AV receiver must decode. Any other player plays it as loud static, so a plain rip of a DTS-CD fills your library with noise.</p>
+          <p>Silverside automatically recognizes DTS-CDs when the disc goes in, and verifies the CD rip as it would any other. Then it keeps the album in raw DTS-encoded form, with a decoded copy beside it: every channel, in FLAC or Apple Lossless at the stream's own 20 or 24 bits, or in AAC, gapless from track to track. Or keep just the decoded audio. Each track plays decoded in Silverside too. Decoding uses ffmpeg, which you install with <code>brew install ffmpeg</code>.</p>
+        </div>
+        <div class="ss-card result-panel">
+          <!-- Real results: Marvin Gaye, Forever Yours (DTS Entertainment), 2026-10-29: 11 of 11 accurate, CTDB verified, a 5.1 stream at 20 bits. -->
+          <ul class="hdcd-list">
+            <li>
+              <div><strong>Forever Yours</strong><span class="ss-detail"><span class="dts-logo" role="img" aria-label="DTS"></span>stream · AccurateRip 11/11</span></div>
+              <span class="ss-chip">As the disc has it</span>
+            </li>
+            <li>
+              <div><strong>Forever Yours (DTS 5.1)</strong><span class="ss-detail"><span class="dts-logo" role="img" aria-label="DTS"></span>5.1 · 20 bits</span></div>
+              <span class="ss-chip">5.1 FLAC</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
     <section class="section gutter" aria-labelledby="more-title">
       <div class="wrap">
         <div class="section-head">
@@ -252,17 +276,17 @@
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="6"/><path d="M13 6.6a6 6 0 0 1 0 10.8M16 6.1a6 6 0 0 1 0 11.8"/><circle cx="9" cy="12" r="1.5"/></svg></div></div>
             <h3 class="ss-card__title">Box sets, one album</h3>
-            <p class="ss-card__text">The discs of a set share the release, the names, the cover, one album folder, and one album gain. The set has a view of its own, with each disc's state and the work left.</p>
+            <p class="ss-card__text">The discs of a set share the release, the names, the cover, one album folder, and one album gain. The set has a view of its own, with each disc's state and the work left. Sub-sets of large collections, such as individual concerts, can have their own art.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L18 10l-4-4L4 16v4z"/><path d="M12.5 7.5l4 4"/></svg></div></div>
             <h3 class="ss-card__title">Names you can change</h3>
-            <p class="ss-card__text">Edit the album, artist, date, and track titles, before the rip or after it. The files are named and tagged with your edits, and what MusicBrainz said stays in the report. A disc MusicBrainz does not know is named from its CD-Text, or by you.</p>
+            <p class="ss-card__text">Edit the album, artist, date, and track titles, before the rip or after it. The files are named and tagged with your edits, and what MusicBrainz said stays in the report. A disc that MusicBrainz does not know is named from its CD-Text, or by you, and Add to MusicBrainz opens its editor with those names, the track lengths, and the disc ID filled in, to help contribute to this free database.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg></div></div>
             <h3 class="ss-card__title">Even loudness</h3>
-            <p class="ss-card__text">ReplayGain tags, measured as EBU R 128 does, let players that read them play every album at one level, and a show split across discs too. The audio is not changed.</p>
+            <p class="ss-card__text">ReplayGain tags, measured as EBU R 128 does, let players that read them play every album at one level, and a show split across discs too. The audio samples are not changed.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></div></div>
@@ -270,9 +294,24 @@
             <p class="ss-card__text">A song hidden before track 1 is ripped and encoded as track 0. An Enhanced CD's data track is kept as a disc image, with its files ready to open. Pregaps, index points, ISRCs, the MCN, and CD-Text go into the report and the CUE sheet.</p>
           </article>
           <article class="ss-card">
+            <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 16h4c3 0 4-8 7-8h7"/><path d="M3 20h18"/></svg></div></div>
+            <h3 class="ss-card__title">Pre-emphasis, kept or undone</h3>
+            <p class="ss-card__text">Some early CDs were mastered with a treble boost that a CD player takes out again. Silverside finds the flag in the Q subchannel as well as the TOC, where many rippers miss it, and keeps it in the tags and the CUE sheet, or takes the boost out into 20-bit files.</p>
+          </article>
+          <article class="ss-card">
+            <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12.5l-7.5 7.5L4 11.5V4h7.5z"/><circle cx="8" cy="8" r="1.5"/></svg></div></div>
+            <h3 class="ss-card__title">Your edition</h3>
+            <p class="ss-card__text">After a rip, choose another release of the disc in MusicBrainz, such as your own edition, or one added since. The files take its names, tags, and cover, with no new rip.</p>
+          </article>
+          <article class="ss-card">
+            <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></div></div>
+            <h3 class="ss-card__title">Discs nobody has checked</h3>
+            <p class="ss-card__text">When AccurateRip and CTDB do not know a disc yet, Silverside shows whether the reads agreed, and you can accept the rip as it is and encode it. Check Again looks the rip up later, as the databases grow.</p>
+          </article>
+          <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5-5.5 3.5z"/></svg></div></div>
             <h3 class="ss-card__title">Listen first</h3>
-            <p class="ss-card__text">Play any track from the disc, read the way a rip reads it, or from an earlier rip, from its WAV file or its encoded file.</p>
+            <p class="ss-card__text">Preview any track directly from the disc, read the way a rip reads it, or from an earlier rip, from its WAV file or its encoded file, including DTS multichannel audio downmixed to stereo.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></svg></div></div>
@@ -307,7 +346,7 @@
           </details>
           <details>
             <summary>What about MP3?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-            <p>Apple's audio frameworks cannot write MP3, so Silverside uses the free LAME encoder for it. Install it with <code>brew install lame</code>, and MP3 appears among the formats. Everything else is built in.</p>
+            <p>Apple's audio frameworks cannot write MP3, so Silverside uses the free LAME encoder for it. Install it with <code>brew install lame</code>, and MP3 appears among the formats.</p>
           </details>
           <details>
             <summary>Does it need an account, or send anything about me?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
@@ -337,7 +376,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
           Download for Mac
         </a>
-        <p class="ss-detail">Version 0.8 · Free and open source · macOS 15 or later · Apple silicon and Intel</p>
+        <p class="ss-detail">Version 0.9.1 · Free and open source · macOS 15 or later · Apple silicon and Intel</p>
       </div>
     </section>
 
@@ -352,6 +391,8 @@
           <li><a href="http://cue.tools/wiki/CUETools_Database">CUETools DB</a> by Grigory Chudov keeps checksums of whole discs, and the data that repairs damaged rips.</li>
           <li><a href="https://musicbrainz.org">MusicBrainz</a> and the <a href="https://coverartarchive.org">Cover Art Archive</a>, run by the MetaBrainz Foundation, provide album names and cover art, built by their volunteers.</li>
           <li><a href="https://lame.sourceforge.io">LAME</a> encodes MP3 when it is installed. Silverside runs it as a separate program and does not include it.</li>
+          <li><a href="https://ffmpeg.org">FFmpeg</a> decodes a DTS-CD's surround sound when it is installed. Silverside runs it as a separate program and does not include it.</li>
+          <li>FFmpeg's HDCD decoder finds and decodes the HDCD codes in a rip. Chris Moeller wrote it from Christopher Key's HDCD library, with work by Gumboot and Burt P. Silverside includes it under its <a href="license.html#hdcd">BSD license</a>.</li>
           <li>Apple's AudioToolbox encodes FLAC, Apple Lossless, and AAC.</li>
         </ul>
       </div>

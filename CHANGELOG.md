@@ -3,7 +3,7 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
-## 0.9.1 (not released yet)
+## 0.9.1 (2026-10-29)
 
 ### Added
 
@@ -19,7 +19,6 @@ command-line tool.
 - A DVD, DVD-Audio, Blu-ray, or Ultra HD Blu-ray disc in a drive is named,
   with its logo, in place of "Insert an audio CD", and Eject works for it.
   `silverside drives` names it too.
-
 - **Change Release…** for an earlier rip: choose another release of the disc
   in MusicBrainz, such as your edition, or one added since the rip. The
   rip's encoded files get the release's tags, names, and cover, with no new
@@ -29,11 +28,12 @@ command-line tool.
   disc has it with a decoded copy beside it, such as "Forever Yours (DTS
   5.1)", the decode alone, or the stream alone. Decoding needs ffmpeg
   (`brew install ffmpeg`), which Silverside runs as a separate program, as
-  it runs lame. The decoded files have every channel (20-bit FLAC or Apple
-  Lossless, AAC, or AIFF), are gapless across the tracks, and have
-  ReplayGain; they are tagged DTS=decoded. Decode DTS… decodes an earlier
-  rip, the preview plays a DTS track decoded, and Settings › Encoding has the
-  choice. `silverside rip` and `encode` take `--dts`.
+  it runs lame. The decoded files have every channel (FLAC or Apple
+  Lossless at the stream's 20 or 24 bits, AAC, or AIFF), are gapless across
+  the tracks, and have ReplayGain; they are tagged DTS=decoded. Decode DTS…
+  decodes an earlier rip, the preview plays a DTS track decoded (mixed to
+  stereo), and Settings › Encoding has the choice. `silverside rip` and
+  `encode` take `--dts`.
 
 ### Changed
 

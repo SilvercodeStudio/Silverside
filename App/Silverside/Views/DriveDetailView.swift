@@ -535,7 +535,7 @@ struct AlbumHeader: View {
                 help: "HDCD codes in the first tracks, from a few seconds of each read when the disc went in. "
                     + (features == "nothing"
                         ? "There they ask for no peak extend or gain adjustment, so an HDCD decoder would play "
-                            + "the same audio. "
+                            + "the same audio. Any benefit of the HDCD mastering process is already in the audio. "
                         : "They ask for "
                             + features.replacingOccurrences(of: "gain", with: "a gain adjustment")
                             .replacingOccurrences(of: ", ", with: " and ")

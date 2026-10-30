@@ -39,6 +39,8 @@ command-line tool.
 - When the MusicBrainz lookup of a new disc fails, Silverside tries once
   more after 5 seconds. If that fails too, point to the "lookup failed" chip
   to see why, and click it to look up again.
+- In a box set's Cover Art Archive images, the main front comes first, then
+  the images for the disc in the drive, which also load first.
 
 ### Fixed
 

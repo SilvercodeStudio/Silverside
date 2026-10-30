@@ -253,6 +253,17 @@ public struct CoverArtImage: Equatable, Identifiable, Sendable {
         images.first { !$0.isFront && $0.types.contains("Front") && $0.mediums?.contains(position) == true }
     }
 
+    /// The main front, then the images that name the disc, then the rest, so that a box set's
+    /// dozens of images show (and load) the disc's own early; each part keeps the archive's order.
+    public static func ordered(_ images: [CoverArtImage], forDisc position: Int?) -> [CoverArtImage] {
+        guard let position else { return images }
+        func rank(_ image: CoverArtImage) -> Int {
+            image.isFront ? 0 : image.mediums?.contains(position) == true ? 1 : 2
+        }
+        return images.enumerated().sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }
+            .map(\.element)
+    }
+
     /// Which sleeve each disc takes, for `positions` (the release's CDs): the sleeve's discs,
     /// in the archive's order, and the discs that no sleeve names, which keep the set's cover.
     public static func sleeves(

@@ -105,6 +105,11 @@ struct CoverArtListingTests {
         let plan = CoverArtImage.sleeves(for: Array(1...14), in: images)
         #expect(plan.sleeves.map(\.image.id) == ["2", "3"] && plan.sleeves.map(\.discs) == [[1, 2], [12, 13, 14]])
         #expect(plan.others == Array(3...11))
+        // The main front, then the images for a disc, then the rest in the archive's order.
+        #expect(CoverArtImage.ordered(images, forDisc: 13).map(\.id) == ["1", "3", "2", "4"])
+        #expect(CoverArtImage.ordered(images, forDisc: 3).map(\.id) == ["1", "4", "2", "3"])
+        #expect(CoverArtImage.ordered(images, forDisc: 9).map(\.id) == ["1", "2", "3", "4"])
+        #expect(CoverArtImage.ordered(images, forDisc: nil).map(\.id) == ["1", "2", "3", "4"])
     }
 
     /// The sleeves rule is kept for the release, and a cover for the whole set ends it.

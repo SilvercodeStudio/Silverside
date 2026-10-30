@@ -151,11 +151,12 @@ struct CoverArtPickerSheet: View {
         return "discs " + ListFormatter.localizedString(byJoining: positions.map(String.init))
     }
 
-    /// The list, then the thumbnails, four at a time (the web client still spaces the requests
-    /// as the archive asks), each shown as it comes.
+    /// The list, with the main front and then this disc's images first, then the thumbnails in that order, four at a
+    /// time (the web client still spaces the requests as the archive asks), each shown as it comes.
     private func load() async {
         do {
-            let found = try await CoverArtClient().images(releaseID: release.id)
+            let found = CoverArtImage.ordered(
+                try await CoverArtClient().images(releaseID: release.id), forDisc: disc)
             images = found
             await withTaskGroup(of: (String, Data?).self) { group in
                 var waiting = found[...]

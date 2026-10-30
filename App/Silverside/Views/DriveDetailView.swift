@@ -583,8 +583,12 @@ struct AlbumHeader: View {
                     + "The files get no MusicBrainz IDs. Edit the names here; they are kept with the rip.")
             if let release = disc.shownRelease { ResultChips.addToMusicBrainz(release, toc: disc.toc) }
             ResultChips.addDiscID(toc: disc.toc)
-        case .failed:
-            Chip(text: "MusicBrainz · lookup failed", tone: .bad, systemImage: "wifi.slash")
+        case .failed(let error):
+            Chip(
+                text: "MusicBrainz · lookup failed", tone: .bad, systemImage: "wifi.slash",
+                help: "MusicBrainz did not answer, twice (\(error)). This is often brief: wait a moment, then "
+                    + "click to look up again (or use Look Up Metadata).",
+                action: slot.rip?.isRunning == true ? nil : { slot.lookUpAgain() })
         }
     }
 }

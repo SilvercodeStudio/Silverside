@@ -36,6 +36,9 @@ command-line tool.
   so that the tracks under it do not show through.
 - Tracks that AccurateRip has no checksum for because they are silence are
   named so: "91 silent tracks (no AccurateRip checksum)".
+- When the MusicBrainz lookup of a new disc fails, Silverside tries once
+  more after 5 seconds. If that fails too, point to the "lookup failed" chip
+  to see why, and click it to look up again.
 
 ### Fixed
 

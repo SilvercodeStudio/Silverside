@@ -240,14 +240,26 @@ struct DiscInfo {
     /// composers, the genre): two requests, kept in the web cache, so the rip sends none.
     /// `fresh` asks MusicBrainz again, not the cache (Look Up Metadata): the cache keeps a disc
     /// that MusicBrainz did not know for a day, and a release that was just added should show.
+    /// A failed lookup is often brief (the network not yet up after sleep, a busy server), so it
+    /// is tried once more after this pause.
+    static let retryDelay = Duration.seconds(5)
+
     mutating func lookUpRelease(fresh: Bool = false) async {
         guard !toc.audioTracks.isEmpty else { return }
         lookup = .lookingUp
-        let result: ReleaseLookupResult
-        do {
-            result = try await ReleaseLookup.find(toc: toc, mcn: mcn, details: true, useCache: !fresh)
-        } catch {
-            lookup = .failed("\(error)")
+        var found: ReleaseLookupResult?
+        var failure: (any Error)?
+        for attempt in 1...2 {
+            do {
+                found = try await ReleaseLookup.find(toc: toc, mcn: mcn, details: true, useCache: !fresh)
+                break
+            } catch {
+                failure = error
+                guard attempt == 1, (try? await Task.sleep(for: Self.retryDelay)) != nil else { break }
+            }
+        }
+        guard let result = found else {
+            lookup = .failed(failure.map { "\($0)" } ?? "unknown error")
             if release == nil { await useManualRelease() }
             return
         }

@@ -50,6 +50,13 @@ command-line tool.
 
 ### Fixed
 
+- A disc whose cover failed to download as it went in kept showing no cover,
+  even after choosing the main front in Cover Art Archive…. The download is
+  now tried once more after a few seconds, and choosing the main front gets
+  it again.
+- While a track played from an earlier rip, the player bar covered the
+  disc's logo at the table's corner. The bar now sits below the window's
+  content.
 - A rip got no cover when the Cover Art Archive's list of a release's images
   could not be read. Now it gets the front cover, which Silverside showed as
   the disc was read.

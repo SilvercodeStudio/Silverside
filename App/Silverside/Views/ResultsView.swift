@@ -176,6 +176,17 @@ struct ResultsView: View {
         #if DEBUG
             .onAppear { hdcdDecodeShown = canDecodeHDCD && UserDefaults.standard.bool(forKey: "hdcdDecode") }
             .onAppear { dtsDecodeShown = canDecodeDTS && UserDefaults.standard.bool(forKey: "dtsDecode") }
+            // `-playTrack 5` puts track 5 in the player bar, paused, for a screenshot of the bar.
+            .onAppear {
+                let number = UserDefaults.standard.integer(forKey: "playTrack")
+                guard number > 0, let track = report.tracks.first(where: { $0.number == number }),
+                    let url = audioURL(of: track)
+                else { return }
+                model.player.play(
+                    file: url, title: titles[number] ?? track.file, subtitle: report.release?.artist ?? "",
+                    holdsDTS: false)
+                model.player.togglePause()
+            }
         #endif
         .navigationTitle(shownRelease.map { "\($0.title)" } ?? folder.lastPathComponent)
         .navigationSubtitle(

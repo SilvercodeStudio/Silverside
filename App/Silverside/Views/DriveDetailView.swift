@@ -508,7 +508,17 @@ struct AlbumHeader: View {
         slot.disc?.userCover = nil
         slot.disc?.keptCover = nil
         slot.disc?.sleeve = nil
-        if let release = disc.release { try? ReleaseCoverStore().forget(releaseID: release.id) }
+        guard let release = disc.release else { return }
+        try? ReleaseCoverStore().forget(releaseID: release.id)
+        // The download when the disc went in can have failed; then the cover comes now.
+        if disc.cover == nil, release.hasFrontCover {
+            Task {
+                guard let data = await DiscInfo.frontCover(releaseID: release.id),
+                    slot.disc?.release?.id == release.id
+                else { return }
+                slot.disc?.cover = data
+            }
+        }
     }
 
     private func chooseCover() {

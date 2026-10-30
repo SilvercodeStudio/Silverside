@@ -145,27 +145,32 @@ struct DetailView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Group {
-            if let slot = model.selectedDrive {
-                // A view of its own for each drive: a name still being typed for one drive is
-                // accepted for that drive as its field goes, not kept for the next drive's field.
-                DriveDetailView(slot: slot).id(slot.id)
-            } else if model.selection == .history {
-                HistoryView()
-            } else if let set = model.selectedSet {
-                SetView(ripSet: set)
-            } else if let rip = model.selectedRip, rip.isMissing {
-                MissingRipView(rip: rip).id(rip.file)
-            } else if let rip = model.selectedRip {
-                ResultsView(folder: rip.folder, report: rip.report, hasAudio: rip.hasAudio, reportFile: rip.file)
-                    .id(rip.file)
-            } else if model.drives.isEmpty {
-                NoDriveView()
-            } else {
-                NoDiscView(driveName: nil)
+        // The player bar goes below the content, not over it as a safe area inset: an earlier
+        // rip's split view does not keep out of an inset, so its logo went under the bar.
+        VStack(spacing: 0) {
+            Group {
+                if let slot = model.selectedDrive {
+                    // A view of its own for each drive: a name still being typed for one drive is
+                    // accepted for that drive as its field goes, not kept for the next drive's field.
+                    DriveDetailView(slot: slot).id(slot.id)
+                } else if model.selection == .history {
+                    HistoryView()
+                } else if let set = model.selectedSet {
+                    SetView(ripSet: set)
+                } else if let rip = model.selectedRip, rip.isMissing {
+                    MissingRipView(rip: rip).id(rip.file)
+                } else if let rip = model.selectedRip {
+                    ResultsView(folder: rip.folder, report: rip.report, hasAudio: rip.hasAudio, reportFile: rip.file)
+                        .id(rip.file)
+                } else if model.drives.isEmpty {
+                    NoDriveView()
+                } else {
+                    NoDiscView(driveName: nil)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PlayerBar(player: model.player)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { PlayerBar(player: model.player) }
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button(action: model.goBack) { Label("Back", systemImage: "chevron.backward") }

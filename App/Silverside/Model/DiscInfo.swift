@@ -322,7 +322,21 @@ struct DiscInfo {
         cover = nil
         await loadSleeve()
         guard chosen.hasFrontCover else { return }
-        cover = try? await CoverArtClient().frontCover(releaseID: chosen.id)?.data
+        cover = await Self.frontCover(releaseID: chosen.id)
+    }
+
+    /// The archive's front cover. A failed download is tried once more after a pause: the
+    /// archive sends its images on to archive.org, which can be slow to answer.
+    static func frontCover(releaseID: String) async -> Data? {
+        for attempt in 1...2 {
+            do {
+                return try await CoverArtClient().frontCover(releaseID: releaseID)?.data
+            } catch {
+                guard attempt == 1, !(error is CancellationError), (try? await Task.sleep(for: retryDelay)) != nil
+                else { return nil }
+            }
+        }
+        return nil
     }
 
     /// This disc's sleeve, if its release's discs take their own (see `ReleaseCoverStore`).

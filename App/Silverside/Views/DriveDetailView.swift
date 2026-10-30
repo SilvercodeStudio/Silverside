@@ -1377,7 +1377,12 @@ enum ResultChips {
                         + (encoding.dtsDecoded.map { " · DTS \($0)" } ?? "")
                         + (encoding.deEmphasizedTracks?.isEmpty == false ? " · de-emphasized" : "")
                         + (all ? "" : " · \(encoding.files.count) tracks"),
-                    tone: all ? .good : .warning, systemImage: "music.note"))
+                    tone: all ? .good : .warning, systemImage: "music.note",
+                    // "FLAC · DTS 5.1" is not a DTS stream in FLAC: say so.
+                    help: encoding.dtsDecoded.map {
+                        "\(encoding.format.name) files of \($0) audio, decoded from the disc's DTS stream: each "
+                            + "channel is plain audio, which any player plays with no DTS decoder."
+                    }))
         }
         return chips
     }

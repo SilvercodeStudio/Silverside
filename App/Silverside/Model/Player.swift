@@ -58,12 +58,13 @@ final class Player {
     nonisolated static let dtsWithoutFFmpeg =
         "A DTS stream, which plays as static. To hear it, install ffmpeg (in Terminal: brew install ffmpeg)."
 
-    /// Plays a file: a rip's WAV file, or an encoded file in the library.
-    func play(file url: URL, title: String, subtitle: String) {
+    /// Plays a file: a rip's WAV file, or an encoded file in the library. `holdsDTS` is true
+    /// when the rip says the file holds a DTS stream; else the file's audio tells.
+    func play(file url: URL, title: String, subtitle: String, holdsDTS: Bool = false) {
         stop()
         do {
             let audio = try AVAudioFile(forReading: url)
-            if DTSFileFeeder.holdsStream(url) {
+            if holdsDTS || DTSFileFeeder.holdsStream(url) {
                 item = Item(
                     source: .file(url), title: title, subtitle: subtitle,
                     seconds: Double(audio.length) / audio.processingFormat.sampleRate)
@@ -296,14 +297,16 @@ nonisolated final class DiscFeeder: @unchecked Sendable {
             reader.unreadableRetries = 0
             reader.stop = stopToken
             var stream = DiscAudioStream(reader: reader, track: track, startingAtSector: startSector)
-            // The first piece with sound says whether the track is a DTS stream.
-            var decided = false
+            // The first second with sound says whether the track is a DTS stream (`DTSPlaybackCheck`).
+            var check = DTSPlaybackCheck.Pieces()
             while !stopToken.isStopped {
-                guard let piece = try stream.next() else { return }
-                let isLast = stream.isAtEnd
-                if !decided, piece.contains(where: { $0 != 0 }) {
-                    decided = true
-                    if DTSStream.isStream(piece, minimumFrames: 4) {
+                guard let next = try stream.next() else { return }
+                let pieces: [[UInt32]]
+                switch check.add(next, isLast: stream.isAtEnd) {
+                case .wait: continue
+                case .play(let some): pieces = some
+                case .decided(let isStream, let held):
+                    if isStream {
                         guard let ffmpeg = FFmpeg.program() else {
                             onEnd(Player.dtsWithoutFFmpeg)
                             return
@@ -313,27 +316,38 @@ nonisolated final class DiscFeeder: @unchecked Sendable {
                             onEnd: onEnd)
                         lock.withLock { playback = started }
                     }
+                    pieces = held
                 }
-                if let playback = lock.withLock({ playback }) {
-                    try playback.feed(piece)
-                    if isLast { playback.finish() }
-                    continue
-                }
-                // Wait for room in the node's queue, but not past a stop.
-                while queued.wait(timeout: .now() + .milliseconds(200)) == .timedOut {
-                    if stopToken.isStopped { return }
-                }
-                if stopToken.isStopped { return }
-                node.scheduleBuffer(Self.buffer(piece, format: format), completionCallbackType: .dataPlayedBack) {
-                    [self] _ in
-                    queued.signal()
-                    if isLast, !stopToken.isStopped { onEnd(nil) }
-                }
+                if try !play(pieces, isLastAtEnd: stream.isAtEnd) { return }
             }
         } catch is CancellationError {
         } catch {
             if !stopToken.isStopped { onEnd("\(error)") }
         }
+    }
+
+    /// Plays the pieces, through the DTS decode if the track holds a stream; the last one ends
+    /// the track if `isLastAtEnd`. False after a stop.
+    private func play(_ pieces: [[UInt32]], isLastAtEnd: Bool) throws -> Bool {
+        for (index, piece) in pieces.enumerated() {
+            let isLast = isLastAtEnd && index == pieces.count - 1
+            if let playback = lock.withLock({ playback }) {
+                try playback.feed(piece)
+                if isLast { playback.finish() }
+                continue
+            }
+            // Wait for room in the node's queue, but not past a stop.
+            while queued.wait(timeout: .now() + .milliseconds(200)) == .timedOut {
+                if stopToken.isStopped { return false }
+            }
+            if stopToken.isStopped { return false }
+            node.scheduleBuffer(Self.buffer(piece, format: format), completionCallbackType: .dataPlayedBack) {
+                [self] _ in
+                queued.signal()
+                if isLast, !stopToken.isStopped { onEnd(nil) }
+            }
+        }
+        return !stopToken.isStopped
     }
 
     /// The samples (left in the low half, right in the high half) as the engine's floats.
@@ -485,10 +499,9 @@ nonisolated final class DTSFileFeeder: @unchecked Sendable {
         self.onEnd = onEnd
     }
 
-    /// True if the file's first seconds are a DTS stream: 16-bit stereo, as a rip has it.
+    /// True if the file's first second with sound is a DTS stream: 16-bit stereo, as a rip has it.
     static func holdsStream(_ url: URL) -> Bool {
-        guard let samples = try? read(url, from: 0, frames: 2 * 44_100) else { return false }
-        return DTSStream.isStream(samples, minimumFrames: 4)
+        DTSPlaybackCheck.holdsStream { try read(url, from: $0, frames: $1) }
     }
 
     /// Up to `frames` samples of the file from `start`, as Silverside samples. Nil for a file

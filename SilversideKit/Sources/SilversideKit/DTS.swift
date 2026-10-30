@@ -448,6 +448,8 @@ public enum DTSError: Error, Equatable, CustomStringConvertible {
     case lossyStream(AudioFormat)
     /// The format cannot hold more than two channels here.
     case noSurround(AudioFormat)
+    /// The format's encoder has no layout with a place for each of these speakers.
+    case noLayout(AudioFormat, layout: SurroundPCM)
 
     public var description: String {
         switch self {
@@ -459,6 +461,9 @@ public enum DTSError: Error, Equatable, CustomStringConvertible {
                 + " format, or decode the DTS (with ffmpeg)."
         case .noSurround(let format):
             "\(format.name) files cannot hold surround sound here. Decode DTS into FLAC, Apple Lossless, AAC, or AIFF."
+        case .noLayout(let format, let layout):
+            "\(format.name) files have no channel layout for this \(layout.layoutName) decode (channel mask "
+                + "0x\(String(layout.channelMask, radix: 16, uppercase: true))). Decode it into AIFF."
         }
     }
 }
@@ -483,6 +488,14 @@ extension DiscEncoder {
         public var encoding: RipReport.Encoding?
         public var copyFiles: [URL] = []
         public var copyEncoding: RipReport.Encoding?
+        /// True if `files` hold the disc's DTS stream as it is.
+        public var holdsStream = false
+
+        /// The files for Apple's Music app, and their format: Music plays a DTS stream as
+        /// static, so an album that keeps the stream gives its decoded copy, or nothing.
+        public var musicFiles: (files: [URL], format: AudioFormat?) {
+            holdsStream ? (copyFiles, copyEncoding?.format) : (files, encoding?.format)
+        }
     }
 
     /// The format of a DTS decode: the library's, if it holds surround sound; else AAC in place
@@ -501,14 +514,14 @@ extension DiscEncoder {
         let tracks = try dtsTracks(of: disc)
         guard !tracks.isEmpty, choice == .decode || choice == .decodeOnly else {
             let (files, encoding) = try encodeWithRecord(disc, into: library)
-            return DTSEncoding(files: files, encoding: encoding)
+            return DTSEncoding(files: files, encoding: encoding, holdsStream: !tracks.isEmpty)
         }
         guard let program = ffmpeg ?? FFmpeg.program() else {
             log(
                 "DTS: ffmpeg is not installed, so the files keep the stream. Install it (brew install ffmpeg) to decode it."
             )
             let (files, encoding) = try encodeWithRecord(disc, into: library)
-            return DTSEncoding(files: files, encoding: encoding)
+            return DTSEncoding(files: files, encoding: encoding, holdsStream: true)
         }
         var decoder = self
         decoder.ffmpeg = program
@@ -532,7 +545,8 @@ extension DiscEncoder {
         decoder.images = nil
         log("DTS: the decoded copy, as \(disc.release?.title ?? "the album")\(decoder.albumSuffix!).")
         let (copyFiles, copyEncoding) = try decoder.encodeWithRecord(disc, into: library)
-        return DTSEncoding(files: files, encoding: encoding, copyFiles: copyFiles, copyEncoding: copyEncoding)
+        return DTSEncoding(
+            files: files, encoding: encoding, copyFiles: copyFiles, copyEncoding: copyEncoding, holdsStream: true)
     }
 }
 

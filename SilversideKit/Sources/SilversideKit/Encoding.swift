@@ -1176,11 +1176,13 @@ public struct DiscEncoder: Sendable {
         let matches: Bool
         switch audio {
         case .surround(let surround):
-            let decoded = try AudioEncoder.decodeSurround(url)
+            // Each speaker's channel, where the encoder put it, so a lossless file checks every value in place.
+            let decoded = try AudioEncoder.decodeSurround(url, as: surround.channelMask)
             matches =
-                decoded.channels == surround.channels
-                && (format.isLossless
-                    ? decoded.values == surround.values : abs(decoded.frameCount - surround.frameCount) < 4 * 1152)
+                decoded.map {
+                    format.isLossless
+                        ? $0.values == surround.values : abs($0.frameCount - surround.frameCount) < 4 * 1152
+                } ?? false
         case .pcm(.cd(let samples)):
             let decoded = try AudioEncoder.decode(url)
             matches = format.isLossless ? decoded == samples : abs(decoded.count - samples.count) < 4 * 1152

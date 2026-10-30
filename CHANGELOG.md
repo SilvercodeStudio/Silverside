@@ -56,6 +56,19 @@ command-line tool.
   encoded, and named only track 1. Now the rip counts as done, and Encode…
   in the banner accepts it as it is and encodes it. It no longer asks about
   HDCD, pre-emphasis, or DTS first, for an encoding that does not happen.
+- A DTS decode in quad (front and surround pairs) could not be encoded in
+  FLAC or Apple Lossless, as the check after encoding failed, and in AAC its
+  surrounds were lost or moved to the center. Now each speaker's audio
+  stays in its own channel in every format, checked with ffmpeg's decode as
+  well; where a format has no layout of just those speakers, silent channels
+  fill it out (quad in Apple Lossless is 5.0 with a silent center).
+- Playing a DTS track that starts with a few seconds of silence played the
+  stream as static, from a rip's file or from the disc. Now Silverside waits
+  for a second of sound before it decides, and an earlier rip's tracks play
+  as the rip found them.
+- Encoding an earlier rip of a DTS-CD with Add to Music added the stream to
+  Music, where it plays as static. Now Music gets the decoded copy, as after
+  a rip, or nothing if there is none.
 - The genre was "Non-Music" when that had the most votes in MusicBrainz, as
   for *The Traveling Wilburys Collection*. Now it is the music's genre with
   the most votes, and "Non-Music" only where it is the one genre.

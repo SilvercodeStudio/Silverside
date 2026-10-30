@@ -78,8 +78,7 @@ struct Encode: ParsableCommand {
                 disc, into: libraryURL, dts: hdcdCopy ? .keep : encoding.dtsChoice(settings))
             total += encoded.files.count + encoded.copyFiles.count
             // Music plays a DTS stream as static, so it gets the decode, if there is one.
-            let keepsStream = try !encoder.dtsTracks(of: disc).isEmpty && encoded.encoding?.dtsDecoded == nil
-            written += keepsStream ? encoded.copyFiles : encoded.files
+            written += encoded.musicFiles.files
             for first in [encoded.files.first, encoded.copyFiles.first].compactMap(\.self) {
                 print("  in \(first.deletingLastPathComponent().path)")
                 RipHistory().recordAlbum(in: first.deletingLastPathComponent())

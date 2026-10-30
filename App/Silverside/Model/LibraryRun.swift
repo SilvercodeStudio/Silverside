@@ -167,9 +167,11 @@ final class LibraryRun: Identifiable {
                         disc, into: library, dts: settings.dts == .ask ? .keep : settings.dts)
                     let (files, record) = (encoded.files, encoded.encoding)
                     try record?.save(inReportAt: rip.folder.appending(path: "disc.json"))
-                    if settings.addToMusic, MusicApp.reads(settings.format), !files.isEmpty {
+                    // Music plays a DTS stream as static, so it gets the decode, if there is one.
+                    let (musicFiles, musicFormat) = encoded.musicFiles
+                    if settings.addToMusic, MusicApp.reads(musicFormat ?? settings.format), !musicFiles.isEmpty {
                         do {
-                            let added = try MusicApp.add(files)
+                            let added = try MusicApp.add(musicFiles)
                             onMain { run.add("\(rip.title): added \(Format.count(added, "track")) to Music.") }
                         } catch {
                             onMain { run.add("\(rip.title): not added to Music: \(error)") }

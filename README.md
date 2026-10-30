@@ -75,7 +75,7 @@ Apple, so macOS opens them without warnings.
   the discs of a box set can each take their own sleeve.
 - **Encoding** to FLAC, Apple Lossless (ALAC), AAC, AIFF, WAV, or MP3, with
   tags and the cover embedded. Each file is checked after encoding: a
-  lossless file must decode to exactly the ripped audio. Optionally, the
+  lossless file must decoded to exactly the ripped audio. Optionally, the
   files go into the Music app (every format but FLAC).
 - **ReplayGain tags**, measured as EBU R 128 does, so players that read them
   play albums at one volume level. The raw audio samples are not changed.
@@ -132,7 +132,7 @@ Apple, so macOS opens them without warnings.
 Note that it will take longer to rip a marginal CD than a nice
 defect-free CD (no major scratches, gouges, disc rot, etc).
 
-Using a different drive might help.
+Using a different drive might help. See the in-app help for more details.
 
 Tips:
 
@@ -202,6 +202,55 @@ it), Silverside asks which one, and remembers the answer for the other discs.
 A disc that MusicBrainz does not know at all is named from its CD-Text or by
 you, and its files get no MusicBrainz IDs. Adding the release to MusicBrainz,
 then looking up the disc again, is better for everyone.
+
+## Technical Features
+
+My goal is for Silverside to be one of the most capable CD ripping apps available.
+Here's a summary of its supported formats, technical features and capabilities.
+Note that some of these require an external tool (ffmpeg or LAME) for full use.
+
+- Compact Disc Digital Audio (CDDA) - standard music CDs
+  - secure ripping with verification and error recovery; can extract
+    verified audio from marginal or damaged CDs in many cases
+  - Uses AccurateRip and CTDB for verification and repair
+- MusicBrainz disc metadata lookup, with links to submit updates or additions
+  - Cover Art Archive lookups
+- Multi-disc set handling for metadata
+  - Shared names and covers; support for different cover art for individual
+    discs or subsets of discs, e.g. "Summer Magic 1985" concert sets.
+- Detailed rip reports in Markdown text and JSON saved to output folders 
+  and internal history data. (EAC log format planned.)
+- Enhanced CDs - multisession audio discs with PC/Mac extra features
+  - mainly from the late 1990's to early 2000s
+  - The data can be extracted to a regular folder for examination, and is
+    also saved as a complete `.iso` image for hybrid filesystem (Mac HFS and PC) support.
+- Mixed-mode CDs - an earlier form of enhanced CD with data in track 1
+  - mainly from the early 1990's. Data folder and `.iso` also extracted.
+- CD-Text - song titles on disc; relatively common.
+  - Additional character blocks such as Japanese MS-JIS are supported.
+- CD+G - CD+Graphics: Mainly karaoke, but a few commercial album releases use it.
+  - Currently, the audio can be extracted. Extracting the graphics as video is planned.
+- Hidden track one audio (HTOA) identification and extraction
+- Additional technical details of the discs are logged: 
+  - disc IDs, MCN (Media Catalog Number), ISRC (International Standard Recording 
+    Code), media type (CD-R, etc.).
+- HDCD - High Definition Compatible Digital discs - hidden codes can allow expansion 
+  of 16-bit data to 20-bit on certain titles for increased dynamic range
+- pre-emphasis handling (de-emphasis) - a rare form of noise reduction on some
+  early 1980's CDs. If the ripping app and player combo doesn't reverse it, and most
+  don't, the resulting sound will be harsh and trebly, but Silverside can decode it 
+  to de-emphasized 20-bit FLAC/ALAC to sound as the artist intended. 
+   - Pre-emphasis is detected in both the TOC and Q subchannel; some tools miss the
+     subchannel codes or keep the flag only in the CUE sheet. 
+- DTS-CD - multichannel audio (often 5.1) on compact disc.
+  - Decoded with ffmpeg to multichannel FLAC or ALAC (up to 24-bit), or 
+    multichannel lossy AAC
+  - Detected automatically and supported in track preview playing
+- accurate ReplayGain tags for consistent volume levels on playback
+- Disc image and CUE sheet generation can be passed to burner apps.
+- DVD, DVD-Audio, Blu-ray and 4K UHD Blu-ray discs are recognized, but are not supported
+  for audio extraction.
+- Planned: DVD-Audio extraction (or audio from regular DVDs)
 
 ## Building from source
 

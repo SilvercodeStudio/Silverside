@@ -287,6 +287,11 @@ struct DTSTests {
         }
         #expect(record?.replayGain == nil)
         #expect(record?.dtsDecoded == nil)
+        // Music would play the stream as static, so a kept stream with no decode gives it nothing.
+        var again = DiscEncoder(format: .flac)
+        again.overwrites = true
+        let kept = try again.encodeWithRecord(disc, into: library, dts: .keep)
+        #expect(kept.holdsStream && kept.musicFiles.files.isEmpty)
         #expect(throws: DTSError.lossyStream(.aac)) {
             try DiscEncoder(format: .aac).encodeWithRecord(disc, into: library)
         }
@@ -333,6 +338,8 @@ struct DTSTests {
         let result = try DiscEncoder(format: .flac).encodeWithRecord(disc, into: library, dts: .decode)
         #expect(result.files.count == 3)
         #expect(result.copyFiles.count == 3)
+        // Music gets the decoded copy, not the stream (Apple Lossless or FLAC alike).
+        #expect(result.musicFiles.files == result.copyFiles && result.musicFiles.format == .flac)
         #expect(result.copyEncoding?.dtsDecoded == "5.1")
         #expect(result.copyEncoding?.albumSuffix == " (DTS 5.1)")
         #expect(result.copyEncoding?.replayGain?.album != nil)
@@ -352,5 +359,42 @@ struct DTSTests {
         let wrong = zip(values[lead..<(lead + expected.count)], expected).filter { $0 != $1 }.count
         #expect(wrong == 0)
         #expect(values[(lead + expected.count)...].allSatisfy { $0 == 0 })
+    }
+}
+
+/// Playback looks at the first second with sound for a DTS stream, past digital silence.
+struct DTSPlaybackCheckTests {
+    /// Seconds of digital silence, then a stream (the reviewer's case, 2026-10-29); and a quiet
+    /// intro of music, which is not one.
+    @Test func findsAStreamAfterSilence() {
+        let stream = DTSTests.samples(DTSTests.stream(frames: 100))
+        let file = [UInt32](repeating: 0, count: 3 * 44_100) + stream
+        func reader(_ samples: [UInt32]) -> (Int, Int) -> [UInt32]? {
+            { start, count in start < samples.count ? Array(samples[start..<min(start + count, samples.count)]) : nil }
+        }
+        #expect(DTSPlaybackCheck.holdsStream(read: reader(file)))
+        let quiet = (0..<(3 * 44_100)).map { UInt32(UInt16(bitPattern: Int16(($0 % 7) - 3))) * 0x1_0001 }
+        #expect(!DTSPlaybackCheck.holdsStream(read: reader(quiet + stream)))
+        #expect(!DTSPlaybackCheck.holdsStream(read: reader([UInt32](repeating: 0, count: 44_100))))
+    }
+
+    /// From the disc, a second at a time: silence plays at once, and a piece that ends just
+    /// after the stream starts waits for the next.
+    @Test func decidesFromASecondOfSound() {
+        let stream = DTSTests.samples(DTSTests.stream(frames: 100))
+        let samples = [UInt32](repeating: 0, count: 2 * 44_100 - 512) + stream
+        let pieces = stride(from: 0, to: samples.count, by: 44_100).map {
+            Array(samples[$0..<min($0 + 44_100, samples.count)])
+        }
+        var check = DTSPlaybackCheck.Pieces()
+        #expect(check.add(pieces[0], isLast: false) == .play([pieces[0]]))
+        #expect(check.add(pieces[1], isLast: false) == .wait)
+        #expect(check.add(pieces[2], isLast: false) == .decided(isStream: true, pieces: [pieces[1], pieces[2]]))
+        #expect(check.add(pieces[3], isLast: false) == .play([pieces[3]]))
+
+        // A short track decides at its end; music is no stream.
+        var music = DTSPlaybackCheck.Pieces()
+        let tone = PreEmphasisTests.sine(440, amplitude: 0.1, frames: 4000)
+        #expect(music.add(tone, isLast: true) == .decided(isStream: false, pieces: [tone]))
     }
 }

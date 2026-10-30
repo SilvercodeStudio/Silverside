@@ -663,9 +663,11 @@ struct ResultsView: View {
             TableColumn("") { track in
                 if let url = audioURL(of: track) {
                     PlayButton(player: model.player, source: .file(url)) {
+                        // The rip's file, or the album's as the disc has it, holds the stream the rip found.
                         model.player.play(
                             file: url, title: titles[track.number] ?? track.file,
-                            subtitle: report.release?.artist ?? folder.lastPathComponent)
+                            subtitle: report.release?.artist ?? folder.lastPathComponent,
+                            holdsDTS: track.dts == true && (hasAudio || report.encoding?.dtsDecoded == nil))
                     }
                 }
             }

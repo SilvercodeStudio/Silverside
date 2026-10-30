@@ -739,9 +739,7 @@ public struct DiscRip {
                         "The decoded copy: \(encoded.copyFiles.count) \(copy.format.name) files in \(copy.folder)"))
             }
             // Music plays a DTS stream as static, so it gets the decode, if there is one.
-            let keepsStream = report.dts == .stream && record?.dtsDecoded == nil
-            let (musicFiles, musicFormat) =
-                keepsStream ? (encoded.copyFiles, encoded.copyEncoding?.format) : (files, record?.format)
+            let (musicFiles, musicFormat) = encoded.musicFiles
             if options.addsToMusic, let musicFormat, MusicApp.reads(musicFormat), !musicFiles.isEmpty {
                 do {
                     events(.addedToMusic(try await blocking { try MusicApp.add(musicFiles) }))

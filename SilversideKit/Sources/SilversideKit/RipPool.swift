@@ -41,6 +41,11 @@ public enum RipPool {
         return (versions, alternatives, skipped)
     }
 
+    /// The report of a rip that was stopped, in its folder: the tracks it finished, written
+    /// after each one, so that a later rip can keep them (`accurateCopy`). The finished rip's
+    /// disc.json takes its place.
+    public static let progressFile = ".silverside-progress.json"
+
     /// A copy of a track from an earlier rip that AccurateRip says is accurate.
     public struct AccurateCopy: Sendable {
         /// The earlier rip's folder.
@@ -48,26 +53,58 @@ public enum RipPool {
         public var samples: [UInt32]
         /// The submissions for the v1 and the v2 checksum.
         public var confidence: [Int]
+        /// The track as the earlier rip's report has it, with the same CRC-32: its ISRC,
+        /// pregap, index points, and Q control bits, which only a read of the disc gives.
+        public var track: RipReport.Track
+        /// The samples at the audio's edges that the earlier rip's drive could not read.
+        public var paddedEdges: [RipReport.PaddedEdge]
     }
 
     /// The first "Track NN.wav" in `folders` that AccurateRip says is accurate, checked here
-    /// from its samples, not taken from a report: a rip keeps it in place of a read
-    /// (`DiscRipOptions.keepsAccurateTracks`). The folders are read one at a time, so only one
-    /// copy of the track is in memory. Nil if none is, or there are no AccurateRip records.
+    /// from its samples, and that the folder's report (its disc.json, or a stopped rip's
+    /// progress) describes with the same CRC-32: a rip keeps it in place of a read
+    /// (`DiscRipOptions.keepsAccurateTracks`). A copy whose drive left more of the audio's
+    /// edges as silence than `padding` (this rip's drive would) is not kept: a read gives
+    /// more of the track. Nil `padding` does not compare. The folders are read one at a
+    /// time, so only one copy of the track is in memory. Nil if none is, or there are no
+    /// AccurateRip records.
     public static func accurateCopy(
-        of track: TOC.Track, toc: TOC, in folders: [URL], records: [AccurateRipRecord]
+        of track: TOC.Track, toc: TOC, in folders: [URL], records: [AccurateRipRecord],
+        padding: [RipReport.PaddedEdge]?
     ) -> AccurateCopy? {
         guard !records.isEmpty else { return nil }
         let length = toc.sectorRange(of: track).count * CDDA.samplesPerSector
         let name = String(format: "Track %02d.wav", track.number)
         var seen = Set<String>()
         for folder in folders where seen.insert(folder.standardizedFileURL.resolvingSymlinksInPath().path).inserted {
+            let reports = ["disc.json", progressFile].compactMap {
+                try? RipReport.read(from: folder.appending(path: $0))
+            }
             let url = folder.appending(path: name)
-            guard FileManager.default.fileExists(atPath: url.path), let samples = try? WAVFile.read(url),
-                samples.count == length
+            guard !reports.isEmpty, FileManager.default.fileExists(atPath: url.path),
+                let samples = try? WAVFile.read(url), samples.count == length,
+                case .accurate(let v1, let v2) = verification(of: samples, track: track, toc: toc, records: records)
             else { continue }
-            if case .accurate(let v1, let v2) = verification(of: samples, track: track, toc: toc, records: records) {
-                return AccurateCopy(folder: folder, samples: samples, confidence: [v1, v2])
+            let crc = CRC32.hex(CRC32.checksum(of: samples[...]))
+            for report in reports {
+                guard let described = report.tracks.first(where: { $0.number == track.number && $0.crc32 == crc })
+                else { continue }
+                // Reports from before 0.9 have no padding: it follows from their drive's offset.
+                let padded =
+                    (report.paddedEdges
+                    ?? DiscRip.paddedEdges(of: toc, readOffset: report.drive.readOffset, tracks: [track.number]))
+                    .filter { $0.track == track.number }
+                if let padding,
+                    !padded.allSatisfy({ edge in
+                        padding.contains {
+                            $0.track == edge.track && $0.atEnd == edge.atEnd && $0.samples >= edge.samples
+                        }
+                    })
+                {
+                    break
+                }
+                return AccurateCopy(
+                    folder: folder, samples: samples, confidence: [v1, v2], track: described, paddedEdges: padded)
             }
         }
         return nil

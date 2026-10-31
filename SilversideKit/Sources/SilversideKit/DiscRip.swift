@@ -450,15 +450,34 @@ public struct DiscRip {
         var reports = [RipReport.Track]()
         // Each track's audio, with its suspect samples, for CTDB.
         var trackAudio = [TrackAudio]()
+        // The samples at the audio's edges that no drive gave: this drive's for the tracks it
+        // read, and the earlier rips' drives' for the tracks kept from them.
+        var keptPadding = [RipReport.PaddedEdge]()
+        func paddedEdges(of reports: [RipReport.Track]) -> [RipReport.PaddedEdge] {
+            let read = Set(reports.filter { $0.keptFrom == nil }.map(\.number))
+            return
+                (Self.paddedEdges(
+                    of: toc, readOffset: readOffset, tracks: read, readableLeadOut: reader.readableLeadOut)
+                + keptPadding).sorted { ($0.track, $0.atEnd ? 1 : 0) < ($1.track, $1.atEnd ? 1 : 0) }
+        }
+        let driveReport = RipReport.Drive(
+            vendor: identity.vendor, product: identity.product, revision: identity.revision, readOffset: readOffset,
+            offsetSource: source)
+        // The tracks finished so far, for a later rip if this one stops (`RipPool.progressFile`).
+        let progressFile = folder.appending(path: RipPool.progressFile)
         for (position, track) in selected.enumerated() {
             try stop.check()
             events(.trackStarted(track, position: position + 1, count: selected.count))
             let start = ContinuousClock.now
             // The track's rip, with the pooling and the files, on the reading thread.
-            let (audio, ripped, ripSummary) = try await blocking { [self] in
+            let (audio, ripped, ripSummary, copyPadding) = try await blocking { [self] in
+                let kept = keptTrack(
+                    track, toc: toc, folders: [folder] + options.pool, records: records,
+                    padding: Self.paddedEdges(
+                        of: toc, readOffset: readOffset, tracks: [track.number],
+                        readableLeadOut: reader.readableLeadOut))
                 var (samples, summary, audio, report) =
-                    try keptTrack(track, toc: toc, folders: [folder] + options.pool, records: records)
-                    ?? ripTrack(track, toc: toc, ripper: ripper, secure: secure, records: records)
+                    try kept?.rip ?? ripTrack(track, toc: toc, ripper: ripper, secure: secure, records: records)
                 pool(
                     track, toc: toc, records: records, samples: &samples, audio: &audio, report: &report,
                     summary: &summary)
@@ -482,7 +501,7 @@ public struct DiscRip {
                         to: folder.appending(path: TrackAudio.alternativesFileName(track: track.number)))
                 }
                 try WAVFile.write(samples, to: folder.appending(path: report.file))
-                return (audio, report, summary)
+                return (audio, report, summary, kept?.padded)
             }
             var summary = ripSummary
             var report = ripped
@@ -497,6 +516,13 @@ public struct DiscRip {
             if !audio.alternatives.isEmpty { written.insert(TrackAudio.alternativesFileName(track: track.number)) }
             written.insert(report.file)
             reports.append(report)
+            keptPadding += copyPadding ?? []
+            var progress = RipReport(
+                drive: driveReport, secure: !options.singlePass, toc: toc, tracks: reports,
+                ctdb: .init(status: .notChecked))
+            let paddedSoFar = paddedEdges(of: reports)
+            progress.paddedEdges = paddedSoFar.isEmpty ? nil : paddedSoFar
+            try? progress.write(to: progressFile)
             if let c2 = report.c2Sectors, !c2.isEmpty { summary += ", C2 errors in \(c2.count) sectors" }
             if let unreadable = report.unreadableSectors, !unreadable.isEmpty {
                 summary += ", \(unreadable.count) sectors could not be read"
@@ -616,9 +642,6 @@ public struct DiscRip {
             }
         }
 
-        let driveReport = RipReport.Drive(
-            vendor: identity.vendor, product: identity.product, revision: identity.revision, readOffset: readOffset,
-            offsetSource: source)
         var report = RipReport(drive: driveReport, secure: !options.singlePass, toc: toc, tracks: reports, ctdb: ctdb)
         report.started = Date(timeIntervalSince1970: started.timeIntervalSince1970.rounded(.down))
         report.ctdbSeconds = ctdbSeconds
@@ -627,9 +650,7 @@ public struct DiscRip {
         report.cdGraphics = options.cdGraphics
         report.hiddenTrack = hiddenTrack
         report.hiddenAreaUnreadableSectors = hiddenAreaUnreadable
-        let padded = Self.paddedEdges(
-            of: toc, readOffset: readOffset, tracks: Set(reports.map(\.number)), readableLeadOut: reader.readableLeadOut
-        )
+        let padded = paddedEdges(of: reports)
         report.paddedEdges = padded.isEmpty ? nil : padded
         report.hdcd = HDCDStatus(reports)
         report.dts = DTSStatus(reports)
@@ -639,6 +660,8 @@ public struct DiscRip {
             written.formUnion(["disc.json", "Rip Report.md"] + (options.writesEACLog ? ["Rip Report.log"] : []))
             report.files = written.sorted()
             try report.write(to: folder.appending(path: "disc.json"))
+            // The rip's report describes its tracks now.
+            try? FileManager.default.removeItem(at: progressFile)
             if !edits.isEmpty { try edits.save(inDiscJSONOf: folder) }
             var shown = report
             shown.release = named
@@ -809,7 +832,7 @@ public struct DiscRip {
     /// The edges of the disc's audio that a drive without overread cannot read, in the tracks
     /// ripped: with an offset of +N, the last N samples before each end of the audio come from
     /// past it; with -N, the first N after each start. (No drive tested overreads.)
-    static func paddedEdges(
+    public static func paddedEdges(
         of toc: TOC, readOffset: Int, tracks: Set<Int>, readableLeadOut: Range<Int>? = nil
     ) -> [RipReport.PaddedEdge] {
         guard readOffset != 0 else { return [] }
@@ -852,15 +875,18 @@ public struct DiscRip {
     }
 
     /// An earlier copy of the track that AccurateRip says is accurate, kept in place of a read
-    /// (`keepsAccurateTracks`), from the first of `folders` that has one. The ISRC, pregap,
-    /// index points, and Q control bits come from that rip's report when it has the same
-    /// audio; else (a stopped rip has no report) the ISRC and pregap are read from the Q
-    /// subchannel. Nil reads the track.
+    /// (`keepsAccurateTracks`), from the first of `folders` that has one, with the ISRC,
+    /// pregap, index points, and Q control bits from that rip's report, and the samples that
+    /// its drive left as silence at the audio's edges. Nil reads the track: no copy, or one
+    /// whose drive read less of the edges than this one does.
     private func keptTrack(
-        _ track: TOC.Track, toc: TOC, folders: [URL], records: [AccurateRipRecord]
-    ) -> (samples: [UInt32], summary: String, audio: TrackAudio, report: RipReport.Track)? {
+        _ track: TOC.Track, toc: TOC, folders: [URL], records: [AccurateRipRecord], padding: [RipReport.PaddedEdge]
+    ) -> (
+        rip: (samples: [UInt32], summary: String, audio: TrackAudio, report: RipReport.Track),
+        padded: [RipReport.PaddedEdge]
+    )? {
         guard options.keepsAccurateTracks,
-            let copy = RipPool.accurateCopy(of: track, toc: toc, in: folders, records: records)
+            let copy = RipPool.accurateCopy(of: track, toc: toc, in: folders, records: records, padding: padding)
         else { return nil }
         var report = RipReport.Track(
             number: track.number, file: String(format: "Track %02d.wav", track.number), startLBA: track.startLBA,
@@ -869,23 +895,11 @@ public struct DiscRip {
         report.tocFlags = RipReport.ControlFlags(track)
         report.accurateRipTop = .top(trackAt: toc.audioTracks.firstIndex(of: track) ?? 0, records: records)
         report.keptFrom = copy.folder.lastPathComponent
-        let crc = CRC32.hex(CRC32.checksum(of: copy.samples[...]))
-        if let earlier = try? RipReport.read(from: copy.folder.appending(path: "disc.json")),
-            let same = earlier.tracks.first(where: { $0.number == track.number && $0.crc32 == crc })
-        {
-            report.isrc = same.isrc
-            report.pregapSectors = same.pregapSectors
-            report.pregapUnknown = same.pregapUnknown
-            report.indexes = same.indexes
-            report.recordSubchannel(same.subchannel)
-        } else {
-            report.isrc = try? SubchannelCodes.isrc(of: track, in: toc, drive: drive)
-            do {
-                report.pregapSectors = try PregapFinder.pregap(of: track, in: toc, drive: drive)
-            } catch {
-                report.pregapUnknown = true
-            }
-        }
+        report.isrc = copy.track.isrc
+        report.pregapSectors = copy.track.pregapSectors
+        report.pregapUnknown = copy.track.pregapUnknown
+        report.indexes = copy.track.indexes
+        report.recordSubchannel(copy.track.subchannel)
         // In this rip's folder, suspects that an older read left cannot change an accurate track.
         if copy.folder == folders.first {
             try? FileManager.default.removeItem(
@@ -894,7 +908,7 @@ public struct DiscRip {
         let summary =
             "accurate (v1 \(copy.confidence[0]), v2 \(copy.confidence[1]) submissions) in the earlier rip in "
             + "\"\(copy.folder.lastPathComponent)\", which is kept: the track was not read again"
-        return (copy.samples, summary, TrackAudio(samples: copy.samples), report)
+        return ((copy.samples, summary, TrackAudio(samples: copy.samples), report), copy.paddedEdges)
     }
 
     /// Rips one track, once (single pass) or securely, and fills in its report.

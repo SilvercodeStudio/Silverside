@@ -491,6 +491,11 @@ final class AppModel {
         let (folders, own) = earlierCopyFolders(for: slot)
         if let found = slot.earlierCopies, found.folders == folders, found.stamp == stamp { return }
         let toc = disc.toc
+        // The drive's offset says how much of the audio's edges a read gives (`RipPool.accurateCopy`).
+        let identity = slot.identity
+        let readOffset =
+            (try? DriveProfileStore().profile(
+                vendor: identity.vendor, product: identity.product, revision: identity.revision))?.offset?.value
         let copies = await Task.detached { () -> [Int: URL] in
             let names = toc.audioTracks.map { String(format: "Track %02d.wav", $0.number) }
             let hasTracks = folders.contains { folder in
@@ -501,7 +506,10 @@ final class AppModel {
             }
             var copies = [Int: URL]()
             for track in toc.audioTracks {
-                if let copy = RipPool.accurateCopy(of: track, toc: toc, in: folders, records: records) {
+                let padding = readOffset.map { DiscRip.paddedEdges(of: toc, readOffset: $0, tracks: [track.number]) }
+                if let copy = RipPool.accurateCopy(
+                    of: track, toc: toc, in: folders, records: records, padding: padding)
+                {
                     copies[track.number] = copy.folder
                 }
             }

@@ -46,6 +46,10 @@ struct AppCommands: Commands {
                 }
             }
             .disabled(!canAddNewRelease)
+            Button("Save Data Track…") {
+                if let (rip, number) = model.dataTrackToSave { model.saveDataTrack(number, of: rip) }
+            }
+            .disabled(model.dataTrackToSave == nil)
             Button("Show Rip Log") { model.logShown = true }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
                 .disabled(model.selectedDrive?.rip == nil)

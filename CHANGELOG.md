@@ -38,6 +38,11 @@ command-line tool.
 
 ### Changed
 
+- Save Data Track… is in the Disc menu too, for the disc in the selected
+  drive, and the disc's data track chip says "saved" once a rip has it.
+  While it reads, the drive's status bar and its sidebar row show how far.
+- While a drive rips, the sidebar names its disc after the progress, as in
+  "Ripping · 27% · Cornell 5/8/77", so busy drives can be told apart.
 - `silverside drives` says on each drive's first line what disc it holds,
   with the device name for `-d`, or "no disc", and leaves a blank line
   between drives.

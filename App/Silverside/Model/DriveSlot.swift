@@ -57,6 +57,8 @@ final class DriveSlot: Identifiable {
     var earlierCopies: EarlierCopies?
     /// True while a repair or a drive test holds the drive.
     var isBusy = false
+    /// The data track that Save Data Track reads from this drive, and the fraction read.
+    var savingDataTrack: (number: Int, fraction: Double)?
     /// Which names the header and the table show.
     var namesSource = DiscInfo.Source.musicBrainz
     var rip: RipRun?

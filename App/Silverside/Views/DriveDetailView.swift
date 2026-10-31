@@ -554,16 +554,26 @@ struct AlbumHeader: View {
                 case .skip: "The rip leaves it out (Settings › Ripping)."
                 }
             let first = disc.toc.tracks.first?.kind == .data
+            // The newest rip of the disc has every data track: saved by the rip, or by Save Data Track.
+            let saved = model.recentRips.first { $0.report.toc == disc.toc.ctdbTOCString }.flatMap { rip in
+                model.missingDataTrack(of: rip) == nil ? rip : nil
+            }
+            let kind =
+                disc.toc.isEnhanced ? "Enhanced CD · data track" : first ? "Mixed Mode CD · data track" : "Data track"
             Chip(
-                text: disc.toc.isEnhanced
-                    ? "Enhanced CD · data track" : first ? "Mixed Mode CD · data track" : "Data track",
+                text: saved == nil ? kind : kind + " saved",
+                tone: saved == nil ? .neutral : .good,
                 systemImage: "externaldrive",
-                help: (disc.toc.isEnhanced
-                    ? "After the music, in a session of its own, this disc has a data track with extras for a computer. "
-                    : first
-                        ? "Track 1 of this disc is data for a computer (a Mixed Mode CD), so the music starts at track 2. "
-                            + "Most CD players skip it. "
-                        : "This disc has a data track for a computer. ") + choice)
+                help: saved.map {
+                    "The rip of \($0.date.formatted(date: .abbreviated, time: .omitted)) has this disc's data track: "
+                        + "a disc image of it, and its files, are in the rip's folder and the album folder."
+                }
+                    ?? (disc.toc.isEnhanced
+                        ? "After the music, in a session of its own, this disc has a data track with extras for a computer. "
+                        : first
+                            ? "Track 1 of this disc is data for a computer (a Mixed Mode CD), so the music starts at track 2. "
+                                + "Most CD players skip it. "
+                            : "This disc has a data track for a computer. ") + choice)
         }
     }
 
@@ -897,7 +907,9 @@ struct StatusBar: View {
                 .foregroundStyle(.secondary)
                 .padding(.leading, 8)
             }
-            if let rip = slot.rip, rip.phase != .stopped {
+            if let save = slot.savingDataTrack {
+                SheenProgressBar(fraction: save.fraction, verified: false)
+            } else if let rip = slot.rip, rip.phase != .stopped {
                 // While encoding, the bar starts again and counts the encoded tracks.
                 SheenProgressBar(
                     fraction: rip.phase == .finished ? 1 : rip.phase == .encoding ? rip.encodeFraction : rip.fraction,
@@ -958,10 +970,14 @@ struct StatusBar: View {
     }
 
     private var isWorking: Bool {
-        slot.rip?.isRunning == true || (slot.rip == nil && slot.disc?.lookup == .lookingUp)
+        slot.rip?.isRunning == true || slot.savingDataTrack != nil
+            || (slot.rip == nil && slot.disc?.lookup == .lookingUp)
     }
 
     private var statusText: String {
+        if let save = slot.savingDataTrack {
+            return "Saving data track \(save.number) · \(Int(save.fraction * 100))%"
+        }
         if let rip = slot.rip { return rip.statusText }
         guard let disc = slot.disc else { return "" }
         if disc.lookup == .lookingUp { return "Looking up the disc in MusicBrainz…" }
@@ -1443,8 +1459,8 @@ enum ResultChips {
                 Chip(
                     text: "Data track not saved", tone: .warning, systemImage: "externaldrive.badge.xmark",
                     help: failures.map { "Data track \($0.number): \($0.reason)" }.joined(separator: " ")
-                        + " The audio's rip is whole. To save the data track, put the disc in a drive and use"
-                        + " Save Data Track… in the toolbar; another drive may read it."))
+                        + " The audio's rip is whole. To save the data track, put the disc in a drive and choose"
+                        + " Disc › Save Data Track…; another drive may read it."))
         }
         if let encoding = report.encoding {
             let leftOut = encoding.silentTracksLeftOut ?? []

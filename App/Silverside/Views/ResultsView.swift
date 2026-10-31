@@ -283,11 +283,7 @@ struct ResultsView: View {
     }
 
     /// The first data track of the disc that the rip did not save, for Save Data Track.
-    private var missingDataTrack: Int? {
-        guard let toc else { return nil }
-        let saved = Set((report.dataTracks ?? []).map(\.number))
-        return toc.tracks.first { $0.kind == .data && !saved.contains($0.number) }?.number
-    }
+    private var missingDataTrack: Int? { model.missingDataTrack(of: recentRip) }
 
     /// A rip whose HDCD codes change the audio, not decoded yet, with lossless audio to decode:
     /// its WAV files, or the album's files.

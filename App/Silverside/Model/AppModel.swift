@@ -555,6 +555,26 @@ final class AppModel {
         }
     }
 
+    /// The first data track of the disc that the rip did not save. Nil if it saved them all.
+    func missingDataTrack(of rip: RecentRip) -> Int? {
+        guard let toc = try? TOC(ctdbTOCString: rip.report.toc) else { return nil }
+        let saved = Set((rip.report.dataTracks ?? []).map(\.number))
+        return toc.tracks.first { $0.kind == .data && !saved.contains($0.number) }?.number
+    }
+
+    /// What Disc › Save Data Track… saves: for a selected drive, the newest rip of its disc,
+    /// and for a selected rip, that rip, if it lacks a data track and the disc is in a free drive.
+    var dataTrackToSave: (rip: RecentRip, number: Int)? {
+        let rip =
+            selectedDrive.flatMap { slot in
+                slot.disc.flatMap { disc in recentRips.first { $0.report.toc == disc.toc.ctdbTOCString } }
+            } ?? selectedRip
+        guard let rip, !rip.isMissing, savingDataTrack[rip.file] == nil, freeDrive(with: rip) != nil,
+            let number = missingDataTrack(of: rip)
+        else { return nil }
+        return (rip, number)
+    }
+
     /// Reads a data track that the rip did not save, from the disc in a free drive
     /// (`DiscEncoder.saveDataTrack`).
     func saveDataTrack(_ number: Int, of rip: RecentRip) {
@@ -577,6 +597,7 @@ final class AppModel {
         }
         player.stop(drive: slot.id)
         slot.isBusy = true
+        slot.savingDataTrack = (number, 0)
         savingDataTrack[rip.file] = 0
         let makeDrive = slot.makeDrive
         let saver = encoder
@@ -585,13 +606,19 @@ final class AppModel {
             do {
                 _ = try await Task.detached {
                     try saver.saveDataTrack(number, reportAt: file, drive: try makeDrive()) { fraction in
-                        DispatchQueue.main.async { MainActor.assumeIsolated { self.savingDataTrack[file] = fraction } }
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated {
+                                self.savingDataTrack[file] = fraction
+                                slot.savingDataTrack = (number, fraction)
+                            }
+                        }
                     }
                 }.value
             } catch {
                 alert = AppAlert(title: "The data track could not be saved", message: "\(error)")
             }
             savingDataTrack[file] = nil
+            slot.savingDataTrack = nil
             slot.isBusy = false
             refreshRecentRips()
         }

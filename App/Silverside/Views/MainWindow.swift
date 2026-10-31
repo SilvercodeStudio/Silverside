@@ -314,13 +314,21 @@ struct SidebarView: View {
     private func subtitle(of slot: DriveSlot) -> String {
         if let rip = slot.rip, rip.isRunning {
             // The percent counts each track's first read, so it stands still while a track is read again.
+            let status: String
             switch rip.phase {
-            case .checkingCTDB: return "Checking CTDB"
-            case .encoding: return "Encoding · \(Int(rip.encodeFraction * 100))%"
+            case .checkingCTDB: status = "Checking CTDB"
+            case .encoding: status = "Encoding · \(Int(rip.encodeFraction * 100))%"
             default:
-                if rip.isRereading, let track = rip.currentTrack { return "Reading track \(track) again" }
-                return "Ripping · \(Int(rip.fraction * 100))%"
+                status =
+                    rip.isRereading && rip.currentTrack != nil
+                    ? "Reading track \(rip.currentTrack!) again" : "Ripping · \(Int(rip.fraction * 100))%"
             }
+            // The status first, so that a long title is what the row shortens.
+            return slot.disc.map { "\(status) · \($0.title)" } ?? status
+        }
+        if let save = slot.savingDataTrack {
+            return "Saving data track \(save.number) · \(Int(save.fraction * 100))%"
+                + (slot.disc.map { " · \($0.title)" } ?? "")
         }
         switch slot.discState {
         case .empty: return slot.device.otherDisc.map { "\($0.name) · not a CD" } ?? "No disc"

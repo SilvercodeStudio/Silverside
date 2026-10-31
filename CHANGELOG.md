@@ -25,6 +25,15 @@ command-line tool.
   its toolbar, with ⌘[ and ⌘], with a mouse's back and forward buttons,
   and with a swipe on the trackpad.
 
+### Fixed
+
+- A damaged track could be called accurate when it was not. Where reads
+  of a sector disagree, a secure rip tries thousands of combinations of
+  them against AccurateRip, and one of them could match a checksum that
+  only a few rips have, by chance. Now such a match counts only when both
+  of AccurateRip's checksums agree, or it has the most submissions for the
+  track. A rip also keeps an earlier rip's track only by the same rule.
+
 ## 0.9.2 (2026-10-30)
 
 ### Added

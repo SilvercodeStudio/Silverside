@@ -156,6 +156,41 @@ struct SecureRipperTests {
         if !withRecords { #expect(rip.rounds == 1 && rip.versionCounts == [138: 1, 139: 1]) }
     }
 
+    /// The search tests many combinations of versions, so one of them can hit a checksum
+    /// by chance (*Past Masters* disc 2, track 15: a v1 match to 3 submissions, where the
+    /// pressing has 200). Here a wrong combination, sector 500 wrong, has a checksum in
+    /// AccurateRip, and the true audio's checksum is not known. The search keeps such a
+    /// match only when both of its checksums match, or it is the track's best-supported one.
+    @Test(arguments: [3, 200])
+    func asksMoreOfAMatchTheSearchFinds(decoyConfidence: Int) throws {
+        let (toc, samples, record) = try TrackRipperTests().disc()
+        let track = toc.tracks[1]
+        let sectors = toc.sectorRange(of: track)
+        var decoy = Array(samples[(sectors.lowerBound * 588)..<(sectors.upperBound * 588)])
+        for index in ((500 - sectors.lowerBound) * 588)..<((501 - sectors.lowerBound) * 588) {
+            decoy[index] ^= 0x0001_0001
+        }
+        let checksum = AccurateRipAccumulator.checksum(of: decoy[...], isFirstTrack: false, isLastTrack: false)
+        var pressing = record
+        pressing.tracks[1].confidence = 200
+        pressing.tracks[1].checksum &+= 1
+        var few = record
+        few.tracks[1].confidence = decoyConfidence
+        few.tracks[1].checksum = checksum.v1
+        let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: Self.driveOffset)
+        drive.unstableSectors = [500, 620]
+        let reader = AudioReader(drive: drive, toc: toc, readOffset: Self.driveOffset, canOverread: false)
+        var secure = SecureRipper(ripper: TrackRipper(reader: reader, records: [pressing, few]))
+        secure.cacheFlushSectors = 300
+        let rip = try secure.rip(track)
+        if decoyConfidence == 200 {
+            #expect(rip.status == .accurate(v1Confidence: 200, v2Confidence: 0))
+        } else {
+            #expect(rip.status == .suspect)
+            #expect(rip.unresolvedSectors == rip.suspectSectors)
+        }
+    }
+
     @Test func joinsNearbySectorsIntoRuns() {
         #expect(SecureRipper.runs(of: [1, 2, 4, 8, 9, 20]) == [1..<5, 8..<10, 20..<21])
         #expect(SecureRipper.runs(of: []) == [])

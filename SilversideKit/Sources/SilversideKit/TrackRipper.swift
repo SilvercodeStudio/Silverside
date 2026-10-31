@@ -7,6 +7,16 @@ public enum AccurateRipVerification: Equatable, Sendable {
     case notAccurate
     /// The database does not have the disc, or it was not checked.
     case notChecked
+
+    /// True for a match that holds up where many candidates were tested (the secure ripper's
+    /// search of sector versions), or the audio came from such a test (an earlier rip's
+    /// file): both checksums match, or the checksum is one of the track's best-supported.
+    /// One of thousands of wrong combinations can match a 32-bit checksum by chance, most
+    /// likely one of the many that few rips have.
+    public func isProof(among known: [AccurateRipRecord.Track]) -> Bool {
+        guard case .accurate(let v1, let v2) = self else { return false }
+        return (v1 > 0 && v2 > 0) || max(v1, v2) >= (known.map(\.confidence).max() ?? 0)
+    }
 }
 
 /// One ripped track.

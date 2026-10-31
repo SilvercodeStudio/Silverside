@@ -224,6 +224,29 @@ struct KeptTracksTests {
         #expect(report.paddedEdges?.first { $0.track == 3 }?.samples == silence)
     }
 
+    /// A copy may come from the secure ripper's search, which can match a checksum that few
+    /// rips have by chance. It is kept only if the match is proof: here its v1 checksum
+    /// matches alone, and is kept only where it is the track's best-supported.
+    @Test(arguments: [(3, false), (200, true)])
+    func keepsACopyOnlyIfItsMatchIsProof(confidence: Int, kept: Bool) throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (toc, samples) = try disc()
+        try writeRip(of: [2], in: root, readOffset: 6)
+        let track = toc.audioTracks[1]
+        let range = toc.sectorRange(of: track)
+        let audio = Array(samples[(range.lowerBound * 588)..<(range.upperBound * 588)])
+        let checksum = AccurateRipAccumulator.checksum(of: audio[...], isFirstTrack: false, isLastTrack: false)
+        func record(_ confidence: Int, _ checksum: UInt32) -> AccurateRipRecord {
+            AccurateRipRecord(
+                discID: toc.accurateRipDiscID,
+                tracks: (0..<3).map { _ in .init(confidence: confidence, checksum: checksum, frame450Checksum: 0) })
+        }
+        let records = [record(200, checksum.v1 &+ 1), record(confidence, checksum.v1)]
+        let copy = RipPool.accurateCopy(of: track, toc: toc, in: [root], records: records, padding: nil)
+        #expect((copy != nil) == kept)
+    }
+
     /// With keeping off (Read every track again, `--read-all`), every track is read.
     @Test func readsEveryTrackWhenAsked() async throws {
         let root = try makeRoot()

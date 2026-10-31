@@ -61,8 +61,9 @@ public enum RipPool {
     }
 
     /// The first "Track NN.wav" in `folders` that AccurateRip says is accurate, checked here
-    /// from its samples, and that the folder's report (its disc.json, or a stopped rip's
-    /// progress) describes with the same CRC-32: a rip keeps it in place of a read
+    /// from its samples by the rule for a search's match (`AccurateRipVerification.isProof`:
+    /// the copy may come from one), and that the folder's report (its disc.json, or a stopped
+    /// rip's progress) describes with the same CRC-32: a rip keeps it in place of a read
     /// (`DiscRipOptions.keepsAccurateTracks`). A copy whose drive left more of the audio's
     /// edges as silence than `padding` (this rip's drive would) is not kept: a read gives
     /// more of the track. Nil `padding` does not compare. The folders are read one at a
@@ -75,6 +76,7 @@ public enum RipPool {
         guard !records.isEmpty else { return nil }
         let length = toc.sectorRange(of: track).count * CDDA.samplesPerSector
         let name = String(format: "Track %02d.wav", track.number)
+        let known = toc.audioTracks.firstIndex(of: track).map { records.entries(forTrackAt: $0) } ?? []
         var seen = Set<String>()
         for folder in folders where seen.insert(folder.standardizedFileURL.resolvingSymlinksInPath().path).inserted {
             let reports = ["disc.json", progressFile].compactMap {
@@ -82,9 +84,10 @@ public enum RipPool {
             }
             let url = folder.appending(path: name)
             guard !reports.isEmpty, FileManager.default.fileExists(atPath: url.path),
-                let samples = try? WAVFile.read(url), samples.count == length,
-                case .accurate(let v1, let v2) = verification(of: samples, track: track, toc: toc, records: records)
+                let samples = try? WAVFile.read(url), samples.count == length
             else { continue }
+            let verified = verification(of: samples, track: track, toc: toc, records: records)
+            guard verified.isProof(among: known), case .accurate(let v1, let v2) = verified else { continue }
             let crc = CRC32.hex(CRC32.checksum(of: samples[...]))
             for report in reports {
                 guard let described = report.tracks.first(where: { $0.number == track.number && $0.crc32 == crc })

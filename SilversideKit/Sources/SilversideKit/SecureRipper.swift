@@ -397,8 +397,9 @@ public struct SecureRipper {
         func search(from first: Int, changes: Int, checksum: AccurateRipChecksum) -> Bool {
             if changes == 0 {
                 budget -= 1
+                // Thousands of combinations are tested, so a match must be proof (`isProof`).
                 return (knownChecksums.contains(checksum.v1) || knownChecksums.contains(checksum.v2))
-                    && status(checksum) != nil
+                    && TrackRipper.verification(of: checksum, known: known).isProof(among: known)
             }
             for choice in first..<choices.count {
                 for version in 1..<choices[choice].versions.count {

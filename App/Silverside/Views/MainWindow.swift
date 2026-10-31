@@ -241,7 +241,7 @@ struct SidebarView: View {
                 ForEach(model.drives) { slot in
                     SidebarRow(
                         title: slot.name, subtitle: subtitle(of: slot), systemImage: icon(of: slot),
-                        tone: tone(of: slot)
+                        tone: tone(of: slot), isRipping: slot.rip?.isRunning == true, spins: isReading(slot)
                     )
                     .tag(SidebarItem.drive(slot.id))
                 }
@@ -338,6 +338,15 @@ struct SidebarView: View {
         slot.disc == nil ? "opticaldiscdrive" : "opticaldisc"
     }
 
+    /// True while the drive reads the disc: a rip's reads, a repair's re-reads, a drive test, or
+    /// a track that plays from the disc. Not while a rip checks CTDB or encodes.
+    private func isReading(_ slot: DriveSlot) -> Bool {
+        if slot.isBusy { return true }
+        if let rip = slot.rip, rip.isRunning, rip.phase == .starting || rip.phase == .ripping { return true }
+        if case .disc(let id, _) = model.player.item?.source, id == slot.id { return model.player.isPlaying }
+        return false
+    }
+
     private func tone(of slot: DriveSlot) -> Chip.Tone {
         if let rip = slot.rip, rip.isRunning { return .good }
         return slot.disc == nil ? .neutral : .good
@@ -380,6 +389,14 @@ struct SidebarRow: View {
     var subtitle: String
     var systemImage: String
     var tone: Chip.Tone
+    /// A rip is under way: the icon takes the progress bar's colors, around the disc.
+    var isRipping = false
+    /// The drive reads the disc: the icon turns.
+    var spins = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// One turn of the disc, in seconds.
+    private static let turn = 2.0
 
     var body: some View {
         Label {
@@ -388,7 +405,21 @@ struct SidebarRow: View {
                 Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
         } icon: {
-            Image(systemName: systemImage).foregroundStyle(color)
+            if isRipping || spins {
+                // The angle comes from the clock, so a row that is drawn again keeps turning
+                // smoothly; paused, the timeline draws nothing more.
+                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !spins || reduceMotion)) { context in
+                    let seconds = context.date.timeIntervalSinceReferenceDate
+                    Image(systemName: systemImage)
+                        .foregroundStyle(isRipping ? AnyShapeStyle(Theme.sheenRing) : AnyShapeStyle(color))
+                        .rotationEffect(
+                            .degrees(
+                                spins && !reduceMotion
+                                    ? seconds.truncatingRemainder(dividingBy: Self.turn) / Self.turn * 360 : 0))
+                }
+            } else {
+                Image(systemName: systemImage).foregroundStyle(color)
+            }
         }
     }
 

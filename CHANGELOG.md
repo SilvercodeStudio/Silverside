@@ -38,6 +38,10 @@ command-line tool.
 
 ### Changed
 
+- In the sidebar, a drive's disc takes the progress bar's colors while it
+  rips, and turns while the drive reads: a rip, a repair's re-reads, a drive
+  test, or a track that plays from the disc. With Reduce Motion on, it stays
+  still.
 - The disc's logo beside the Rip button sits on glass, as on an earlier rip,
   so that the tracks under it do not show through.
 - Tracks that AccurateRip has no checksum for because they are silence are

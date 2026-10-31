@@ -114,6 +114,70 @@ struct KeptTracksTests {
         #expect(markdown.contains("| kept |") && markdown.contains("Track 1 was not read again"))
     }
 
+    /// A rip that keeps a stopped rip's tracks, and is stopped too, leaves the tracks that it
+    /// did not get to in the progress: a third rip still keeps both.
+    @Test func keepsTracksAcrossTwoStoppedRips() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(try await rip(root: root, stopsAfter: 2) == nil)
+        #expect(try await rip(root: root, stopsAfter: 1) == nil)
+        let folder = root.appending(path: "Silverside \(try disc().toc.musicBrainzDiscID)")
+        let progress = try RipReport.read(from: folder.appending(path: RipPool.progressFile))
+        #expect(progress.tracks.map(\.number) == [1, 2])
+        #expect(progress.tracks.map(\.keptFrom) == [folder.lastPathComponent, nil])
+        let (report, _) = try #require(await rip(root: root))
+        #expect(report.tracks.map(\.keptFrom) == [folder.lastPathComponent, folder.lastPathComponent, nil])
+    }
+
+    /// Every track a stopped rip finished is kept, not only the first: the progress keeps the
+    /// earlier entries while the new rip goes through them.
+    @Test func keepsEveryFinishedTrackOnResume() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(try await rip(root: root, stopsAfter: 2) == nil)
+        let folder = root.appending(path: "Silverside \(try disc().toc.musicBrainzDiscID)")
+        let (report, _) = try #require(await rip(root: root))
+        #expect(report.tracks.map(\.keptFrom) == [folder.lastPathComponent, folder.lastPathComponent, nil])
+        #expect(report.tracks[1].fullReads == 0)
+    }
+
+    /// A report with no padding is taken at its word where the copy has audio at the edge: an
+    /// Enhanced CD's tail that a +103 drive read through the session's lead-out is kept by a
+    /// drive that cannot read there, and the rip reports no padding for it.
+    @Test(arguments: [6, 103])
+    func keepsAnEnhancedCDsTailReadThroughTheLeadOut(offset: Int) async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (toc, samples) = try EnhancedCDTests.disc()
+        let folder = root.appending(path: "enhanced disc")
+        var settings = Settings()
+        settings.rips = root.path
+        settings.dataTracks = .skip
+        func run(offset: Int, readsLeadOut: Bool) async throws -> DiscRipResult {
+            let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: offset)
+            drive.readsSessionLeadOut = readsLeadOut
+            var options = DiscRipOptions(settings: settings)
+            options.folder = folder
+            options.readOffset = offset
+            var rip = DiscRip(
+                drive: drive, identity: .init(vendor: "SIM", product: "DRIVE", revision: "1"),
+                settings: settings, options: options,
+                profiles: try DriveProfileStore(url: root.appending(path: "profiles.json")))
+            rip.webClient = await DiscRipTests.web(toc: toc, samples: samples).client(in: root.appending(path: "cache"))
+            return try await rip.run()
+        }
+        let first = try await run(offset: 103, readsLeadOut: true)
+        #expect(first.report.isVerified && first.report.paddedEdges == nil)
+        let last = toc.audioTracks.last!.number
+        let file = folder.appending(path: String(format: "Track %02d.wav", last))
+        let before = try WAVFile.read(file)
+        #expect(before.suffix(103).allSatisfy { $0 != 0 })
+        let again = try await run(offset: offset, readsLeadOut: false)
+        #expect(again.report.tracks.last?.keptFrom != nil)
+        #expect(try WAVFile.read(file).suffix(103) == before.suffix(103))
+        #expect(again.report.paddedEdges == nil)
+    }
+
     /// Track files that no report describes are read again: a read gives what only the disc
     /// has, such as the Q subchannel's control bits and index points.
     @Test func readsTracksThatNoReportDescribes() async throws {

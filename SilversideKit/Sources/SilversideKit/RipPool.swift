@@ -89,11 +89,9 @@ public enum RipPool {
             for report in reports {
                 guard let described = report.tracks.first(where: { $0.number == track.number && $0.crc32 == crc })
                 else { continue }
-                // Reports from before 0.9 have no padding: it follows from their drive's offset.
                 let padded =
-                    (report.paddedEdges
-                    ?? DiscRip.paddedEdges(of: toc, readOffset: report.drive.readOffset, tracks: [track.number]))
-                    .filter { $0.track == track.number }
+                    report.paddedEdges.map { $0.filter { $0.track == track.number } }
+                    ?? Self.paddedEdges(of: samples, track: track, toc: toc, readOffset: report.drive.readOffset)
                 if let padding,
                     !padded.allSatisfy({ edge in
                         padding.contains {
@@ -108,6 +106,20 @@ public enum RipPool {
             }
         }
         return nil
+    }
+
+    /// The padding of a copy whose report lists none: none at all, or (before 0.9) not known.
+    /// It can be no more than its drive's offset allows, and no more than the silence the
+    /// copy has at that edge, so an edge whose audio is there (an Enhanced CD's tail read
+    /// through the session's lead-out) counts as not padded.
+    static func paddedEdges(
+        of samples: [UInt32], track: TOC.Track, toc: TOC, readOffset: Int
+    ) -> [RipReport.PaddedEdge] {
+        DiscRip.paddedEdges(of: toc, readOffset: readOffset, tracks: [track.number]).compactMap { edge in
+            let silence = (edge.atEnd ? Array(samples.reversed()) : samples).prefix { $0 == 0 }.count
+            let samples = min(edge.samples, silence)
+            return samples > 0 ? RipReport.PaddedEdge(track: edge.track, samples: samples, atEnd: edge.atEnd) : nil
+        }
     }
 
     /// How a version of an audio track compares with AccurateRip.

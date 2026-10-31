@@ -38,6 +38,12 @@ command-line tool.
 
 ### Changed
 
+- `silverside drives` says on each drive's first line what disc it holds,
+  with the device name for `-d`, or "no disc", and leaves a blank line
+  between drives.
+- When the Cover Art Archive cannot send a release's images, its picker says
+  so in plain words, with what to do, and an image whose thumbnail did not
+  come shows a mark in place of a spinner that never stops.
 - In the sidebar, a drive's disc takes the progress bar's colors while it
   rips, and turns while the drive reads: a rip, a repair's re-reads, a drive
   test, or a track that plays from the disc. With Reduce Motion on, it stays
@@ -54,6 +60,11 @@ command-line tool.
 
 ### Fixed
 
+- A short gap of tape hiss before track 1 (less than a second, and quieter
+  than about -40 dBFS) was kept as a hidden track. It is now left out, as a
+  CD player skips it; a hidden song is longer, or clearly audible.
+- A cover you gave a disc was lost when its rip was stopped and the disc went
+  in again. It is now kept for the release as soon as you give it.
 - A disc whose cover failed to download as it went in kept showing no cover,
   even after choosing the main front in Cover Art Archive…. The download is
   now tried once more after a few seconds, and choosing the main front gets

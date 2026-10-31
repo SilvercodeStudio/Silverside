@@ -20,6 +20,8 @@ struct CoverArtPickerSheet: View {
 
     @State private var images: [CoverArtImage]?
     @State private var thumbnails = [String: Data]()
+    /// The images whose thumbnail could not be downloaded.
+    @State private var missingThumbnails = Set<String>()
     @State private var failure: String?
     @State private var selected: String?
     @State private var downloading = false
@@ -98,6 +100,13 @@ struct CoverArtPickerSheet: View {
             Group {
                 if let data = thumbnails[image.id], let picture = NSImage(data: data) {
                     Image(nsImage: picture).resizable().aspectRatio(contentMode: .fit)
+                } else if missingThumbnails.contains(image.id) {
+                    Color.secondary.opacity(0.12).overlay {
+                        Image(systemName: "photo.badge.exclamationmark").font(.title).foregroundStyle(.secondary)
+                    }
+                    .help(
+                        "The Cover Art Archive did not send this image's thumbnail. Use This Cover tries the full image."
+                    )
                 } else {
                     Color.secondary.opacity(0.12).overlay { ProgressView().controlSize(.small) }
                 }
@@ -166,13 +175,26 @@ struct CoverArtPickerSheet: View {
                 }
                 for _ in 0..<4 { add() }
                 while let (id, data) = await group.next() {
-                    if let data { thumbnails[id] = data }
+                    if let data { thumbnails[id] = data } else { missingThumbnails.insert(id) }
                     add()
                 }
             }
         } catch {
-            failure = "The Cover Art Archive could not be reached: \(error)"
+            failure = Self.problem(error, with: "The images could not be listed")
         }
+    }
+
+    /// Why the archive gave nothing, for people: "The images could not be listed: …".
+    static func problem(_ error: any Error, with start: String) -> String {
+        if case .httpStatus(let status, _) = error as? OnlineLookupError, status >= 500 {
+            return start + ": the Cover Art Archive answered with an error (HTTP \(status)). Its images are stored "
+                + "at the Internet Archive (archive.org), which sometimes cannot send a release's images for hours "
+                + "or days. Try again later, or use your own image: drop it on the cover, or choose Choose Cover…."
+        }
+        if let error = error as? URLError, error.code == .timedOut {
+            return start + ": the Cover Art Archive did not answer in time. Try again later."
+        }
+        return start + ": " + ((error as? URLError)?.localizedDescription ?? "\(error)")
     }
 
     /// Downloads the chosen image at full size; the main front is the archive's own choice.
@@ -194,7 +216,7 @@ struct CoverArtPickerSheet: View {
                 choose(.image(cover))
                 dismiss()
             } catch {
-                failure = "The image could not be downloaded: \(error)"
+                failure = Self.problem(error, with: "The image could not be downloaded")
             }
         }
     }

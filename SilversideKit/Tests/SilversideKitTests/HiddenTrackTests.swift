@@ -29,6 +29,22 @@ struct HiddenTrackTests {
         #expect(try HiddenTrackRip.rip(reader: reader) == nil)
     }
 
+    /// A gap under a second of quiet noise (tape hiss, peak 56, as on *Let's Get It On*) is not
+    /// a hidden track; the same noise for longer, or a short gap that is clearly audible, is.
+    @Test(arguments: [(32, 56, false), (32, 400, true), (100, 56, true)])
+    func keepsAShortGapOnlyIfItIsAudible(sectors: Int, peak: Int, kept: Bool) throws {
+        let toc = try TOC(audioTrackStarts: [sectors, sectors + 300], leadOutLBA: sectors + 600)
+        var generator = SplitMix64(state: 9)
+        var samples = (0..<((sectors + 600) * 588)).map { _ in UInt32.random(in: .min ... .max, using: &generator) }
+        for index in 0..<(sectors * 588) {
+            let value = UInt32(UInt16(bitPattern: Int16(Int.random(in: -peak...peak, using: &generator))))
+            samples[index] = value | value << 16
+        }
+        let reader = AudioReader(
+            drive: SimulatedDrive(toc: toc, samples: samples), toc: toc, readOffset: 0, canOverread: false)
+        #expect((try HiddenTrackRip.rip(reader: reader, cacheFlushSectors: 50) != nil) == kept)
+    }
+
     /// On a mixed-mode disc, the audio before the first audio track is a data track, not a hidden track.
     @Test func leavesADataTrackAlone() throws {
         let toc = try TOC(

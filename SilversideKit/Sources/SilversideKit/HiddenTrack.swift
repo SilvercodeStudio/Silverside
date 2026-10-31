@@ -32,6 +32,18 @@ public struct HiddenTrackRip: Sendable {
     /// Below this peak, the gap is silence (or dither), not a hidden track.
     public static let silencePeak = 32
 
+    /// A gap shorter than this (1 second) that is not clearly audible is noise, not a hidden
+    /// track: a hidden song lasts much longer, and is meant to be heard. *Let's Get It On*
+    /// (Motown, 1998) has 32 sectors of tape hiss before track 1, peak 56.
+    public static let shortGapSectors = CDDA.sectorsPerSecond
+    /// About -40 dBFS: the peak that a short gap needs to be a hidden track.
+    public static let audiblePeak = 328
+
+    /// True if a gap of `sectors` with this peak is silence or noise, not a hidden track.
+    static func isSilence(peak: Int, sectors: Int) -> Bool {
+        peak < silencePeak || (sectors < shortGapSectors && peak < audiblePeak)
+    }
+
     /// Reads the part of the disc before track 1, and returns it if it is audio, not
     /// silence, or if sectors could not be read (`isUnreadable` tells which). Nil if track 1
     /// starts at LBA 0, or the gap is silent, or track 1 is a data track (a mixed-mode disc),
@@ -46,7 +58,10 @@ public struct HiddenTrackRip: Sendable {
         let firstRead = try reader.read(positions, withC2: false)
         func peak(_ read: AudioReader.Read) -> Int { read.samples.reduce(0) { max($0, magnitude(of: $1)) } }
         // A failed read that was replaced by zero is not evidence of a silent gap.
-        if firstRead.unreadable.isEmpty && peak(firstRead) < silencePeak { return nil }
+        func isSilence(_ read: AudioReader.Read) -> Bool {
+            Self.isSilence(peak: peak(read), sectors: first.startLBA)
+        }
+        if firstRead.unreadable.isEmpty && isSilence(firstRead) { return nil }
         var reads = [firstRead]
         var incomplete = false
         while reads.count < max(1, maximumReads) {
@@ -63,7 +78,7 @@ public struct HiddenTrackRip: Sendable {
             if independent, next.unreadable.isEmpty,
                 reads.contains(where: { $0.unreadable.isEmpty && $0.samples == next.samples })
             {
-                if peak(next) < silencePeak { return nil }
+                if isSilence(next) { return nil }
                 return HiddenTrackRip(samples: next.samples, peak: peak(next), readsAgree: true, reads: reads.count + 1)
             }
             reads.append(next)
@@ -71,7 +86,7 @@ public struct HiddenTrackRip: Sendable {
         // Keep the best available audio, with the failures explicit, until a later rip can confirm it.
         let best = reads.min { $0.unreadable.count < $1.unreadable.count }!
         // A whole read of silence is silence, as for the first read.
-        if best.unreadable.isEmpty && peak(best) < silencePeak { return nil }
+        if best.unreadable.isEmpty && isSilence(best) { return nil }
         return HiddenTrackRip(
             samples: best.samples, peak: peak(best), readsAgree: false, reads: reads.count,
             unreadableSamples: best.unreadable, cacheFlushIncomplete: incomplete)

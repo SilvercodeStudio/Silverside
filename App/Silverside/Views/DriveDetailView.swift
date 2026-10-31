@@ -60,7 +60,7 @@ struct DriveDetailView: View {
                 if let path = UserDefaults.standard.string(forKey: "coverFile"), !path.isEmpty {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                         if let data = CoverDrop.imageData(from: URL(filePath: path)) {
-                            slot.disc?.userCover = CoverImage(data: data)
+                            slot.disc?.useCover(CoverImage(data: data))
                         }
                     }
                 }
@@ -236,7 +236,7 @@ struct AlbumHeader: View {
                 }
                 .onDrop(of: [.fileURL, .image], isTargeted: $coverTargeted) { providers in
                     guard slot.rip?.isRunning != true, let provider = providers.first else { return false }
-                    CoverDrop.load(provider) { slot.disc?.userCover = CoverImage(data: $0) }
+                    CoverDrop.load(provider) { slot.disc?.useCover(CoverImage(data: $0)) }
                     return true
                 }
                 .onTapGesture {
@@ -273,7 +273,7 @@ struct AlbumHeader: View {
                     if let release = disc.release {
                         CoverArtPickerSheet(release: release, disc: disc.shownMedium?.position) { choice in
                             switch choice {
-                            case .image(let image?): slot.disc?.userCover = image
+                            case .image(let image?): slot.disc?.useCover(image)
                             case .image(nil): useArchiveCover()
                             case .discSleeves:
                                 try? ReleaseCoverStore().useDiscSleeves(true, releaseID: release.id)
@@ -508,8 +508,9 @@ struct AlbumHeader: View {
         slot.disc?.userCover = nil
         slot.disc?.keptCover = nil
         slot.disc?.sleeve = nil
+        // A disc with no release keeps its cover by its own manual release (`DiscInfo.useCover`).
+        if let id = disc.baseRelease?.id { try? ReleaseCoverStore().forget(releaseID: id) }
         guard let release = disc.release else { return }
-        try? ReleaseCoverStore().forget(releaseID: release.id)
         // The download when the disc went in can have failed; then the cover comes now.
         if disc.cover == nil, release.hasFrontCover {
             Task {
@@ -523,7 +524,7 @@ struct AlbumHeader: View {
 
     private func chooseCover() {
         let message = "Choose an image for the cover. JPEG and PNG are kept as they are; other formats become JPEG."
-        if let data = CoverDrop.choose(message: message) { slot.disc?.userCover = CoverImage(data: data) }
+        if let data = CoverDrop.choose(message: message) { slot.disc?.useCover(CoverImage(data: data)) }
     }
 
     /// A binding to one album-level edit: the original value clears the edit.

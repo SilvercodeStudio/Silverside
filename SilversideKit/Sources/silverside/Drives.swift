@@ -92,39 +92,13 @@ struct Drives: ParsableCommand {
         if drives.isEmpty {
             print("No optical drives found.")
         }
-        for drive in drives {
+        for (index, drive) in drives.enumerated() {
             let name = [drive.vendor, drive.product].filter { !$0.isEmpty }.joined(separator: " ")
             let connection = [drive.location, drive.interconnect].filter { !$0.isEmpty }.joined(separator: " ")
-            print("\(name) (firmware \(drive.revision), \(connection))")
-            if let bsdName = drive.discBSDName {
-                // macOS already has the TOC, so this does not spin the disc.
-                if let toc = try? IOKitDrive(bsdName: bsdName).readTOC() {
-                    let seconds =
-                        toc.audioTracks.reduce(0) { $0 + toc.sectorRange(of: $1).count } / CDDA.sectorsPerSecond
-                    let data = toc.tracks.count - toc.audioTracks.count
-                    guard !toc.audioTracks.isEmpty else {
-                        print("  CD: \(bsdName), a data disc (\(data) data track\(data == 1 ? "" : "s")), no audio")
-                        continue
-                    }
-                    print(
-                        "  CD: \(bsdName), \(toc.audioTracks.count) audio tracks, "
-                            + String(format: "%d:%02d", seconds / 60, seconds % 60)
-                            + (data > 0 ? ", and \(data) data track\(data == 1 ? "" : "s")" : ""))
-                    // The release an earlier lookup found, from the cache: no request.
-                    if let release = ReleaseLookup.cachedRelease(toc: toc) {
-                        let disc = release.medium(for: toc).flatMap {
-                            release.media.count > 1 ? " (disc \($0.position) of \(release.media.count))" : nil
-                        }
-                        print("  \(release.artist) - \(release.title)" + (disc ?? ""))
-                    }
-                } else {
-                    print("  CD: \(bsdName) (its TOC cannot be read)")
-                }
-            } else if let other = drive.otherDisc, let bsdName = drive.otherDiscBSDName {
-                print("  \(other.name): \(bsdName), not a CD")
-            } else {
-                print("  No CD")
-            }
+            // The first line says what `-d` needs: the disc in the drive, by its device, or none.
+            if index > 0 { print() }
+            print("\(name): \(Self.disc(in: drive))")
+            print("  Firmware \(drive.revision)" + (connection.isEmpty ? "" : ", \(connection)"))
             let profile = store.profile(vendor: drive.vendor, product: drive.product, revision: drive.revision)
             if let (offset, source) = profile.offset {
                 print("  Read offset: \(offset.signedDescription) (\(source.description))")
@@ -140,5 +114,33 @@ struct Drives: ParsableCommand {
                 print("  Cache flush before re-reads: \(profile.cacheFlushSectors) sectors")
             }
         }
+    }
+
+    /// The disc in the drive, for its first line: "disk9, Dave Matthews Band - Crash (12 audio
+    /// tracks, 68:51)", or "no disc".
+    static func disc(in drive: OpticalDrive) -> String {
+        guard let bsdName = drive.discBSDName else {
+            if let other = drive.otherDisc, let bsdName = drive.otherDiscBSDName {
+                return "\(bsdName), \(other.name), not a CD"
+            }
+            return "no disc"
+        }
+        // macOS already has the TOC, so this does not spin the disc.
+        guard let toc = try? IOKitDrive(bsdName: bsdName).readTOC() else {
+            return "\(bsdName), a CD whose TOC cannot be read"
+        }
+        let data = toc.tracks.count - toc.audioTracks.count
+        let dataTracks = "\(data) data track\(data == 1 ? "" : "s")"
+        guard !toc.audioTracks.isEmpty else { return "\(bsdName), a data disc (\(dataTracks)), no audio" }
+        let seconds = toc.audioTracks.reduce(0) { $0 + toc.sectorRange(of: $1).count } / CDDA.sectorsPerSecond
+        let tracks =
+            "\(toc.audioTracks.count) audio track\(toc.audioTracks.count == 1 ? "" : "s"), "
+            + String(format: "%d:%02d", seconds / 60, seconds % 60) + (data > 0 ? ", and \(dataTracks)" : "")
+        // The release an earlier lookup found, from the cache: no request.
+        guard let release = ReleaseLookup.cachedRelease(toc: toc) else { return "\(bsdName), a CD (\(tracks))" }
+        let disc = release.medium(for: toc).flatMap {
+            release.media.count > 1 ? ", disc \($0.position) of \(release.media.count)" : nil
+        }
+        return "\(bsdName), \(release.artist) - \(release.title)\(disc ?? "") (\(tracks))"
     }
 }

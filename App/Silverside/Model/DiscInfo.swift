@@ -296,6 +296,8 @@ struct DiscInfo {
         medium = made.media.first
         edits = MetadataEdits()
         namesFromEarlierRip = false
+        // A cover given before a rip that did not finish (`useCover`).
+        if userCover == nil { userCover = ReleaseCoverStore().cover(forReleaseID: made.id) }
         let toc = toc
         guard
             let earlier = await Task.detached(operation: { RipHistory().newestNamedRip(of: toc) }).value,
@@ -310,6 +312,14 @@ struct DiscInfo {
         {
             userCover = CoverImage(data: data)
         }
+    }
+
+    /// A cover the user dropped or chose: shown now, and kept at once for the release (with
+    /// none, for the disc's own manual release), so that it is there again when the disc goes
+    /// in again, even if no rip finished to save it.
+    mutating func useCover(_ cover: CoverImage) {
+        userCover = cover
+        if let id = baseRelease?.id { try? ReleaseCoverStore().remember(cover, forReleaseID: id) }
     }
 
     private mutating func use(_ chosen: MusicBrainzRelease) async {

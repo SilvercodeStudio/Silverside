@@ -465,6 +465,11 @@ public struct DiscRip {
             offsetSource: source)
         // The tracks finished so far, for a later rip if this one stops (`RipPool.progressFile`).
         let progressFile = folder.appending(path: RipPool.progressFile)
+        // An earlier stopped rip's progress: its tracks that this rip has not done yet stay in
+        // it, with their padding, so that a rip after this one can still keep them.
+        let earlierProgress = try? RipReport.read(from: progressFile)
+        // A progress always lists its padding, if only as none.
+        let earlierPadding = earlierProgress?.paddedEdges ?? []
         for (position, track) in selected.enumerated() {
             try stop.check()
             events(.trackStarted(track, position: position + 1, count: selected.count))
@@ -517,11 +522,15 @@ public struct DiscRip {
             written.insert(report.file)
             reports.append(report)
             keptPadding += copyPadding ?? []
+            let done = Set(reports.map(\.number))
             var progress = RipReport(
-                drive: driveReport, secure: !options.singlePass, toc: toc, tracks: reports,
+                drive: driveReport, secure: !options.singlePass, toc: toc,
+                tracks: (reports + (earlierProgress?.tracks ?? []).filter { !done.contains($0.number) })
+                    .sorted { $0.number < $1.number },
                 ctdb: .init(status: .notChecked))
-            let paddedSoFar = paddedEdges(of: reports)
-            progress.paddedEdges = paddedSoFar.isEmpty ? nil : paddedSoFar
+            // Never nil: a progress that holds several rips' tracks has no one drive to work it out from.
+            progress.paddedEdges = (paddedEdges(of: reports) + earlierPadding.filter { !done.contains($0.track) })
+                .sorted { ($0.track, $0.atEnd ? 1 : 0) < ($1.track, $1.atEnd ? 1 : 0) }
             try? progress.write(to: progressFile)
             if let c2 = report.c2Sectors, !c2.isEmpty { summary += ", C2 errors in \(c2.count) sectors" }
             if let unreadable = report.unreadableSectors, !unreadable.isEmpty {

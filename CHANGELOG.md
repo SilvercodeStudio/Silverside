@@ -3,15 +3,22 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
-## 0.9.2 (not released yet)
+## 0.9.2 (2026-10-30)
 
 ### Added
 
-- A Medium column in Rip History: what each disc is, as its logo says (CD,
-  CD-Text, CD-R, Enhanced CD, HDCD, DTS, and so on). For HDCD it says what
-  the codes ask for (peak extend, gain), or that the files hold the decode;
-  for DTS, that the files hold the decode. Sort by it, or search for
-  "HDCD" or "Enhanced", to find the rips of a kind.
+- A rip keeps what an earlier rip got right. When a rip is stopped, or a
+  drive gives up on a damaged disc, the next rip of the disc, in any drive,
+  keeps each track that AccurateRip says is accurate and reads only the
+  rest; CTDB still checks the whole disc. A chip says how many tracks were
+  ripped before, and those tracks show "From an earlier rip". Read every
+  track again in the rip options (or `rip --read-all`) turns it off.
+- An EAC-style log: beside each rip's report, `Rip Report.log` has the rip in
+  the layout of Exact Audio Copy's logs, for people and tools that read those.
+  Its CRC-32s and AccurateRip checksums are the same as EAC's for the same
+  disc (checked on four discs). It names Silverside as the program that wrote
+  it, and has no EAC log checksum. On by default; Settings › Ripping turns it
+  off, as does `--no-eac-log`.
 - Silent tracks: a disc with tracks of nothing but digital silence, such as
   the 91 one-second tracks before the hidden songs of Nine Inch Nails
   *Broken*, can leave them out of the album. Silverside rips and verifies
@@ -20,48 +27,41 @@ command-line tool.
   tracks 98 and 99); **Keep** encodes them as any track. A disc image keeps
   every track. The answer can be set in Settings › Encoding, and the command
   line has `--silent-tracks`.
-- An EAC-style log: beside each rip's report, `Rip Report.log` has the rip in
-  the layout of Exact Audio Copy's logs, for people and tools that read those.
-  Its CRC-32s and AccurateRip checksums are the same as EAC's for the same
-  disc (checked on four discs). It names Silverside as the program that wrote
-  it, and has no EAC log checksum. On by default; Settings › Ripping turns it
-  off, as does `--no-eac-log`.
+- A Medium column in Rip History: what each disc is, as its logo says (CD,
+  CD-Text, CD-R, Enhanced CD, HDCD, DTS, and so on). For HDCD it says what
+  the codes ask for (peak extend, gain), or that the files hold the decode;
+  for DTS, that the files hold the decode. Sort by it, or search for
+  "HDCD" or "Enhanced", to find the rips of a kind.
 - A Copy Control CD (a copy-protected disc, such as some EMI releases of
   2001 to 2004) shows the Copy Control logo, when MusicBrainz names the
   release's format so.
-- A rip keeps what an earlier rip got right. When a rip is stopped, or a
-  drive gives up on a damaged disc, the next rip of the disc, in any drive,
-  keeps each track that AccurateRip says is accurate and reads only the
-  rest; CTDB still checks the whole disc. A chip says how many tracks were
-  ripped before, and those tracks show "From an earlier rip". Read every
-  track again in the rip options (or `rip --read-all`) turns it off.
 
 ### Changed
 
-- Save Data Track… is in the Disc menu too, for the disc in the selected
-  drive, and the disc's data track chip says "saved" once a rip has it.
-  While it reads, the drive's status bar and its sidebar row show how far.
-- While a drive rips, the sidebar names its disc after the progress, as in
-  "Ripping · 27% · Cornell 5/8/77", so busy drives can be told apart.
-- `silverside drives` says on each drive's first line what disc it holds,
-  with the device name for `-d`, or "no disc", and leaves a blank line
-  between drives.
-- When the Cover Art Archive cannot send a release's images, its picker says
-  so in plain words, with what to do, and an image whose thumbnail did not
-  come shows a mark in place of a spinner that never stops.
 - In the sidebar, a drive's disc takes the progress bar's colors while it
   rips, and turns while the drive reads: a rip, a repair's re-reads, a drive
   test, or a track that plays from the disc. With Reduce Motion on, it stays
   still.
-- The disc's logo beside the Rip button sits on glass, as on an earlier rip,
-  so that the tracks under it do not show through.
-- Tracks that AccurateRip has no checksum for because they are silence are
-  named so: "91 silent tracks (no AccurateRip checksum)".
+- While a drive rips, the sidebar names its disc after the progress, as in
+  "Ripping · 27% · Cornell 5/8/77", so busy drives can be told apart.
+- Save Data Track… is in the Disc menu too, for the disc in the selected
+  drive, and the disc's data track chip says "saved" once a rip has it.
+  While it reads, the drive's status bar and its sidebar row show how far.
+- `silverside drives` says on each drive's first line what disc it holds,
+  with the device name for `-d`, or "no disc", and leaves a blank line
+  between drives.
 - When the MusicBrainz lookup of a new disc fails, Silverside tries once
   more after 5 seconds. If that fails too, point to the "lookup failed" chip
   to see why, and click it to look up again.
 - In a box set's Cover Art Archive images, the main front comes first, then
   the images for the disc in the drive, which also load first.
+- When the Cover Art Archive cannot send a release's images, its picker says
+  so in plain words, with what to do, and an image whose thumbnail did not
+  come shows a mark in place of a spinner that never stops.
+- The disc's logo beside the Rip button sits on glass, as on an earlier rip,
+  so that the tracks under it do not show through.
+- Tracks that AccurateRip has no checksum for because they are silence are
+  named so: "91 silent tracks (no AccurateRip checksum)".
 
 ### Fixed
 
@@ -70,6 +70,9 @@ command-line tool.
   CD player skips it; a hidden song is longer, or clearly audible.
 - A cover you gave a disc was lost when its rip was stopped and the disc went
   in again. It is now kept for the release as soon as you give it.
+- A rip got no cover when the Cover Art Archive's list of a release's images
+  could not be read. Now it gets the front cover, which Silverside showed as
+  the disc was read.
 - A disc whose cover failed to download as it went in kept showing no cover,
   even after choosing the main front in Cover Art Archive…. The download is
   now tried once more after a few seconds, and choosing the main front gets
@@ -77,9 +80,6 @@ command-line tool.
 - While a track played from an earlier rip, the player bar covered the
   disc's logo at the table's corner. The bar now sits below the window's
   content.
-- A rip got no cover when the Cover Art Archive's list of a release's images
-  could not be read. Now it gets the front cover, which Silverside showed as
-  the disc was read.
 
 ## 0.9.1 (2026-10-29)
 

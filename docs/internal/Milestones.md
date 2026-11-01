@@ -317,7 +317,7 @@ Deferred:
 
 - CTDB entry order. `DiscRepairer` tries entries by their submissions, and up to three shifts for each. On *Reckoning* (2026-10-21), the 31-submission entry, which is another pressing's, was tried at three shifts first, each a repair that stopped after 200 columns, before the 19-submission entry repaired the disc at shift 0 with no errors in column 0. Ordering every (entry, shift) pair by the errors in column 0 first (an exact match before any with errors), then by submissions, would try the right one first and save a minute or two on such discs.
 - The drive report's check of an unreadable sector (it needs a damaged disc).
-- Developer ID signing and notarization: for 1.0.
+- Developer ID signing and notarization: for 1.0. Then updates through Sparkle, with the CLI inside the app and a DMG: the plan is in `docs/internal/Sparkle.md` (2026-11-01, not started).
 - The C2 fallback (review item 16b), for 2.0 (decided 2026-10-27): `TrackRipper` asks for C2 flags with `try?`, so any error from that read, even an ejected disc, becomes a plain read. A C2 probe for each drive, kept in its profile, would be better. It needs a drive that refuses C2 to test against (all four test drives give C2 flags), and `SimulatedDrive` cannot refuse C2 yet.
 - A `DiscRip` test with `--pool`, and its cleanup of the alternatives; only `RipPool` itself is tested.
 

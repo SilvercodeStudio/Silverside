@@ -44,12 +44,13 @@ struct AboutView: View {
         #endif
     }
 
-    /// "0.9 (1) · 536e697-dirty": the version, the build, and the Git commit, with "-dirty" if the
-    /// build had changes that were not committed.
+    /// "0.9.3 · 536e697-dirty": the version and the Git commit, with "-dirty" if the build had
+    /// changes that were not committed. The build number is the version (`CURRENT_PROJECT_VERSION`
+    /// is `$(MARKETING_VERSION)`, which Sparkle will compare), so it shows only if it differs.
     private var version: String {
         let info = Bundle.main.infoDictionary
         var text = info?["CFBundleShortVersionString"] as? String ?? SilversideVersion.string
-        if let build = info?["CFBundleVersion"] as? String { text += " (\(build))" }
+        if let build = info?["CFBundleVersion"] as? String, build != text { text += " (\(build))" }
         // A release (an archive) leaves out the commit, which its Git tag names, unless it had
         // changes that were not committed. The reports and the log name it either way.
         let archive = info?["SilversideArchive"] as? Bool == true

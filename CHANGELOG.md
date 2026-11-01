@@ -50,6 +50,8 @@ command-line tool.
   where one refers to another. The Help window has Back and Forward: in
   its toolbar, with ⌘[ and ⌘], with a mouse's back and forward buttons,
   and with a swipe on the trackpad.
+- The About window shows the version once, as "0.9.3", not "0.9.3 (1)":
+  the app's build number is now its version.
 - A repaired track's line in the Status column is shorter, so it fits:
   "116 sectors re-read · 3,356 repaired".
 

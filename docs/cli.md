@@ -20,11 +20,16 @@ completions for zsh, bash, and fish. `make uninstall` takes them away.
 
 ```sh
 silverside drives                         # the drives, and the disc in each
-silverside info -d disk14                 # the disc: tracks, ISRCs, disc IDs
-silverside rip -d disk14                  # rip to WAV, verify, repair
+silverside info -d asus                   # the disc: tracks, ISRCs, disc IDs
+silverside rip -d asus                    # rip to WAV, verify, repair
 silverside rip -d disk14 --encode         # rip, then encode into the library
 silverside encode -i "<rip folder>"       # encode a rip later
 ```
+
+`-d` takes a drive's short name, which `silverside drives` shows (its vendor, as
+`asus` or `matshita`, or its model, as `bu50n`), or any part of the drive's name
+that only one drive has, or the disc's BSD name (`disk14`). With one disc in one
+drive, `-d` can be left out.
 
 `silverside help <command>` explains each command, with examples.
 
@@ -48,7 +53,7 @@ shares. Without a terminal, as in a script, `rip` stops until you agree with
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
 | `hdcd` | Looks for HDCD codes in audio files and folders (WAV, AIFF, FLAC, Apple Lossless), such as rips and albums from before. |
 | `config` | Shows and changes the settings. |
-| `eject` | Ejects the disc from a drive (`-d diskN`), or from every drive (`--all`). |
+| `eject` | Ejects the disc from a drive (`-d`), or from every drive (`--all`: CDs, DVDs, and Blu-ray discs). A drive named with `-d` ejects a disc that macOS never recognized, through Disc Recording as `drutil eject` does, or opens its empty tray. A drive that hangs in a read is safer to unplug than to eject. |
 | `license` | Shows the notice and the license (the GNU GPL, version 3 or later), and the code from others that the CLI includes. |
 
 ## What a rip makes
@@ -225,8 +230,8 @@ all its fields have values, so `[{disc:2}-]` is left out for a single disc, and
 
 Every drive reads audio a few samples early or late: its read offset. Silverside
 finds it in AccurateRip's list of drives, then confirms it from your own rips
-(two discs that agree). `silverside drives -d diskN --set-offset N` sets it by hand.
-`silverside drives -d diskN --measure-cache` measures how much the drive caches, so
+(two discs that agree). `silverside drives -d <drive> --set-offset N` sets it by hand, with or without a disc.
+`silverside drives -d <drive> --measure-cache` measures, with a disc in the drive, how much the drive caches, so
 re-reads empty the cache with fewer reads.
 
 ## MP3 options

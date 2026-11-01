@@ -350,17 +350,16 @@ struct FinishedStatus: View {
             if rereads > 0 { parts.append(Format.count(rereads, "sector") + " re-read") }
             if unreadable > 0 { parts.append("\(unreadable) unreadable") }
         }
-        if track.repairedSamples > 0 {
-            parts.append(
-                track.repairedSamples.formatted() + (track.repairedSamples == 1 ? " sample" : " samples") + " repaired")
-        }
+        // "3,356 repaired": the column is narrow, and the verdict and the tooltip say they are samples.
+        if track.repairedSamples > 0 { parts.append(track.repairedSamples.formatted() + " repaired") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private func help(for verdict: TrackVerdict) -> String {
         switch verdict {
         case .verified: "The track matches AccurateRip or the CUETools database."
-        case .repaired: "CTDB's repair data corrected the track, and the result is verified."
+        case .repaired:
+            "CTDB's repair data corrected \(Format.count(track.repairedSamples, "sample")) of the track, and the result is verified."
         case .copied: "The reads agree, but no database has this disc to check against."
         case .notVerified: "No database matches the track, and a repair was not possible."
         }

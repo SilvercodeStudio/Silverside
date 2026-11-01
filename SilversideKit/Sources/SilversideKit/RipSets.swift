@@ -93,6 +93,23 @@ public struct RipSet: Equatable, Sendable {
         return text
     }
 
+    /// The set's state as seen from disc `position`, which its own page shows: the other
+    /// discs only, as "disc 1 still to do" or "discs 1 and 3 done; disc 2 not encoded".
+    public func summary(besides position: Int) -> String {
+        if isComplete { return "all \(discCount) discs verified and encoded" }
+        let others = positions.filter { $0 != position }
+        func part(_ numbers: [Int], _ state: String) -> String? {
+            numbers.isEmpty ? nil : "\(numbers.count == 1 ? "disc" : "discs") \(Self.list(numbers)) \(state)"
+        }
+        let parts = [
+            part(others.filter { discs[$0] == nil }, "still to do"),
+            part(others.filter { discs[$0].map { !$0.isVerified } ?? false }, "not verified"),
+            part(others.filter { discs[$0].map { $0.isVerified && !$0.isEncoded } ?? false }, "not encoded"),
+            part(others.filter { discs[$0]?.isFinished ?? false }, "done"),
+        ]
+        return parts.compactMap { $0 }.joined(separator: "; ")
+    }
+
     /// "1", "1 and 3", "1, 2, and 4".
     public static func list(_ numbers: [Int]) -> String {
         list(numbers.map(String.init))

@@ -278,6 +278,9 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// The submissions of every entry for the disc, as EAC's CTDB plugin counts them ("132/137").
         /// Nil if the disc is not in CTDB, and in reports from before 0.9.2.
         public var submissions: Int?
+        /// True if an entry's repair data was tried, and the errors were too many for it. Nil
+        /// if none was, and in reports from before 0.9.3.
+        public var repairTried: Bool?
 
         public init(status: Status, entry: Int? = nil, confidence: Int? = nil, shift: Int? = nil) {
             self.status = status
@@ -299,6 +302,7 @@ public struct RipReport: Codable, Equatable, Sendable {
             }
             entriesWithoutRepairData = result.entriesWithoutRepairData
             submissions = result.submissions
+            repairTried = result.repairTried ? true : nil
         }
     }
 

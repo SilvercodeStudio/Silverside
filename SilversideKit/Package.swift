@@ -16,7 +16,9 @@ let package = Package(
         .target(name: "SilversideKit", dependencies: ["CHDCD"]),
         // FFmpeg's HDCD decoder, under its own BSD license: see Vendor/HDCD/README.md.
         .target(name: "CHDCD", path: "Vendor/HDCD", exclude: ["LICENSE", "README.md"]),
-        .target(name: "SilversideDarwin", dependencies: ["SilversideKit"]),
+        .target(
+            name: "SilversideDarwin", dependencies: ["SilversideKit"],
+            linkerSettings: [.linkedFramework("DiscRecording")]),
         .executableTarget(
             name: "silverside",
             dependencies: [

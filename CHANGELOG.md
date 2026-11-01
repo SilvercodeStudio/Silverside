@@ -22,6 +22,15 @@ command-line tool.
 
 ### Changed
 
+- The command-line tool takes a drive's short name with `-d`, as
+  `-d asus` or `-d bu50n`, besides the disc's BSD name. `silverside drives`
+  shows each drive's name, and sets the BSD name apart from the album. A
+  read offset can be set for a drive with no disc in it.
+- `silverside eject -d <drive>` ejects a disc that macOS never recognized,
+  which has no BSD name, and opens an empty drive's tray. `silverside
+  drives` says when a drive holds such a disc.
+- `silverside eject --all` ejects DVDs and Blu-ray discs too, not only CDs,
+  and goes on to the other drives when one refuses.
 - About › Acknowledgments › License and `silverside license` show the
   copyright notice and the full text of the license, the GNU General
   Public License, version 3 or later. Contributions come in under the
@@ -31,6 +40,8 @@ command-line tool.
   General keeps the agreement; the app does not rip a disc without it, and
   asks at the next rip. `silverside rip` asks once at a terminal, and
   `silverside --accept-disclaimer` agrees ahead of time.
+- An earlier rip of one disc of a set names the other discs only, as
+  "Disc 2 of 2 · disc 1 still to do", not "Disc 2 of 2" twice.
 - The welcome no longer offers WAV files only, so that it fits a 13-inch
   screen with the new agreement. Settings › General still turns encoding
   off.
@@ -39,9 +50,14 @@ command-line tool.
   where one refers to another. The Help window has Back and Forward: in
   its toolbar, with ⌘[ and ⌘], with a mouse's back and forward buttons,
   and with a swipe on the trackpad.
+- A repaired track's line in the Status column is shorter, so it fits:
+  "116 sectors re-read · 3,356 repaired".
 
 ### Fixed
 
+- After CTDB's repair data was tried and the errors were too many, the
+  advice said that the matching entries had no repair data. It now says
+  the errors were too many.
 - A damaged track could be called accurate when it was not. Where reads
   of a sector disagree, a secure rip tries thousands of combinations of
   them against AccurateRip, and one of them could match a checksum that

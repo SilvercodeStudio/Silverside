@@ -581,10 +581,11 @@ struct ResultsView: View {
         }
     }
 
-    /// "Disc 2 of 3 · Discs 1 and 2 of 3 ripped; disc 3 still to do".
+    /// "Disc 2 of 3 · disc 1 done; disc 3 still to do": the other discs, since the page is this one's.
     private func setText(_ set: RipSet) -> String {
-        let position = report.discPosition.map { "Disc \($0) of \(set.discCount) · " } ?? ""
-        return position + set.summary
+        guard let position = report.discPosition else { return set.summary }
+        let others = set.summary(besides: position)
+        return "Disc \(position) of \(set.discCount)" + (others.isEmpty ? "" : " · " + others)
     }
 
     /// The track's audio: the rip's WAV file, or the encoded file in the library.

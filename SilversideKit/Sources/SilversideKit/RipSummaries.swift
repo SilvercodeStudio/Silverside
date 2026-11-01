@@ -235,10 +235,14 @@ extension RipReport {
         var text = ""
         switch ctdb.status {
         case .notVerified:
+            // A tried repair says more than entries without data beside it (*Past Masters*
+            // disc 2: entry 2144's data was tried, and 43 single submissions have none).
             text =
-                ctdb.entriesWithoutRepairData > 0
-                ? "The entries in CTDB that match this pressing have no repair data. "
-                : "CTDB knows this disc, but the errors are too many for its repair data. "
+                ctdb.repairTried == true
+                ? "CTDB has repair data for this pressing, but the errors are too many for it. "
+                : ctdb.entriesWithoutRepairData > 0
+                    ? "The entries in CTDB that match this pressing have no repair data. "
+                    : "CTDB knows this disc, but the errors are too many for its repair data. "
         case .partlyRepaired: text = "CTDB repaired some tracks, not the whole disc. "
         default: break
         }

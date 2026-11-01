@@ -74,6 +74,9 @@ struct RipSetTests {
         #expect(set.discs[1]?.stateText == "ripped, not verified" && set.discs[3]?.stateText == "verified and encoded")
         #expect(set.missing == [2] && set.unfinished == [1] && !set.isComplete)
         #expect(set.summary == "Discs 1 and 3 of 3 ripped; disc 2 still to do; disc 1 not verified")
+        // A disc's own page names the others only (*Eagles Live* disc 2 said "Disc 2 of 2" twice).
+        #expect(set.summary(besides: 3) == "disc 2 still to do; disc 1 not verified")
+        #expect(set.summary(besides: 1) == "disc 2 still to do; disc 3 done")
         // A report kept in the library counts as encoded.
         var complete = set
         complete.discs[1] = .init(
@@ -83,6 +86,7 @@ struct RipSetTests {
         #expect(complete.summary == "Discs 1, 2, and 3 of 3 ripped; disc 2 not encoded")
         complete.discs[2]?.isEncoded = true
         #expect(complete.isComplete && complete.summary == "All 3 discs verified and encoded")
+        #expect(complete.summary(besides: 2) == "all 3 discs verified and encoded")
         #expect(RipSet.list([1, 2, 4]) == "1, 2, and 4")
     }
 

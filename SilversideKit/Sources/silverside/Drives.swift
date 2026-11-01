@@ -13,7 +13,7 @@ struct Drives: ParsableCommand {
 
             Examples:
               silverside drives
-              silverside drives -d disk14 --set-offset 6
+              silverside drives -d bu50n --set-offset 6
               silverside drives -d disk14 --measure-cache
             """)
 
@@ -72,13 +72,20 @@ struct Drives: ParsableCommand {
             return
         }
         if setOffset != nil || clearOffset || measureCache {
-            let bsdName = try deviceOptions.bsdName()
-            guard let drive = drives.first(where: { $0.discBSDName == bsdName }) else {
-                throw CommandError("Cannot find the drive that holds \(bsdName).")
+            // An offset belongs to the drive, so a drive named needs no disc; a cache test does.
+            let drive: OpticalDrive
+            if deviceOptions.device != nil, !deviceOptions.namesADisc, !measureCache {
+                drive = try deviceOptions.drive(in: drives)
+            } else {
+                let bsdName = try deviceOptions.bsdName()
+                guard let found = drives.first(where: { $0.discBSDName == bsdName }) else {
+                    throw CommandError("Cannot find the drive that holds \(bsdName).")
+                }
+                drive = found
             }
             var profile = store.profile(vendor: drive.vendor, product: drive.product, revision: drive.revision)
             if setOffset != nil || clearOffset { profile.manualOffset = setOffset }
-            if measureCache {
+            if measureCache, let bsdName = drive.discBSDName {
                 let device = try IOKitDrive(bsdName: bsdName)
                 print("Measuring the cache of \(drive.vendor) \(drive.product)...")
                 guard let sectors = try CacheProbe(drive: device).cacheSectors(toc: device.readTOC()) else {
@@ -92,12 +99,12 @@ struct Drives: ParsableCommand {
         if drives.isEmpty {
             print("No optical drives found.")
         }
+        let shortNames = OpticalDrive.shortNames(of: drives)
         for (index, drive) in drives.enumerated() {
-            let name = [drive.vendor, drive.product].filter { !$0.isEmpty }.joined(separator: " ")
             let connection = [drive.location, drive.interconnect].filter { !$0.isEmpty }.joined(separator: " ")
-            // The first line says what `-d` needs: the disc in the drive, by its device, or none.
+            // The first line says what `-d` takes: the drive's short name, or its disc's BSD name.
             if index > 0 { print() }
-            print("\(name): \(Self.disc(in: drive))")
+            print("\(drive.name) (-d \(shortNames[index])): \(Self.disc(in: drive))")
             print("  Firmware \(drive.revision)" + (connection.isEmpty ? "" : ", \(connection)"))
             let profile = store.profile(vendor: drive.vendor, product: drive.product, revision: drive.revision)
             if let (offset, source) = profile.offset {
@@ -116,31 +123,35 @@ struct Drives: ParsableCommand {
         }
     }
 
-    /// The disc in the drive, for its first line: "disk9, Dave Matthews Band - Crash (12 audio
+    /// The disc in the drive, for its first line: "disk9 · Dave Matthews Band - Crash (12 audio
     /// tracks, 68:51)", or "no disc".
     static func disc(in drive: OpticalDrive) -> String {
         guard let bsdName = drive.discBSDName else {
             if let other = drive.otherDisc, let bsdName = drive.otherDiscBSDName {
-                return "\(bsdName), \(other.name), not a CD"
+                return "\(bsdName) · \(other.name), not a CD"
+            }
+            // A disc that macOS never recognized has no BSD name, but Disc Recording sees it.
+            if let path = drive.registryPath, DiscEject.hasMedia(registryPath: path) == true {
+                return "a disc that macOS did not recognize (silverside eject -d … ejects it)"
             }
             return "no disc"
         }
         // macOS already has the TOC, so this does not spin the disc.
         guard let toc = try? IOKitDrive(bsdName: bsdName).readTOC() else {
-            return "\(bsdName), a CD whose TOC cannot be read"
+            return "\(bsdName) · a CD whose TOC cannot be read"
         }
         let data = toc.tracks.count - toc.audioTracks.count
         let dataTracks = "\(data) data track\(data == 1 ? "" : "s")"
-        guard !toc.audioTracks.isEmpty else { return "\(bsdName), a data disc (\(dataTracks)), no audio" }
+        guard !toc.audioTracks.isEmpty else { return "\(bsdName) · a data disc (\(dataTracks)), no audio" }
         let seconds = toc.audioTracks.reduce(0) { $0 + toc.sectorRange(of: $1).count } / CDDA.sectorsPerSecond
         let tracks =
             "\(toc.audioTracks.count) audio track\(toc.audioTracks.count == 1 ? "" : "s"), "
             + String(format: "%d:%02d", seconds / 60, seconds % 60) + (data > 0 ? ", and \(dataTracks)" : "")
         // The release an earlier lookup found, from the cache: no request.
-        guard let release = ReleaseLookup.cachedRelease(toc: toc) else { return "\(bsdName), a CD (\(tracks))" }
+        guard let release = ReleaseLookup.cachedRelease(toc: toc) else { return "\(bsdName) · a CD (\(tracks))" }
         let disc = release.medium(for: toc).flatMap {
             release.media.count > 1 ? ", disc \($0.position) of \(release.media.count)" : nil
         }
-        return "\(bsdName), \(release.artist) - \(release.title)\(disc ?? "") (\(tracks))"
+        return "\(bsdName) · \(release.artist) - \(release.title)\(disc ?? "") (\(tracks))"
     }
 }

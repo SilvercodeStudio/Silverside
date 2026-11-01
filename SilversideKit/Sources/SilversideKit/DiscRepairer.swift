@@ -150,6 +150,8 @@ public struct DiscRepairer {
         public var trackConfidences: [Int]
         /// The number of entries that match the rip's alignment, but have no repair data.
         public var entriesWithoutRepairData = 0
+        /// True if an entry's repair data was tried on the rip.
+        public var repairTried = false
         /// The submissions of every entry for the disc.
         public var submissions = 0
         /// Other values for suspect samples, by index in `audio`, with the ones that re-reads added.
@@ -249,10 +251,12 @@ public struct DiscRepairer {
         // Entries that match the rip's alignment but have no repair data: often single
         // submissions, each with its own errors.
         var withoutRepairData = Set<Int>()
+        var repairTried = false
 
         func finish(_ outcome: Outcome, audio: [UInt32]? = nil) -> Result {
             result.outcome = outcome
             result.entriesWithoutRepairData = withoutRepairData.count
+            result.repairTried = repairTried
             result.alternatives = alternatives
             if let audio { result.audio = audio }
             result.trackConfidences = trackConfidences(of: result.audio, layout: layout, outcome: outcome)
@@ -313,6 +317,7 @@ public struct DiscRepairer {
                     continue
                 }
                 log("Repairing with \(name)...")
+                repairTried = true
                 let reference = try await repairData(entry)
                 var quietRounds = 0
                 rounds: for round in 0...(reader == nil ? 0 : rereadRounds) {

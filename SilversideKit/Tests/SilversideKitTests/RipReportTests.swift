@@ -57,6 +57,28 @@ struct RipReportTests {
         #expect(!report.isVerified)
     }
 
+    /// After a repair that was tried and failed, the advice says the errors were too many,
+    /// even when single submissions without repair data match too (*Past Masters* disc 2).
+    @Test func saysWhyCTDBDidNotRepair() throws {
+        let toc = try TOC(audioTrackStarts: [0, 20867], leadOutLBA: 56350)
+        let drive = RipReport.Drive(
+            vendor: "SIM", product: "DRIVE", revision: "1.0", readOffset: 6, offsetSource: "--offset")
+        let tracks = [
+            RipReport.Track(
+                number: 1, file: "Track 01.wav", startLBA: 0, sectors: 20867, preEmphasis: false,
+                accurateRip: .accurate),
+            RipReport.Track(
+                number: 2, file: "Track 02.wav", startLBA: 20867, sectors: 35483, preEmphasis: false,
+                accurateRip: .notAccurate),
+        ]
+        var report = RipReport(
+            drive: drive, secure: true, toc: toc, tracks: tracks, ctdb: .init(status: .notVerified))
+        report.ctdb.entriesWithoutRepairData = 43
+        #expect(report.advice?.hasPrefix("The entries in CTDB that match this pressing have no repair data.") == true)
+        report.ctdb.repairTried = true
+        #expect(report.advice?.hasPrefix("CTDB has repair data for this pressing, but the errors are too many") == true)
+    }
+
     /// The archive keeps a rip's report inside its manifest, under "ripReport", with the release beside it.
     @Test func readsAReportFromAnArchiveManifest() throws {
         let (toc, _) = try makeDisc(trackSectors: [800, 900])

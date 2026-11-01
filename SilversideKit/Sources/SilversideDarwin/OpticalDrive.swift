@@ -22,6 +22,8 @@ public struct OpticalDrive: Equatable, Sendable {
     /// (such as "CD Features" and "Retry Count"), and the USB bridge's names, IDs, and speed.
     /// Serial numbers are left out.
     public var registry: [String: String] = [:]
+    /// The drive's path in the I/O Registry's service plane, which Disc Recording knows it by.
+    public var registryPath: String?
 
     public init(
         vendor: String, product: String, revision: String, interconnect: String, location: String,
@@ -59,6 +61,7 @@ public struct OpticalDrive: Equatable, Sendable {
                     interconnect: protocolInfo["Physical Interconnect"] as? String ?? "",
                     location: protocolInfo["Physical Interconnect Location"] as? String ?? "",
                     discBSDName: cdBSDName(below: service), registry: registry(device, protocolInfo, service)))
+            drives[drives.count - 1].registryPath = path(of: service)
             if drives[drives.count - 1].discBSDName == nil, let other = otherMedia(below: service) {
                 drives[drives.count - 1].otherDiscBSDName = other.bsdName
                 drives[drives.count - 1].otherDisc = DiscLogo.otherDisc(
@@ -153,7 +156,45 @@ public struct OpticalDrive: Equatable, Sendable {
         return result
     }
 
+    private static func path(of entry: io_registry_entry_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: MemoryLayout<io_string_t>.size)
+        guard IORegistryEntryGetPath(entry, kIOServicePlane, &buffer) == KERN_SUCCESS else { return nil }
+        return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
     private static func property(_ entry: io_registry_entry_t, _ key: String) -> Any? {
         IORegistryEntryCreateCFProperty(entry, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
+    }
+}
+
+extension OpticalDrive {
+    /// "MATSHITA BD-MLT UJ260AF".
+    public var name: String { [vendor, product].filter { !$0.isEmpty }.joined(separator: " ") }
+
+    /// Names to type for a drive, one for each of `drives`: its vendor in lowercase ("asus",
+    /// "matshita") where it is one plain word that no other drive has, else its model, the
+    /// product's last word ("bu50n" for HL-DT-ST's). A second drive of the same model gets "-2".
+    public static func shortNames(of drives: [OpticalDrive]) -> [String] {
+        let vendors = drives.map { $0.vendor.lowercased() }
+        var names = drives.enumerated().map { index, drive in
+            let vendor = vendors[index]
+            if vendor.wholeMatch(of: /[a-z]+/) != nil, vendors.filter({ $0 == vendor }).count == 1 { return vendor }
+            return (drive.product.split(separator: " ").last.map(String.init) ?? drive.product).lowercased()
+        }
+        var seen = [String: Int]()
+        for index in names.indices {
+            let count = seen[names[index], default: 0] + 1
+            seen[names[index]] = count
+            if count > 1 { names[index] += "-\(count)" }
+        }
+        return names
+    }
+
+    /// The drives that `text` names: the drive whose short name it is, else every drive whose
+    /// name holds it ("bu50n", "lg" does not: the vendor is "HL-DT-ST"), ignoring case.
+    public static func indices(named text: String, in drives: [OpticalDrive]) -> [Int] {
+        let wanted = text.lowercased()
+        if let exact = shortNames(of: drives).firstIndex(of: wanted) { return [exact] }
+        return drives.indices.filter { drives[$0].name.lowercased().contains(wanted) }
     }
 }

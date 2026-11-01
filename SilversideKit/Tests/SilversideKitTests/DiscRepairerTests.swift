@@ -59,6 +59,7 @@ struct DiscRepairerTests {
         #expect(result.outcome == .notVerified)
         #expect(result.audio == damaged)
         #expect(result.trackConfidences == [5, 0, 5])
+        #expect(!result.repairTried)
     }
 
     /// An entry with more syndromes than Silverside uses is left out, and the others still work.
@@ -127,6 +128,8 @@ struct DiscRepairerTests {
 
         let blind = try await repairer.repair(rips.map { TrackAudio(samples: $0.samples) })
         #expect(blind.outcome == .notVerified)
+        // Its repair data was tried: the advice says the errors are too many, not that there is none.
+        #expect(blind.repairTried && RipReport.CTDBResult(blind).repairTried == true)
         let result = try await repairer.repair(rips.map(TrackAudio.init))
         guard case .repaired(_, 0, let changed) = result.outcome else {
             Issue.record("Not repaired: \(result.outcome)")

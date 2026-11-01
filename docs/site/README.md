@@ -29,10 +29,12 @@ Switch macOS between Light and Dark (System Settings › Appearance) to see both
 
 ## Screenshots
 
-Capture the window with Shift-Command-4, then Space, then click the window (hold Option to leave out the shadow). The tool finds the window's edge inside the capture, crops to it, and writes a 2400-wide and a 1200-wide JPEG:
+Capture the window with Shift-Command-4, drawing a box a little larger than the window. The tool finds the window's edge inside the capture, crops to it, and writes a 2400-wide and a 1200-wide WebP (JPEG without `cwebp`):
 
 ```sh
-swift docs/site/tools/shot.swift ~/Desktop/capture.png docs/site/images/rip-report-dark
+swift docs/site/tools/shot.swift ~/Desktop/capture.png docs/site/images/report-dark --radius 36
 ```
 
-Make each capture in both appearances, name them `-dark` and `-light`, and write alt text that says what the screenshot shows.
+`--radius 36` makes the corners past the window's round ones transparent, so the page's shadow follows the window. For a window in front of another (the welcome, Settings, About), `--rect X,Y,W,H` crops that rectangle, in the capture's pixels, and `--widths 1200,600` writes smaller sizes. Make each capture in both appearances, name them `-dark` and `-light`, and write alt text that says what the screenshot shows. Each screenshot is a link (`a.zoom`) to its largest image, with `data-light` for the light one.
+
+The link preview (`og:image`) is `images/og-image.jpg`, made from the dark hero: run `swift docs/site/tools/og-image.swift docs/site/images/ripping-dark-2400.webp docs/site/images/og-image.jpg` after the hero changes.

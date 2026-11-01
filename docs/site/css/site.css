@@ -119,8 +119,20 @@ code { font: 400 0.92em/1.4 var(--font-mono); padding: 1px 5px; border-radius: 5
 .nav-links a { color: var(--ink-2); }
 .nav-links a:hover, .nav-links a.ss-btn { color: var(--ink); }
 .nav-links a.ss-btn { color: var(--on-action); }
-/* On a phone the nav keeps only Download; the sections are one scroll away, and the hero has How it works. */
-@media (max-width: 599px) { .nav-links .nav-more { display: none; } }
+/* On a phone the nav keeps Download, and the links, GitHub, and the theme button move into a menu. */
+.nav-menu { display: none; position: relative; }
+@media (max-width: 599px) {
+  .nav-links .nav-more, .nav-links > .nav-icon { display: none; }
+  .nav-links { gap: 4px 12px; }
+  .nav-menu { display: block; }
+}
+.nav-menu summary { list-style: none; cursor: pointer; border: 1px solid var(--line); }
+.nav-menu summary::-webkit-details-marker { display: none; }
+.nav-menu[open] summary { color: var(--ink); background: var(--chip); }
+.nav-menu__panel { position: absolute; right: 0; top: calc(100% + 10px); z-index: 10; min-width: 200px; padding: var(--space-2); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); box-shadow: var(--shadow-icon); }
+.nav-menu__panel a, .nav-menu__panel button { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-radius: var(--radius-chip); background: transparent; color: var(--ink); font: inherit; font-size: 16px; text-align: left; cursor: pointer; }
+.nav-menu__panel a:hover, .nav-menu__panel button:hover { color: var(--ink); background: var(--chip); }
+.nav-menu__panel svg { flex: none; color: var(--ink-2); }
 /* GitHub's mark alone, in a 44px target that does not make the bar taller. Grey only: GitHub's rule. */
 .nav-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-block: -12px; border-radius: var(--radius-pill); color: var(--ink-2); }
 .nav-icon:hover { color: var(--ink); background: var(--chip); }
@@ -128,6 +140,8 @@ code { font: 400 0.92em/1.4 var(--font-mono); padding: 1px 5px; border-radius: 5
 /* The theme button: a sun to go light, a moon to go dark. js/site.js shows it and sets data-theme. */
 .theme-btn { padding: 0; border: 1px solid var(--line); background: transparent; cursor: pointer; font: inherit; }
 :root[data-theme="light"] .theme-btn .icon-sun, :root:not([data-theme="light"]) .theme-btn .icon-moon { display: none; }
+/* Hidden until js/site.js shows it; .nav-icon and the menu's buttons would otherwise override [hidden]. */
+.theme-btn[hidden] { display: none; }
 
 .hero-band { position: relative; padding: clamp(40px, 6vw, 80px) clamp(16px, 4vw, 32px) clamp(96px, 17vw, 250px); text-align: center; }
 .hero-stack { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 28px; }

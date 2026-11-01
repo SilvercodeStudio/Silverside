@@ -6,6 +6,8 @@ struct License: ParsableCommand {
         abstract: "Show the license, and the code from others that silverside includes.")
 
     func run() {
+        print(SilversideLicense.notice)
+        print()
         print(SilversideLicense.text)
         print(
             """

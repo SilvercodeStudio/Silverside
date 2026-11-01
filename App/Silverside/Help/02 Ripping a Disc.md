@@ -1,5 +1,7 @@
 # Ripping a Disc
 
+<!-- toc -->
+
 ## Metadata
 
 When a disc appears, Silverside reads its table of contents and asks MusicBrainz which releases have it. The chip under the album name says how sure the match is:
@@ -43,7 +45,7 @@ An earlier rip's album, album artist, and date can be edited in its header, and 
 
 A rip tagged with the wrong release, such as another edition of the album, or a disc that MusicBrainz did not know at the rip and has since, can take another release with **Change Release…**: in the rip's header, in the Disc menu, or in the menu of the rip in Recent Rips and Rip History. Choose from the releases that have the disc (Look Up Again asks MusicBrainz again, for one added since). The rip's report, and its encoded files' tags, names, and CUE sheet, change to the new release, and the cover too if the Cover Art Archive has one; the audio does not change, and no disc is needed. Names you changed on the rip go back to the release's. Each disc of a set changes on its own, so a set whose discs were tagged as two editions becomes one set when they have the same release; the other discs in the album folder then get the album gain over the whole set.
 
-A rip that is not encoded has an **Encode** button, which encodes it into the library as Settings say. Only a verified rip is encoded; see Verification for what to try with one that is not.
+A rip that is not encoded has an **Encode** button, which encodes it into the library as Settings say. Only a verified rip is encoded; see [Verification](help:verification#when-tracks-stay-unverified) for what to try with one that is not.
 
 ## Read modes
 
@@ -57,7 +59,7 @@ The Options button in the toolbar holds choices for the next rip only:
 - **Folder.** By default a rip's folder is named from the release, in the rips folder. Choose another for this rip.
 - **Pool earlier rips of this disc.** On by default when the rips folder has a rip of the same disc. A track that an earlier rip got accurate replaces one that is not, and where the rips disagree, the CTDB repair has more versions to work with.
 - **Read every track again.** Off by default: a track that an earlier rip has a copy of that AccurateRip says is accurate is kept, not read again (see below). Turn it on for a fresh read of every track.
-- **Offline.** No AccurateRip, CTDB, or drive offset list. The names come from the lookup already made. Repair (see Verification) can check the rip later.
+- **Offline.** No AccurateRip, CTDB, or drive offset list. The names come from the lookup already made. [Repair](help:verification#repair) can check the rip later.
 
 The Secure or Fast choice is kept between launches.
 

@@ -59,6 +59,21 @@ struct MainWindow: View {
         } message: { alert in
             Text(alert.message)
         }
+        .alert(
+            "Rip only discs you own",
+            isPresented: Binding(get: { model.agreementSlot != nil }, set: { if !$0 { model.agreementSlot = nil } }),
+            presenting: model.agreementSlot
+        ) { slot in
+            Button("I Agree") {
+                model.settings.agreedToPersonalUse = true
+                model.startRip(slot)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text(
+                "\(SilversideLicense.personalUse)\n\nTo rip, agree: “\(SilversideLicense.personalUseAgreement)” You can change this in Settings › General."
+            )
+        }
         .sheet(isPresented: $model.logShown) {
             RipLogView(run: model.selectedDrive?.rip)
         }

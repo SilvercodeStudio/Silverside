@@ -22,6 +22,9 @@ struct SettingsTests {
         let settings = try Settings.load(from: url)
         #expect(settings.format == .alac && settings.plainPunctuation && settings.mp3.mode == .cbr)
         #expect(settings.mp3.bitRate == 320 && settings.library == Settings().library)
+        // An older file has no agreement: the app asks for it before the next rip.
+        #expect(!settings.agreedToPersonalUse)
+        #expect(try settings.setting("agreedToPersonalUse", to: "true").agreedToPersonalUse)
     }
 
     @Test func changesOneKey() throws {

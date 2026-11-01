@@ -18,6 +18,9 @@ struct SilversideCommand: AsyncParsableCommand {
               silverside rip -d disk14 --encode      rip, then encode into the library
               silverside encode -i <rip folder>      encode a rip later
               silverside config                      the settings (library, format, names)
+
+            Silverside is for archival copies of discs that you own, for your personal use. The first \
+            rip asks you to agree to this; silverside --accept-disclaimer agrees ahead of time.
             """,
         version: SilversideVersion.described,
         subcommands: [
@@ -26,6 +29,18 @@ struct SilversideCommand: AsyncParsableCommand {
             Config.self, Eject.self, License.self,
         ]
     )
+
+    @Flag(help: "Agree to rip only discs that you own, for your personal use, at your own risk.")
+    var acceptDisclaimer = false
+
+    /// With no subcommand: the agreement, or the help.
+    func run() async throws {
+        guard acceptDisclaimer else {
+            print(Self.helpMessage())
+            return
+        }
+        try Disclaimer.accept()
+    }
 
     /// Prints each line at once, also when the output goes to a file or a pipe,
     /// so a long rip shows its progress.

@@ -7,14 +7,17 @@ struct WelcomeView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openSettings) private var openSettings
-    @State private var choice = Choice.flac
+    /// None when the welcome opens again with encoding off: Get Started then leaves it off.
+    @State private var choice: Choice? = .flac
     /// MP3 needs the external `lame`; the window looks for it while it is open.
     @State private var lame = MP3Encoder.lame()
 
     static let doneKey = "welcomeDone"
 
+    /// The formats. WAV files only (no encoding) is in Settings › General, to keep the window
+    /// short enough for a 13-inch screen.
     enum Choice: CaseIterable {
-        case alac, flac, aac, mp3, wav
+        case alac, flac, aac, mp3
 
         var title: String {
             switch self {
@@ -22,7 +25,6 @@ struct WelcomeView: View {
             case .flac: "FLAC"
             case .aac: "AAC"
             case .mp3: "MP3"
-            case .wav: "WAV files only"
             }
         }
 
@@ -33,22 +35,21 @@ struct WelcomeView: View {
                 "An exact copy of the CD, for most other systems and players. Apple's Music app does not play it."
             case .aac: "A fifth of the size, and most people cannot hear a difference. Plays almost everywhere."
             case .mp3: "Plays on almost anything, old or new. AAC sounds a little better at the same size."
-            case .wav: "No encoding: rips stay in the rips folder as uncompressed WAV files, with no tags."
             }
         }
 
-        var format: AudioFormat? {
+        var format: AudioFormat {
             switch self {
             case .alac: .alac
             case .flac: .flac
             case .aac: .aac
             case .mp3: .mp3
-            case .wav: nil
             }
         }
     }
 
     var body: some View {
+        @Bindable var model = model
         VStack(spacing: 0) {
             Hero(height: 104, iconSize: 96)
             Theme.sheen.frame(height: 3)
@@ -91,6 +92,18 @@ struct WelcomeView: View {
                     Image(systemName: "music.note").foregroundStyle(Theme.warning)
                 }
                 .font(.callout)
+                // Silverside rips only after this box is checked, here or in Settings › General.
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle(isOn: $model.settings.agreedToPersonalUse) {
+                        Text(SilversideLicense.personalUseAgreement).font(.body.weight(.semibold))
+                    }
+                    .toggleStyle(.checkbox)
+                    Text(SilversideLicense.personalUse)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 20)
+                }
                 HStack {
                     Spacer()
                     Button("Settings…") {
@@ -99,6 +112,7 @@ struct WelcomeView: View {
                     }
                     Button("Get Started") { finish() }
                         .keyboardShortcut(.defaultAction)
+                        .disabled(!model.settings.agreedToPersonalUse)
                 }
                 .controlSize(.large)
             }
@@ -115,7 +129,7 @@ struct WelcomeView: View {
                 choice = Choice.allCases.first { $0.format == model.settings.format } ?? .flac
                 if choice == .mp3 && lame == nil { choice = .flac }
             } else if UserDefaults.standard.bool(forKey: Self.doneKey) {
-                choice = .wav
+                choice = nil
             }
         }
     }
@@ -147,11 +161,9 @@ struct WelcomeView: View {
     }
 
     private func finish() {
-        if let format = choice.format {
-            model.settings.format = format
+        if let choice {
+            model.settings.format = choice.format
             model.settings.encodeAfterRip = true
-        } else {
-            model.settings.encodeAfterRip = false
         }
         UserDefaults.standard.set(true, forKey: Self.doneKey)
         dismiss()

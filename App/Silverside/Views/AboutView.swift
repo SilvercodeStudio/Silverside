@@ -239,16 +239,17 @@ private struct AcknowledgmentsSheet: View {
     }
 }
 
-/// The license, from the copy of LICENSE in the app's bundle, and the HDCD decoder's.
+/// The notice, the license (the GNU GPL, from the copy of LICENSE in the app's bundle), and the
+/// HDCD decoder's.
 private struct LicenseSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    private var text: String {
+    private var license: String {
         let own =
             Bundle.main.url(forResource: "LICENSE", withExtension: nil)
             .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? SilversideLicense.text
         return own.trimmingCharacters(in: .newlines)
-            + "\n\nThe HDCD decoder from FFmpeg (libavfilter/af_hdcd.c), which Silverside includes:\n\n"
+            + "\n\n\nThe HDCD decoder from FFmpeg (libavfilter/af_hdcd.c), which Silverside includes:\n\n"
             + SilversideLicense.hdcdDecoder
     }
 
@@ -256,10 +257,14 @@ private struct LicenseSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("License").font(.title2.bold())
             ScrollView {
-                Text(text)
-                    .font(.callout)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(SilversideLicense.notice).font(.callout)
+                    Divider()
+                    // The GPL's own line breaks, which a proportional font would break again.
+                    Text(license).font(.system(size: 11, design: .monospaced))
+                }
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack {
                 Spacer()
@@ -267,6 +272,6 @@ private struct LicenseSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 520, height: 540)
+        .frame(width: 640, height: 580)
     }
 }

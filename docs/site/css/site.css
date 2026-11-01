@@ -218,6 +218,7 @@ code { font: 400 0.92em/1.4 var(--font-mono); padding: 1px 5px; border-radius: 5
 .acks ul { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 10px 40px; font-size: 14px; line-height: 1.5; color: var(--ink-3); }
 .acks a { color: var(--ink-2); font-weight: 500; }
 .acks a:hover { color: var(--ink); }
+.acks-note { max-width: 72ch; font-size: 14px; line-height: 1.5; color: var(--ink-3); }
 
 .site-footer { padding-block: clamp(48px, 6vw, 72px) 48px; }
 .site-footer .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px 32px; padding-top: 28px; border-top: 1px solid var(--line); font-size: 14px; color: var(--ink-3); }

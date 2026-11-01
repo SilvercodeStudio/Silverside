@@ -15,6 +15,12 @@ as tag the tracks with accurate metadata (song titles, composers, and so on).
 My goal for Silverside is to be the best CD ripping app you can get, whether
 free or paid.
 
+**For personal use.** Silverside is for archival copies of discs that you
+own, for your personal use. It does not support or endorse piracy: do not use
+it to copy discs that are not yours, or to share copies with other people.
+Follow the copyright law where you live. You use Silverside at your own risk:
+it comes with no warranty (see [LICENSE](LICENSE)).
+
 ## Key features 
 
 - Easy to use Mac app and a command-line tool `silverside` that share one engine 
@@ -23,12 +29,20 @@ free or paid.
 - 20-bit HDCD decoding when applicable for enhanced dynamic range.
 - ReplayGain tags for consistent playback volume
 - Excellent handling of multi-CD sets and online metadata lookup (track titles, etc.)
+- Other supported formats for audio extraction:
+  - DTS-CD - when ffmpeg is installed
+  - DVD-Audio (MLP lossless high-resolution surround) - coming soon
+  - DVD-Video - coming soon
+  - Super Audio CD (SACD) extraction is not possible with a standard
+    PC CD/DVD/BD drive. The CD layer of hybrid CD/SACD discs can still
+    be ripped as standard CD audio.
 
 See also:
 
 - [silverside.app](https://silverside.app) official site
 - [CHANGELOG.md](CHANGELOG.md) changes in each version.
-- [LICENSE](LICENSE)
+- [LICENSE](LICENSE) (the GNU General Public License) and [NOTICE](NOTICE)
+- [CONTRIBUTING.md](CONTRIBUTING.md) if you want to send a change.
 
 ## Requirements
 
@@ -264,7 +278,7 @@ make test                 # the engine's tests
 
 Open `Silverside.xcworkspace` in Xcode to work on the app, the engine, and the
 command-line tool together. At its first launch, the app asks what a rip
-should become (Apple Lossless, FLAC, AAC, MP3, or WAV files only).
+should become (Apple Lossless, FLAC, AAC, or MP3).
 
 ## The command-line tool
 
@@ -321,6 +335,15 @@ See [docs/internal/Milestones.md](docs/internal/Milestones.md) for the plan.
 
 ## License
 
-The code is under the MIT License; see [LICENSE](LICENSE). The name "Silverside"
+Silverside is free software under the GNU General Public License, version 3
+or later; see [LICENSE](LICENSE) and [NOTICE](NOTICE). The name "Silverside"
 and the icon and logo artwork are not covered by it: a modified version that
 you distribute needs a different name and icon.
+
+The disc and format logos that Silverside shows (Compact Disc, HDCD, DTS, and
+others) are trademarks of their owners, and are not covered by the license.
+Silverside shows them only to identify a disc's format; it claims no ownership
+of them, and is not endorsed or licensed by their owners.
+
+Contributions come in under the MIT License, and ship in Silverside under the
+GPL; see [CONTRIBUTING.md](CONTRIBUTING.md).

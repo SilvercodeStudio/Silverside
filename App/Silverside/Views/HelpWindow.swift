@@ -7,6 +7,9 @@ struct HelpTopic: Identifiable, Hashable {
     let title: String
     let markdown: String
 
+    /// The name that `help:` links use: the title as an anchor, as "ripping-a-disc".
+    var slug: String { MarkdownHTML.slug(title) }
+
     static func all() -> [HelpTopic] {
         let urls = Bundle.main.urls(forResourcesWithExtension: "md", subdirectory: nil) ?? []
         return
@@ -22,32 +25,202 @@ struct HelpTopic: Identifiable, Hashable {
     }
 }
 
-/// The Help window: topics on the left, the page on the right.
+/// The Help window: topics on the left, the page on the right, with Back and Forward.
 struct HelpView: View {
     @State private var topics = HelpTopic.all()
     @State private var selection: String?
+    @State private var browser: HelpBrowser?
 
     var body: some View {
         NavigationSplitView {
-            List(topics, selection: $selection) { topic in
+            // A page chosen in the list opens at its top, as a new step in the history.
+            List(
+                topics,
+                selection: Binding(
+                    get: { selection },
+                    set: { id in
+                        guard let id, id != selection, let topic = topics.first(where: { $0.id == id }) else { return }
+                        selection = id
+                        browser?.open(topic.slug)
+                    })
+            ) { topic in
                 Text(topic.title).tag(topic.id)
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 280)
         } detail: {
-            if let topic = topics.first(where: { $0.id == selection }) ?? topics.first {
-                HelpWebView(html: MarkdownHTML.page(MarkdownHTML.render(topic.markdown)))
-                    .navigationTitle(topic.title)
-            } else {
+            if let browser {
+                HelpBrowserView(browser: browser)
+                    .navigationTitle(topics.first { $0.id == selection }?.title ?? "Silverside Help")
+                    .toolbar {
+                        ToolbarItemGroup(placement: .navigation) {
+                            Button(action: browser.goBack) { Label("Back", systemImage: "chevron.backward") }
+                                .disabled(!browser.canGoBack)
+                                .help("Show the place you were before (⌘[)")
+                            Button(action: browser.goForward) { Label("Forward", systemImage: "chevron.forward") }
+                                .disabled(!browser.canGoForward)
+                                .help("Show the place you went back from (⌘])")
+                        }
+                    }
+            } else if topics.isEmpty {
                 Text("No help pages are in the app.").foregroundStyle(.secondary)
             }
         }
         .frame(minWidth: 720, minHeight: 500)
-        .onAppear { if selection == nil { selection = topics.first?.id } }
+        .onAppear {
+            guard browser == nil, let first = topics.first else { return }
+            let browser = HelpBrowser(topics: topics)
+            // The page on show names the selection in the list, also after Back and links.
+            browser.onPage = { slug in selection = topics.first { $0.slug == slug }?.id }
+            self.browser = browser
+            var slug = first.slug
+            var section: String?
+            #if DEBUG
+                // `-helpTopic ripping-a-disc` (and `-helpSection hdcd`) opens that page, for screenshots.
+                if let topic = UserDefaults.standard.string(forKey: "helpTopic") {
+                    slug = topic
+                    section = UserDefaults.standard.string(forKey: "helpSection")
+                }
+            #endif
+            browser.open(slug, section: section)
+        }
     }
 }
 
-/// Shows an HTML page. Links open in the browser.
+/// The help pages in a web view, served from the bundle's Markdown under
+/// `silverside-help://<page>`, so that WebKit keeps the history: a page, and a section of it
+/// (`#hdcd`), is one step back, with the place it was scrolled to. `help:` links in the
+/// Markdown (`help:verification#repair`) open another page; other links open in the browser.
+/// Back and Forward: the toolbar, ⌘[ and ⌘] (and ⌘← and ⌘→), a mouse's back and forward
+/// buttons, and a swipe on the trackpad.
+@Observable
+final class HelpBrowser: NSObject, WKNavigationDelegate {
+    static let scheme = "silverside-help"
+
+    @ObservationIgnored let webView: WKWebView
+    private(set) var canGoBack = false
+    private(set) var canGoForward = false
+    /// Called with the page's name when a page shows.
+    @ObservationIgnored var onPage: ((String) -> Void)?
+    @ObservationIgnored private var observations = [NSKeyValueObservation]()
+    /// Set once in init and read only in deinit, both on the main thread.
+    @ObservationIgnored nonisolated(unsafe) private var monitor: Any?
+
+    init(topics: [HelpTopic]) {
+        let configuration = WKWebViewConfiguration()
+        configuration.setURLSchemeHandler(HelpPages(topics: topics), forURLScheme: Self.scheme)
+        webView = WKWebView(frame: .zero, configuration: configuration)
+        super.init()
+        webView.navigationDelegate = self
+        webView.allowsBackForwardNavigationGestures = true
+        webView.setValue(false, forKey: "drawsBackground")
+        observations = [
+            webView.observe(\.canGoBack) { [weak self] view, _ in
+                MainActor.assumeIsolated { self?.canGoBack = view.canGoBack }
+            },
+            webView.observe(\.canGoForward) { [weak self] view, _ in
+                MainActor.assumeIsolated { self?.canGoForward = view.canGoForward }
+            },
+        ]
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .otherMouseDown]) { [weak self] event in
+            guard let self, let window = webView.window, event.window === window else { return event }
+            return handle(event) ? nil : event
+        }
+    }
+
+    deinit {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+    }
+
+    func open(_ slug: String, section: String? = nil) {
+        guard let url = URL(string: "\(Self.scheme)://\(slug)" + (section.map { "#\($0)" } ?? "")) else { return }
+        webView.load(URLRequest(url: url))
+    }
+
+    func goBack() { webView.goBack() }
+    func goForward() { webView.goForward() }
+
+    /// The mouse's back and forward buttons (buttons 4 and 5, numbered 3 and 4 from 0), and the
+    /// keys, which the main window's Back and Forward in the View menu would take otherwise.
+    private func handle(_ event: NSEvent) -> Bool {
+        if event.type == .otherMouseDown {
+            switch event.buttonNumber {
+            case 3: goBack()
+            case 4: goForward()
+            default: return false
+            }
+            return true
+        }
+        guard
+            event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.numericPad, .function])
+                == .command
+        else { return false }
+        switch event.charactersIgnoringModifiers {
+        case "[": goBack()
+        case "]": goForward()
+        default:
+            switch event.keyCode {
+            case 123: goBack()
+            case 124: goForward()
+            default: return false
+            }
+        }
+        return true
+    }
+
+    func webView(
+        _ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+        decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let url = action.request.url else { return decisionHandler(.allow) }
+        switch url.scheme {
+        case Self.scheme, "about":
+            decisionHandler(.allow)
+        case "help":
+            // help:verification#repair. Such a URL has no path, so `URL.fragment` is nil: split the text.
+            decisionHandler(.cancel)
+            let parts = url.absoluteString.dropFirst("help:".count).split(separator: "#", maxSplits: 1)
+            if let page = parts.first { open(String(page), section: parts.count > 1 ? String(parts[1]) : nil) }
+        default:
+            decisionHandler(.cancel)
+            if action.navigationType == .linkActivated { NSWorkspace.shared.open(url) }
+        }
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        if let slug = webView.url?.host() { onPage?(slug) }
+    }
+}
+
+/// Serves `silverside-help://<page>` from the help pages' Markdown, as HTML.
+private final class HelpPages: NSObject, WKURLSchemeHandler {
+    let topics: [HelpTopic]
+
+    init(topics: [HelpTopic]) { self.topics = topics }
+
+    func webView(_ webView: WKWebView, start task: any WKURLSchemeTask) {
+        guard let url = task.request.url, let topic = topics.first(where: { $0.slug == url.host() }) else {
+            task.didFailWithError(URLError(.fileDoesNotExist))
+            return
+        }
+        let data = Data(MarkdownHTML.page(MarkdownHTML.render(topic.markdown)).utf8)
+        task.didReceive(
+            URLResponse(url: url, mimeType: "text/html", expectedContentLength: data.count, textEncodingName: "utf-8"))
+        task.didReceive(data)
+        task.didFinish()
+    }
+
+    func webView(_ webView: WKWebView, stop task: any WKURLSchemeTask) {}
+}
+
+private struct HelpBrowserView: NSViewRepresentable {
+    let browser: HelpBrowser
+
+    func makeNSView(context: Context) -> WKWebView { browser.webView }
+    func updateNSView(_ view: WKWebView, context: Context) {}
+}
+
+/// Shows an HTML page, such as a rip's report. Links open in the browser.
 struct HelpWebView: NSViewRepresentable {
     var html: String
 
@@ -85,6 +258,8 @@ struct HelpWebView: NSViewRepresentable {
 
 /// A small Markdown to HTML converter for the help pages: headings, paragraphs, bullet and
 /// numbered lists, pipe tables, fenced code, and inline code, bold, italics, and links.
+/// Each heading gets an anchor (`slug`), so `[HDCD](#hdcd)` links to a section, and a line
+/// `<!-- toc -->` becomes a list of the page's sections (its `##` headings).
 nonisolated enum MarkdownHTML {
     /// The first level-one heading.
     static func title(of markdown: String) -> String? {
@@ -100,6 +275,8 @@ nonisolated enum MarkdownHTML {
         var list: String?
         var table = [String]()
         var inCode = false
+        let anchors = headings(markdown)
+        var headingIndex = 0
 
         func endParagraph() {
             guard !paragraph.isEmpty else { return }
@@ -163,7 +340,18 @@ nonisolated enum MarkdownHTML {
             if let level = heading(line) {
                 endParagraph()
                 endList()
-                html.append("<h\(level)>\(inline(String(line.dropFirst(level + 1))))</h\(level)>")
+                let id = headingIndex < anchors.count ? anchors[headingIndex].id : slug(line)
+                headingIndex += 1
+                html.append("<h\(level) id=\"\(id)\">\(inline(String(line.dropFirst(level + 1))))</h\(level)>")
+                continue
+            }
+            if line == "<!-- toc -->" {
+                endParagraph()
+                endList()
+                let items = anchors.filter { $0.level == 2 }.map {
+                    "<li><a href=\"#\($0.id)\">\(inline($0.text))</a></li>"
+                }
+                if !items.isEmpty { html.append("<nav class=\"toc\"><ul>" + items.joined() + "</ul></nav>") }
                 continue
             }
             if line.hasPrefix("- ") || line.hasPrefix("* ") {
@@ -194,6 +382,35 @@ nonisolated enum MarkdownHTML {
         endList()
         endTable()
         return html.joined(separator: "\n")
+    }
+
+    /// Every heading outside code, with its anchor; a second heading of the same name gets "-2".
+    private static func headings(_ markdown: String) -> [(level: Int, text: String, id: String)] {
+        var result = [(level: Int, text: String, id: String)]()
+        var used = [String: Int]()
+        var inCode = false
+        for raw in markdown.components(separatedBy: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("```") { inCode.toggle() }
+            guard !inCode, let level = heading(line) else { continue }
+            let base = slug(line)
+            let count = (used[base] ?? 0) + 1
+            used[base] = count
+            result.append((level, String(line.dropFirst(level + 1)), count == 1 ? base : "\(base)-\(count)"))
+        }
+        return result
+    }
+
+    /// A heading or title as an anchor, as GitHub makes them: lowercase letters, digits, and
+    /// hyphens, with spaces as hyphens ("## Pre-emphasis and other flags" is
+    /// "pre-emphasis-and-other-flags").
+    static func slug(_ text: String) -> String {
+        let words = text.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces).lowercased()
+        return String(
+            words.compactMap { character -> Character? in
+                if character == " " { return "-" }
+                return character.isLetter || character.isNumber || character == "-" ? character : nil
+            })
     }
 
     private static func heading(_ line: String) -> Int? {
@@ -274,6 +491,12 @@ nonisolated enum MarkdownHTML {
                  border-bottom: 1px solid color-mix(in srgb, CanvasText 14%, transparent); }
         th { font-weight: 600; }
         a { color: LinkText; }
+        nav.toc { margin: 0 0 18px; padding: 10px 14px; border-radius: 8px;
+                  background: color-mix(in srgb, CanvasText 5%, transparent); }
+        nav.toc ul { list-style: none; padding: 0; margin: 0; columns: 2; column-gap: 28px; }
+        nav.toc li { margin: 0; padding: 0 0 4px; break-inside: avoid; }
+        nav.toc a { text-decoration: none; }
+        nav.toc a:hover { text-decoration: underline; }
         </style></head><body>\(body)</body></html>
         """
     }

@@ -89,6 +89,11 @@ struct GeneralSettings: View {
                     Text("None").tag(ArtworkChoice.none)
                 }
             }
+            Section("Personal use") {
+                Toggle(SilversideLicense.personalUseAgreement, isOn: $model.settings.agreedToPersonalUse)
+                Text("\(SilversideLicense.personalUse) Without this agreement, Silverside does not rip a disc.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .watchingForLAME($lame)

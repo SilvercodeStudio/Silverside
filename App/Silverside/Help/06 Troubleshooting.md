@@ -1,5 +1,7 @@
 # Troubleshooting
 
+<!-- toc -->
+
 ## Apple Music opens when I insert a disc
 
 macOS opens Music for every audio CD, and Music has no setting that leaves the disc alone completely. The closest is “When a CD is inserted: Show CD” in the Music app's settings: Music still opens and comes to the front, but it does not play or import the disc. Then close Music, or leave it open. Do not let Music play or import the disc during a rip: two readers slow each other down.
@@ -28,17 +30,17 @@ The rip works. The names come from the disc's CD-Text, or you type them in the h
 
 ## MP3 is not a choice
 
-MP3 needs the LAME encoder (see Encoding under Settings). Install it with `brew install lame` in Terminal; Silverside notices it within a few seconds. Silverside looks for `lame` in `/opt/homebrew/bin`, `/usr/local/bin`, and the folders on its `PATH`. An app opened from the Finder does not get your shell's `PATH`, so a `lame` installed elsewhere is not found.
+MP3 needs the LAME encoder (see [Encoding](help:settings#encoding) in Settings). Install it with `brew install lame` in Terminal; Silverside notices it within a few seconds. Silverside looks for `lame` in `/opt/homebrew/bin`, `/usr/local/bin`, and the folders on its `PATH`. An app opened from the Finder does not get your shell's `PATH`, so a `lame` installed elsewhere is not found.
 
 ## The rip was not encoded
 
 The rip stays in the rips folder, and the banner or the status bar says why:
 
 - The library already had the album, and you chose Keep the Files.
-- A track is not verified by AccurateRip or CTDB, or no database has the disc. Silverside encodes only verified rips; see Verification for what to try. To encode it as it is, listen to it, then click **Encode…** in the banner.
+- A track is not verified by AccurateRip or CTDB, or no database has the disc. Silverside encodes only verified rips; see [Verification](help:verification#when-tracks-stay-unverified) for what to try. To encode it as it is, listen to it, then click **Encode…** in the banner.
 - MP3 is the format, but LAME is not installed.
 
-To encode a kept rip later, select it in Recent Rips and click **Encode**, or for a set, use **Encode Discs** in the set's view. For a rip with tracks that no database verifies, **Encode…** asks you to accept it as it is first (see Verification).
+To encode a kept rip later, select it in Recent Rips and click **Encode**, or for a set, use **Encode Discs** in the set's view. For a rip with tracks that no database verifies, **Encode…** asks you to accept it as it is first (see [Verification](help:verification#when-tracks-stay-unverified)).
 
 ## A disc was not ripped when it went in
 
@@ -50,7 +52,7 @@ With "Rip it at once" on (Settings › General), a disc rips by itself only when
 
 ## Tracks are not accurate
 
-See Verification. In short: clean the disc, rip again, or rip in another drive; the rips pool. A disc that is not in AccurateRip or CTDB cannot be verified, only read until the reads agree.
+See [Verification](help:verification#when-tracks-stay-unverified). In short: clean the disc, rip again, or rip in another drive; the rips pool. A disc that is not in AccurateRip or CTDB cannot be verified, only read until the reads agree.
 
 ## A drive hangs on a damaged disc
 

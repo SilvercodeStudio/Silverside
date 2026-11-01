@@ -36,6 +36,8 @@ final class AppModel {
         }
     }
     private(set) var drives: [DriveSlot] = []
+    /// A drive whose rip waits for the user to agree to rip only discs they own.
+    var agreementSlot: DriveSlot?
     private(set) var recentRips: [RecentRip] = []
     /// Rips that only the history has: their files were moved or deleted.
     private(set) var missingRips: [RecentRip] = []
@@ -327,6 +329,10 @@ final class AppModel {
     /// release is certain and it is not ripped yet. Otherwise the slot says why it waits.
     func considerRipOnInsert(_ slot: DriveSlot) {
         guard settings.ripOnInsert, !slot.isDemo, slot.rip == nil, !slot.isBusy, let disc = slot.disc else { return }
+        guard settings.agreedToPersonalUse else {
+            slot.ripOnInsertNote = "you have not agreed to rip only discs you own"
+            return
+        }
         if let reason = Self.reasonNotToRipOnInsert(disc, earlierRips: recentRips) {
             slot.ripOnInsertNote = reason
             return
@@ -399,6 +405,11 @@ final class AppModel {
         // A name still being typed (with ⌘R, say) goes into the rip.
         slot.pendingNames.acceptAll()
         guard slot.rip?.isRunning != true, !slot.isBusy, let disc = slot.disc else { return }
+        // No rip without the agreement (the welcome's, or Settings › General's); the demo disc is no disc.
+        guard settings.agreedToPersonalUse || slot.isDemo else {
+            agreementSlot = slot
+            return
+        }
         slot.stopProbe()
         slot.ripOnInsertDate = nil
         slot.ripOnInsertNote = nil

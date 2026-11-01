@@ -75,6 +75,9 @@ public struct Settings: Codable, Equatable, Sendable {
     /// What to do with each data track (an Enhanced CD's extras for a computer): save it as an
     /// ISO image, which the encoding copies into the album's folder with its files beside it.
     public var dataTracks = DataTrackChoice.ask
+    /// The user agreed to rip only discs they own, for their personal use, at their own risk
+    /// (`SilversideLicense.personalUseAgreement`). The app does not rip a disc without it.
+    public var agreedToPersonalUse = false
 
     public init() {}
 
@@ -223,6 +226,7 @@ public struct Settings: Codable, Equatable, Sendable {
         writeImages = try value(.writeImages, defaults.writeImages)
         images = try value(.images, defaults.images)
         dataTracks = try value(.dataTracks, defaults.dataTracks)
+        agreedToPersonalUse = try value(.agreedToPersonalUse, defaults.agreedToPersonalUse)
     }
 }
 

@@ -1,5 +1,7 @@
 # Verification
 
+<!-- toc -->
+
 A rip is only as good as the check that proves it. Silverside uses two databases, and both are independent of the drive.
 
 ## AccurateRip
@@ -37,7 +39,7 @@ Under a track's status, a short line says what the track needed: the sectors tha
 
 The result banner says what is most likely to help next. In short:
 
-- Clean the disc and rip again. The new rip pools with the first (see Options under Ripping a Disc): a track that either rip got accurate is kept.
+- Clean the disc and rip again. The new rip pools with the first (see [Options for one rip](help:ripping-a-disc#options-for-one-rip)): a track that either rip got accurate is kept.
 - Rip in another drive. Each drive reads damage differently, so two drives together often get what one cannot.
 - Repair the rip.
 - For a new release, wait, then use Check Again (below).
@@ -59,4 +61,4 @@ Check Again shows for a rip that is not verified, for one that AccurateRip or CT
 
 ## Multi-disc sets
 
-A set is done when every disc is verified and in the library. The chips on a disc say how far the set is ("Disc 2 of 3", and how many discs are ripped), and the set's view, under Sets in the sidebar, names each disc that still needs attention: one still to rip, one ripped but not verified, one verified but not encoded. See Sets under Ripping a Disc.
+A set is done when every disc is verified and in the library. The chips on a disc say how far the set is ("Disc 2 of 3", and how many discs are ripped), and the set's view, under Sets in the sidebar, names each disc that still needs attention: one still to rip, one ripped but not verified, one verified but not encoded. See [Sets](help:ripping-a-disc#sets).

@@ -99,6 +99,7 @@ struct Rip: AsyncParsableCommand {
     var readAll = false
 
     func run() async throws {
+        try Disclaimer.require()
         let settings = try Settings.load()
         let bsdName = try deviceOptions.bsdName()
         let drive = try IOKitDrive(bsdName: bsdName)

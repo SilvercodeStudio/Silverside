@@ -28,6 +28,12 @@ silverside encode -i "<rip folder>"       # encode a rip later
 
 `silverside help <command>` explains each command, with examples.
 
+Silverside is for archival copies of discs that you own, for your personal use,
+at your own risk. The first `silverside rip` at a terminal asks you to agree to
+this (type `yes`), and remembers the answer in the settings, which the app
+shares. Without a terminal, as in a script, `rip` stops until you agree with
+`silverside --accept-disclaimer`.
+
 ## Commands
 
 | Command | What it does |
@@ -43,7 +49,7 @@ silverside encode -i "<rip folder>"       # encode a rip later
 | `hdcd` | Looks for HDCD codes in audio files and folders (WAV, AIFF, FLAC, Apple Lossless), such as rips and albums from before. |
 | `config` | Shows and changes the settings. |
 | `eject` | Ejects the disc from a drive (`-d diskN`), or from every drive (`--all`). |
-| `license` | Shows the license, and the code from others that the CLI includes. |
+| `license` | Shows the notice and the license (the GNU GPL, version 3 or later), and the code from others that the CLI includes. |
 
 ## What a rip makes
 

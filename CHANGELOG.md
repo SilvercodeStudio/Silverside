@@ -3,6 +3,28 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.9.3 (not released yet)
+
+### Changed
+
+- About › Acknowledgments › License and `silverside license` show the
+  copyright notice and the full text of the license, the GNU General
+  Public License, version 3 or later. Contributions come in under the
+  terms in CONTRIBUTING.md.
+- Silverside is for archival copies of discs that you own, for your
+  personal use. The welcome asks you to agree to this, and Settings ›
+  General keeps the agreement; the app does not rip a disc without it, and
+  asks at the next rip. `silverside rip` asks once at a terminal, and
+  `silverside --accept-disclaimer` agrees ahead of time.
+- The welcome no longer offers WAV files only, so that it fits a 13-inch
+  screen with the new agreement. Settings › General still turns encoding
+  off.
+- The longer help pages (Ripping a Disc, Verification, Troubleshooting)
+  start with a list of their sections, and the pages link to each other
+  where one refers to another. The Help window has Back and Forward: in
+  its toolbar, with ⌘[ and ⌘], with a mouse's back and forward buttons,
+  and with a swipe on the trackpad.
+
 ## 0.9.2 (2026-10-30)
 
 ### Added
@@ -690,7 +712,7 @@ command-line tool.
 - **An About window**, with the version, how many discs you ripped and how
   many tracks are verified, the services Silverside uses, and
   Acknowledgments.
-- **The MIT License.** The name "Silverside" and the icon and logo artwork are
+- **The license.** The name "Silverside" and the icon and logo artwork are
   not covered by it. The app shows it from Acknowledgments, and
   `silverside license` prints it.
 - **Silverside asks before it replaces files in your library.** When the

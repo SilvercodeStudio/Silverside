@@ -10,6 +10,7 @@ Silverside and the `silverside` command line share one settings file, so a chang
 - **Add the files to the Music app** works for every format but FLAC, which Music cannot read. Music adds the files where they are, in the library folder, or copies them into its own folder if "Copy files to Music Media folder when adding to Library" is on in Music's settings. The first time, macOS asks whether Silverside may control Music; the answer is in System Settings › Privacy & Security › Automation. A file renamed later by Update the Library or a name change stays in Music, which follows a moved file on the same disk.
 - **When a disc goes in, rip it at once:** a disc that goes in while Silverside runs is ripped five seconds after its lookup, if MusicBrainz names its release for certain (an exact match, and not one of several releases unless you chose one for the set) and the disc is not ripped yet. The status bar counts down, with Rip Now and Cancel. Otherwise the disc waits for you, and the status bar says why. A disc already in a drive when Silverside starts is never ripped by itself. With eject after the rip on as well, a set rips with no more than a swap of discs.
 - **Artwork:** the front cover only (saved as `cover.jpg` and embedded in the files), every image in the Cover Art Archive, or none.
+- **Personal use:** Silverside is for archival copies of discs that you own, for your personal use, at your own risk. It rips a disc only while this box is checked. The welcome asks for it first; if you uncheck it, the next rip asks again.
 
 ## Ripping
 
@@ -60,7 +61,7 @@ What to do with tracks mastered with pre-emphasis: **Ask each time** (the defaul
 
 ### Silent tracks
 
-What to do with tracks that are all digital silence: **Ask each time** (the default), **Leave out**, or **Keep**. See Silent tracks under Ripping a Disc.
+What to do with tracks that are all digital silence: **Ask each time** (the default), **Leave out**, or **Keep**. See [Silent tracks](help:ripping-a-disc#silent-tracks).
 
 ### Disc image
 

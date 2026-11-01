@@ -61,6 +61,9 @@ public struct DriveReport: Codable, Sendable {
         let middle = (first.startLBA + toc.sectorRange(of: last).upperBound) / 2
 
         run("Read 2,600 sectors from the middle") {
+            // A drive that slept spins up in the first read: on the PLDS DH-6E2S, that took the
+            // timed reads from 7 seconds to 75. One read first keeps that out of the speed.
+            _ = try drive.readAudioSectors(at: middle - 26, count: 26)
             let start = ContinuousClock.now
             for lba in stride(from: middle, to: middle + 2600, by: 26) {
                 _ = try drive.readAudioSectors(at: lba, count: 26)

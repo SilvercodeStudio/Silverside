@@ -1,6 +1,6 @@
 # silverside.app
 
-The website for Silverside: static HTML and CSS, no build step, no JavaScript. GitHub Pages serves this folder as https://silverside.app.
+The website for Silverside: static HTML and CSS, no build step. One small script, `js/site.js`, runs the theme button and opens a screenshot full size over the page; without it, the page follows the system appearance and a screenshot's link opens the image itself. GitHub Pages serves this folder as https://silverside.app.
 
 ## Preview
 

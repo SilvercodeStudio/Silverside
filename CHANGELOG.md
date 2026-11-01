@@ -66,6 +66,9 @@ command-line tool.
   only a few rips have, by chance. Now such a match counts only when both
   of AccurateRip's checksums agree, or it has the most submissions for the
   track. A rip also keeps an earlier rip's track only by the same rule.
+- The drive test's speed check could give a speed far too low when the
+  drive had spun down: the time to spin up counted as reading. It now
+  reads once before it starts the clock.
 
 ## 0.9.2 (2026-10-30)
 

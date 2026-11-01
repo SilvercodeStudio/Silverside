@@ -723,8 +723,10 @@ final class RipRun {
         case .artwork(let result):
             isSavingArtwork = false
             switch result {
-            case .saved(let files):
-                add("Cover: saved \(files.count == 1 ? files[0].lastPathComponent : "\(files.count) images")")
+            case .saved(let files, let other):
+                add(
+                    "Cover: saved \(files.count == 1 ? files[0].lastPathComponent : "\(files.count) images")"
+                        + (other.map { ", from release \($0)" } ?? ""))
             default: add("Cover: \(result)")
             }
         case .artworkFailed(let error):

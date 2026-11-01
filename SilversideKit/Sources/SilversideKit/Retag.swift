@@ -22,6 +22,10 @@ public struct ReleaseCoverStore: Sendable {
         folder.appending(path: "\(Self.name(releaseID)).sleeves")
     }
 
+    private func artworkFile(for releaseID: String) -> URL {
+        folder.appending(path: "\(Self.name(releaseID)).artwork")
+    }
+
     private static func name(_ releaseID: String) -> String {
         releaseID.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "_")
     }
@@ -42,6 +46,22 @@ public struct ReleaseCoverStore: Sendable {
         }
     }
 
+    /// The other release whose Cover Art Archive images the release takes, front cover and
+    /// artwork alike, when it has none of its own or the user liked another edition's better.
+    public func artworkRelease(forReleaseID releaseID: String) -> String? {
+        (try? String(contentsOf: artworkFile(for: releaseID), encoding: .utf8))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// The release takes `other`'s images from now on, in place of a cover kept for it and
+    /// its discs' sleeves.
+    public func useArtwork(ofRelease other: String, forReleaseID releaseID: String) throws {
+        try forget(releaseID: releaseID)
+        guard other != releaseID else { return }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data(other.utf8).write(to: artworkFile(for: releaseID), options: .atomic)
+    }
+
     public func cover(forReleaseID releaseID: String) -> CoverImage? {
         files(for: releaseID).lazy.compactMap { try? Data(contentsOf: $0) }.first.map(CoverImage.init)
     }
@@ -54,9 +74,11 @@ public struct ReleaseCoverStore: Sendable {
         try cover.data.write(to: files(for: releaseID).first { $0.pathExtension == fileExtension }!, options: .atomic)
     }
 
-    /// Forgets the cover and the discs' sleeves: the release takes the archive's main front again.
+    /// Forgets the cover, the other release's artwork, and the discs' sleeves: the release
+    /// takes the archive's main front again.
     public func forget(releaseID: String) throws {
-        for file in files(for: releaseID) where FileManager.default.fileExists(atPath: file.path) {
+        for file in files(for: releaseID) + [artworkFile(for: releaseID)]
+        where FileManager.default.fileExists(atPath: file.path) {
             try FileManager.default.removeItem(at: file)
         }
         try useDiscSleeves(false, releaseID: releaseID)

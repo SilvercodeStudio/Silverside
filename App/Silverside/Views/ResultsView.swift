@@ -35,6 +35,8 @@ struct ResultsView: View {
     /// The cover's file while Quick Look shows it.
     @State private var coverPreview: URL?
     @State private var archivePickerShown = false
+    /// The other images of a release, offered for the rip's Artwork folder.
+    @State private var artworkOffer: ArtworkOffer?
     /// The rip's own edits (track titles and artists), as typed; saved on Return, or when the
     /// focus leaves the field.
     @State private var edits = MetadataEdits()
@@ -450,11 +452,17 @@ struct ResultsView: View {
                     Button("Quick Look") { coverPreview = CoverDrop.file(for: cover, name: coverFileName) }
                         .disabled(cover == nil)
                     Button("Choose Cover…") { chooseCover() }
-                    if let release = report.release, release.hasArtwork {
-                        Button("Cover Art Archive…") { archivePickerShown = true }
+                    if let release = report.release, !release.isManual {
+                        Button(release.hasArtwork ? "Cover Art Archive…" : "Other Releases' Cover Art…") {
+                            archivePickerShown = true
+                        }
                     }
-                    if let release = report.release, !release.isManual, release.hasFrontCover {
+                    if let release = report.release, !release.isManual {
                         Button("Use the Cover Art Archive's") { model.changeCover(of: recentRip, to: nil) }
+                        Button("Download Artwork…") {
+                            Task { artworkOffer = await model.artworkOffer(for: release, rips: [recentRip]) }
+                        }
+                        .disabled(recentRip.isMissing)
                     }
                     Divider()
                     Button("Export Cover…") { CoverDrop.export(cover, name: coverFileName) }.disabled(cover == nil)
@@ -467,10 +475,26 @@ struct ResultsView: View {
                         CoverArtPickerSheet(release: release, disc: report.discPosition) { choice in
                             switch choice {
                             case .image(let image): model.changeCover(of: recentRip, to: image)
+                            case .release(let other, let front):
+                                model.changeCover(of: recentRip, to: front)
+                                Task {
+                                    let images = (try? await CoverArtClient().images(releaseID: other)) ?? []
+                                    artworkOffer = ArtworkOffer(images: images, rips: [recentRip], afterCover: true)
+                                }
                             case .discSleeves: model.useDiscSleeves(of: release)
                             }
                         }
                     }
+                }
+                .alert(
+                    artworkOffer?.title ?? "",
+                    isPresented: Binding(get: { artworkOffer != nil }, set: { if !$0 { artworkOffer = nil } }),
+                    presenting: artworkOffer
+                ) { offer in
+                    Button("Save Artwork") { model.saveArtwork(offer.images, of: offer.rips) }
+                    Button(offer.afterCover ? "Cover Only" : "Cancel", role: .cancel) {}
+                } message: { offer in
+                    Text(offer.message)
                 }
                 #if DEBUG
                     .onAppear { archivePickerShown = UserDefaults.standard.bool(forKey: "coverArchive") }

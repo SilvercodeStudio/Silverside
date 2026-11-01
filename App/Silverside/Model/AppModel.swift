@@ -260,16 +260,69 @@ final class AppModel {
             var cover = image
             if cover == nil {
                 try? ReleaseCoverStore().forget(releaseID: set.releaseID)
-                cover = try? await CoverArtClient().frontCover(releaseID: set.releaseID)
+                // A release with no front cover of its own takes its release group's.
+                if let release = rips.lazy.compactMap(\.report.release).first(where: { $0.id == set.releaseID }) {
+                    cover = try? await CoverArtClient().frontCover(of: release)
+                } else {
+                    cover = try? await CoverArtClient().frontCover(releaseID: set.releaseID)
+                }
                 guard cover != nil else {
                     alert = AppAlert(
-                        title: "No cover", message: "The Cover Art Archive has no front cover for this release.")
+                        title: "No cover",
+                        message:
+                            "The Cover Art Archive has no front cover for this release, nor for the album's other releases."
+                    )
                     return
                 }
             }
             startLibraryRun(
                 title: set.title, encode: [], update: rips, cover: cover,
                 discCovers: Dictionary(uniqueKeysWithValues: rips.map { ($0.file, .remove) }))
+        }
+    }
+
+    /// The newest cover change of an earlier rip, which artwork saved after it waits for.
+    @ObservationIgnored private var coverChange: Task<Void, Never>?
+
+    /// Puts `images` (a release's, but its main front) in the Artwork folders of earlier rips,
+    /// their rip folders and album folders, in place of the images there.
+    func saveArtwork(_ images: [CoverArtImage], of rips: [RecentRip]) {
+        let folders = ArtworkOffer.folders(of: rips)
+        Task { @MainActor in
+            // A cover change just asked for rewrites the same reports: it goes first.
+            await coverChange?.value
+            while library?.isRunning == true { try? await Task.sleep(for: .milliseconds(250)) }
+            do {
+                _ = try await CoverArtClient().replaceArtwork(with: images, in: folders)
+                refreshRecentRips()
+            } catch {
+                alert = AppAlert(
+                    title: "The artwork could not be saved",
+                    message: CoverArtPickerSheet.problem(error, with: "The images could not be downloaded")
+                        + " The Artwork folders are as they were.")
+            }
+        }
+    }
+
+    /// Offers the artwork of the release (its own, else its release group's) for earlier
+    /// rips, as Download Artwork… asks; nil when there is none but the cover.
+    func artworkOffer(for release: MusicBrainzRelease, rips: [RecentRip]) async -> ArtworkOffer? {
+        do {
+            let found = try await CoverArtClient().artworkImages(of: release)
+            guard let offer = ArtworkOffer(images: found.images, rips: rips, afterCover: false) else {
+                alert = AppAlert(
+                    title: "No artwork",
+                    message:
+                        "The Cover Art Archive has no images but the cover for this release, nor for the album's other releases."
+                )
+                return nil
+            }
+            return offer
+        } catch {
+            alert = AppAlert(
+                title: "No artwork", message: CoverArtPickerSheet.problem(error, with: "The images could not be listed")
+            )
+            return nil
         }
     }
 
@@ -785,16 +838,19 @@ final class AppModel {
     /// Archive's front cover back.
     func changeCover(of rip: RecentRip, to image: CoverImage?) {
         let settings = settings
-        Task { @MainActor in
+        coverChange = Task { @MainActor in
             do {
                 var cover = image
                 if cover == nil, let release = rip.report.release, !release.isManual {
                     try? ReleaseCoverStore().forget(releaseID: release.id)
-                    cover = try await CoverArtClient().frontCover(releaseID: release.id)
+                    cover = try await CoverArtClient().frontCover(of: release)
                 }
                 guard let cover else {
                     alert = AppAlert(
-                        title: "No cover", message: "The Cover Art Archive has no front cover for this release.")
+                        title: "No cover",
+                        message:
+                            "The Cover Art Archive has no front cover for this release, nor for the album's other releases."
+                    )
                     return
                 }
                 let (file, remember) = (rip.file, image != nil)
@@ -832,8 +888,9 @@ final class AppModel {
             // The picker's releases are the disc lookup's; the details (writers, genre) come by ID.
             let release = ((try? await MusicBrainzClient().release(id: chosen.id)) ?? nil) ?? chosen
             var cover = ReleaseCoverStore().cover(forReleaseID: release.id)
-            if cover == nil, release.hasFrontCover {
-                cover = try? await CoverArtClient().frontCover(releaseID: release.id)
+            if cover == nil {
+                cover = try? await CoverArtClient().frontCover(
+                    of: release, from: ReleaseCoverStore().artworkRelease(forReleaseID: release.id))
             }
             let run = LibraryRun(
                 title: rip.title, encode: [], update: others,

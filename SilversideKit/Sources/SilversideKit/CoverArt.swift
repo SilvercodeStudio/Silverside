@@ -122,6 +122,31 @@ public struct CoverArtClient: Sendable {
         return try Self.images(fromJSON: data)
     }
 
+    /// The images that stand for a release group: those of the release that the archive
+    /// takes for the group (one that editors chose, else one of its releases with a front
+    /// cover), with that release's ID. Nil if no release of the group has a front cover.
+    public func releaseGroupArtwork(releaseGroupID: String) async throws -> (
+        releaseID: String, images: [CoverArtImage]
+    )? {
+        let url = URL(string: "https://coverartarchive.org/release-group/\(releaseGroupID)")!
+        guard let data = try await client.data(from: url) else { return nil }
+        let listing = try Self.listing(fromJSON: data)
+        guard let release = listing.release, !listing.images.isEmpty else { return nil }
+        return (release, listing.images)
+    }
+
+    /// The front cover that stands for the release: the front of `source` (another release
+    /// whose artwork the user chose for it, `ReleaseCoverStore.artworkRelease`), else its
+    /// own, else its release group's, which the archive takes from another release of the
+    /// group. Nil if there is none.
+    public func frontCover(of release: MusicBrainzRelease, from source: String? = nil) async throws -> CoverImage? {
+        if let source, source != release.id { return try await frontCover(releaseID: source) }
+        if release.hasFrontCover { return try await frontCover(releaseID: release.id) }
+        guard !release.isManual, let group = release.releaseGroup?.id else { return nil }
+        let url = URL(string: "https://coverartarchive.org/release-group/\(group)/front")!
+        return try await client.data(from: url).map(CoverImage.init)
+    }
+
     /// One image, at the size it was uploaded.
     public func download(_ image: CoverArtImage) async throws -> CoverImage? {
         try await client.data(from: image.url).map(CoverImage.init)
@@ -143,6 +168,12 @@ public struct CoverArtClient: Sendable {
     }
 
     static func images(fromJSON data: Data) throws -> [CoverArtImage] {
+        try listing(fromJSON: data).images
+    }
+
+    /// A listing's images, and the release they belong to (a release group's listing names
+    /// it: "release": "https://musicbrainz.org/release/<ID>").
+    static func listing(fromJSON data: Data) throws -> (release: String?, images: [CoverArtImage]) {
         struct Listing: Decodable {
             struct Image: Decodable {
                 var id: AnyID
@@ -154,6 +185,7 @@ public struct CoverArtClient: Sendable {
                 var thumbnails: [String: String]?
             }
             var images: [Image]
+            var release: String?
         }
         // The archive gives image IDs as numbers, or in older answers as strings.
         struct AnyID: Decodable {
@@ -176,7 +208,7 @@ public struct CoverArtClient: Sendable {
             components.scheme = "https"
             return components.url
         }
-        return listing.images.compactMap { image in
+        let images = listing.images.compactMap { image -> CoverArtImage? in
             guard let url = secure(image.image) else { return nil }
             let thumbnails = image.thumbnails ?? [:]
             return CoverArtImage(
@@ -184,23 +216,32 @@ public struct CoverArtClient: Sendable {
                 isBack: image.back ?? false, url: url, comment: image.comment ?? "",
                 thumbnailURL: secure(thumbnails["250"] ?? thumbnails["small"] ?? thumbnails["500"]))
         }
+        return (listing.release.flatMap { URL(string: $0)?.lastPathComponent }, images)
     }
 
     /// Saves the release's artwork in `folder`: the front cover as "cover.jpg" (or .png),
     /// and, if `all`, the other images in "Artwork" (see `CoverArtImage.fileNames`).
     /// Returns the files written.
     public func save(releaseID: String, in folder: URL, all: Bool) async throws -> [URL] {
-        let images = try await images(releaseID: releaseID)
+        try await save(try await images(releaseID: releaseID), in: folder, all: all)
+    }
+
+    /// Saves `images` (one release's listing) as `save(releaseID:in:all:)` does.
+    func save(_ images: [CoverArtImage], in folder: URL, all: Bool) async throws -> [URL] {
         var written = [URL]()
         if let front = images.first(where: \.isFront), let image = try await download(front) {
             written.append(try image.write(to: folder))
         }
         guard all else { return written }
-        // The other images, three at a time: full-size scans are many megabytes each, and the
-        // web client still spaces the requests as the archive asks. The files keep the archive's order.
+        return written + (try await saveOthers(images, in: folder.appending(path: "Artwork")))
+    }
+
+    /// Saves the images but the main front in `artwork`, named by `CoverArtImage.fileNames`,
+    /// three at a time: full-size scans are many megabytes each, and the web client still
+    /// spaces the requests as the archive asks. The files keep the archive's order.
+    func saveOthers(_ images: [CoverArtImage], in artwork: URL) async throws -> [URL] {
         let others = Array(
             zip(images.filter { !$0.isFront }, CoverArtImage.fileNames(for: images.filter { !$0.isFront })))
-        let artwork = folder.appending(path: "Artwork")
         let saved = try await withThrowingTaskGroup(of: (Int, URL?).self) { group -> [URL?] in
             var results = [URL?](repeating: nil, count: others.count)
             var next = 0
@@ -217,7 +258,89 @@ public struct CoverArtClient: Sendable {
             }
             return results
         }
-        return written + saved.compactMap { $0 }
+        return saved.compactMap { $0 }
+    }
+
+    /// The images that stand for the release: `source`'s (another release the user chose),
+    /// else its own, else its release group's, with the other release they come from.
+    public func artworkImages(of release: MusicBrainzRelease, from source: String? = nil) async throws -> (
+        images: [CoverArtImage], fromRelease: String?
+    ) {
+        if let source, source != release.id { return (try await images(releaseID: source), source) }
+        if release.hasFrontCover || (release.artworkCount ?? 0) > 0 {
+            return (try await images(releaseID: release.id), nil)
+        }
+        guard !release.isManual, let group = release.releaseGroup?.id,
+            let found = try await releaseGroupArtwork(releaseGroupID: group), found.releaseID != release.id
+        else { return ([], nil) }
+        return (found.images, found.releaseID)
+    }
+
+    /// Puts `images` but the main front (the cover, which a retag changes) in place of the
+    /// Artwork folder of each of `folders`: earlier rips' folders and their album folders.
+    /// The images are downloaded first, and each folder's old Artwork is removed only when
+    /// its new one is in place, so a failure leaves it as it was. A rip's disc.json lists the
+    /// new files. Returns the number of images in each folder's Artwork now.
+    public func replaceArtwork(with images: [CoverArtImage], in folders: [URL]) async throws -> Int {
+        let manager = FileManager.default
+        let staging = manager.temporaryDirectory.appending(
+            path: "silverside-artwork-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? manager.removeItem(at: staging) }
+        let saved = try await saveOthers(images, in: staging)
+        try Task.checkCancellation()
+        var seen = Set<String>()
+        for folder in folders where seen.insert(folder.standardizedFileURL.resolvingSymlinksInPath().path).inserted {
+            try ArtworkFolder.replace(in: folder, with: staging, files: saved)
+        }
+        return saved.count
+    }
+}
+
+/// The Artwork folder of a rip or an album: the release's images but its cover.
+public enum ArtworkFolder {
+    /// The images in `folder`'s Artwork.
+    public static func count(in folder: URL) -> Int {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.appending(path: "Artwork").path)) ?? []
+        return names.filter { !$0.hasPrefix(".") }.count
+    }
+
+    /// Copies `staged` into `folder` as its Artwork, in place of the one there. The copy goes
+    /// in under another name first; the old folder is moved aside, the copy takes its name,
+    /// and only then is the old one removed (put back if the rename fails). A disc.json in
+    /// `folder` with a list of files gets `files` (in `staged`) as Artwork/... in place of its old ones.
+    static func replace(in folder: URL, with staged: URL, files: [URL]) throws {
+        let manager = FileManager.default
+        let artwork = folder.appending(path: "Artwork", directoryHint: .isDirectory)
+        let copy = folder.appending(path: ".silverside-artwork-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let aside = folder.appending(path: ".silverside-artwork-old-\(UUID().uuidString)", directoryHint: .isDirectory)
+        if files.isEmpty {
+            try manager.createDirectory(at: copy, withIntermediateDirectories: true)
+        } else {
+            try manager.copyItem(at: staged, to: copy)
+        }
+        let hadArtwork = manager.fileExists(atPath: artwork.path)
+        do {
+            if hadArtwork { try manager.moveItem(at: artwork, to: aside) }
+            do {
+                try manager.moveItem(at: copy, to: artwork)
+            } catch {
+                if hadArtwork { try? manager.moveItem(at: aside, to: artwork) }
+                throw error
+            }
+        } catch {
+            try? manager.removeItem(at: copy)
+            throw error
+        }
+        try? manager.removeItem(at: aside)
+        if files.isEmpty { try? manager.removeItem(at: artwork) }
+
+        let reportFile = folder.appending(path: "disc.json")
+        guard manager.fileExists(atPath: reportFile.path), var report = try? RipReport.read(from: reportFile),
+            let listed = report.files
+        else { return }
+        let names = files.map { "Artwork/" + $0.lastPathComponent }
+        report.files = (listed.filter { !$0.hasPrefix("Artwork/") } + names).sorted()
+        try report.write(to: reportFile)
     }
 }
 

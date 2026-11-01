@@ -143,18 +143,26 @@ public enum ArtworkResult: Equatable, Sendable {
     case notWanted
     /// The Cover Art Archive has no images for the release.
     case noneInArchive
-    /// The images, as saved.
-    case saved([URL])
+    /// The images, as saved; `fromRelease` is the other release they came from, if they are
+    /// not the release's own.
+    case saved([URL], fromRelease: String? = nil)
 }
 
 extension CoverArtClient {
     /// Saves the release's artwork in `folder`: the front cover as cover.jpg, and with
-    /// `.all`, the other images in Artwork/.
-    public func saveArtwork(_ choice: ArtworkChoice, of release: MusicBrainzRelease, in folder: URL) async throws
-        -> ArtworkResult
-    {
+    /// `.all`, the other images in Artwork/. The images are those of `source` when the user
+    /// chose another release's (`ReleaseCoverStore.artworkRelease`). A release with none of
+    /// its own takes its release group's: another edition's, as the archive chooses it
+    /// (*Live at Stubb's*: Epic EK 96464 has none, the Or Music release has three).
+    public func saveArtwork(
+        _ choice: ArtworkChoice, of release: MusicBrainzRelease, in folder: URL, from source: String? = nil
+    ) async throws -> ArtworkResult {
         guard choice != .none else { return .notWanted }
-        guard release.hasFrontCover || (release.artworkCount ?? 0) > 0 else { return .noneInArchive }
+        if (source != nil && source != release.id) || !(release.hasFrontCover || (release.artworkCount ?? 0) > 0) {
+            let found = try await artworkImages(of: release, from: source)
+            let files = try await save(found.images, in: folder, all: choice == .all)
+            return files.isEmpty ? .noneInArchive : .saved(files, fromRelease: found.fromRelease)
+        }
         do {
             let files = try await save(releaseID: release.id, in: folder, all: choice == .all)
             return files.isEmpty ? .noneInArchive : .saved(files)

@@ -63,6 +63,15 @@ struct DiscInfo {
     var keptCover: CoverImage?
     /// This disc's own sleeve, for a box set whose discs take theirs from the Cover Art Archive.
     var sleeve: CoverImage?
+    /// The other release whose images the user chose for the release (`ReleaseCoverStore.artworkRelease`).
+    var artworkRelease: String?
+    /// The other release whose images stand for this one: the one chosen, or, for a release
+    /// with none, the one the Cover Art Archive takes for its release group. Nil for its own.
+    var coverRelease: String?
+    /// The number of images of `coverRelease`, for the cover's badge.
+    var coverReleaseImages: Int?
+    /// `cover` is another release's.
+    var coverFromOtherRelease: Bool { coverRelease != nil && cover != nil }
     /// The cover to show: the one the rip's files will embed.
     var shownCover: Data? { (userCover ?? sleeve ?? keptCover)?.data ?? cover }
     /// A release Silverside made, when MusicBrainz has none: from CD-Text, or "Unknown".
@@ -331,16 +340,38 @@ struct DiscInfo {
         keptCover = chosen.isManual ? nil : ReleaseCoverStore().cover(forReleaseID: chosen.id)
         cover = nil
         await loadSleeve()
-        guard chosen.hasFrontCover else { return }
-        cover = await Self.frontCover(releaseID: chosen.id)
+        await loadCover()
     }
 
-    /// The archive's front cover. A failed download is tried once more after a pause: the
-    /// archive sends its images on to archive.org, which can be slow to answer.
-    static func frontCover(releaseID: String) async -> Data? {
+    /// The archive's cover for the release, and the other release it comes from, if any: the
+    /// one the user chose (`ReleaseCoverStore.artworkRelease`), else, for a release with no
+    /// images, its release group's (`CoverArtClient.releaseGroupArtwork`).
+    mutating func loadCover() async {
+        (artworkRelease, coverRelease, coverReleaseImages) = (nil, nil, nil)
+        guard let release, !release.isManual else { return }
+        artworkRelease = ReleaseCoverStore().artworkRelease(forReleaseID: release.id)
+        coverRelease = artworkRelease
+        if let other = artworkRelease {
+            coverReleaseImages = (try? await CoverArtClient().images(releaseID: other))?.count
+        } else if !release.hasFrontCover, let group = release.releaseGroup?.id,
+            let found = try? await CoverArtClient().releaseGroupArtwork(releaseGroupID: group),
+            found.releaseID != release.id
+        {
+            coverRelease = found.releaseID
+            coverReleaseImages = found.images.count
+        }
+        let data = await Self.frontCover(of: release, from: coverRelease)
+        guard self.release?.id == release.id else { return }
+        cover = data
+    }
+
+    /// The archive's front cover for the release: `source`'s, its own, or its release group's
+    /// (`CoverArtClient.frontCover(of:from:)`). A failed download is tried once more after a
+    /// pause: the archive sends its images on to archive.org, which can be slow to answer.
+    static func frontCover(of release: MusicBrainzRelease, from source: String? = nil) async -> Data? {
         for attempt in 1...2 {
             do {
-                return try await CoverArtClient().frontCover(releaseID: releaseID)?.data
+                return try await CoverArtClient().frontCover(of: release, from: source)?.data
             } catch {
                 guard attempt == 1, !(error is CancellationError), (try? await Task.sleep(for: retryDelay)) != nil
                 else { return nil }

@@ -397,8 +397,11 @@ public struct DiscRip {
         // image of a release can be a hundred megabytes of scans. The rip waits for it at the end.
         let artworkTask: Task<ArtworkResult, any Error>? =
             if userCover == nil, let chosen, !chosen.isManual {
-                Task { [webClient, choice = options.artwork] in
-                    try await CoverArtClient(client: webClient).saveArtwork(choice, of: chosen, in: folder)
+                Task {
+                    [webClient, choice = options.artwork, source = coverStore.artworkRelease(forReleaseID: chosen.id)]
+                    in
+                    try await CoverArtClient(client: webClient).saveArtwork(
+                        choice, of: chosen, in: folder, from: source)
                 }
             } else {
                 nil
@@ -631,7 +634,7 @@ public struct DiscRip {
             events(.savingArtwork)
             do {
                 let artwork = try await artworkTask.value
-                if case .saved(let files) = artwork {
+                if case .saved(let files, _) = artwork {
                     for file in files { written.insert(Self.relativePath(of: file, in: folder)) }
                 }
                 events(.artwork(artwork))

@@ -144,7 +144,9 @@ struct Metadata: AsyncParsableCommand {
             print("Cover: \(try image.write(to: folder).path)")
         } else if !chosen.isManual {
             ReleaseChoice.printArtwork(
-                try await CoverArtClient().saveArtwork(artwork ?? Settings.load().artwork, of: chosen, in: folder))
+                try await CoverArtClient().saveArtwork(
+                    artwork ?? Settings.load().artwork, of: chosen, in: folder,
+                    from: ReleaseCoverStore().artworkRelease(forReleaseID: chosen.id)))
         }
         if retag {
             let settings = try Settings.load()
@@ -246,7 +248,8 @@ enum ReleaseChoice {
             break
         case .noneInArchive:
             print("Cover: the Cover Art Archive has none for this release.")
-        case .saved(let files):
+        case .saved(let files, let other):
+            if let other { print("Cover: this release has none; from release \(other)") }
             for file in files {
                 let size = ((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) / 1024
                 print("Cover: \(file.path) (\(size) KB)")

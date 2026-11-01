@@ -13,6 +13,8 @@ struct SetView: View {
     /// The cover's file while Quick Look shows it.
     @State private var coverPreview: URL?
     @State private var archivePickerShown = false
+    /// The other images of a release, offered for the discs' Artwork folders.
+    @State private var artworkOffer: ArtworkOffer?
     @State private var album = ""
     @State private var albumArtist = ""
     @State private var date = ""
@@ -151,11 +153,14 @@ struct SetView: View {
                     Button("Quick Look") { coverPreview = CoverDrop.file(for: cover, name: coverFileName) }
                         .disabled(cover == nil)
                     Button("Choose Cover…", action: chooseCover)
-                    if release?.hasArtwork == true {
-                        Button("Cover Art Archive…") { archivePickerShown = true }
-                    }
-                    if release?.hasFrontCover == true {
+                    if let release, !release.isManual {
+                        Button(release.hasArtwork ? "Cover Art Archive…" : "Other Releases' Cover Art…") {
+                            archivePickerShown = true
+                        }
                         Button("Use the Cover Art Archive's") { changeCover(to: nil) }
+                        Button("Download Artwork…") {
+                            Task { artworkOffer = await model.artworkOffer(for: release, rips: setRips) }
+                        }
                     }
                     Divider()
                     Button("Export Cover…") {
@@ -171,10 +176,26 @@ struct SetView: View {
                         CoverArtPickerSheet(release: release, disc: nil) { choice in
                             switch choice {
                             case .image(let image): changeCover(to: image)
+                            case .release(let other, let front):
+                                changeCover(to: front)
+                                Task {
+                                    let images = (try? await CoverArtClient().images(releaseID: other)) ?? []
+                                    artworkOffer = ArtworkOffer(images: images, rips: setRips, afterCover: true)
+                                }
                             case .discSleeves: model.useDiscSleeves(of: release)
                             }
                         }
                     }
+                }
+                .alert(
+                    artworkOffer?.title ?? "",
+                    isPresented: Binding(get: { artworkOffer != nil }, set: { if !$0 { artworkOffer = nil } }),
+                    presenting: artworkOffer
+                ) { offer in
+                    Button("Save Artwork") { model.saveArtwork(offer.images, of: offer.rips) }
+                    Button(offer.afterCover ? "Cover Only" : "Cancel", role: .cancel) {}
+                } message: { offer in
+                    Text(offer.message)
                 }
                 #if DEBUG
                     .onAppear { archivePickerShown = UserDefaults.standard.bool(forKey: "coverArchive") }
@@ -386,8 +407,10 @@ struct SetView: View {
 
     /// A cover for every disc: the encoded ones through a library update, the others through
     /// their rip folders; nil takes the Cover Art Archive's front cover.
+    /// The set's rips, one for each disc ripped.
+    private var setRips: [RecentRip] { ripSet.positions.compactMap(rip(at:)) }
+
     private func changeCover(to image: CoverImage?) {
-        let rips = ripSet.positions.compactMap(rip(at:))
-        model.changeCover(ofSet: ripSet, rips: rips, to: image)
+        model.changeCover(ofSet: ripSet, rips: setRips, to: image)
     }
 }

@@ -220,13 +220,24 @@ struct AlbumHeader: View {
     /// The cover's file while Quick Look shows it.
     @State private var coverPreview: URL?
     @State private var archivePickerShown = false
+    /// The picker starts with another release's images (Other Releases' Cover Art…).
+    @State private var pickerStartsWithOthers = false
+    /// The release whose images the picker starts with, as the badge asks; nil for the usual.
+    @State private var pickerStartsWith: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             CoverView(data: disc.shownCover)
                 .overlay(alignment: .bottomTrailing) {
                     if slot.rip?.isRunning != true {
-                        CoverArchiveBadge(release: disc.release) { archivePickerShown = true }
+                        CoverArchiveBadge(
+                            release: disc.release, otherRelease: disc.userCover == nil ? disc.coverRelease : nil,
+                            otherCount: disc.coverReleaseImages
+                        ) {
+                            pickerStartsWithOthers = false
+                            pickerStartsWith = disc.userCover == nil ? disc.coverRelease : nil
+                            archivePickerShown = true
+                        }
                     }
                 }
                 .overlay {
@@ -252,11 +263,25 @@ struct AlbumHeader: View {
                     Button("Quick Look") { coverPreview = CoverDrop.file(for: disc.shownCover, name: coverFileName) }
                         .disabled(disc.shownCover == nil)
                     Button("Choose Cover…") { chooseCover() }.disabled(slot.rip?.isRunning == true)
-                    if let release = disc.release, release.hasArtwork {
-                        Button("Cover Art Archive…") { archivePickerShown = true }
+                    if let release = disc.release, !release.isManual {
+                        if release.hasArtwork {
+                            Button("Cover Art Archive…") {
+                                pickerStartsWithOthers = false
+                                pickerStartsWith = nil
+                                archivePickerShown = true
+                            }
                             .disabled(slot.rip?.isRunning == true)
+                        }
+                        Button("Other Releases' Cover Art…") {
+                            pickerStartsWithOthers = true
+                            pickerStartsWith = disc.coverRelease
+                            archivePickerShown = true
+                        }
+                        .disabled(slot.rip?.isRunning == true)
                     }
-                    if disc.userCover != nil || disc.keptCover != nil || disc.sleeve != nil {
+                    if disc.userCover != nil || disc.keptCover != nil || disc.sleeve != nil
+                        || disc.artworkRelease != nil
+                    {
                         Button(disc.cover == nil ? "Remove Cover" : "Use the Cover Art Archive's") {
                             useArchiveCover()
                         }
@@ -271,10 +296,26 @@ struct AlbumHeader: View {
                 )
                 .sheet(isPresented: $archivePickerShown) {
                     if let release = disc.release {
-                        CoverArtPickerSheet(release: release, disc: disc.shownMedium?.position) { choice in
+                        CoverArtPickerSheet(
+                            release: release, disc: disc.shownMedium?.position, others: disc.releases,
+                            startsWithOthers: pickerStartsWithOthers, startsWith: pickerStartsWith
+                        ) { choice in
                             switch choice {
                             case .image(let image?): slot.disc?.useCover(image)
                             case .image(nil): useArchiveCover()
+                            case .release(let other, let front):
+                                try? ReleaseCoverStore().useArtwork(ofRelease: other, forReleaseID: release.id)
+                                slot.disc?.userCover = nil
+                                slot.disc?.keptCover = nil
+                                slot.disc?.sleeve = nil
+                                slot.disc?.cover = front.data
+                                Task {
+                                    var info = disc
+                                    await info.loadCover()
+                                    slot.disc?.artworkRelease = info.artworkRelease
+                                    slot.disc?.coverRelease = info.coverRelease
+                                    slot.disc?.coverReleaseImages = info.coverReleaseImages
+                                }
                             case .discSleeves:
                                 try? ReleaseCoverStore().useDiscSleeves(true, releaseID: release.id)
                                 slot.disc?.userCover = nil
@@ -336,6 +377,13 @@ struct AlbumHeader: View {
                             Chip(text: "This disc's sleeve", systemImage: "photo.stack")
                                 .help(
                                     "Each disc of this set takes its own sleeve from the Cover Art Archive: this one's files embed it, and the album folder keeps the set's cover."
+                                )
+                        } else if disc.coverFromOtherRelease {
+                            Chip(text: "Another release's cover", systemImage: "photo.on.rectangle")
+                                .help(
+                                    disc.artworkRelease != nil
+                                        ? "You chose another release's images in the Cover Art Archive for this release: the rip saves its cover and artwork."
+                                        : "This release has no images in the Cover Art Archive, so the cover and artwork come from another release of the album, as the archive chooses it. Other Releases' Cover Art… in the cover's menu shows the others."
                                 )
                         }
                         if !disc.edits.isEmpty {
@@ -505,19 +553,24 @@ struct AlbumHeader: View {
 
     /// Back to the Cover Art Archive's main front, for this disc and the release.
     private func useArchiveCover() {
+        let hadOtherRelease = disc.artworkRelease != nil
         slot.disc?.userCover = nil
         slot.disc?.keptCover = nil
         slot.disc?.sleeve = nil
         // A disc with no release keeps its cover by its own manual release (`DiscInfo.useCover`).
         if let id = disc.baseRelease?.id { try? ReleaseCoverStore().forget(releaseID: id) }
-        guard let release = disc.release else { return }
-        // The download when the disc went in can have failed; then the cover comes now.
-        if disc.cover == nil, release.hasFrontCover {
+        guard let release = disc.release, !release.isManual else { return }
+        // The download when the disc went in can have failed, or the cover was another
+        // release's that the user chose; then the archive's comes now.
+        if disc.cover == nil || hadOtherRelease {
             Task {
-                guard let data = await DiscInfo.frontCover(releaseID: release.id),
-                    slot.disc?.release?.id == release.id
-                else { return }
-                slot.disc?.cover = data
+                var info = disc
+                await info.loadCover()
+                guard slot.disc?.release?.id == release.id else { return }
+                slot.disc?.cover = info.cover
+                slot.disc?.artworkRelease = info.artworkRelease
+                slot.disc?.coverRelease = info.coverRelease
+                slot.disc?.coverReleaseImages = info.coverReleaseImages
             }
         }
     }

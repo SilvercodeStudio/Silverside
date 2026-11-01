@@ -507,7 +507,7 @@ struct DiscRipTests {
         let file = result.folder.appending(path: "cover.png")
         #expect(try Data(contentsOf: file) == png.data)
         #expect(result.report.files?.contains("cover.png") == true)
-        #expect(events.contains { if case .artwork(.saved([file])) = $0 { true } else { false } })
+        #expect(events.contains { if case .artwork(.saved([file], nil)) = $0 { true } else { false } })
     }
 
     /// A box set whose discs take their own sleeves: the rip saves the set's cover (the

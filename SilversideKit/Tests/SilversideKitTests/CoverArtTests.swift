@@ -152,6 +152,168 @@ struct CoverArtListingTests {
             ])
     }
 
+    /// A client whose answers are `answers`, with a cache in `directory`.
+    func client(_ answers: [FakeTransport.Answer], in directory: URL) -> (CoverArtClient, FakeTransport) {
+        let transport = FakeTransport(answers)
+        let client = CoverArtClient(
+            client: WebClient(
+                directory: directory.appending(path: "cache"), transport: transport,
+                policies: ["coverartarchive.org": .init(interval: .zero, lifetime: .seconds(60))]))
+        return (client, transport)
+    }
+
+    /// A release that MusicBrainz knows, in release group "g", with no images of its own.
+    func releaseWithoutArtwork() throws -> MusicBrainzRelease {
+        var release = MusicBrainzRelease.manual(toc: try TOC(audioTrackStarts: [0], leadOutLBA: 1000))
+        release.id = "epic"
+        release.releaseGroup = .init(id: "g", title: "Live", primaryType: "Album", secondaryTypes: [])
+        release.artworkCount = 0
+        return release
+    }
+
+    /// A release with no images takes its release group's, every one of them, and says which
+    /// release they came from (*Live at Stubb's*: Epic has none, Or Music has three).
+    @Test func takesTheReleaseGroupsArtworkWhenTheReleaseHasNone() async throws {
+        let jpeg: [UInt8] = [0xFF, 0xD8, 0xFF, 0xE0]
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (client, transport) = client(
+            [.status(200, body: Self.listing)] + Array(repeating: .bytes(jpeg), count: 5), in: directory)
+        let result = try await client.saveArtwork(
+            .all, of: try releaseWithoutArtwork(), in: directory.appending(path: "album"))
+        guard case .saved(let files, let other) = result else {
+            Issue.record("Not saved: \(result)")
+            return
+        }
+        #expect(other == "r" && files.count == 5 && files[0].lastPathComponent == "cover.jpg")
+        let urls = await transport.requests.map { $0.url!.absoluteString }
+        #expect(urls.first == "https://coverartarchive.org/release-group/g")
+    }
+
+    /// A group that has no art at all leaves the release with none; one whose art is the
+    /// release's own adds nothing.
+    @Test func savesNothingWhenTheGroupHasNone() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (client, _) = client([.status(404)], in: directory)
+        let result = try await client.saveArtwork(
+            .all, of: try releaseWithoutArtwork(), in: directory.appending(path: "album"))
+        #expect(result == .noneInArchive)
+    }
+
+    /// The release the user chose for the artwork gives every image, front cover and all.
+    @Test func savesTheArtworkOfTheReleaseTheUserChose() async throws {
+        let jpeg: [UInt8] = [0xFF, 0xD8, 0xFF, 0xE0]
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (client, transport) = client(
+            [.status(200, body: Self.listing)] + Array(repeating: .bytes(jpeg), count: 5), in: directory)
+        var release = try releaseWithoutArtwork()
+        release.hasFrontCover = true
+        release.artworkCount = 1
+        let result = try await client.saveArtwork(
+            .all, of: release, in: directory.appending(path: "album"), from: "ormusic")
+        guard case .saved(let files, let other) = result else {
+            Issue.record("Not saved: \(result)")
+            return
+        }
+        #expect(other == "ormusic" && files.count == 5)
+        let urls = await transport.requests.map { $0.url!.absoluteString }
+        #expect(urls.first == "https://coverartarchive.org/release/ormusic")
+    }
+
+    /// The front cover shown for a release: the chosen release's, its own, or its group's.
+    @Test(arguments: [
+        (true, nil, "https://coverartarchive.org/release/epic/front"),
+        (false, nil, "https://coverartarchive.org/release-group/g/front"),
+        (true, "ormusic", "https://coverartarchive.org/release/ormusic/front"),
+    ])
+    func findsTheFrontCoverThatStandsForTheRelease(ownFront: Bool, source: String?, url: String) async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (client, transport) = client([.bytes([0xFF, 0xD8, 0xFF, 0xE0])], in: directory)
+        var release = try releaseWithoutArtwork()
+        release.hasFrontCover = ownFront
+        #expect(try await client.frontCover(of: release, from: source) != nil)
+        #expect(await transport.requests.map { $0.url!.absoluteString } == [url])
+    }
+
+    /// Another release's artwork is kept for the release until a cover of its own, or the
+    /// archive's again, replaces it.
+    @Test func keepsTheOtherReleaseUntilACoverReplacesIt() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = ReleaseCoverStore(folder: folder)
+        try store.remember(try makeJPEG(width: 10, height: 10), forReleaseID: "epic")
+        try store.useArtwork(ofRelease: "ormusic", forReleaseID: "epic")
+        #expect(store.artworkRelease(forReleaseID: "epic") == "ormusic" && store.cover(forReleaseID: "epic") == nil)
+        try store.remember(try makeJPEG(width: 10, height: 10), forReleaseID: "epic")
+        #expect(store.artworkRelease(forReleaseID: "epic") == nil)
+        try store.useArtwork(ofRelease: "ormusic", forReleaseID: "epic")
+        try store.forget(releaseID: "epic")
+        #expect(store.artworkRelease(forReleaseID: "epic") == nil)
+    }
+
+    /// A rip folder with old artwork and a disc.json that lists it, and an album folder with a copy.
+    func earlierRip(in directory: URL) throws -> (rip: URL, album: URL) {
+        let rip = directory.appending(path: "rip", directoryHint: .isDirectory)
+        let album = directory.appending(path: "album", directoryHint: .isDirectory)
+        for folder in [rip, album] {
+            try FileManager.default.createDirectory(
+                at: folder.appending(path: "Artwork"), withIntermediateDirectories: true)
+            try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: folder.appending(path: "Artwork/back.jpg"))
+            try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: folder.appending(path: "Artwork/tray.jpg"))
+        }
+        let toc = try TOC(audioTrackStarts: [0], leadOutLBA: 1000)
+        var report = RipReport(
+            drive: .init(vendor: "SIM", product: "DRIVE", revision: "1", readOffset: 6, offsetSource: "test"),
+            secure: true, toc: toc, tracks: [], ctdb: .init(status: .notChecked))
+        report.files = ["Artwork/back.jpg", "Artwork/tray.jpg", "Track 01.wav", "cover.jpg", "disc.json"]
+        try report.write(to: rip.appending(path: "disc.json"))
+        return (rip, album)
+    }
+
+    /// Another release's images replace an earlier rip's Artwork, and its album's, after the
+    /// fact; the rip's report lists the new files.
+    @Test func replacesTheArtworkOfAnEarlierRip() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (rip, album) = try earlierRip(in: directory)
+        let (client, transport) = client(Array(repeating: .bytes([0xFF, 0xD8, 0xFF, 0xE0]), count: 4), in: directory)
+        let images = try CoverArtClient.images(fromJSON: Data(Self.listing.utf8))
+        let count = try await client.replaceArtwork(with: images, in: [rip, album, rip])
+        #expect(count == 4)
+        let expected = ["back.jpg", "booklet-01.jpg", "booklet-02.jpg", "medium.jpg"]
+        for folder in [rip, album] {
+            let names = try FileManager.default.contentsOfDirectory(atPath: folder.appending(path: "Artwork").path)
+            #expect(names.sorted() == expected)
+            #expect(ArtworkFolder.count(in: folder) == 4)
+            let leftovers = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+                .filter { $0.hasPrefix(".silverside-artwork") }
+            #expect(leftovers.isEmpty)
+        }
+        #expect(
+            try RipReport.read(from: rip.appending(path: "disc.json")).files
+                == (expected.map { "Artwork/" + $0 } + ["Track 01.wav", "cover.jpg", "disc.json"]).sorted())
+        // The front is the cover, which a retag changes: it is not downloaded here.
+        #expect(await transport.requests.count == 4)
+    }
+
+    /// A download that fails leaves every folder's Artwork as it was.
+    @Test func keepsTheOldArtworkWhenADownloadFails() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (rip, album) = try earlierRip(in: directory)
+        let (client, _) = client([.status(500), .status(500), .status(500), .status(500)], in: directory)
+        let images = try CoverArtClient.images(fromJSON: Data(Self.listing.utf8))
+        await #expect(throws: (any Error).self) { try await client.replaceArtwork(with: images, in: [rip, album]) }
+        for folder in [rip, album] {
+            let names = try FileManager.default.contentsOfDirectory(atPath: folder.appending(path: "Artwork").path)
+            #expect(names.sorted() == ["back.jpg", "tray.jpg"])
+        }
+        #expect(try RipReport.read(from: rip.appending(path: "disc.json")).files?.contains("Artwork/tray.jpg") == true)
+    }
+
     /// When the archive's list of images fails, the rip still gets the front cover, which the
     /// app fetched as the disc was read.
     @Test func savesTheFrontWhenTheListFails() async throws {
@@ -167,7 +329,7 @@ struct CoverArtListingTests {
         archived.id = "r"
         archived.hasFrontCover = true
         let result = try await client.saveArtwork(.all, of: archived, in: directory.appending(path: "album"))
-        guard case .saved(let files) = result else {
+        guard case .saved(let files, _) = result else {
             Issue.record("Not saved: \(result)")
             return
         }

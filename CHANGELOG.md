@@ -5,6 +5,21 @@ command-line tool.
 
 ## 0.9.3 (not released yet)
 
+### Added
+
+- A release with no images in the Cover Art Archive takes another release
+  of the album's, as the archive chooses it: the cover and, if you keep
+  all artwork, every other image. A chip says "Another release's cover",
+  and the badge on the cover counts that release's images and opens them.
+- Other Releases' Cover Art… in the cover's menu shows the images of the
+  album's other releases. Choose one's main front to make all of its
+  images this release's artwork, or any other image as your cover.
+- An earlier rip or a set can get its artwork after the fact: after you
+  choose another release's cover, Silverside offers to save that release's
+  other images too, and Download Artwork… in the cover's menu fills the
+  Artwork folders of the rips and the album. The old images stay until the
+  new ones are all downloaded.
+
 ### Changed
 
 - About › Acknowledgments › License and `silverside license` show the

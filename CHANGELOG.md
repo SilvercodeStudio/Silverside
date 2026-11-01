@@ -52,6 +52,8 @@ command-line tool.
   and with a swipe on the trackpad.
 - The About window shows the version once, as "0.9.3", not "0.9.3 (1)":
   the app's build number is now its version.
+- A set of two discs says "both discs", not "all 2 discs", and a disc of
+  two tracks "both tracks".
 - A repaired track's line in the Status column is shorter, so it fits:
   "116 sectors re-read · 3,356 repaired".
 

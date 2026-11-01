@@ -87,6 +87,9 @@ struct RipSetTests {
         complete.discs[2]?.isEncoded = true
         #expect(complete.isComplete && complete.summary == "All 3 discs verified and encoded")
         #expect(complete.summary(besides: 2) == "all 3 discs verified and encoded")
+        // Two discs are "both", not "all 2".
+        #expect(RipSet.all(2, "discs", capitalized: true) == "Both discs" && RipSet.all(2) == "both")
+        #expect(RipSet.all(3, "tracks") == "all 3 tracks")
         #expect(RipSet.list([1, 2, 4]) == "1, 2, and 4")
     }
 

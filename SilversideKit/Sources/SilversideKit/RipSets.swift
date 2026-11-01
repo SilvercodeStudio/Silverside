@@ -76,7 +76,7 @@ public struct RipSet: Equatable, Sendable {
     /// "Discs 1 and 3 of 3 ripped; disc 2 still to do; disc 1 not verified", for people to read.
     public var summary: String {
         let ripped = discs.keys.sorted()
-        if isComplete { return "All \(discCount) discs verified and encoded" }
+        if isComplete { return Self.all(discCount, "discs", capitalized: true) + " verified and encoded" }
         var text =
             ripped.isEmpty
             ? "No disc of \(discCount) ripped yet"
@@ -96,7 +96,7 @@ public struct RipSet: Equatable, Sendable {
     /// The set's state as seen from disc `position`, which its own page shows: the other
     /// discs only, as "disc 1 still to do" or "discs 1 and 3 done; disc 2 not encoded".
     public func summary(besides position: Int) -> String {
-        if isComplete { return "all \(discCount) discs verified and encoded" }
+        if isComplete { return Self.all(discCount, "discs") + " verified and encoded" }
         let others = positions.filter { $0 != position }
         func part(_ numbers: [Int], _ state: String) -> String? {
             numbers.isEmpty ? nil : "\(numbers.count == 1 ? "disc" : "discs") \(Self.list(numbers)) \(state)"
@@ -108,6 +108,12 @@ public struct RipSet: Equatable, Sendable {
             part(others.filter { discs[$0]?.isFinished ?? false }, "done"),
         ]
         return parts.compactMap { $0 }.joined(separator: "; ")
+    }
+
+    /// "both discs" for two, else "all 3 discs"; with no noun, "both" or "all 3".
+    public static func all(_ count: Int, _ noun: String? = nil, capitalized: Bool = false) -> String {
+        let all = count == 2 ? (capitalized ? "Both" : "both") : (capitalized ? "All" : "all") + " \(count)"
+        return noun.map { "\(all) \($0)" } ?? all
     }
 
     /// "1", "1 and 3", "1, 2, and 4".
@@ -210,14 +216,15 @@ public struct SetReplayGain: Equatable, Sendable {
             discs[position]!.map { "disc \(position) \($0.gainText)" }
         }
         if let whole {
-            return "Album gain over all \(discCount) discs: \(whole.gainText), peak "
+            return "Album gain over \(RipSet.all(discCount, "discs")): \(whole.gainText), peak "
                 + String(format: "%.3f", whole.peak) + ". On its own, " + RipSet.list(own) + "."
         }
         if let without = discs.keys.sorted().first(where: { discs[$0]! == nil }) {
             return "Disc \(without) was encoded without ReplayGain, so the set has no album gain over all its discs."
         }
         if discs.count < discCount {
-            return "Each disc has its own album gain until all \(discCount) are encoded (\(discs.count) so far):"
+            return
+                "Each disc has its own album gain until \(RipSet.all(discCount)) are encoded (\(discs.count) so far):"
                 + " " + RipSet.list(own) + ". Then every disc gets the album gain over the whole set."
         }
         return "Each disc has its own album gain: " + RipSet.list(own)

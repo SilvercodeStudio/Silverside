@@ -498,7 +498,7 @@ struct AlbumHeader: View {
             let rest = tracks.filter { !kept.contains($0) }
             Chip(
                 text: rest.isEmpty
-                    ? "All \(tracks.count) tracks ripped before"
+                    ? RipSet.all(tracks.count, "tracks", capitalized: true) + " ripped before"
                     : "\(kept.count) of \(tracks.count) tracks ripped before",
                 tone: .good, systemImage: "arrow.uturn.down.circle",
                 help: "An earlier rip has copies of " + Self.tracks(kept)

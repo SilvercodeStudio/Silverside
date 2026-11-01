@@ -587,7 +587,8 @@ final class RipRun {
                 || report.ctdb.status == .verified || report.ctdb.status == .repaired
         }.count
         if verified == total {
-            return total == 1 ? "The track ripped accurately" : "All \(total) tracks ripped accurately"
+            return total == 1
+                ? "The track ripped accurately" : RipSet.all(total, "tracks", capitalized: true) + " ripped accurately"
         }
         if verified == 0, report.tracks.allSatisfy({ $0.accurateRip == .notInDatabase }),
             report.ctdb.status != .notVerified

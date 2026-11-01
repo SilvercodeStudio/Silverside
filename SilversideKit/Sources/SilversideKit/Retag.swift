@@ -658,7 +658,9 @@ extension DiscEncoder {
             else { continue }
             do {
                 _ = try updateLibrary(reportAt: file, library: library)
-                log("Disc \(other): album gain \(values.gainText), over all \(release.cdPositions.count) discs")
+                log(
+                    "Disc \(other): album gain \(values.gainText), over \(RipSet.all(release.cdPositions.count, "discs"))"
+                )
             } catch {
                 log("Disc \(other): the album gain could not be written: \(error)")
             }

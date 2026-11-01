@@ -213,14 +213,15 @@ struct SetView: View {
                 HStack(spacing: 8) {
                     Chip(
                         text: ripSet.isComplete
-                            ? "All \(ripSet.discCount) discs verified and encoded"
+                            ? ripSet.summary
                             : "\(ripSet.discs.count) of \(ripSet.discCount) discs ripped",
                         tone: ripSet.isComplete ? .good : .neutral, systemImage: "square.stack")
                     if let release, let label = release.labels.compactMap(\.name).first { Chip(text: label) }
                     if let genre = release?.genre { Chip(text: genre, systemImage: "music.note.list") }
                     if !edits.isEmpty { Chip(text: "Edited", tone: .warning, systemImage: "pencil") }
                 }
-                Text(ripSet.summary).font(.callout).foregroundStyle(.secondary)
+                // A complete set's chip says it all; an unfinished one's line gives the details.
+                if !ripSet.isComplete { Text(ripSet.summary).font(.callout).foregroundStyle(.secondary) }
                 if let replayGain {
                     Label(
                         "ReplayGain: " + replayGain.text.prefix(1).lowercased() + replayGain.text.dropFirst(),

@@ -283,7 +283,7 @@ extension RipReport {
                 var summary = "ReplayGain, to \(ReplayGain.referenceLoudness.formatted()) LUFS as EBU R 128 measures it"
                 if let whole = gain.release {
                     summary +=
-                        ": the album, all \(gain.releaseDiscs ?? 0) discs, is \(whole.loudnessText), so its gain is"
+                        ": the album, \(RipSet.all(gain.releaseDiscs ?? 0, "discs")), is \(whole.loudnessText), so its gain is"
                         + " \(whole.gainText), peak \(whole.peakText)"
                     if let album = gain.album { summary += "; this disc alone is \(album.loudnessText)" }
                 } else if let album = gain.album {

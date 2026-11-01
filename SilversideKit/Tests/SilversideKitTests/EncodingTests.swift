@@ -556,7 +556,7 @@ extension EncodingTests {
         let albumFolder = files2[0].deletingLastPathComponent()
         let waiting = try #require(RipSet.replayGain(of: release, folders: [root, albumFolder]))
         #expect(waiting.whole == nil && waiting.discs.count == 1)
-        #expect(waiting.text.hasPrefix("Each disc has its own album gain until all 2 are encoded (1 so far): disc 2 "))
+        #expect(waiting.text.hasPrefix("Each disc has its own album gain until both are encoded (1 so far): disc 2 "))
 
         let (files1, record1) = try encoder.encodeWithRecord(try RippedDisc(folder: folder1), into: library)
         let gain1 = try #require(record1?.replayGain)
@@ -571,10 +571,10 @@ extension EncodingTests {
         let saved2 = try RipReport.read(from: album.appending(path: "Rip Report (Disc 2).json"))
         #expect(saved2.encoding?.replayGain?.release == whole && saved2.encoding?.replayGain?.album == gain2.album)
         let markdown = try String(contentsOf: album.appending(path: "Rip Report (Disc 2).md"), encoding: .utf8)
-        #expect(markdown.contains("the album, all 2 discs, is \(whole.loudnessText)"))
+        #expect(markdown.contains("the album, both discs, is \(whole.loudnessText)"))
         let done = try #require(RipSet.replayGain(of: release, folders: [album]))
         #expect(done.whole == whole && done.discs.count == 2)
-        #expect(done.text.hasPrefix("Album gain over all 2 discs: \(whole.gainText), peak "))
+        #expect(done.text.hasPrefix("Album gain over both discs: \(whole.gainText), peak "))
         #expect(done.text.contains("On its own, disc 1 \(try #require(gain1.album).gainText) and disc 2 "))
 
         // A record from before histograms were kept is measured from its files.

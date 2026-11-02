@@ -190,6 +190,10 @@ command-line tool.
 
 ### Added
 
+- `silverside dvd info` lists DVD-Audio programs, and `silverside dvd rip`
+  extracts supported MLP stereo and 5.1 programs into numbered FLAC tracks,
+  with sample-count and PCM checks, playlists, and a rip report. Protected
+  discs use an optional helper and user-installed Homebrew DVD libraries.
 - A release with no images in the Cover Art Archive takes another release
   of the album's, as the archive chooses it: the cover and, if you keep
   all artwork, every other image. A chip says "Another release's cover",

@@ -25,7 +25,7 @@ struct SilversideCommand: AsyncParsableCommand {
         version: SilversideVersion.described,
         subcommands: [
             Drives.self, Info.self, CDTextCommand.self, Rip.self, Repair.self, Check.self, Metadata.self, Encode.self,
-            HDCDCommand.self, VideoCommand.self,
+            HDCDCommand.self, VideoCommand.self, DVDCommand.self,
             Config.self, Eject.self, License.self,
         ]
     )

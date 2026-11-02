@@ -401,13 +401,28 @@ Later, maybe: **GnuDB as a fallback** for discs MusicBrainz does not know (freed
 
 Not planned: Opus and Ogg Vorbis output (too few users; it would need `opusenc`, and Apple's frameworks cannot read Ogg to check the files).
 
-## Later: DVD-Audio and Blu-ray audio
+## DVD-Audio CLI; later DVD-Video and Blu-ray audio
 
-A possible goal after the CD work: extract the audio from a DVD-Audio disc (the user has *American Beauty*) and from a Blu-ray audio disc (a BD-R copy of *The Dark Side of the Moon*). These are different from CD: files on a UDF file system, MLP or PCM streams, and, on DVD-Audio, CPPM copy protection.
+Initial DVD-Audio CLI implementation (2026-11-01, feature/dvd): `dvd info`
+enumerates programs and `dvd rip` extracts supported MLP stereo/5.1 programs
+to numbered per-track FLAC, playlists, and a separate DVD report. A standalone
+helper loads user-installed Homebrew libdvdread/libdvdcss; neither library,
+cipher implementations nor keys are shipped. Plain AUDIO_TS directories have
+a filesystem reader. No Homebrew headers/libraries are needed to build.
 
-An outline (discussed 2026-10-31; not started). Glen Phillips' DVD-Audio disc (2001) has no CPPM: no `DVDAUDIO.MKB` in `AUDIO_TS`, and its `ATS_01_1.AOB` (MLP, 5.1, 24-bit, 96 kHz) decodes cleanly with ffmpeg from a plain `dd` image. For CPPM, Homebrew's libdvdcss (1.6.0) has `dvdcpxm.h` (`dvdcpxm_init` with the disc's MKB, `dvdcpxm_read`); the album ID comes from the disc's lead-in, so a protected disc is decrypted from the drive, not from an image. The user's choices: libdvdcss from Homebrew, never shipped, as with `lame` and `ffmpeg`; loaded by a small helper program in the app bundle (only it gets the hardened runtime's "disable library validation" entitlement, which notarization allows), which writes decrypted `.AOB` data to a pipe; ffmpeg decodes the MLP, and the IFO's track times split it into one FLAC per track. First, a scratchpad test on a CPPM disc: *American Beauty* (2001) is one (its `AUDIO_TS` has `DVDAUDIO.MKB`, every AOB packet sampled has its PES scrambling bits set, and ffmpeg's MLP decoder fails its checksums; MLP, 5.1, 24-bit, 96 kHz, four AOB files of about 4 GB); its `VIDEO_TS` has no CSS.
+The workflow checks navigation bounds, source fingerprints, packet timestamps,
+exact sample counts, output formats, per-track PCM and joined-program hashes.
+It handles American Beauty's fresh-decoder-per-track layout and Fragile's
+continuous timeline separately. Output must be new; failures/cancellation leave
+an incomplete report. The existing personal-use agreement also covers DVD rips.
+See [DVD.md](DVD.md) for evidence, command examples and remaining limitations.
 
-With it, for 1.0 whether or not the DVD part exists: a one-time acknowledgment that Silverside is for copies of discs the user owns, for their own use, not to share or sell. A checkbox in the welcome window (Get Started waits for it), kept in the settings file so the CLI shares it; the CLI asks once at a terminal, with a flag for scripts. A line in the site's Download section says the same.
+Next: broaden title/layout coverage with the incoming DVD-Audio discs, finish
+Developer ID/notarization and clean-machine testing, parse optional Audio Text,
+then integrate presentation selection and output into the GUI. DVD-Video
+LPCM/chapter extraction and decrypted disc images remain separate follow-ups.
+Blu-ray audio (including the user's BD-R copy of The Dark Side of the Moon)
+remains exploratory. More DTS-CD titles are also on the way for CD-path testing.
 
 ## The app (after the CLI)
 

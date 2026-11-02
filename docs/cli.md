@@ -13,8 +13,9 @@ make install                    # silverside in /usr/local/bin (may need sudo)
 make install PREFIX=~/.local    # or in ~/.local/bin
 ```
 
-`make install` builds `silverside` for Apple silicon and Intel, and installs shell
-completions for zsh, bash, and fish. `make uninstall` takes them away.
+`make install` builds `silverside` and its optional `silverside-dvd-helper` for
+Apple silicon and Intel, and installs shell completions for zsh, bash, and fish.
+`make uninstall` takes them away.
 
 ## Quick start
 
@@ -39,6 +40,60 @@ this (type `yes`), and remembers the answer in the settings, which the app
 shares. Without a terminal, as in a script, `rip` stops until you agree with
 `silverside --accept-disclaimer`.
 
+## DVD-Audio (initial CLI support)
+
+Install the optional tools yourself with Homebrew:
+
+```sh
+brew install ffmpeg libdvdread
+silverside dvd info -d matshita
+silverside dvd rip -d matshita -o "$HOME/Music/American Beauty DVD"
+silverside dvd rip -d asus --mix both -o "$HOME/Music/Fragile DVD"
+```
+
+Homebrew installs libdvdread's dependencies, including libdvdcss. The helper
+loads those external libraries at runtime; Silverside does not ship, download
+or install them. The CLI and helper must be installed together (`make install`),
+or built together (`make cli ARGS='dvd info -d matshita'`). Ordinary CD commands
+continue to work without these DVD libraries.
+
+The default `--mix auto` prefers one supported surround program, falling back
+to stereo. `--mix stereo`, `--mix surround`, and `--mix both` select explicitly.
+If several programs fit, use `--title SET:TITLE` from `dvd info`, for example
+`--title 1:2`. One-track programs of at most one second require explicit title
+selection. `dvd info --json` emits the versioned inventory.
+
+This first version supports constant-format, 16/24-bit MLP stereo or 5.1 with
+contiguous, one-cell-per-track navigation. It preserves the decoded sample rate,
+precision and speaker layout. An identified authored stereo substream can be
+selected; Silverside does not synthesize a stereo mix. Other layouts/codecs,
+DVD-Video extraction, metadata lookup and GUI integration are follow-up work.
+
+The output folder must be new, and its parent must exist. Each program gets a
+folder of numbered FLAC tracks and `Tracks.m3u8`. `dvd-rip.json` and
+`Rip Report.txt` record the source navigation, tools, hashes and outcome. The
+checks compare decoded PCM and exact track lengths; they are **not**
+AccurateRip/CTDB verification or a secure reread consensus. No resampling,
+normalization or ReplayGain is applied. Optional disc text is not parsed yet,
+so track titles are placeholders. Menus and pictures are not exported.
+
+Ctrl-C stops the helper/decoder and retains an incomplete report and diagnostic
+work files. A program's tracks become final only after its checks pass. There
+is no resume yet; choose a new output folder for another attempt. Temporary
+space can exceed the size of the selected audio while FLAC is being verified.
+
+For unprotected material, `--source /path/to/disc-folder` (or its `AUDIO_TS`
+folder) uses ordinary file reads. Encrypted filesystem copies are rejected;
+CPPM authentication normally needs the original disc in its drive. Direct ISO
+access is experimental: libdvdread 7.1.1/libdvdcss 1.6.0 fail on the tested
+unprotected Glen Phillips ISO's no-MKB path. Mount an unprotected ISO read-only
+and pass its mounted directory to `--source` instead. Silverside does not mount
+images automatically or modify the source.
+
+The existing personal-use agreement applies to `dvd rip` too. These commands
+do not add DVD features to the GUI yet. See [the DVD plan](internal/DVD.md) for
+tested titles, remaining coverage and helper signing requirements.
+
 ## Commands
 
 | Command | What it does |
@@ -52,6 +107,7 @@ shares. Without a terminal, as in a script, `rip` stops until you agree with
 | `metadata` | Shows the MusicBrainz releases for a disc, and keeps the chosen one in a rip's `disc.json`; `--set` edits names, `--cover` gives a cover, and `--retag` writes both into the album's encoded files. |
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
 | `video` | Makes a video of a CD+G disc's rip: the graphics drawn as a CD+G player draws them, over the rip's audio (Apple Lossless, exactly as ripped, or `--audio aac`), the whole disc in one `.m4v` with a chapter for each track, named by its title. A CD+EG disc's video shows its 256 colors, as a CD+EG player does; `--picture g` shows it as a CD+G player does, in 16 colors, as "… (CD+G).m4v", and `--picture both` makes the two. It goes into the album folder when the rip was encoded, named after the album, else into the rip's folder; an album whose rip is gone works too (give its `Rip Report.json`), if it is lossless. `--codec hevc` makes smaller files; `--scale` sets the size (4: 1200 × 864). |
+| `dvd` | Lists DVD-Audio presentations and extracts supported MLP programs to verified FLAC tracks (`info`, `rip`). |
 | `hdcd` | Looks for HDCD codes in audio files and folders (WAV, AIFF, FLAC, Apple Lossless), such as rips and albums from before. |
 | `config` | Shows and changes the settings. |
 | `eject` | Ejects the disc from a drive (`-d`), or from every drive (`--all`: CDs, DVDs, and Blu-ray discs). A drive named with `-d` ejects a disc that macOS never recognized, through Disc Recording as `drutil eject` does, or opens its empty tray. A drive that hangs in a read is safer to unplug than to eject. |

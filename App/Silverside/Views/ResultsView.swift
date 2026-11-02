@@ -600,7 +600,7 @@ struct ResultsView: View {
     {
         TableColumn("#") { track in Text(String(track.number)).foregroundStyle(.secondary) }.width(28)
             .customizationID("number").disabledCustomizationBehavior(.all)
-        TableColumn("Title") { track in titleCell(track) }.width(min: 160, ideal: 360)
+        TableColumn("Title") { track in titleCell(track) }.width(min: 120, ideal: 360)
             .customizationID("title").disabledCustomizationBehavior(.visibility)
         TableColumn("Time") { track in Text(Format.duration(sectors: track.sectors)).foregroundStyle(.secondary) }
             .width(52)
@@ -734,14 +734,15 @@ struct ResultsView: View {
                         showsRereads: columns[visibility: TrackColumns.rereads] != .visible)
                 }
             }
-            .width(min: 110, ideal: 150)
+            .width(min: 100, ideal: 150, max: 240)
             .customizationID("status").disabledCustomizationBehavior(.visibility)
-            TableColumn("Re-reads") { track in RereadsCell(track: track, ctdb: report.ctdb) }.width(min: 60, ideal: 75)
+            TableColumn("Re-reads") { track in RereadsCell(track: track, ctdb: report.ctdb) }
+                .width(min: 60, ideal: 75, max: 120)
                 .customizationID(TrackColumns.rereads).defaultVisibility(.hidden)
             TableColumn("AccurateRip") { track in
                 if track.number == 0 { HiddenTrackStatus.notCovered } else { AccurateRipCell(state: .finished(track)) }
             }
-            .width(min: 90, ideal: 110)
+            .width(min: 70, ideal: 110, max: 140)
             .customizationID("accurateRip")
             TableColumn("CTDB") { track in
                 if track.number == 0 {
@@ -750,7 +751,7 @@ struct ResultsView: View {
                     CTDBResultCell(track: track, ctdb: report.ctdb)
                 }
             }
-            .width(min: 70, ideal: 90)
+            .width(min: 60, ideal: 90, max: 130)
             .customizationID("ctdb")
             if let encoding = report.encoding {
                 TableColumn("Encoding") { track in
@@ -763,7 +764,7 @@ struct ResultsView: View {
                         Text("Not encoded").foregroundStyle(.secondary)
                     }
                 }
-                .width(min: 60, ideal: 75)
+                .width(min: 60, ideal: 75, max: 120)
                 .customizationID("encoding")
             }
         }

@@ -34,7 +34,7 @@ struct TrackTable: View {
                             showsRereads: columns[visibility: TrackColumns.rereads] != .visible)
                     }
                 }
-                .width(min: 150, ideal: 200)
+                .width(min: 100, ideal: 180, max: 240)
                 .customizationID("status")
                 .disabledCustomizationBehavior(.visibility)
                 TableColumn("Re-reads") { track in
@@ -44,7 +44,7 @@ struct TrackTable: View {
                         Text("—").foregroundStyle(.secondary)
                     }
                 }
-                .width(min: 80, ideal: 100)
+                .width(min: 60, ideal: 80, max: 120)
                 .customizationID(TrackColumns.rereads)
                 .defaultVisibility(.hidden)
                 TableColumn("AccurateRip") { track in
@@ -54,7 +54,7 @@ struct TrackTable: View {
                         AccurateRipCell(state: rip.trackStates[track.number])
                     }
                 }
-                .width(min: 90, ideal: 110)
+                .width(min: 70, ideal: 110, max: 140)
                 .customizationID("accurateRip")
                 TableColumn("CTDB") { track in
                     if track.number == 0 {
@@ -63,13 +63,13 @@ struct TrackTable: View {
                         CTDBCell(run: rip, number: track.number)
                     }
                 }
-                .width(min: 70, ideal: 90)
+                .width(min: 60, ideal: 100, max: 130)
                 .customizationID("ctdb")
                 if rip.encodes {
                     TableColumn("Encoding") { track in
                         EncodeCell(state: rip.encodeStates[track.number], format: rip.encodingFormat)
                     }
-                    .width(min: 80, ideal: 100)
+                    .width(min: 60, ideal: 90, max: 120)
                     .customizationID("encoding")
                 }
             }
@@ -117,7 +117,7 @@ struct TrackTable: View {
                 titleCell(track)
             }
         }
-        .width(min: 220, ideal: 360)
+        .width(min: 120, ideal: 360)
         .customizationID("title")
         .disabledCustomizationBehavior(.visibility)
         TableColumn("Time") { track in

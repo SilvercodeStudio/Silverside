@@ -1,0 +1,410 @@
+import CryptoKit
+import Darwin
+import Foundation
+
+/// This report describes local read/decode checks, not an AccurateRip/CTDB result.
+public struct DVDRipReport: Codable, Sendable {
+    public var version = 1
+    public var silverside = SilversideVersion.described
+    public var started = Date()
+    public var finished: Date?
+    public var status = "incomplete"
+    public var error: String?
+    public var inventory: DVDInventory?
+    public var ffmpegVersion: String?
+    public var selected = [String]()
+    public var programs = [Program]()
+    public var limitations = [
+        "Local decode and PCM equality checks only; no independent database verification or secure reread consensus.",
+        "Only contiguous, one-cell-per-track, constant-format MLP stereo/5.1 programs are supported initially.",
+        "No resampling, normalization, ReplayGain, or generic stereo downmix. Authored stereo substreams are identified separately.",
+        "Optional DVD-Audio text is not parsed; filenames and title tags are numbered placeholders.",
+        "Menus, pictures, downmix instructions and other presentation metadata are not preserved in FLAC.",
+    ]
+
+    public struct Program: Codable, Sendable {
+        public var id: String
+        public var directory: String
+        public var sourceSHA256: String
+        public var decoderResetPerTrack: Bool
+        public var pcmSHA256: String?
+        public var complete = false
+        public var tracks = [Track]()
+    }
+    public struct Track: Codable, Sendable {
+        public var number: Int
+        public var file: String
+        public var frames: Int64
+        public var pcmSHA256: String
+        public var fileSHA256: String
+    }
+}
+
+public enum DVDExtraction {
+    /// Never silently choose among several programs of the requested channel count.
+    public static func select(_ inventory: DVDInventory, mix: String = "auto", title: String? = nil) throws
+        -> [DVDPresentation]
+    {
+        if let title {
+            guard let p = inventory.presentations.first(where: { $0.id == title }) else {
+                throw DVDError("No DVD program \(title). Run dvd info to list programs.")
+            }
+            guard p.unsupportedReason == nil, p.format != nil else {
+                throw DVDError(p.unsupportedReason ?? "Unknown audio format.")
+            }
+            return [p]
+        }
+        let candidates = inventory.presentations.filter {
+            $0.unsupportedReason == nil && $0.format != nil && !$0.shortProgram
+        }
+        func one(_ channels: Int) throws -> DVDPresentation {
+            let found = candidates.filter { $0.format?.channels == channels }
+            guard found.count == 1 else {
+                throw DVDError(
+                    found.isEmpty
+                        ? "No supported \(channels)-channel program. Run dvd info to inspect the disc."
+                        : "Several \(channels)-channel programs (\(found.map(\.id).joined(separator: ", "))). Select one with --title SET:TITLE."
+                )
+            }
+            return found[0]
+        }
+        switch mix {
+        case "auto": return [try one(candidates.contains { $0.format?.channels == 6 } ? 6 : 2)]
+        case "surround": return [try one(6)]
+        case "stereo": return [try one(2)]
+        case "both": return [try one(6), try one(2)]
+        default: throw DVDError("Mix must be auto, surround, stereo, or both.")
+        }
+    }
+
+    /// The destination must not exist. All media is staged in this newly claimed directory;
+    /// tracks are promoted only after format, duration and PCM checks pass.
+    public static func rip(
+        source: String, output: URL, tools: DVDTools, mix: String = "auto", title: String? = nil,
+        stop: StopToken = StopToken(), progress: @escaping (String) -> Void = { _ in }
+    ) throws -> DVDRipReport {
+        let root = output.standardizedFileURL.resolvingSymlinksInPath()
+        let input = URL(fileURLWithPath: source).standardizedFileURL.resolvingSymlinksInPath()
+        var directory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: input.path, isDirectory: &directory), directory.boolValue {
+            // Check filesystem identity too: paths can differ only in case on macOS.
+            var relationship = FileManager.URLRelationship.other
+            try FileManager.default.getRelationship(
+                &relationship, ofDirectoryAt: input, toItemAt: root.deletingLastPathComponent())
+            if root == input || relationship == .same || relationship == .contains {
+                throw DVDError("The output cannot be inside the DVD source directory.")
+            }
+        }
+        guard mkdir(root.path, 0o700) == 0 else {
+            throw DVDError(
+                "Cannot create a new output directory (the parent must exist, and the output must not): \(root.path). \(String(cString: strerror(errno)))"
+            )
+        }
+        let work = root.appendingPathComponent(".work", isDirectory: true)
+        var report = DVDRipReport()
+        do {
+            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: false)
+            try save(report, to: root)
+            progress("Inspecting DVD-Audio programs…")
+            let inventory = try tools.inventory(source: source, work: work, stop: stop)
+            report.inventory = inventory
+            report.ffmpegVersion =
+                String(
+                    decoding: try DVDProcess.run(tools.ffmpeg, ["-version"], in: work, stop: stop).output, as: UTF8.self
+                ).components(separatedBy: "\n").first
+            let programs = try select(inventory, mix: mix, title: title)
+            report.selected = programs.map(\.id)
+            try save(report, to: root)
+            for p in programs {
+                try stop.check()
+                let format = p.format!
+                let folder = "Program \(p.titleSet)-\(p.title) - \(format.channels == 2 ? "Stereo" : "Surround")"
+                let destination = root.appendingPathComponent(folder, isDirectory: true)
+                try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+                let sourceFile = work.appendingPathComponent("program-\(p.titleSet)-\(p.title).aob")
+                let first = p.tracks[0].firstSector
+                let count = p.tracks.last!.lastSector - first + 1
+                progress("Reading program \(p.id): \(count) sectors, \(p.tracks.count) tracks…")
+                _ = try DVDProcess.run(
+                    tools.helper,
+                    [
+                        "read", source, String(p.titleSet), String(first), String(count), sourceFile.path,
+                        inventory.fingerprint, "protocol-1",
+                    ], in: work, stop: stop,
+                    progress: {
+                        if let bytes = (try? FileManager.default.attributesOfItem(atPath: sourceFile.path)[.size])
+                            as? NSNumber
+                        {
+                            progress("Program \(p.id): read \(bytes.int64Value / 2048)/\(count) sectors")
+                        }
+                    })
+                guard
+                    (try FileManager.default.attributesOfItem(atPath: sourceFile.path)[.size] as? NSNumber)?.int64Value
+                        == Int64(count) * 2048
+                else { throw DVDError("Incomplete audio read.") }
+                try validatePackets(sourceFile, presentation: p)
+                report.programs.append(
+                    .init(
+                        id: p.id, directory: folder, sourceSHA256: try fileHash(sourceFile, stop: stop),
+                        decoderResetPerTrack: p.resetsDecoder))
+                let programIndex = report.programs.count - 1
+                try save(report, to: root)
+                let programWork = work.appendingPathComponent("program-\(p.titleSet)-\(p.title)", isDirectory: true)
+                try FileManager.default.createDirectory(at: programWork, withIntermediateDirectories: false)
+                var sourcePCM: String?
+                if !p.resetsDecoder {
+                    progress("Decoding program \(p.id) continuously before cutting tracks…")
+                    let continuous = programWork.appendingPathComponent("continuous.flac")
+                    sourcePCM = try encode(
+                        sourceFile, to: continuous, p: p, tools: tools, work: programWork, stop: stop)
+                    let frames = try p.tracks.reduce(Int64(0)) { try $0 + $1.frames(at: format.sampleRate) }
+                    try verifyFormat(
+                        continuous, frames: frames, format: format, tools: tools, work: programWork, stop: stop)
+                    guard
+                        try pcmHash(continuous, bits: format.bits, tools: tools, work: programWork, stop: stop)
+                            == sourcePCM
+                    else { throw DVDError("Continuous FLAC differs from source PCM.") }
+                    try split(continuous, p: p, tools: tools, work: programWork, stop: stop)
+                }
+                var staged = [URL]()
+                for track in p.tracks {
+                    try stop.check()
+                    progress("Program \(p.id): checking track \(track.number)/\(p.tracks.count)…")
+                    let file = programWork.appendingPathComponent(String(format: "%02d.flac", track.number))
+                    var originalHash: String?
+                    if p.resetsDecoder {
+                        let cell = programWork.appendingPathComponent("cell.aob")
+                        try copyRange(
+                            sourceFile, to: cell, offset: (track.firstSector - first) * 2048,
+                            count: (track.lastSector - track.firstSector + 1) * 2048, stop: stop)
+                        originalHash = try encode(
+                            cell, to: file, p: p, track: track.number, tools: tools, work: programWork, stop: stop)
+                        try FileManager.default.removeItem(at: cell)
+                    }
+                    let frames = try track.frames(at: format.sampleRate)
+                    try verifyFormat(file, frames: frames, format: format, tools: tools, work: programWork, stop: stop)
+                    let hash = try pcmHash(file, bits: format.bits, tools: tools, work: programWork, stop: stop)
+                    if let originalHash, hash != originalHash {
+                        throw DVDError("Track \(track.number) FLAC differs from source PCM.")
+                    }
+                    let name = String(format: "%02d - Track %02d.flac", track.number, track.number)
+                    report.programs[programIndex].tracks.append(
+                        .init(
+                            number: track.number, file: name, frames: frames, pcmSHA256: hash,
+                            fileSHA256: try fileHash(file, stop: stop)))
+                    staged.append(file)
+                }
+                let joined = try joinedHash(staged, bits: format.bits, tools: tools, work: programWork, stop: stop)
+                if let sourcePCM, sourcePCM != joined {
+                    throw DVDError("Joined tracks differ from the complete source PCM.")
+                }
+                report.programs[programIndex].pcmSHA256 = joined
+                for (file, track) in zip(staged, report.programs[programIndex].tracks) {
+                    try FileManager.default.moveItem(at: file, to: destination.appendingPathComponent(track.file))
+                }
+                let playlist =
+                    "#EXTM3U\n" + report.programs[programIndex].tracks.map(\.file).joined(separator: "\n") + "\n"
+                try playlist.write(
+                    to: destination.appendingPathComponent("Tracks.m3u8"), atomically: true, encoding: .utf8)
+                report.programs[programIndex].complete = true
+                try save(report, to: root)
+                try FileManager.default.removeItem(at: sourceFile)
+                try FileManager.default.removeItem(at: programWork)
+            }
+            try stop.check()
+            report.status = "complete"
+            report.finished = Date()
+            try save(report, to: root)
+            try FileManager.default.removeItem(at: work)
+            return report
+        } catch {
+            report.status = error is CancellationError ? "cancelled" : "failed"
+            report.error = String(describing: error)
+            report.finished = Date()
+            try? save(report, to: root)
+            throw error
+        }
+    }
+
+    static let common = ["-hide_banner", "-v", "warning", "-xerror", "-n", "-nostdin"]
+    static func clean(_ result: DVDProcess.Result) throws {
+        guard result.diagnostics.isEmpty else {
+            throw DVDError("Decoder diagnostics require review: \(result.diagnostics)")
+        }
+    }
+    static func hashValue(_ data: Data) throws -> String {
+        let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.hasPrefix("SHA256="), text.count == 71, text.dropFirst(7).allSatisfy({ $0.isHexDigit }) else {
+            throw DVDError("Invalid decoder PCM hash.")
+        }
+        return text.dropFirst(7).lowercased()
+    }
+    static func pcmCodec(_ bits: Int) -> String { bits == 24 ? "pcm_s24le" : "pcm_s16le" }
+    static func flacArguments(_ p: DVDPresentation, track: Int? = nil) -> [String] {
+        var args = [
+            "-c:a", "flac", "-sample_fmt", p.format!.bits == 24 ? "s32" : "s16", "-bits_per_raw_sample",
+            String(p.format!.bits), "-map_metadata", "-1",
+        ]
+        if let track {
+            args += [
+                "-metadata", String(format: "title=Track %02d", track), "-metadata", "track=\(track)/\(p.tracks.count)",
+            ]
+        }
+        return args
+    }
+    static func encode(
+        _ source: URL, to output: URL, p: DVDPresentation, track: Int? = nil, tools: DVDTools, work: URL,
+        stop: StopToken
+    ) throws -> String {
+        let result = try DVDProcess.run(
+            tools.ffmpeg,
+            common + (p.authoredStereo ? ["-downmix", "stereo"] : [])
+                + ["-reinit_filter", "0", "-f", "mpeg", "-i", source.path, "-map", "0:a:0", "-af", "asetpts=N/SR/TB"]
+                + flacArguments(p, track: track) + [
+                    output.path, "-map", "0:a:0", "-af", "asetpts=N/SR/TB", "-c:a", pcmCodec(p.format!.bits), "-f",
+                    "hash", "-hash", "sha256", "pipe:1",
+                ], in: work, stop: stop)
+        try clean(result)
+        return try hashValue(result.output)
+    }
+    static func verifyFormat(
+        _ file: URL, frames: Int64, format: DVDAudioFormat, tools: DVDTools, work: URL, stop: StopToken
+    ) throws {
+        let (actual, count) = try tools.inspect(file, work: work, stop: stop)
+        var expected = format
+        expected.codec = "flac"
+        guard actual == expected, count == frames else {
+            throw DVDError(
+                "\(file.lastPathComponent): format or sample count differs from DVD navigation (expected \(frames), found \(count.map(String.init) ?? "unknown"))."
+            )
+        }
+    }
+    static func pcmHash(_ file: URL, bits: Int, tools: DVDTools, work: URL, stop: StopToken) throws -> String {
+        let result = try DVDProcess.run(
+            tools.ffmpeg,
+            common + [
+                "-i", file.path, "-map", "0:a:0", "-c:a", pcmCodec(bits), "-f", "hash", "-hash", "sha256", "pipe:1",
+            ], in: work, stop: stop)
+        try clean(result)
+        return try hashValue(result.output)
+    }
+    static func joinedHash(_ files: [URL], bits: Int, tools: DVDTools, work: URL, stop: StopToken) throws -> String {
+        // Generated numeric basenames only; user paths never enter concat syntax.
+        let manifest = work.appendingPathComponent("tracks.ffconcat")
+        try ("ffconcat version 1.0\n" + files.map { "file '\($0.lastPathComponent)'\n" }.joined()).write(
+            to: manifest, atomically: true, encoding: .utf8)
+        let result = try DVDProcess.run(
+            tools.ffmpeg,
+            common + [
+                "-f", "concat", "-safe", "1", "-i", manifest.path, "-map", "0:a:0", "-af", "asetpts=N/SR/TB", "-c:a",
+                pcmCodec(bits), "-f", "hash", "-hash", "sha256", "pipe:1",
+            ], in: work, stop: stop)
+        try clean(result)
+        return try hashValue(result.output)
+    }
+    static func split(_ full: URL, p: DVDPresentation, tools: DVDTools, work: URL, stop: StopToken) throws {
+        var filters = ["[0:a]asplit=\(p.tracks.count)" + p.tracks.indices.map { "[s\($0)]" }.joined()]
+        var offset: Int64 = 0
+        for (i, track) in p.tracks.enumerated() {
+            let end = try offset + track.frames(at: p.format!.sampleRate)
+            filters.append("[s\(i)]atrim=start_sample=\(offset):end_sample=\(end),asetpts=N/SR/TB[t\(i)]")
+            offset = end
+        }
+        var args = common + ["-i", full.path, "-filter_complex", filters.joined(separator: ";")]
+        for (i, track) in p.tracks.enumerated() {
+            args +=
+                ["-map", "[t\(i)]"] + flacArguments(p, track: track.number) + [
+                    work.appendingPathComponent(String(format: "%02d.flac", track.number)).path
+                ]
+        }
+        try clean(DVDProcess.run(tools.ffmpeg, args, in: work, stop: stop))
+    }
+    static func fileHash(_ file: URL, stop: StopToken) throws -> String {
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var hash = SHA256()
+        while let data = try handle.read(upToCount: 1024 * 1024), !data.isEmpty {
+            try stop.check()
+            hash.update(data: data)
+        }
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+    static func copyRange(_ source: URL, to output: URL, offset: Int, count: Int, stop: StopToken) throws {
+        let input = try FileHandle(forReadingFrom: source)
+        defer { try? input.close() }
+        let fd = open(output.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        guard fd >= 0 else { throw DVDError("Cannot create track staging file.") }
+        let out = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        defer { try? out.close() }
+        try input.seek(toOffset: UInt64(offset))
+        var remaining = count
+        while remaining > 0 {
+            try stop.check()
+            guard let data = try input.read(upToCount: min(remaining, 1024 * 1024)), !data.isEmpty else {
+                throw DVDError("Short staged audio read.")
+            }
+            try out.write(contentsOf: data)
+            remaining -= data.count
+        }
+    }
+    static func save(_ report: DVDRipReport, to root: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(report).write(to: root.appendingPathComponent("dvd-rip.json"), options: .atomic)
+        var lines = [
+            "Silverside DVD-Audio Rip Report", "Status: \(report.status)",
+            "Source: \(report.inventory?.source ?? "not inspected")",
+            "Volume: \(report.inventory?.volume ?? "unknown")",
+        ]
+        if let error = report.error { lines += ["Error: \(error)"] }
+        for p in report.programs {
+            lines += [
+                "", "Program \(p.id): \(p.complete ? "complete" : "incomplete")",
+                "Source sectors SHA-256: \(p.sourceSHA256)",
+            ]
+            if let hash = p.pcmSHA256 { lines += ["Joined PCM SHA-256: \(hash)"] }
+            for t in p.tracks { lines += ["  \(t.file): \(t.frames) frames; PCM SHA-256 \(t.pcmSHA256)"] }
+        }
+        lines += ["", "Limitations:"] + report.limitations.map { "- " + $0 }
+        try (lines.joined(separator: "\n") + "\n").write(
+            to: root.appendingPathComponent("Rip Report.txt"), atomically: true, encoding: .utf8)
+    }
+    /// Check the actual first audio packet of each cell against the navigation timestamp.
+    static func validatePackets(_ source: URL, presentation p: DVDPresentation) throws {
+        let file = try FileHandle(forReadingFrom: source)
+        defer { try? file.close() }
+        let first = p.tracks[0].firstSector
+        for track in p.tracks {
+            try file.seek(toOffset: UInt64(track.firstSector - first) * 2048)
+            let data = try file.read(upToCount: min(32, track.lastSector - track.firstSector + 1) * 2048) ?? Data()
+            guard try firstAudioPTS(data) == track.startPTS else {
+                throw DVDError("Track \(track.number): audio packet timestamp disagrees with navigation.")
+            }
+        }
+    }
+    static func firstAudioPTS(_ data: Data) throws -> Int64 {
+        let b = Array(data)
+        for base in stride(from: 0, to: b.count - 2047, by: 2048) {
+            guard b[base..<base + 4].elementsEqual([0, 0, 1, 0xba]) else { continue }
+            var pos = base + 14 + Int(b[base + 13] & 7)
+            while pos + 9 <= base + 2048, b[pos..<pos + 3].elementsEqual([0, 0, 1]) {
+                let end = pos + 6 + Int(b[pos + 4]) * 256 + Int(b[pos + 5])
+                guard end <= base + 2048, end > pos else { throw DVDError("Invalid DVD audio packet length.") }
+                if b[pos + 3] == 0xbd, b[pos + 7] & 0x80 != 0 {
+                    guard end >= pos + 14, b[pos + 8] >= 5, b[pos + 6] & 0x30 == 0 else {
+                        throw DVDError("Encrypted or truncated audio timestamp.")
+                    }
+                    let a = Array(b[pos + 9..<pos + 14])
+                    guard [0, 2, 4].allSatisfy({ a[$0] & 1 == 1 }) else {
+                        throw DVDError("Invalid audio timestamp marker.")
+                    }
+                    return Int64(a[0] >> 1 & 7) << 30 | Int64(a[1]) << 22 | Int64(a[2] >> 1) << 15 | Int64(a[3]) << 7
+                        | Int64(a[4] >> 1)
+                }
+                pos = end
+            }
+        }
+        throw DVDError("No audio timestamp in the first 32 sectors of a cell.")
+    }
+}

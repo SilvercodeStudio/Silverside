@@ -84,6 +84,7 @@ app:
 	@$(XCODEBUILD) -showBuildSettings 2>/dev/null | awk -F' = ' '/^ *BUILT_PRODUCTS_DIR =/ {dir=$$2} /^ *FULL_PRODUCT_NAME =/ {name=$$2} END {print dir "/" name}'
 
 cli: commit-plist
+	@swift build --package-path $(PACKAGE) --product silverside-dvd-helper -q
 	@swift build --package-path $(PACKAGE) --product silverside -q $(COMMIT_FLAGS)
 	@"$$(swift build --package-path $(PACKAGE) --show-bin-path)/silverside" $(ARGS)
 
@@ -112,6 +113,7 @@ lint:
 	@scripts/version.sh check
 
 release: commit-plist
+	swift build --package-path $(PACKAGE) -c release --arch arm64 --arch x86_64 --product silverside-dvd-helper
 	swift build --package-path $(PACKAGE) -c release --arch arm64 --arch x86_64 --product silverside $(COMMIT_FLAGS)
 
 commit-plist:
@@ -125,6 +127,7 @@ install-cli-local: release
 	install -d "$(CLI_PREFIX)/bin" "$(CLI_PREFIX)/share/zsh/site-functions" "$(CLI_PREFIX)/etc/bash_completion.d" \
 		"$(CLI_PREFIX)/share/fish/vendor_completions.d"
 	install -m 755 "$(RELEASE_BIN)" "$(CLI_PREFIX)/bin/silverside"
+	install -m 755 "$(dir $(RELEASE_BIN))silverside-dvd-helper" "$(CLI_PREFIX)/bin/silverside-dvd-helper"
 	"$(RELEASE_BIN)" --generate-completion-script zsh > "$(CLI_PREFIX)/share/zsh/site-functions/_silverside"
 	"$(RELEASE_BIN)" --generate-completion-script bash > "$(CLI_PREFIX)/etc/bash_completion.d/silverside"
 	"$(RELEASE_BIN)" --generate-completion-script fish > "$(CLI_PREFIX)/share/fish/vendor_completions.d/silverside.fish"
@@ -163,7 +166,7 @@ dist:
 	@scripts/dist.sh
 
 uninstall-cli-local:
-	rm -f "$(CLI_PREFIX)/bin/silverside" "$(CLI_PREFIX)/share/zsh/site-functions/_silverside" \
+	rm -f "$(CLI_PREFIX)/bin/silverside" "$(CLI_PREFIX)/bin/silverside-dvd-helper" "$(CLI_PREFIX)/share/zsh/site-functions/_silverside" \
 		"$(CLI_PREFIX)/etc/bash_completion.d/silverside" "$(CLI_PREFIX)/share/fish/vendor_completions.d/silverside.fish"
 
 # The website, as GitHub Pages serves it.

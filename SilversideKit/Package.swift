@@ -8,6 +8,7 @@ let package = Package(
         .library(name: "SilversideKit", targets: ["SilversideKit"]),
         .library(name: "SilversideDarwin", targets: ["SilversideDarwin"]),
         .executable(name: "silverside", targets: ["silverside"]),
+        .executable(name: "silverside-dvd-helper", targets: ["silverside-dvd-helper"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2")
@@ -20,6 +21,9 @@ let package = Package(
             name: "SilversideDarwin", dependencies: ["SilversideKit"],
             linkerSettings: [.linkedFramework("DiscRecording")]),
         .executableTarget(
+            name: "silverside-dvd-helper", dependencies: ["SilversideKit"],
+            exclude: ["README.md", "entitlements.plist"]),
+        .executableTarget(
             name: "silverside",
             dependencies: [
                 "SilversideKit",
@@ -28,5 +32,6 @@ let package = Package(
             ]),
         .testTarget(name: "SilversideKitTests", dependencies: ["SilversideKit"], resources: [.copy("Resources")]),
         .testTarget(name: "SilversideDarwinTests", dependencies: ["SilversideDarwin"]),
+        .testTarget(name: "DVDHelperTests", dependencies: ["silverside-dvd-helper"]),
     ]
 )

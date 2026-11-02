@@ -140,6 +140,12 @@ AAC and MP3 would turn the stream itself into noise, so with those formats Silve
 
 **Decode DTS…** in an earlier rip's toolbar decodes it later: a copy beside the album, in any format that holds surround sound, or in place of the album's files.
 
+## A hidden track before track 1
+
+Some discs hide a song before track 1, where a player reaches it only by rewinding from the start of track 1. Fall Out Boy's *Folie à Deux* has "Lullabye" there, 2:18. Silverside reads that part of the disc first, when it rips track 1, and keeps it as track 0 if it is not silence. Most discs have a fraction of a second of silence there instead, and get no track 0.
+
+The track table shows it as row 0 when MusicBrainz names a hidden track, or when the gap before track 1 is 5 seconds or longer; a rip that finds one adds the row. Its checkbox follows track 1's, and while track 1 is chosen the status bar says "and the hidden track". AccurateRip and CTDB do not cover this part of the disc, so its check is that two reads agree: its status says "Reads agree", not "Verified". It is encoded as track 0, named from MusicBrainz, and the CUE sheet puts it before track 1, as on the disc. Some drives cannot read before track 1; the log then says so, and another drive may find the track.
+
 ## Silent tracks
 
 Some discs have tracks of nothing but digital silence. Nine Inch Nails *Broken* has 91 tracks of a second each, so that its two hidden songs are tracks 98 and 99; some test discs have them too. Silverside rips and verifies every track, so AccurateRip and CTDB check the whole disc. Then, before it encodes, it asks whether to leave the silent tracks out of the album:

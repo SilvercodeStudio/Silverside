@@ -3,6 +3,17 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.9.4 (not released yet)
+
+### Changed
+
+- A hidden track before track 1 shows in the track table, as track 0, with
+  its name from MusicBrainz: on the drive's page before and during a rip,
+  and in an earlier rip. Its status says whether the reads agree, since
+  AccurateRip and CTDB do not cover it, the status bar says "and the hidden
+  track" before a rip, and a chip in the result says the disc has one. Before, the track was ripped and encoded, but only the log
+  and the report said so.
+
 ## 0.9.3 (2026-11-01)
 
 ### Added

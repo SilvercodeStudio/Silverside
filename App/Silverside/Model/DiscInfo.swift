@@ -193,6 +193,16 @@ struct DiscInfo {
     /// The tracks, named from the release or CD-Text.
     var tracks: [Track] { tracks(from: .musicBrainz) }
 
+    /// Row 0 of the track table: the audio before track 1, where a rip may find a hidden track.
+    /// It shows when MusicBrainz names a hidden track, the gap is long enough to hold one
+    /// (`HiddenTrackRip.likelyGapSectors`), or `found` (a rip kept one or is reading the gap).
+    func hiddenTrackRow(found: Bool) -> Track? {
+        let sectors = HiddenTrackRip.gapSectors(of: toc)
+        let named = medium(in: shownRelease)?.hiddenTrack?.title
+        guard sectors > 0, found || named != nil || sectors >= HiddenTrackRip.likelyGapSectors else { return nil }
+        return Track(number: 0, title: named ?? "Hidden track", sectors: sectors)
+    }
+
     func tracks(from source: Source) -> [Track] {
         let shownRelease = shownRelease
         let shownMedium = medium(in: shownRelease)

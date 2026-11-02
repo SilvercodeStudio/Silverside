@@ -1035,7 +1035,12 @@ struct StatusBar: View {
         guard let disc = slot.disc else { return "" }
         if disc.lookup == .lookingUp { return "Looking up the disc in MusicBrainz…" }
         let count = slot.selectedTracks.count
-        return "Ready to rip \(count) of \(disc.toc.audioTracks.count) tracks"
+        let text = "Ready to rip \(count) of \(disc.toc.audioTracks.count) tracks"
+        // The hidden track is read with track 1, so it is named only while track 1 is chosen.
+        guard let first = disc.toc.audioTracks.first, slot.selectedTracks.contains(first.number),
+            disc.hiddenTrackRow(found: false) != nil
+        else { return text }
+        return text + " and the hidden track"
     }
 
     private var timeLabel: some View {
@@ -1444,6 +1449,15 @@ enum ResultChips {
         case .notVerified: chips.append(Chip(text: "CTDB not verified", tone: .bad))
         case .notInDatabase: chips.append(Chip(text: "Not in CTDB"))
         case .notChecked: break
+        }
+        if let hidden = report.hiddenTrack {
+            chips.append(
+                Chip(
+                    text: hidden.readsAgree ? "Hidden track · reads agree" : "Hidden track · reads differ",
+                    tone: hidden.readsAgree ? .neutral : .bad,
+                    help: "The disc hides \(Format.duration(sectors: hidden.sectors)) of audio before track 1, kept as "
+                        + "track 0. " + HiddenTrackStatus.notCoveredHelp + " The check is that "
+                        + "\(hidden.reads) reads " + (hidden.readsAgree ? "agree." : "agree, and they do not.")))
         }
         let suspects = report.tracks.reduce(0) { $0 + $1.suspectSectors.count }
         let unresolved = report.tracks.reduce(0) { $0 + $1.unresolvedSectors.count }

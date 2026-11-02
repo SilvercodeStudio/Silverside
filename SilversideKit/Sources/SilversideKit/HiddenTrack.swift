@@ -39,6 +39,17 @@ public struct HiddenTrackRip: Sendable {
     /// About -40 dBFS: the peak that a short gap needs to be a hidden track.
     public static let audiblePeak = 328
 
+    /// A gap before track 1 this long (5 seconds) may hold a hidden track, so the app shows it
+    /// before a rip; most discs have a fraction of a second of silence there. A rip reads any gap.
+    public static let likelyGapSectors = 5 * CDDA.sectorsPerSecond
+
+    /// The sectors before track 1's index 01 that a rip reads for a hidden track: 0 if track 1
+    /// starts at LBA 0, or the disc starts with a data track (a mixed-mode disc).
+    public static func gapSectors(of toc: TOC) -> Int {
+        guard let first = toc.audioTracks.first, first == toc.tracks.first else { return 0 }
+        return first.startLBA
+    }
+
     /// True if a gap of `sectors` with this peak is silence or noise, not a hidden track.
     static func isSilence(peak: Int, sectors: Int) -> Bool {
         peak < silencePeak || (sectors < shortGapSectors && peak < audiblePeak)
@@ -51,9 +62,7 @@ public struct HiddenTrackRip: Sendable {
     public static func rip(reader: AudioReader, cacheFlushSectors: Int = 4000, maximumReads: Int = 4) throws
         -> HiddenTrackRip?
     {
-        guard let first = reader.toc.audioTracks.first, first == reader.toc.tracks[0], first.startLBA > 0 else {
-            return nil
-        }
+        guard gapSectors(of: reader.toc) > 0, let first = reader.toc.audioTracks.first else { return nil }
         let positions = 0..<(first.startLBA * CDDA.samplesPerSector)
         let firstRead = try reader.read(positions, withC2: false)
         func peak(_ read: AudioReader.Read) -> Int { read.samples.reduce(0) { max($0, magnitude(of: $1)) } }

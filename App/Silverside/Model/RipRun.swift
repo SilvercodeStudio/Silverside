@@ -107,7 +107,19 @@ final class RipRun {
         var isEmpty: Bool { flagged.isEmpty && unreadable.isEmpty && suspect.isEmpty && unresolved.isEmpty }
     }
 
+    /// The audio before track 1, where a disc may hide a track.
+    enum HiddenState: Equatable {
+        case reading
+        case kept(RipReport.HiddenTrack)
+        /// The gap is silence: there is no track to keep.
+        case silence
+        /// Sectors could not be read, and the rest is silence: this drive may not read there.
+        case unreadable(sectors: Int)
+    }
+
     private(set) var phase = Phase.starting
+    /// Nil while the rip does not read the gap before track 1: there is none, or track 1 is not ripped.
+    private(set) var hidden: HiddenState?
     private(set) var trackStates: [Int: TrackState] = [:]
     private(set) var trackErrors: [Int: TrackErrors] = [:]
     private(set) var summaries: [Int: String] = [:]
@@ -237,6 +249,12 @@ final class RipRun {
         case .save: savesDataTracks = true
         case .skip: savesDataTracks = false
         case .ask: savesDataTracks = nil
+        }
+        // The rip reads the gap before track 1 first, when it rips track 1.
+        if HiddenTrackRip.gapSectors(of: disc.toc) > 0, let first = disc.toc.audioTracks.first,
+            tracksToRip.contains(first.number)
+        {
+            hidden = .reading
         }
         for track in disc.toc.audioTracks {
             trackStates[track.number] = tracksToRip.contains(track.number) ? .queued : .skipped
@@ -509,6 +527,7 @@ final class RipRun {
             }
         }
         currentTrack = nil
+        if hidden == .reading { hidden = nil }
         for (number, state) in trackStates {
             if case .finished = state { continue }
             if state != .skipped { trackStates[number] = .queued }
@@ -643,6 +662,7 @@ final class RipRun {
             self.folder = folder
             add("Folder: \(folder.path)" + (insteadOf.map { _ in " (another rip holds the usual folder)" } ?? ""))
         case .hiddenTrack(let hidden):
+            self.hidden = .kept(hidden)
             add(
                 "Hidden track before track 1: \(Format.duration(sectors: hidden.sectors)), "
                     + (hidden.readsAgree ? "\(hidden.reads) reads agree" : "NOT verified: \(hidden.reads) reads differ")
@@ -650,12 +670,15 @@ final class RipRun {
                         ? "" : ", \(hidden.unreadableSectors!.count) sectors unreadable")
             )
         case .hiddenAreaUnreadable(let sectors, let total):
+            hidden = .unreadable(sectors: sectors)
             add(
                 "Before track 1: \(sectors) of \(total) sectors could not be read, and the rest is silence. "
                     + "This drive may not read before track 1; another drive may find a hidden track there.")
         case .poolFileSkipped(let file):
             add("Pool: \(file.url.lastPathComponent) was not used: \(file.reason).")
         case .trackStarted(let track, let position, let count):
+            // The gap before track 1 is read first: a track's start with no hidden track means silence.
+            if hidden == .reading { hidden = .silence }
             currentTrack = track.number
             self.position = position
             self.count = count

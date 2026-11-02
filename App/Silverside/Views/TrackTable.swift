@@ -13,7 +13,12 @@ struct TrackTable: View {
     @AppStorage("driveTrackColumns") private var columns = TableColumnCustomization<DiscInfo.Track>()
     @AppStorage("ripTrackColumns") private var ripColumns = TableColumnCustomization<RipReport.Track>()
 
-    private var rows: [DiscInfo.Track] { slot.disc?.tracks(from: slot.namesSource) ?? [] }
+    /// The disc's tracks, after row 0 for the gap before track 1 when it may hold a hidden track.
+    private var rows: [DiscInfo.Track] {
+        guard let disc = slot.disc else { return [] }
+        let hidden = disc.hiddenTrackRow(found: slot.rip?.hidden != nil && slot.rip?.hidden != .silence)
+        return (hidden.map { [$0] } ?? []) + disc.tracks(from: slot.namesSource)
+    }
 
     var body: some View {
         // Before a rip, the result columns would hold only dashes, so the titles get the room.
@@ -21,9 +26,13 @@ struct TrackTable: View {
             Table(rows, selection: $tableSelection, columnCustomization: $columns) {
                 discColumns
                 TableColumn("Status") { track in
-                    StatusCell(
-                        state: rip.trackStates[track.number], ctdb: rip.ctdb, summary: rip.summaries[track.number],
-                        showsRereads: columns[visibility: TrackColumns.rereads] != .visible)
+                    if track.number == 0 {
+                        HiddenTrackStatus(state: rip.hidden)
+                    } else {
+                        StatusCell(
+                            state: rip.trackStates[track.number], ctdb: rip.ctdb, summary: rip.summaries[track.number],
+                            showsRereads: columns[visibility: TrackColumns.rereads] != .visible)
+                    }
                 }
                 .width(min: 150, ideal: 200)
                 .customizationID("status")
@@ -39,12 +48,20 @@ struct TrackTable: View {
                 .customizationID(TrackColumns.rereads)
                 .defaultVisibility(.hidden)
                 TableColumn("AccurateRip") { track in
-                    AccurateRipCell(state: rip.trackStates[track.number])
+                    if track.number == 0 {
+                        HiddenTrackStatus.notCovered
+                    } else {
+                        AccurateRipCell(state: rip.trackStates[track.number])
+                    }
                 }
                 .width(min: 90, ideal: 110)
                 .customizationID("accurateRip")
                 TableColumn("CTDB") { track in
-                    CTDBCell(run: rip, number: track.number)
+                    if track.number == 0 {
+                        HiddenTrackStatus.notCovered
+                    } else {
+                        CTDBCell(run: rip, number: track.number)
+                    }
                 }
                 .width(min: 70, ideal: 90)
                 .customizationID("ctdb")
@@ -69,21 +86,19 @@ struct TrackTable: View {
     /// The columns of the disc itself: the checkbox, the number, the title, and the time.
     @TableColumnBuilder<DiscInfo.Track, Never> private var discColumns: some TableColumnContent<DiscInfo.Track, Never> {
         TableColumn("") { track in
-            Toggle("", isOn: binding(for: track.number))
+            // The gap before track 1 is ripped with track 1.
+            let first = slot.disc?.toc.audioTracks.first?.number ?? 1
+            Toggle("", isOn: binding(for: track.number == 0 ? first : track.number))
                 .labelsHidden()
-                .disabled(slot.rip?.isRunning == true)
+                .disabled(slot.rip?.isRunning == true || track.number == 0)
+                .help(track.number == 0 ? "Ripped with track \(first)" : "")
         }
         .width(24)
         .customizationID("include")
         .disabledCustomizationBehavior(.all)
         TableColumn("") { track in
-            PlayButton(player: model.player, source: .disc(slotID: slot.id, track: track.number), isEnabled: canPlay) {
-                guard let disc = slot.disc,
-                    let tocTrack = disc.toc.audioTracks.first(where: { $0.number == track.number })
-                else { return }
-                model.player.play(
-                    disc: slot, track: tocTrack, title: track.title,
-                    subtitle: track.artist ?? disc.shownRelease?.artist ?? slot.name)
+            if track.number > 0 {
+                playButton(track)
             }
         }
         .width(22)
@@ -96,40 +111,10 @@ struct TrackTable: View {
         .customizationID("number")
         .disabledCustomizationBehavior(.all)
         TableColumn("Title") { track in
-            VStack(alignment: .leading, spacing: 1) {
-                if canEdit {
-                    let title = title(of: track.number, shown: track.title)
-                    NameTextField(
-                        value: title.wrappedValue, field: .title(track.number), focus: $focusedName,
-                        tabOrder: { fieldOrder }, pending: slot.pendingNames
-                    ) { title.wrappedValue = $0 }
-                    // The artist's field shows when the track has an artist of its own, or on request.
-                    if track.artist != nil || artistRows.contains(track.number) || isCompilation {
-                        let artist = artist(of: track.number)
-                        NameTextField(
-                            value: artist.wrappedValue, prompt: "Track artist", field: .artist(track.number),
-                            focus: $focusedName, tabOrder: { fieldOrder }, pending: slot.pendingNames
-                        ) { artist.wrappedValue = $0 }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Text(track.title)
-                    if let artist = track.artist { Text(artist).font(.caption).foregroundStyle(.secondary) }
-                }
-            }
-            .contextMenu {
-                if canEdit {
-                    if track.artist == nil && !artistRows.contains(track.number) && !isCompilation {
-                        Button("Add Track Artist") { artistRows.insert(track.number) }
-                    }
-                    Button("Clear This Track's Edits") {
-                        slot.disc?.edits.setTitle(nil, ofTrack: track.number)
-                        slot.disc?.edits.setArtist(nil, ofTrack: track.number)
-                        artistRows.remove(track.number)
-                    }
-                    .disabled(slot.disc?.edits.tracks[track.number] == nil)
-                }
+            if track.number == 0 {
+                HiddenTrackTitle(title: track.title)
+            } else {
+                titleCell(track)
             }
         }
         .width(min: 220, ideal: 360)
@@ -142,13 +127,62 @@ struct TrackTable: View {
         .customizationID("time")
         .disabledCustomizationBehavior(.visibility)
         TableColumn("") { track in
-            if let disc = slot.disc {
+            if let disc = slot.disc, track.number > 0 {
                 InfoButton(help: "Track info", debugID: "track\(track.number)") { InfoSection.track(track, disc: disc) }
             }
         }
         .width(22)
         .customizationID("info")
         .disabledCustomizationBehavior(.all)
+    }
+
+    private func playButton(_ track: DiscInfo.Track) -> some View {
+        PlayButton(player: model.player, source: .disc(slotID: slot.id, track: track.number), isEnabled: canPlay) {
+            guard let disc = slot.disc,
+                let tocTrack = disc.toc.audioTracks.first(where: { $0.number == track.number })
+            else { return }
+            model.player.play(
+                disc: slot, track: tocTrack, title: track.title,
+                subtitle: track.artist ?? disc.shownRelease?.artist ?? slot.name)
+        }
+    }
+
+    private func titleCell(_ track: DiscInfo.Track) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            if canEdit {
+                let title = title(of: track.number, shown: track.title)
+                NameTextField(
+                    value: title.wrappedValue, field: .title(track.number), focus: $focusedName,
+                    tabOrder: { fieldOrder }, pending: slot.pendingNames
+                ) { title.wrappedValue = $0 }
+                // The artist's field shows when the track has an artist of its own, or on request.
+                if track.artist != nil || artistRows.contains(track.number) || isCompilation {
+                    let artist = artist(of: track.number)
+                    NameTextField(
+                        value: artist.wrappedValue, prompt: "Track artist", field: .artist(track.number),
+                        focus: $focusedName, tabOrder: { fieldOrder }, pending: slot.pendingNames
+                    ) { artist.wrappedValue = $0 }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            } else {
+                Text(track.title)
+                if let artist = track.artist { Text(artist).font(.caption).foregroundStyle(.secondary) }
+            }
+        }
+        .contextMenu {
+            if canEdit {
+                if track.artist == nil && !artistRows.contains(track.number) && !isCompilation {
+                    Button("Add Track Artist") { artistRows.insert(track.number) }
+                }
+                Button("Clear This Track's Edits") {
+                    slot.disc?.edits.setTitle(nil, ofTrack: track.number)
+                    slot.disc?.edits.setArtist(nil, ofTrack: track.number)
+                    artistRows.remove(track.number)
+                }
+                .disabled(slot.disc?.edits.tracks[track.number] == nil)
+            }
+        }
     }
 
     /// A track plays while the drive is free: not during a rip, a repair, or a drive test.
@@ -165,7 +199,7 @@ struct TrackTable: View {
     /// The track fields in Tab's order.
     private var fieldOrder: [NameField] {
         let rows = rows
-        return NameField.trackOrder(rows.map(\.number)) { number in
+        return NameField.trackOrder(rows.map(\.number).filter { $0 > 0 }) { number in
             rows.first { $0.number == number }?.artist != nil || artistRows.contains(number) || isCompilation
         }
     }
@@ -499,5 +533,78 @@ struct EncodeCell: View {
         case nil:
             Text("—").foregroundStyle(.secondary)
         }
+    }
+}
+
+/// The title of row 0, the audio before track 1: a hidden track's name from MusicBrainz, not
+/// editable (the encoding names it from the release), and where it is on the disc.
+struct HiddenTrackTitle: View {
+    var title: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+            Text("Before track 1").font(.caption).foregroundStyle(.secondary)
+        }
+        .help(
+            "Audio before track 1, where some discs hide a song: a player reaches it only by rewinding from track 1. A rip reads it first and keeps it as track 0 if it is not silence."
+        )
+    }
+}
+
+/// What a rip found before track 1. AccurateRip and CTDB do not cover this audio, so the only
+/// check is that two reads agree: no green verdict.
+struct HiddenTrackStatus: View {
+    var state: RipRun.HiddenState?
+
+    static let notCoveredHelp = "AccurateRip and CTDB do not cover the audio before track 1."
+
+    /// The AccurateRip and CTDB cells of row 0.
+    static var notCovered: some View { Text("—").foregroundStyle(.secondary).help(notCoveredHelp) }
+
+    var body: some View {
+        switch state {
+        case nil:
+            Text("—").foregroundStyle(.secondary)
+        case .reading:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Reading")
+            }
+        case .kept(let hidden):
+            HiddenTrackVerdict(hidden: hidden)
+        case .silence:
+            Text("Silence").foregroundStyle(.secondary)
+                .help("The gap before track 1 is silence, so there is no track to keep.")
+        case .unreadable(let sectors):
+            Text("Unreadable").foregroundStyle(Theme.warning)
+                .help(
+                    "\(Format.count(sectors, "sector")) before track 1 could not be read, and the rest is silence. This drive may not read before track 1; another drive may find a hidden track there."
+                )
+        }
+    }
+}
+
+/// A kept hidden track: its reads agree, or they do not.
+struct HiddenTrackVerdict: View {
+    var hidden: RipReport.HiddenTrack
+
+    var body: some View {
+        let unreadable = hidden.unreadableSectors?.count ?? 0
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 5) {
+                Image(systemName: hidden.readsAgree ? "checkmark" : "xmark.circle")
+                Text(hidden.readsAgree ? "Reads agree" : "Reads differ")
+            }
+            .foregroundStyle(hidden.readsAgree ? AnyShapeStyle(.secondary) : AnyShapeStyle(Theme.bad))
+            if unreadable > 0 {
+                Text("\(unreadable) unreadable").font(.caption).foregroundStyle(Theme.warning)
+            }
+        }
+        .help(
+            (hidden.readsAgree
+                ? "\(hidden.reads) reads of the audio before track 1 agree."
+                : "\(hidden.reads) reads of the audio before track 1 differ, so it may have errors.")
+                + " " + HiddenTrackStatus.notCoveredHelp)
     }
 }

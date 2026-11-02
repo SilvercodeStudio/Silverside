@@ -381,6 +381,19 @@ public struct RipReport: Codable, Equatable, Sendable {
             self.readsAgree = readsAgree
             self.reads = reads
         }
+
+        /// The hidden track as track 0 of a table of the report's tracks. No database checks it:
+        /// its AccurateRip status is `notInDatabase`, and it has no CTDB confidence, so a table
+        /// shows `readsAgree` for it, not a verdict.
+        public var reportTrack: Track {
+            var track = Track(
+                number: 0, file: file, startLBA: 0, sectors: sectors, preEmphasis: false, accurateRip: .notInDatabase,
+                fullReads: reads)
+            track.unreadableSectors = unreadableSectors
+            track.crc32 = crc32
+            track.peak = peak
+            return track
+        }
     }
     /// The MusicBrainz release that the rip used for its names, with every disc's tracks.
     public var release: MusicBrainzRelease?

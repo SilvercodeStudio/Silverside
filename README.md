@@ -306,7 +306,7 @@ does, and how it was compared with independent tools and real discs.
   discs, and CUE sheets that describe the whole disc.
 - **Copy-controlled discs:** checked on real discs, with a note in the report
   when a disc looks copy-controlled.
-- More tests with real discs: CD+G, hidden track one audio.
+- More tests with real discs: CD+G.
 - Signed and notarized release builds, with Add to Music working under
   macOS's hardened runtime.
 - Polish in the app.

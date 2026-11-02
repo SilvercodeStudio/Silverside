@@ -606,8 +606,10 @@ struct ResultsView: View {
             .width(52)
             .customizationID("time").disabledCustomizationBehavior(.visibility)
         TableColumn("") { track in
-            InfoButton(help: "Track info, and the tags of its encoded file", debugID: "track\(track.number)") {
-                InfoSection.track(track, report: report, title: titles[track.number], file: audioURL(of: track))
+            if track.number > 0 {
+                InfoButton(help: "Track info, and the tags of its encoded file", debugID: "track\(track.number)") {
+                    InfoSection.track(track, report: report, title: titles[track.number], file: audioURL(of: track))
+                }
             }
         }
         .width(22)
@@ -625,6 +627,14 @@ struct ResultsView: View {
 
     /// A track's title, and its artist when it has one of its own, editable as in a drive's table.
     @ViewBuilder private func titleCell(_ track: RipReport.Track) -> some View {
+        if track.number == 0 {
+            HiddenTrackTitle(title: title(ofTrack: 0) ?? track.file)
+        } else {
+            editableTitleCell(track)
+        }
+    }
+
+    @ViewBuilder private func editableTitleCell(_ track: RipReport.Track) -> some View {
         let shown = tracks(of: shownRelease)[track.number]
         let ownArtist = shown.flatMap { $0.artist != shownRelease?.artist ? $0.artist : nil }
         VStack(alignment: .leading, spacing: 1) {
@@ -690,14 +700,23 @@ struct ResultsView: View {
             })
     }
 
+    /// The report's tracks, after the hidden track before track 1 (track 0) if the rip kept one.
+    private var rows: [RipReport.Track] { (report.hiddenTrack.map { [$0.reportTrack] } ?? []) + report.tracks }
+
+    /// A track's title: the hidden track's from the release's pregap track.
+    private func title(ofTrack number: Int) -> String? {
+        guard number == 0 else { return titles[number] }
+        return toc.flatMap { shownRelease?.medium(for: $0)?.hiddenTrack?.title } ?? "Hidden track"
+    }
+
     private var table: some View {
-        Table(report.tracks, columnCustomization: $columns) {
+        Table(rows, columnCustomization: $columns) {
             TableColumn("") { track in
                 if let url = audioURL(of: track) {
                     PlayButton(player: model.player, source: .file(url)) {
                         // The rip's file, or the album's as the disc has it, holds the stream the rip found.
                         model.player.play(
-                            file: url, title: titles[track.number] ?? track.file,
+                            file: url, title: title(ofTrack: track.number) ?? track.file,
                             subtitle: report.release?.artist ?? folder.lastPathComponent,
                             holdsDTS: track.dts == true && (hasAudio || report.encoding?.dtsDecoded == nil))
                     }
@@ -707,18 +726,32 @@ struct ResultsView: View {
             .customizationID("play").disabledCustomizationBehavior(.all)
             discColumns
             TableColumn("Status") { track in
-                FinishedStatus(
-                    track: track, ctdb: report.ctdb,
-                    showsRereads: columns[visibility: TrackColumns.rereads] != .visible)
+                if track.number == 0, let hidden = report.hiddenTrack {
+                    HiddenTrackVerdict(hidden: hidden)
+                } else {
+                    FinishedStatus(
+                        track: track, ctdb: report.ctdb,
+                        showsRereads: columns[visibility: TrackColumns.rereads] != .visible)
+                }
             }
             .width(min: 110, ideal: 150)
             .customizationID("status").disabledCustomizationBehavior(.visibility)
             TableColumn("Re-reads") { track in RereadsCell(track: track, ctdb: report.ctdb) }.width(min: 60, ideal: 75)
                 .customizationID(TrackColumns.rereads).defaultVisibility(.hidden)
-            TableColumn("AccurateRip") { track in AccurateRipCell(state: .finished(track)) }.width(min: 90, ideal: 110)
-                .customizationID("accurateRip")
-            TableColumn("CTDB") { track in CTDBResultCell(track: track, ctdb: report.ctdb) }.width(min: 70, ideal: 90)
-                .customizationID("ctdb")
+            TableColumn("AccurateRip") { track in
+                if track.number == 0 { HiddenTrackStatus.notCovered } else { AccurateRipCell(state: .finished(track)) }
+            }
+            .width(min: 90, ideal: 110)
+            .customizationID("accurateRip")
+            TableColumn("CTDB") { track in
+                if track.number == 0 {
+                    HiddenTrackStatus.notCovered
+                } else {
+                    CTDBResultCell(track: track, ctdb: report.ctdb)
+                }
+            }
+            .width(min: 70, ideal: 90)
+            .customizationID("ctdb")
             if let encoding = report.encoding {
                 TableColumn("Encoding") { track in
                     if let file = encoding.file(ofTrack: track.number) {

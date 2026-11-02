@@ -21,6 +21,18 @@ struct HiddenTrackTests {
         #expect(hidden.samples[...] == samples[0..<(100 * 588)])
     }
 
+    /// The gap a rip reads, and the hidden track as track 0 of a table.
+    @Test func gapAndReportTrack() throws {
+        let (reader, _) = try disc(silentGap: false)
+        #expect(HiddenTrackRip.gapSectors(of: reader.toc) == 100)
+        #expect(HiddenTrackRip.gapSectors(of: try TOC(audioTrackStarts: [0, 560], leadOutLBA: 1000)) == 0)
+        var hidden = RipReport.HiddenTrack(file: "Track 00.wav", sectors: 100, peak: 9000, readsAgree: true, reads: 2)
+        hidden.crc32 = "BF951751"
+        let track = hidden.reportTrack
+        #expect(track.number == 0 && track.sectors == 100 && track.file == "Track 00.wav" && track.fullReads == 2)
+        #expect(track.accurateRip == .notInDatabase && track.ctdbConfidence == nil && track.crc32 == "BF951751")
+    }
+
     @Test func keepsNoSilentGap() throws {
         #expect(try HiddenTrackRip.rip(reader: disc(silentGap: true).reader) == nil)
         let (toc, samples) = try makeDisc(trackSectors: [100, 100])

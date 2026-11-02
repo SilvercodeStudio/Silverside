@@ -38,6 +38,8 @@ final class DriveSlot: Identifiable {
         case reading
         case ready
         case failed(String)
+        /// A CD-R or CD-RW with nothing written on it.
+        case blank(DiscMediaType?)
     }
 
     let id: String
@@ -167,6 +169,8 @@ final class DriveSlot: Identifiable {
                 guard !Task.isCancelled else { return }
                 disc = info
                 looked?()
+            } catch DriveError.blankDisc(let media) {
+                discState = .blank(media)
             } catch {
                 discState = .failed("\(error)")
             }

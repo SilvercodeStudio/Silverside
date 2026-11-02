@@ -241,7 +241,7 @@ struct DiscInfo {
             do {
                 return try await Task.detached {
                     let drive = try makeDrive()
-                    let toc = try drive.readTOC()
+                    let toc = try drive.readTOCUnlessBlank()
                     let mcn = try? SubchannelCodes.mcn(in: toc, drive: drive)
                     let cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
                     let media = (try? drive.readMediaType()) ?? nil
@@ -249,6 +249,8 @@ struct DiscInfo {
                 }.value
             } catch {
                 attempt += 1
+                // A blank disc stays blank.
+                if case DriveError.blankDisc? = error as? DriveError { throw error }
                 guard attempt < 4 else { throw error }
                 try await Task.sleep(for: .seconds(1))
             }

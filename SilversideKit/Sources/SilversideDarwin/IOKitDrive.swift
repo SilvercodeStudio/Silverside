@@ -82,6 +82,25 @@ public final class IOKitDrive: CDDrive {
         }
     }
 
+    /// The disc's status from the drive's disc information (`DKIOCCDREADDISCINFO`): byte 2's
+    /// low two bits, 0 for a blank disc, 1 for an open one, 2 for a finished one.
+    public func readDiscStatus() throws -> DiscStatus? {
+        var bytes = [UInt8](repeating: 0, count: 34)
+        var request = dk_cd_read_disc_info_t()
+        try bytes.withUnsafeMutableBytes { buffer in
+            request.buffer = buffer.baseAddress
+            request.bufferLength = UInt16(buffer.count)
+            try control(Ioctl.readDiscInfo, &request)
+        }
+        guard request.bufferLength >= 3 else { return nil }
+        switch bytes[2] & 0x03 {
+        case 0: return .blank
+        case 1: return .open
+        case 2: return .finished
+        default: return nil
+        }
+    }
+
     /// The media type from the disc's ATIP, or nil when the disc has none (pressed) or the drive refuses.
     private func readATIP() -> DiscMediaType? {
         var bytes = [UInt8](repeating: 0, count: 32)
@@ -241,6 +260,7 @@ public enum IOKitDriveError: Error, Equatable, CustomStringConvertible {
 enum Ioctl {
     static let read = readWrite(96, dk_cd_read_t.self)
     static let readTOC = readWrite(100, dk_cd_read_toc_t.self)
+    static let readDiscInfo = readWrite(101, dk_cd_read_disc_info_t.self)
 
     private static func readWrite<T>(_ number: UInt, _: T.Type) -> UInt {
         let inOut: UInt = 0xC000_0000

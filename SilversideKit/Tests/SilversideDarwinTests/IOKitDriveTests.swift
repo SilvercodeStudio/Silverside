@@ -9,6 +9,7 @@ struct IoctlTests {
     @Test func requestCodesMatchTheSDK() {
         #expect(Ioctl.read == 0xC020_6460)
         #expect(Ioctl.readTOC == 0xC018_6464)
+        #expect(Ioctl.readDiscInfo == 0xC018_6465)
     }
 }
 

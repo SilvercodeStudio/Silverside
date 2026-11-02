@@ -58,7 +58,7 @@ final class DriveTestRun: Identifiable {
                         onFinish()
                     }
                 case .cache:
-                    let sectors = try CacheProbe(drive: drive).cacheSectors(toc: drive.readTOC())
+                    let sectors = try CacheProbe(drive: drive).cacheSectors(toc: drive.readTOCUnlessBlank())
                     if let sectors, !isDemo {
                         var changed = profile
                         changed.cacheSectors = sectors

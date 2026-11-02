@@ -484,6 +484,7 @@ final class AppModel {
         options.edits = disc.edits.isEmpty ? nil : disc.edits
         options.manualRelease = disc.manual
         options.cdGraphics = slot.probe?.cdGraphics
+        options.cdExtendedGraphics = slot.probe?.cdExtendedGraphics ?? false
         options.singlePass = slot.fastMode
         if slot.isDemo {
             options.offline = true

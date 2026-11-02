@@ -1,6 +1,7 @@
 /// A short look at a disc's audio as it is read, before a rip, so that the app can show at
 /// once what kind of disc it is (`DiscLogo`): two seconds from each of the first three audio
-/// tracks, for HDCD codes and a DTS stream, and their raw subchannel, for CD+G graphics.
+/// tracks, for HDCD codes and a DTS stream, and their raw subchannel, for CD+G graphics
+/// (and on a CD+G disc, a second of every track's, for CD+EG graphics).
 public struct DiscProbe: Equatable, Sendable {
     /// HDCD codes in the audio read.
     public var hdcd = false
@@ -12,13 +13,19 @@ public struct DiscProbe: Equatable, Sendable {
     public var dts = false
     /// CD+G graphics in the subchannel; nil if the drive did not give the raw subchannel.
     public var cdGraphics: Bool?
+    /// CD+EG graphics in the subchannel (`CDGraphics.holdsExtendedGraphics`).
+    public var cdExtendedGraphics = false
     /// The tracks whose audio was read: none if every read failed, and nothing is known.
     public var tracksRead = 0
 
-    public init(hdcd: Bool = false, dts: Bool = false, cdGraphics: Bool? = nil, tracksRead: Int = 1) {
+    public init(
+        hdcd: Bool = false, dts: Bool = false, cdGraphics: Bool? = nil, cdExtendedGraphics: Bool = false,
+        tracksRead: Int = 1
+    ) {
         self.hdcd = hdcd
         self.dts = dts
         self.cdGraphics = cdGraphics
+        self.cdExtendedGraphics = cdExtendedGraphics
         self.tracksRead = tracksRead
     }
 
@@ -41,35 +48,55 @@ public struct DiscProbe: Equatable, Sendable {
     static let start = 10 * CDDA.sectorsPerSecond
 
     /// Reads the first `tracks` audio tracks. A read that fails leaves its track out: this is
-    /// a look, not a rip. `stop` ends it early, as a rip that starts does.
+    /// a look, not a rip. `stop` ends it early, as a rip that starts does. On a disc with
+    /// CD+G graphics, it then reads a second of the other tracks' subchannel until it finds
+    /// CD+EG graphics: a CD+EG disc can have none in its first tracks (*The CD Graphics World*
+    /// has them in tracks 2, 3, 7, and 8, and in a second of track 8 only).
     public static func probe(
         _ drive: any CDDrive, toc: TOC, tracks: Int = 3, stop: StopToken? = nil
     ) -> DiscProbe {
         var result = DiscProbe(tracksRead: 0)
-        // The drive's raw subchannel, until it refuses it or graphics are found.
+        // The drive's raw subchannel, until it refuses it or both kinds of graphics are found.
         var readsSubchannel = true
+        func lookAtSubchannel(_ pw: [UInt8]) {
+            if result.cdGraphics != true { result.cdGraphics = CDGraphics.holdsGraphics(pw) }
+            if CDGraphics.holdsExtendedGraphics(pw) { result.cdExtendedGraphics = true }
+            if result.cdGraphics == true && result.cdExtendedGraphics { readsSubchannel = false }
+        }
+        // A second of a track's subchannel (300 packs, plenty; its reads are slower than
+        // audio's), and whether every read of it worked. It comes before the track's audio:
+        // the MATSHITA answers a subchannel read of sectors it has just read as audio with the
+        // wrong subchannel (2026-11-02, a CD+EG disc: the same packs for every track).
+        func subchannel(from first: Int, in range: Range<Int>) -> (pw: [UInt8], allRead: Bool) {
+            var pw = [UInt8]()
+            var lba = first
+            while lba < min(first + CDDA.sectorsPerSecond, range.upperBound), stop?.isStopped != true {
+                let piece = min(25, min(first + CDDA.sectorsPerSecond, range.upperBound) - lba)
+                guard let bytes = try? drive.readSubchannelPW(at: lba, count: piece) else { return (pw, false) }
+                pw += bytes
+                lba += piece
+            }
+            return (pw, true)
+        }
         for track in toc.audioTracks.prefix(tracks) {
             guard stop?.isStopped != true else { break }
             let range = toc.sectorRange(of: track)
             let first = range.lowerBound + min(start, range.count / 3)
             let count = min(sectors, range.upperBound - first)
             guard count > 0 else { continue }
-            var audio = [UInt8]()
             var pw = [UInt8]()
+            if readsSubchannel {
+                let read = subchannel(from: first, in: range)
+                pw = read.pw
+                if !read.allRead { readsSubchannel = false }
+            }
+            var audio = [UInt8]()
             var lba = first
             // In pieces of the size a rip reads, so that a stop does not wait long.
             while lba < first + count, stop?.isStopped != true {
                 let piece = min(25, first + count - lba)
                 guard let bytes = try? drive.readAudioSectors(at: lba, count: piece) else { break }
                 audio += bytes
-                // A second of subchannel is 300 packs, plenty; its reads are slower than audio's.
-                if readsSubchannel, lba < first + CDDA.sectorsPerSecond {
-                    if let bytes = try? drive.readSubchannelPW(at: lba, count: piece) {
-                        pw += bytes
-                    } else {
-                        readsSubchannel = false
-                    }
-                }
                 lba += piece
             }
             guard !audio.isEmpty else { continue }
@@ -80,9 +107,15 @@ public struct DiscProbe: Equatable, Sendable {
                 result.hdcdCodes[track.number] = codes
             }
             if !result.dts, DTSStream.isStream(samples) { result.dts = true }
-            if !pw.isEmpty {
-                result.cdGraphics = CDGraphics.holdsGraphics(pw)
-                if result.cdGraphics == true { readsSubchannel = false }
+            if !pw.isEmpty { lookAtSubchannel(pw) }
+        }
+        // CD+EG graphics on a CD+G disc, from the subchannel alone.
+        if result.cdGraphics == true {
+            for track in toc.audioTracks.dropFirst(tracks) {
+                guard readsSubchannel, stop?.isStopped != true else { break }
+                let range = toc.sectorRange(of: track)
+                let pw = subchannel(from: range.lowerBound + min(start, range.count / 3), in: range).pw
+                if !pw.isEmpty { lookAtSubchannel(pw) }
             }
         }
         return result

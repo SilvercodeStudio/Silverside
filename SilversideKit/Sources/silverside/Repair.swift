@@ -58,7 +58,7 @@ struct Repair: AsyncParsableCommand {
         // in a drive (by --device, or with no other TOC), re-reads are possible.
         let savedTOC = RipPool.savedTOC(in: firstFolder)
         let usesDrive = deviceOptions.device != nil || (self.toc == nil && savedTOC == nil)
-        let driveTOC = usesDrive ? try IOKitDrive(bsdName: deviceOptions.bsdName()).readTOC() : nil
+        let driveTOC = usesDrive ? try IOKitDrive(bsdName: deviceOptions.bsdName()).readTOCUnlessBlank() : nil
         guard let toc = try (self.toc ?? savedTOC).map({ try TOC(ctdbTOCString: $0) }) ?? driveTOC else {
             throw CommandError("The disc's TOC is not known.")
         }

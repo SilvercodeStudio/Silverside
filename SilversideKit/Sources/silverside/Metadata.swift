@@ -77,7 +77,7 @@ struct Metadata: AsyncParsableCommand {
             cdText = (try? RipReport.read(from: folder.appending(path: "disc.json")))?.cdText
         } else {
             let drive = try IOKitDrive(bsdName: deviceOptions.bsdName())
-            toc = try drive.readTOC()
+            toc = try drive.readTOCUnlessBlank()
             mcn = try? SubchannelCodes.mcn(in: toc, drive: drive)
             cdText = (try? drive.readCDText()).flatMap { $0.flatMap(CDText.init(bytes:)) }
         }

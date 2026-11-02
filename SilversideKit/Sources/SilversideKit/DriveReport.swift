@@ -52,7 +52,7 @@ public struct DriveReport: Codable, Sendable {
 
         var toc: TOC?
         run("Read the TOC") {
-            toc = try drive.readTOC()
+            toc = try drive.readTOCUnlessBlank()
             let data = toc!.tracks.count - toc!.audioTracks.count
             return (true, "\(toc!.audioTracks.count) audio tracks, \(data) data tracks, lead-out at \(toc!.leadOutLBA)")
         }

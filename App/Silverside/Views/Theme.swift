@@ -243,6 +243,7 @@ extension DiscLogo {
         case .dts: "DiscLogoDTS"
         case .hdcd: "HDCD"
         case .sacd: "DiscLogoSACD"
+        case .cdExtendedGraphics: "DiscLogoCDEG"
         case .cdGraphics: "DiscLogoCDG"
         case .copyControl: "DiscLogoCopyControl"
         case .compactDiscPlus, .mixedMode: "DiscLogoCDExtra"
@@ -266,13 +267,15 @@ extension DiscLogo {
     /// its words) is the same size in each, whatever they add below it: measured from the
     /// SVGs (2026-10-29), where "COMPACT disc" ends at 79.3% of the plain logo's ink, the
     /// plain logo's words at 69.3% of CD+G's, 72.5% of CD-Text's, and "COMPACT disc" at 65.5%
-    /// of CD-R's. The other logos are sized by eye to weigh about the same.
+    /// of CD-R's; CD+EG's is CD+G's with a taller box, its "disc" 1% larger in its units
+    /// (2026-11-02). The other logos are sized by eye to weigh about the same.
     var height: CGFloat {
         let base = Self.compactDiscHeight
         switch self {
         case .compactDisc: return base
         case .compactDiscPlus, .mixedMode: return base * 49.2 / 48
         case .cdGraphics: return base * 70.3 / 48
+        case .cdExtendedGraphics: return base * 79.1 / 48
         case .cdText: return base * 66.1 / 48
         case .recordable: return base * 58.6 / 48
         case .hdcd: return 30
@@ -287,7 +290,7 @@ extension DiscLogo {
     /// what they add hangs below. The others are centered on it.
     var hangsFromTop: Bool {
         switch self {
-        case .compactDisc, .compactDiscPlus, .mixedMode, .cdGraphics, .cdText, .recordable: true
+        case .compactDisc, .compactDiscPlus, .mixedMode, .cdGraphics, .cdExtendedGraphics, .cdText, .recordable: true
         case .hdcd, .dts, .sacd, .copyControl, .dvd, .dvdAudio, .bluRay, .ultraHDBluRay: false
         }
     }

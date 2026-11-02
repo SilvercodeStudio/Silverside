@@ -4,16 +4,18 @@
 
 ## Apple Music opens when I insert a disc
 
-macOS opens Music for every audio CD, and Music has no setting that leaves the disc alone completely. The closest is “When a CD is inserted: Show CD” in the Music app's settings: Music still opens and comes to the front, but it does not play or import the disc. Then close Music, or leave it open. Do not let Music play or import the disc during a rip: two readers slow each other down.
+macOS opens Music for every audio CD. To stop it, open System Settings › CDs & DVDs and set "When you insert a music CD" to Ignore. The CDs & DVDs settings show only while an optical drive is connected.
 
-To keep Music from opening at all, macOS has a hidden setting: the "When you insert a music CD: Ignore" choice of the old CDs & DVDs settings, which macOS still reads although its window is gone. In Terminal:
+If you want Music to open but not touch the disc, set "When a CD is inserted" to Show CD in the Music app's settings instead. Do not let Music play or import the disc during a rip: two readers slow each other down.
+
+The same Ignore setting from Terminal, if the CDs & DVDs settings do not show:
 
 ```
 defaults write com.apple.digihub com.apple.digihub.cd.music.appeared -dict action 1
 killall SystemUIServer
 ```
 
-The second line restarts the part of macOS that handles discs (the menu bar flickers once). To undo it:
+The second line restarts the part of macOS that handles discs (the menu bar flickers once). To undo it, set the choice back in CDs & DVDs, or:
 
 ```
 defaults delete com.apple.digihub com.apple.digihub.cd.music.appeared

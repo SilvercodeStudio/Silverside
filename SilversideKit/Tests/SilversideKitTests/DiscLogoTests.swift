@@ -30,6 +30,8 @@ struct DiscLogoTests {
         #expect(DiscLogo.logo(toc: audio, format: "CD+G", probe: DiscProbe(cdGraphics: false)) == .compactDisc)
         #expect(DiscLogo.logo(toc: audio, format: "CD+G", probe: DiscProbe()) == .cdGraphics)
         #expect(DiscLogo.logo(toc: audio, format: "CD", probe: DiscProbe(cdGraphics: true)) == .cdGraphics)
+        let extended = DiscProbe(cdGraphics: true, cdExtendedGraphics: true)
+        #expect(DiscLogo.logo(toc: audio, format: "CD", media: .recordable, probe: extended) == .cdExtendedGraphics)
     }
 
     /// Data after the music gets the "disc+" logo, and so does data first (Mixed Mode), by another name.
@@ -114,6 +116,7 @@ struct DiscProbeTests {
         let pw = [UInt8](try Data(contentsOf: url))
         let (drive, toc) = try self.drive { _ in [UInt32](repeating: 0, count: 1500 * 588) }
         #expect(CDGraphics.holdsGraphics(pw))
+        #expect(!CDGraphics.holdsExtendedGraphics(pw))
         #expect(!CDGraphics.holdsGraphics([UInt8](repeating: 0, count: pw.count)))
         var generator = SplitMix64(state: 7)
         #expect(!CDGraphics.holdsGraphics((0..<pw.count).map { _ in UInt8.random(in: 0...255, using: &generator) }))
@@ -122,6 +125,55 @@ struct DiscProbeTests {
         #expect(DiscProbe.probe(drive, toc: toc).cdGraphics == true)
         drive.subchannelPW = nil
         #expect(DiscProbe.probe(drive, toc: toc).cdGraphics == nil)
+    }
+
+    /// Raw P–W subchannel of `sectors` sectors holding packs of these commands and
+    /// instructions in turn, interleaved as on a disc (`CDGraphics.packs` undoes it).
+    static func subchannel(_ packs: [(command: UInt8, instruction: UInt8)], sectors: Int) -> [[UInt8]] {
+        func swapped(_ index: Int) -> Int {
+            [1: 18, 18: 1, 2: 5, 5: 2, 3: 23, 23: 3][index] ?? index
+        }
+        var raw = [[UInt8]](repeating: [UInt8](repeating: 0, count: 24), count: sectors * 4)
+        for pack in 0..<(raw.count - 7) {
+            let kind = packs[pack % packs.count]
+            var symbols = [UInt8](repeating: 0, count: 24)
+            symbols[0] = kind.command
+            symbols[1] = kind.instruction
+            for index in 0..<24 {
+                let from = swapped(index)
+                raw[pack + from % 8][from] = symbols[index]
+            }
+        }
+        return (0..<sectors).map { sector in Array(raw[(sector * 4)..<(sector * 4 + 4)].joined()) }
+    }
+
+    /// CD+EG packs have command 10; a CD+EG disc carries CD+G packs too, and its CD+EG ones can
+    /// be in a later track only, so the look reads a second of every track on a CD+G disc.
+    @Test func findsCDExtendedGraphics() throws {
+        let both = Self.subchannel([(9, 6), (10, 14), (9, 38), (10, 6), (10, 3)], sectors: 75)
+        let pw = Array(both.joined())
+        #expect(CDGraphics.holdsGraphics(pw) && CDGraphics.holdsExtendedGraphics(pw))
+        let plain = Array(Self.subchannel([(9, 6), (9, 38), (9, 1)], sectors: 75).joined())
+        #expect(CDGraphics.holdsGraphics(plain) && !CDGraphics.holdsExtendedGraphics(plain))
+        // Command 10 with CD+G's instructions is not CD+EG.
+        #expect(!CDGraphics.holdsExtendedGraphics(Array(Self.subchannel([(10, 20), (10, 30)], sectors: 75).joined())))
+
+        let toc = try TOC(audioTrackStarts: [0, 1500, 3000, 4500, 6000], leadOutLBA: 7500)
+        let drive = SimulatedDrive(toc: toc, samples: [UInt32](repeating: 0, count: 7500 * 588))
+        let cdg = Self.subchannel([(9, 6), (9, 38)], sectors: 75)
+        // Each look starts at 500, a third of a track's 1,500 sectors.
+        for sector in 0..<75 { drive.subchannelPW?[500 + sector] = cdg[sector] }
+        #expect(DiscProbe.probe(drive, toc: toc) == DiscProbe(cdGraphics: true, tracksRead: 3))
+        for sector in 0..<75 { drive.subchannelPW?[6500 + sector] = both[sector] }
+        #expect(
+            DiscProbe.probe(drive, toc: toc) == DiscProbe(cdGraphics: true, cdExtendedGraphics: true, tracksRead: 3))
+        // A drive that loses the subchannel of sectors it has read as audio (the MATSHITA,
+        // 2026-11-02): the look reads each track's subchannel before its audio.
+        let losing = SimulatedDrive(toc: toc, samples: [UInt32](repeating: 0, count: 7500 * 588))
+        losing.subchannelPW = drive.subchannelPW
+        losing.losesSubchannelAfterAudio = true
+        #expect(
+            DiscProbe.probe(losing, toc: toc) == DiscProbe(cdGraphics: true, cdExtendedGraphics: true, tracksRead: 3))
     }
 }
 
@@ -149,6 +201,8 @@ extension DiscLogoTests {
         #expect(DiscLogo.logo(for: report) == .recordable)
         report.cdGraphics = true
         #expect(DiscLogo.logo(for: report) == .cdGraphics)
+        report.cdExtendedGraphics = true
+        #expect(DiscLogo.logo(for: report) == .cdExtendedGraphics)
         report.tracks[1].dts = true
         #expect(DiscLogo.logo(for: report) == .dts)
 
@@ -187,5 +241,21 @@ extension DiscLogoTests {
         #expect(DiscLogo.medium(of: report) == "DTS")
         report.encoding?.dtsDecoded = "5.1"
         #expect(DiscLogo.medium(of: report) == "DTS, decoded")
+    }
+}
+
+extension DiscLogoTests {
+    /// A blank CD-R's TOC read fails as a damaged disc's does; the disc information tells them apart.
+    @Test func tellsABlankDisc() throws {
+        let toc = try TOC(audioTrackStarts: [0, 1500], leadOutLBA: 3000)
+        let drive = SimulatedDrive(toc: toc, samples: [UInt32](repeating: 0, count: 3000 * 588))
+        #expect(try drive.readTOCUnlessBlank() == toc)
+        drive.discStatus = .blank
+        drive.mediaType = .recordable
+        #expect(throws: DriveError.blankDisc(.recordable)) { try drive.readTOCUnlessBlank() }
+        #expect("\(DriveError.blankDisc(.recordable))" == "The disc is a blank CD-R, with nothing to rip.")
+        // A drive that cannot tell reads the TOC as before.
+        drive.discStatus = nil
+        #expect(try drive.readTOCUnlessBlank() == toc)
     }
 }

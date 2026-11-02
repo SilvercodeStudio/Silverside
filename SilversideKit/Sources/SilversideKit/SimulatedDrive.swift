@@ -74,12 +74,27 @@ public final class SimulatedDrive: CDDrive {
     /// sectors read as zeros. Nil when the drive refuses raw subchannel reads, as the BU50N does.
     public var subchannelPW: [Int: [UInt8]]? = [:]
 
+    /// True for a drive that answers a subchannel read of sectors it has read as audio with
+    /// the wrong subchannel (zeros here), as the MATSHITA does.
+    public var losesSubchannelAfterAudio = false
+    /// The sectors read as audio, for `losesSubchannelAfterAudio`.
+    private var readAsAudio = Set<Int>()
+
     public func readSubchannelPW(at lba: Int, count: Int) throws -> [UInt8] {
         guard let subchannelPW, lba >= 0, lba + count <= toc.leadOutLBA else { throw DriveError.readFailed(lba: lba) }
-        return (lba..<(lba + count)).flatMap { subchannelPW[$0] ?? [UInt8](repeating: 0, count: 96) }
+        return (lba..<(lba + count)).flatMap { sector in
+            readAsAudio.contains(sector)
+                ? [UInt8](repeating: 0, count: 96)
+                : subchannelPW[sector] ?? [UInt8](repeating: 0, count: 96)
+        }
     }
 
     public func readMediaType() throws -> DiscMediaType? { mediaType }
+
+    /// What is written on the disc. Nil makes the drive one that cannot tell.
+    public var discStatus: DiscStatus? = .finished
+
+    public func readDiscStatus() throws -> DiscStatus? { discStatus }
 
     /// The simulated user data of a data sector: byte `index` of sector `lba`.
     public static func dataByte(lba: Int, index: Int) -> UInt8 { UInt8(truncatingIfNeeded: lba &* 7 &+ index) }
@@ -161,7 +176,11 @@ public final class SimulatedDrive: CDDrive {
         self.canOverread = canOverread
     }
 
-    public func readTOC() throws -> TOC { toc }
+    public func readTOC() throws -> TOC {
+        // A blank disc has no TOC, and the drive's read of it fails.
+        guard discStatus != .blank else { throw DriveError.tocUnreadable }
+        return toc
+    }
 
     public func readAudioSectors(at lba: Int, count: Int) throws -> [UInt8] {
         try readAudioSectorsWithC2(at: lba, count: count).audio
@@ -170,6 +189,7 @@ public final class SimulatedDrive: CDDrive {
     /// Flags the bytes that it returns wrong, if `reportsC2` is true.
     public func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8]) {
         let sectors = lba..<(lba + count)
+        if losesSubchannelAfterAudio { readAsAudio.formUnion(sectors) }
         if let readSpeed, readSpeed > 0 {
             Thread.sleep(forTimeInterval: Double(count) / (readSpeed * Double(CDDA.sectorsPerSecond)))
         }

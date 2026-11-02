@@ -88,7 +88,7 @@ struct Drives: ParsableCommand {
             if measureCache, let bsdName = drive.discBSDName {
                 let device = try IOKitDrive(bsdName: bsdName)
                 print("Measuring the cache of \(drive.vendor) \(drive.product)...")
-                guard let sectors = try CacheProbe(drive: device).cacheSectors(toc: device.readTOC()) else {
+                guard let sectors = try CacheProbe(drive: device).cacheSectors(toc: device.readTOCUnlessBlank()) else {
                     throw CommandError("No cache size found: reads stayed fast, or the disc is too short.")
                 }
                 profile.cacheSectors = sectors
@@ -137,7 +137,12 @@ struct Drives: ParsableCommand {
             return "no disc"
         }
         // macOS already has the TOC, so this does not spin the disc.
-        guard let toc = try? IOKitDrive(bsdName: bsdName).readTOC() else {
+        let toc: TOC
+        do {
+            toc = try IOKitDrive(bsdName: bsdName).readTOCUnlessBlank()
+        } catch DriveError.blankDisc(let media) {
+            return "\(bsdName) · a blank \(media?.description ?? "CD-R or CD-RW")"
+        } catch {
             return "\(bsdName) · a CD whose TOC cannot be read"
         }
         let data = toc.tracks.count - toc.audioTracks.count

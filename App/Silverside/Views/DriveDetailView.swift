@@ -27,6 +27,8 @@ struct DriveDetailView: View {
                 } actions: {
                     Button("Try Again") { slot.readDisc(settings: model.settings) }
                 }
+            case .blank(let media):
+                BlankDiscView(media: media)
             case .ready:
                 if let disc = slot.disc, disc.toc.audioTracks.isEmpty {
                     // A CD-ROM, such as a game or a program: nothing for a music ripper.

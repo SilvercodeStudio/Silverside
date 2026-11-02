@@ -19,7 +19,7 @@ struct Info: AsyncParsableCommand {
 
     func run() async throws {
         let drive = try IOKitDrive(bsdName: deviceOptions.bsdName())
-        let toc = try drive.readTOC()
+        let toc = try drive.readTOCUnlessBlank()
 
         print("Track  Start LBA  Length    Pregap    ISRC          Type")
         for track in toc.tracks {
@@ -82,7 +82,7 @@ struct Info: AsyncParsableCommand {
         if let features = probe.hdcdFeatures { found.append("HDCD codes (asking for \(features))") }
         if probe.dts { found.append("a DTS stream") }
         switch probe.cdGraphics {
-        case true?: found.append("CD+G graphics")
+        case true?: found.append(probe.cdExtendedGraphics ? "CD+G and CD+EG graphics" : "CD+G graphics")
         case false?: break
         case nil: found.append("no subchannel for CD+G from this drive")
         }

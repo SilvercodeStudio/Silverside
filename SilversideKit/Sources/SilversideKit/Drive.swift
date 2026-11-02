@@ -25,10 +25,15 @@ public protocol CDDrive {
     /// What the disc is: pressed, or written in a drive (CD-R or CD-RW). Nil if the drive cannot tell.
     func readMediaType() throws -> DiscMediaType?
 
+    /// Whether anything is written on the disc: a blank CD-R or CD-RW has no TOC to read. Nil
+    /// if the drive cannot tell.
+    func readDiscStatus() throws -> DiscStatus?
+
     /// Reads the raw P–W subchannel of `count` audio sectors, 96 bytes each (one bit of each
     /// channel in each byte: P is bit 7, Q bit 6, R to W bits 5 to 0), for CD+G graphics.
-    /// Not every drive gives it: the HL-DT-ST BU50N refuses it, and the MATSHITA gave garbage
-    /// on a damaged disc (2026-10-29), so a failure means only that this drive cannot tell.
+    /// Not every drive gives it: the HL-DT-ST BU50N refuses it, so a failure means only that
+    /// this drive cannot tell. The MATSHITA gives the wrong subchannel for sectors it has just
+    /// read as audio (2026-11-02), so read the subchannel first.
     func readSubchannelPW(at lba: Int, count: Int) throws -> [UInt8]
 
     /// The mode of the data sector at `lba`, from its header.
@@ -83,6 +88,7 @@ extension CDDrive {
     }
 
     public func readMediaType() throws -> DiscMediaType? { nil }
+    public func readDiscStatus() throws -> DiscStatus? { nil }
 
     /// A drive that cannot read the raw subchannel fails every read of it.
     public func readSubchannelPW(at lba: Int, count: Int) throws -> [UInt8] { throw DriveError.readFailed(lba: lba) }
@@ -92,6 +98,16 @@ extension CDDrive {
     public func readDataSectors(at lba: Int, count: Int, mode: DataSectorMode) throws -> [UInt8] {
         throw DriveError.readFailed(lba: lba)
     }
+}
+
+/// What the drive's disc information says is written on a disc (MMC's READ DISC INFORMATION).
+public enum DiscStatus: String, Sendable {
+    /// Nothing yet: a blank CD-R or CD-RW.
+    case blank
+    /// Written, with a session left open for more, so the disc is not finished.
+    case open
+    /// Finished: every pressed CD, and a CD-R or CD-RW whose last session was closed.
+    case finished
 }
 
 /// What a disc is made of: pressed in a factory, or written by a drive. A pressed disc is
@@ -116,12 +132,28 @@ public enum DriveError: Error, Equatable, CustomStringConvertible {
     case readFailed(lba: Int)
     /// The drive cannot read the TOC. After many failed reads, a drive can stay in this state.
     case tocUnreadable
+    /// Nothing is written on the disc (`DiscStatus.blank`): a CD-R or CD-RW, if the drive says.
+    case blankDisc(DiscMediaType?)
 
     public var description: String {
         switch self {
         case .sectorOutOfRange(let lba): "Sector \(lba) is outside the disc"
         case .readFailed(let lba): "Cannot read sector \(lba)"
         case .tocUnreadable: "The drive cannot read the disc's TOC. Eject the disc and insert it again."
+        case .blankDisc(let media): "The disc is a blank \(media?.description ?? "CD-R or CD-RW"), with nothing to rip."
+        }
+    }
+}
+
+extension CDDrive {
+    /// The TOC, or for a disc with nothing written on it, `DriveError.blankDisc`: its TOC read
+    /// fails as a damaged disc's does, and only the disc information tells them apart.
+    public func readTOCUnlessBlank() throws -> TOC {
+        do {
+            return try readTOC()
+        } catch {
+            guard (try? readDiscStatus()) == .blank else { throw error }
+            throw DriveError.blankDisc((try? readMediaType()) ?? nil)
         }
     }
 }

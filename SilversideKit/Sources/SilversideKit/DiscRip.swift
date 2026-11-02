@@ -77,6 +77,8 @@ public struct DiscRipOptions: Sendable {
     /// What a look at the disc before the rip found of CD+G graphics (`DiscProbe.cdGraphics`),
     /// for the report. Nil if no one looked.
     public var cdGraphics: Bool?
+    /// True if that look found CD+EG graphics too (`DiscProbe.cdExtendedGraphics`).
+    public var cdExtendedGraphics = false
 
     public init(settings: Settings) {
         artwork = settings.artwork
@@ -274,7 +276,7 @@ public struct DiscRip {
     private func ripDisc() async throws -> DiscRipResult {
         var profiles = self.profiles
         let started = Date()
-        let toc = try drive.readTOC()
+        let toc = try drive.readTOCUnlessBlank()
         guard !toc.audioTracks.isEmpty else { throw DiscRipError.noAudioTracks }
         events(.disc(toc))
         let media = (try? drive.readMediaType()) ?? nil
@@ -660,6 +662,7 @@ public struct DiscRip {
         report.mcn = mcn
         report.media = media
         report.cdGraphics = options.cdGraphics
+        report.cdExtendedGraphics = options.cdExtendedGraphics ? true : nil
         report.hiddenTrack = hiddenTrack
         report.hiddenAreaUnreadableSectors = hiddenAreaUnreadable
         let padded = paddedEdges(of: reports)

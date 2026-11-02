@@ -4,7 +4,8 @@
 /// holds four packs of 24 six-bit symbols. The packs are interleaved as the Red Book says:
 /// symbol i of a pack comes from symbol s(i) of the pack s(i) mod 8 later, where s swaps
 /// 1↔18, 2↔5, and 3↔23 (checked on a real CD+G disc, 2026-10-29). A pack of graphics has
-/// command 9 (TV graphics, mode 1 item 1) and one of the instructions below.
+/// command 9 (TV graphics, mode 1 item 1) and one of the instructions below; CD+EG's have
+/// command 10 (extended TV graphics, mode 1 item 2).
 public enum CDGraphics {
     /// The instructions of TV-graphics mode: memory preset, border preset, tile block,
     /// scroll preset, scroll copy, transparent color, the color tables, and tile block XOR.
@@ -37,7 +38,24 @@ public enum CDGraphics {
     /// of them with an instruction that CD+G has. Damaged or made-up subchannel has command 9
     /// in about 1 pack of 64, and a valid instruction in about 1 of 7 of those.
     public static func holdsGraphics(_ pw: [UInt8]) -> Bool {
-        let graphics = packs(pw).filter { $0[0] == 9 }
+        holds(packs(pw), command: 9, instructions: instructions)
+    }
+
+    /// The instructions of extended TV-graphics mode (CD+EG) that its discs use: memory
+    /// control (3), the tile blocks (6 and 14), and the color tables (16 and 17), the only ones
+    /// in more than 1 command-10 pack of 100 in the subchannel of four CD+EG discs (2026-11-01).
+    static let extendedInstructions: Set<UInt8> = [3, 6, 14, 16, 17]
+
+    /// True if the subchannel holds CD+EG graphics (CD+Extended Graphics: 256 colors and a
+    /// second plane), in packs of command 10, by the same rule as `holdsGraphics(_:)`. A CD+EG
+    /// disc also carries CD+G graphics, for players that have only CD+G, and its command-10
+    /// packs can be missing for minutes at a time (`DiscProbe` looks in every track).
+    public static func holdsExtendedGraphics(_ pw: [UInt8]) -> Bool {
+        holds(packs(pw), command: 10, instructions: extendedInstructions)
+    }
+
+    static func holds(_ packs: [[UInt8]], command: UInt8, instructions: Set<UInt8>) -> Bool {
+        let graphics = packs.filter { $0[0] == command }
         let valid = graphics.filter { instructions.contains($0[1]) }.count
         return graphics.count >= 8 && valid * 10 >= graphics.count * 9
     }

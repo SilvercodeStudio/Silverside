@@ -342,6 +342,9 @@ public struct RipReport: Codable, Equatable, Sendable {
     /// false if none were. Nil if no one looked, the drive did not give the subchannel, and in
     /// reports from before 0.9.1.
     public var cdGraphics: Bool?
+    /// True if CD+EG graphics were found too (`DiscProbe.cdExtendedGraphics`). Nil if none
+    /// were, and in reports from before 0.9.4.
+    public var cdExtendedGraphics: Bool?
     /// Audio before track 1 (hidden track one audio), if the disc has it.
     public var hiddenTrack: HiddenTrack?
     /// Sectors before track 1 that could not be read, when what could be read is silence:

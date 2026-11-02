@@ -349,6 +349,7 @@ struct SidebarView: View {
         case .empty: return slot.device.otherDisc.map { "\($0.name) · not a CD" } ?? "No disc"
         case .reading: return "Reading the disc…"
         case .failed: return "Cannot read the disc"
+        case .blank(let media): return "Blank \(media?.description ?? "CD-R")"
         case .ready:
             guard let disc = slot.disc else { return "" }
             if disc.toc.audioTracks.isEmpty { return "Data disc · no audio" }
@@ -492,6 +493,24 @@ struct NoDiscView: View {
         case .ultraHDBluRay: "an Ultra HD Blu-ray disc"
         default: "a DVD"
         }
+    }
+}
+
+/// A CD-R or CD-RW with nothing written on it, which macOS shows as a disc with no TOC.
+struct BlankDiscView: View {
+    var media: DiscMediaType?
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(DiscLogo.recordable.assetName).resizable().scaledToFit().frame(maxWidth: 220, maxHeight: 110)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 10)
+                .accessibilityHidden(true)
+            Text("This is a blank \(media?.description ?? "CD-R or CD-RW")").font(.title2.weight(.semibold))
+            Text("It has nothing on it to rip. Eject it and insert an audio CD.")
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

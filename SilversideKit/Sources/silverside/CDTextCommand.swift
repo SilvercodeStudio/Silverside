@@ -29,7 +29,7 @@ struct CDTextCommand: ParsableCommand {
 
     func run() throws {
         let drive = try IOKitDrive(bsdName: deviceOptions.bsdName())
-        let toc = try drive.readTOC()
+        let toc = try drive.readTOCUnlessBlank()
         guard let bytes = try drive.readCDText() else {
             print("This disc has no CD-Text.")
             return

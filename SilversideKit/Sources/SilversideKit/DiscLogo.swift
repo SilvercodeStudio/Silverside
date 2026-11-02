@@ -7,6 +7,8 @@ public enum DiscLogo: String, CaseIterable, Sendable {
     case hdcd
     /// The CD layer of a hybrid Super Audio CD.
     case sacd
+    /// CD+Extended Graphics (CD+EG): CD+G's successor, from a few Japanese releases.
+    case cdExtendedGraphics
     /// CD+Graphics.
     case cdGraphics
     /// A Copy Control CD: a copy-protected disc, which does not meet the Compact Disc standard
@@ -46,6 +48,7 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         if found.dts || (!looked && format == "DTS CD") { return .dts }
         if found.hdcd || (!looked && format == "HDCD") { return .hdcd }
         if format.contains("SACD") { return .sacd }
+        if found.cdExtendedGraphics { return .cdExtendedGraphics }
         if found.cdGraphics ?? (format == "CD+G") { return .cdGraphics }
         if format == "COPY CONTROL CD" { return .copyControl }
         if toc.isEnhanced || format == "ENHANCED CD" { return .compactDiscPlus }
@@ -56,14 +59,15 @@ public enum DiscLogo: String, CaseIterable, Sendable {
     }
 
     /// The logo of a ripped disc, from its report: the HDCD codes and the DTS stream of the
-    /// tracks, and CD+G graphics if the look before the rip found them, else MusicBrainz's
+    /// tracks, and CD+G or CD+EG graphics if the look before the rip found them, else MusicBrainz's
     /// format. Nil if the report's TOC cannot be read.
     public static func logo(for report: RipReport) -> DiscLogo? {
         guard let toc = try? TOC(ctdbTOCString: report.toc) else { return nil }
         let found = DiscProbe(
             hdcd: report.tracks.contains { $0.hdcd != nil } || [.codesOnly, .featuresUsed].contains(report.hdcd),
             dts: report.tracks.contains { $0.dts == true } || report.dts == .stream,
-            cdGraphics: report.cdGraphics, tracksRead: report.tracks.count)
+            cdGraphics: report.cdGraphics, cdExtendedGraphics: report.cdExtendedGraphics == true,
+            tracksRead: report.tracks.count)
         return logo(
             toc: toc, format: report.release?.medium(for: toc)?.format, media: report.media,
             hasCDText: report.cdText.map { !$0.titles.isEmpty || !$0.performers.isEmpty } ?? false, probe: found)
@@ -116,6 +120,7 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         case .dts: "DTS Digital Surround"
         case .hdcd: "HDCD"
         case .sacd: "Super Audio CD, its CD layer"
+        case .cdExtendedGraphics: "CD+Extended Graphics (CD+EG)"
         case .cdGraphics: "CD+Graphics"
         case .copyControl: "Copy Control CD: copy protected, and not a Compact Disc by the standard"
         case .compactDiscPlus: "Enhanced CD (CD Extra): music, then data in a session of its own"
@@ -136,6 +141,7 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         case .dts: "DTS"
         case .hdcd: "HDCD"
         case .sacd: "SACD"
+        case .cdExtendedGraphics: "CD+EG"
         case .cdGraphics: "CD+G"
         case .copyControl: "Copy Control"
         case .compactDiscPlus: "Enhanced CD"

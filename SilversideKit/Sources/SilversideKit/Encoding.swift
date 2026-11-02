@@ -469,7 +469,7 @@ public struct DiscEncoder: Sendable {
     ) throws -> RipReport.DataTrack {
         let report = try RipReport.read(from: file)
         let toc = try TOC(ctdbTOCString: report.toc)
-        guard try drive.readTOC().ctdbTOCString == report.toc else { throw DataTrackError.otherDisc }
+        guard try drive.readTOCUnlessBlank().ctdbTOCString == report.toc else { throw DataTrackError.otherDisc }
         guard let track = toc.tracks.first(where: { $0.number == number && $0.kind == .data }) else {
             throw DataTrackError.notData(track: number)
         }

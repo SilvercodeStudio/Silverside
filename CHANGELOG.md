@@ -5,14 +5,34 @@ command-line tool.
 
 ## 0.9.4 (not released yet)
 
+### Added
+
+- The CD+EG logo (CD+Extended Graphics, CD+G's successor from a few
+  Japanese releases), for a disc whose subchannel has its graphics. In a
+  drive that gives the subchannel, a CD+G disc gets a second of each
+  track looked at, since CD+EG graphics can be in later tracks only.
+  `silverside info` says "CD+G and CD+EG graphics".
+- A blank CD-R or CD-RW is named as one: the drive's page says "This is a
+  blank CD-R" with the CD-R logo, the sidebar says "Blank CD-R", and
+  `silverside drives` says "a blank CD-R"; `info`, `rip`, and the other
+  commands say the disc is blank. Before, it was a disc whose TOC could
+  not be read.
+
 ### Changed
 
 - A hidden track before track 1 shows in the track table, as track 0, with
   its name from MusicBrainz: on the drive's page before and during a rip,
   and in an earlier rip. Its status says whether the reads agree, since
-  AccurateRip and CTDB do not cover it, the status bar says "and the hidden
-  track" before a rip, and a chip in the result says the disc has one. Before, the track was ripped and encoded, but only the log
-  and the report said so.
+  AccurateRip and CTDB do not cover it, the status bar says "and the
+  hidden track" before a rip, and a chip in the result says the disc has
+  one. Before, the track was ripped and encoded, but only the log and the
+  report said so.
+
+### Fixed
+
+- In some drives (the MATSHITA UJ260AF), a CD+G disc did not get its logo:
+  the drive gave the wrong subchannel for audio it had just read. The look
+  before a rip now reads the subchannel first.
 
 ## 0.9.3 (2026-11-01)
 

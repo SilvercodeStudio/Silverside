@@ -216,6 +216,18 @@ Silverside finds `ffmpeg` as it finds `lame`, and runs it as a separate
 program. The environment variable `SILVERSIDE_FFMPEG` can name another
 `ffmpeg`, or with `none` make Silverside act as if it were not installed.
 
+## DVD-Audio (CLI)
+
+Initial DVD-Audio extraction is also available through the CLI:
+`silverside dvd info -d matshita`, then
+`silverside dvd rip -d matshita -o "<new folder>"`. It extracts supported MLP
+stereo or 5.1 programs to numbered FLAC tracks with verification and a report.
+Install `ffmpeg` and `libdvdread` through Homebrew (`brew install ffmpeg libdvdread`);
+the DVD helper loads the external libraries at runtime. No DVD libraries are
+bundled. See [DVD-Audio in the CLI guide](docs/cli.md#dvd-audio-initial-cli-support)
+for presentation selection, source limitations, and output details. GUI support
+and DVD-Video extraction are later work.
+
 ## MusicBrainz
 
 Silverside looks up each disc in MusicBrainz once, waits between requests, and

@@ -70,22 +70,39 @@ public final class SimulatedDrive: CDDrive {
     /// What the disc is. Nil makes the drive one that cannot tell.
     public var mediaType: DiscMediaType? = .pressed
 
-    /// The raw P–W subchannel of sectors by LBA, 96 bytes each, such as a CD+G disc's; other
-    /// sectors read as zeros. Nil when the drive refuses raw subchannel reads, as the BU50N does.
+    /// The R–W subchannel of sectors by LBA, 96 bytes each (bits 5 to 0), such as a CD+G
+    /// disc's; other sectors have none. A read gives each sector's Q frame with it, in bit 6.
+    /// Nil when the drive refuses raw subchannel reads, as the BU50N does.
     public var subchannelPW: [Int: [UInt8]]? = [:]
 
-    /// True for a drive that answers a subchannel read of sectors it has read as audio with
-    /// the wrong subchannel (zeros here), as the MATSHITA does.
+    /// True for a drive that answers a subchannel read of sectors still in its buffer from an
+    /// audio read with the wrong subchannel (zeros here, with no valid Q frame), as the MATSHITA
+    /// does, until a read elsewhere makes it read the disc again.
     public var losesSubchannelAfterAudio = false
-    /// The sectors read as audio, for `losesSubchannelAfterAudio`.
-    private var readAsAudio = Set<Int>()
+    /// With `losesSubchannelAfterAudio`, the sectors past an audio read that the drive reads
+    /// ahead into its buffer: about 450 in the MATSHITA (2026-11-02).
+    public var readAheadSectors = 0
+    /// Sectors whose subchannel reads wrong in the next N reads: three symbols of the sector's
+    /// first pack, past what its parity corrects. The subchannel has no other error correction,
+    /// so a read again can give it right.
+    public var flakySubchannel: [Int: Int] = [:]
+    /// The sectors in the buffer from the latest audio read, for `losesSubchannelAfterAudio`.
+    private var buffered = Set<Int>()
 
     public func readSubchannelPW(at lba: Int, count: Int) throws -> [UInt8] {
         guard let subchannelPW, lba >= 0, lba + count <= toc.leadOutLBA else { throw DriveError.readFailed(lba: lba) }
+        // A read that starts outside the buffer reads the disc, and fills the buffer anew.
+        if !buffered.contains(lba) { buffered.removeAll() }
         return (lba..<(lba + count)).flatMap { sector in
-            readAsAudio.contains(sector)
-                ? [UInt8](repeating: 0, count: 96)
-                : subchannelPW[sector] ?? [UInt8](repeating: 0, count: 96)
+            guard !buffered.contains(sector) else { return [UInt8](repeating: 0, count: 96) }
+            var bytes = (subchannelPW[sector] ?? [UInt8](repeating: 0, count: 96)).map { $0 & 0x3F }
+            if let reads = flakySubchannel[sector], reads > 0 {
+                flakySubchannel[sector] = reads - 1
+                for i in [0, 8, 16] { bytes[i] ^= 0x15 }
+            }
+            let q = frame(at: sector).bytes
+            for i in 0..<96 where q[i / 8] & (0x80 >> (i % 8)) != 0 { bytes[i] |= 0x40 }
+            return bytes
         }
     }
 
@@ -200,7 +217,8 @@ public final class SimulatedDrive: CDDrive {
     /// Flags the bytes that it returns wrong, if `reportsC2` is true.
     public func readAudioSectorsWithC2(at lba: Int, count: Int) throws -> (audio: [UInt8], errorFlags: [UInt8]) {
         let sectors = lba..<(lba + count)
-        if losesSubchannelAfterAudio { readAsAudio.formUnion(sectors) }
+        // The buffer holds the latest read, and what the drive read ahead after it.
+        if losesSubchannelAfterAudio { buffered = Set(lba..<(lba + count + readAheadSectors)) }
         if let readSpeed, readSpeed > 0 {
             Thread.sleep(forTimeInterval: Double(count) / (readSpeed * Double(CDDA.sectorsPerSecond)))
         }

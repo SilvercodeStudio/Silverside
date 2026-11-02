@@ -648,6 +648,40 @@ struct DiscRipTests {
         #expect(store.usesDiscSleeves(releaseID: "box") && store.cover(forReleaseID: "box") == nil)
     }
 
+    /// On a disc with CD+G graphics, the rip looks for them (the CLI has no look before it),
+    /// and saves each track's as a .cdg file before reading its audio. A drive that gives the
+    /// wrong subchannel from its buffer after the audio before is made to read the disc again.
+    @Test func savesTheGraphics() async throws {
+        var packs = Array(repeating: CDGraphicsTests.realPacks[2], count: 1700 * 4)
+        packs[100][12] ^= 9
+        let pw = CDGraphicsTests.subchannel(packs)
+        let (result, events, _, root) = try await rip(prepare: { drive in
+            for sector in 0..<1700 { drive.subchannelPW?[sector] = Array(pw[(sector * 96)..<(sector * 96 + 96)]) }
+            drive.losesSubchannelAfterAudio = true
+            drive.readAheadSectors = 450
+        })
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(result.report.cdGraphics == true)
+        #expect(result.report.tracks.map(\.graphics?.file) == ["Track 01.cdg", "Track 02.cdg"])
+        #expect(result.report.tracks.map(\.graphics?.correctedPacks) == [1, 0])
+        #expect(result.report.tracks.map(\.graphics?.uncorrectablePacks) == [0, 0])
+        #expect(result.report.tracks.map(\.graphics?.misplacedReads) == [nil, 1])
+        #expect(result.report.files?.contains("Track 02.cdg") == true)
+        let saved = [UInt8](try Data(contentsOf: result.folder.appending(path: "Track 01.cdg")))
+        #expect(saved == Array(Array(repeating: CDGraphicsTests.realPacks[2], count: 800 * 4).joined()))
+        // Each track's graphics come before its audio.
+        let order = events.compactMap { event -> String? in
+            switch event {
+            case .readingGraphics(let track, _): "graphics \(track)"
+            case .reading(.reading(let track, _, _, _)): "audio \(track)"
+            default: nil
+            }
+        }
+        var steps = [String]()
+        for step in order where steps.last != step { steps.append(step) }
+        #expect(steps == ["graphics 1", "audio 1", "graphics 2", "audio 2"])
+    }
+
     /// Every track's report has the CRC-32s that EAC and XLD print, and the disc's media type.
     /// With test and copy, a second read of each track follows the rip, and its CRC-32 is
     /// compared with the copy's.

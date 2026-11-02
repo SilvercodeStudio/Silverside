@@ -21,6 +21,61 @@ public struct RipReport: Codable, Equatable, Sendable {
         }
     }
 
+    /// A track's CD+G graphics, as `CDGraphicsReader` saved them: the R–W packs of its
+    /// subchannel, from index 01 to the next track's, checked by their parity.
+    public struct Graphics: Codable, Equatable, Sendable {
+        /// The `.cdg` file in the rip's folder ("Track 01.cdg").
+        public var file: String
+        /// True if the track has CD+EG packs too; the file keeps them. Nil if it has not.
+        public var extended: Bool?
+        /// Packs with one or two wrong symbols, which their parity put right.
+        public var correctedPacks: Int
+        /// Packs damaged past correction in the first read, and right in a read again. Nil if none.
+        public var rereadPacks: Int?
+        /// Packs damaged past correction in every read: the file has zeros there.
+        public var uncorrectablePacks: Int
+        /// Sectors whose subchannel the drive did not give, counted from the track's start;
+        /// their packs are zeros. Nil if every sector was read.
+        public var unreadableSectors: [Int]?
+        /// Reads that the drive answered with another place's subchannel, by its Q frames, and
+        /// that were read again. Nil if none.
+        public var misplacedReads: Int?
+
+        public init(
+            file: String, extended: Bool? = nil, correctedPacks: Int = 0, rereadPacks: Int? = nil,
+            uncorrectablePacks: Int = 0,
+            unreadableSectors: [Int]? = nil, misplacedReads: Int? = nil
+        ) {
+            self.file = file
+            self.extended = extended
+            self.correctedPacks = correctedPacks
+            self.rereadPacks = rereadPacks
+            self.uncorrectablePacks = uncorrectablePacks
+            self.unreadableSectors = unreadableSectors
+            self.misplacedReads = misplacedReads
+        }
+
+        /// The file's name for a track: "Track 01.cdg".
+        public static func fileName(track: Int) -> String { String(format: "Track %02d.cdg", track) }
+
+        /// What was saved, for a track's line: "CD+G graphics, 12 packs corrected".
+        public var summary: String {
+            var text = extended == true ? "CD+G and CD+EG graphics" : "CD+G graphics"
+            if correctedPacks > 0 { text += ", \(correctedPacks) \(correctedPacks == 1 ? "pack" : "packs") corrected" }
+            if let reread = rereadPacks, reread > 0 {
+                text += ", \(reread) \(reread == 1 ? "pack" : "packs") right in a read again"
+            }
+            if uncorrectablePacks > 0 {
+                text += ", \(uncorrectablePacks) \(uncorrectablePacks == 1 ? "pack" : "packs") damaged past correction"
+            }
+            if let unreadable = unreadableSectors, !unreadable.isEmpty {
+                text +=
+                    ", the subchannel of \(unreadable.count) \(unreadable.count == 1 ? "sector" : "sectors") unreadable"
+            }
+            return text
+        }
+    }
+
     public enum AccurateRipStatus: String, Codable, Sendable {
         /// The track matches AccurateRip.
         case accurate
@@ -109,6 +164,9 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// True if the track's audio is a DTS stream (a DTS-CD), not PCM. Nil if it is not, and
         /// in older reports (see `RipReport.dts`).
         public var dts: Bool?
+        /// The track's CD+G graphics, saved from its subchannel. Nil if the track has none, if
+        /// the drive does not give the subchannel, and in reports from before 0.9.4.
+        public var graphics: Graphics?
         /// The track's control bits in the TOC. Nil in reports from before 0.8.
         public var tocFlags: ControlFlags?
         /// The control bits of the track's Q frames in its first read. Nil if the drive did not

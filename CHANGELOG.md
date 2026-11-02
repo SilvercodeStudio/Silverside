@@ -5,6 +5,19 @@ command-line tool.
 
 ## 0.9.5 (not released yet)
 
+### Added
+
+- A rip of a disc with CD+G graphics saves each track's graphics as
+  `Track 01.cdg` and so on, the file that karaoke players and VLC read, in a
+  drive that gives the subchannel (not the HL-DT-ST BU50N). Each pack of the
+  graphics carries its own error correction, which the rip applies, and a
+  pack damaged past it is read again. The report has a table of the graphics,
+  and `silverside rip` now looks for them too.
+- `silverside video` makes a video of a CD+G disc's rip: the graphics as a
+  CD+G player draws them, over the audio exactly as ripped (Apple Lossless),
+  the whole disc in one `.m4v` file with a chapter for each track, named by
+  its title. It plays in QuickTime Player, the TV app, VLC, and others.
+
 ### Changed
 
 - About › Acknowledgments names Exact Audio Copy, XLD, and cyanrip, the

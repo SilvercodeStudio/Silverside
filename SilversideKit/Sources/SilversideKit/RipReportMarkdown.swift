@@ -235,6 +235,30 @@ extension RipReport {
             lines.append("")
         }
 
+        let withGraphics = tracks.filter { $0.graphics != nil }
+        if !withGraphics.isEmpty {
+            lines.append("## CD+G graphics")
+            lines.append("")
+            lines.append(
+                "| Track | File | CD+EG | Packs corrected | Packs read again | Packs damaged | Sectors unreadable |")
+            lines.append("|---:|---|---|---:|---:|---:|---:|")
+            for track in withGraphics {
+                let graphics = track.graphics!
+                func count(_ value: Int) -> String { value > 0 ? String(value) : "" }
+                lines.append(
+                    "| \(track.number) | \(graphics.file) | \(graphics.extended == true ? "yes" : "")"
+                        + " | \(count(graphics.correctedPacks)) | \(count(graphics.rereadPacks ?? 0))"
+                        + " | \(count(graphics.uncorrectablePacks))"
+                        + " | \(count(graphics.unreadableSectors?.count ?? 0)) |")
+            }
+            lines.append("")
+            lines.append(
+                "Each track's graphics from its subchannel, 300 packs a second, checked by their parity. A corrected"
+                    + " pack is as the disc has it. A pack damaged past correction is read again, up to 3 times;"
+                    + " one still damaged is left out of the file.")
+            lines.append("")
+        }
+
         let problems = tracks.filter { !$0.unresolvedSectors.isEmpty || $0.shiftedReads?.isEmpty == false }
         if !problems.isEmpty {
             lines.append("## Problems")

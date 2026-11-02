@@ -33,7 +33,8 @@ public protocol CDDrive {
     /// channel in each byte: P is bit 7, Q bit 6, R to W bits 5 to 0), for CD+G graphics.
     /// Not every drive gives it: the HL-DT-ST BU50N refuses it, so a failure means only that
     /// this drive cannot tell. The MATSHITA gives the wrong subchannel for sectors it has just
-    /// read as audio (2026-11-02), so read the subchannel first.
+    /// read as audio, and for about 450 sectors after a long audio read (2026-11-02), so read
+    /// the subchannel first, and check its Q frames (`CDGraphicsReader`).
     func readSubchannelPW(at lba: Int, count: Int) throws -> [UInt8]
 
     /// The mode of the data sector at `lba`, from its header.

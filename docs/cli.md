@@ -51,6 +51,7 @@ shares. Without a terminal, as in a script, `rip` stops until you agree with
 | `check` | Looks earlier rips up in AccurateRip and CTDB again, for a new release that they did not have yet, and checks the rip's audio (its WAV files, or the album's lossless files) against them. |
 | `metadata` | Shows the MusicBrainz releases for a disc, and keeps the chosen one in a rip's `disc.json`; `--set` edits names, `--cover` gives a cover, and `--retag` writes both into the album's encoded files. |
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
+| `video` | Makes a video of a CD+G disc's rip: the graphics drawn as a CD+G player draws them, over the rip's audio (Apple Lossless, exactly as ripped), the whole disc in one `.m4v` with a chapter for each track, named by its title. `--codec hevc` makes smaller files; `--scale` sets the size (4: 1200 × 864). |
 | `hdcd` | Looks for HDCD codes in audio files and folders (WAV, AIFF, FLAC, Apple Lossless), such as rips and albums from before. |
 | `config` | Shows and changes the settings. |
 | `eject` | Ejects the disc from a drive (`-d`), or from every drive (`--all`: CDs, DVDs, and Blu-ray discs). A drive named with `-d` ejects a disc that macOS never recognized, through Disc Recording as `drutil eject` does, or opens its empty tray. A drive that hangs in a read is safer to unplug than to eject. |
@@ -70,6 +71,12 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
 - `Track NN.suspects`, for tracks that are not verified: the other values that
   reads gave for their suspect samples, for a later `silverside repair`
 - `Rip Report.md`, and `Track 00.wav` if the disc has hidden track one audio
+- `Track 01.cdg` and so on, for a disc with CD+G graphics (karaoke lyrics,
+  pictures), in a drive that gives the subchannel: each track's graphics, 300
+  packs a second from its index 01, the file that karaoke players and VLC
+  read. Each pack is checked by its own parity, and one or two wrong symbols
+  are put right; a pack damaged past that is read again, then left out. The
+  file keeps a CD+EG disc's extended graphics too
 - `Rip Report.log`: the rip in the layout of Exact Audio Copy's logs (UTF-8,
   CR LF), for people and tools that read those; the encoding writes one beside
   the album's report too. `--no-eac-log` (or the `writeEACLog` setting) leaves it

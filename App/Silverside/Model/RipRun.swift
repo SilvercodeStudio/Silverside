@@ -143,6 +143,8 @@ final class RipRun {
     private(set) var isSavingArtwork = false
     /// The data track being saved as an ISO image, after the audio, and how much of it is read.
     private(set) var dataTrackProgress: (number: Int, fraction: Double)?
+    /// True while the current track's CD+G graphics are read, before its audio.
+    private(set) var readsGraphics = false
     /// The data tracks saved so far, by number, for the graph.
     private(set) var savedDataTracks: [Int: RipReport.DataTrack] = [:]
     /// Whether the rip saves the data tracks: from the options, or the answer; nil until asked.
@@ -621,7 +623,7 @@ final class RipRun {
                 text += " · re-reading \(Format.count(suspects, "sector")), round \(round) of \(maximum)"
             case .testing: text += " · test read"
             case .readingIndexes: text += " · index points"
-            default: break
+            default: if readsGraphics { text += " · CD+G graphics" }
             }
             return text
         case .checkingCTDB: return ctdbStatus ?? "Checking the disc against CUETools DB…"
@@ -730,7 +732,13 @@ final class RipRun {
             sectorsInPass = 0
             trackStates[track.number] = .reading(pass: 1, passes: 1, fraction: 0)
             passStart = (Date(), 0)
+        case .readingGraphics(_, let fraction):
+            readsGraphics = fraction < 1
+        case .graphicsFailed(let track, let message):
+            readsGraphics = false
+            add("Track \(track): the CD+G graphics were not saved: \(message)")
         case .reading(let event):
+            readsGraphics = false
             handle(event)
         case .trackFinished(let track, let summary, let seconds):
             trackStates[track.number] = .finished(track)

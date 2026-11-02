@@ -75,7 +75,8 @@ public struct DiscRipOptions: Sendable {
     /// Write an EAC-style log beside the report ("Rip Report.log", `RipReport.eacStyleLog`).
     public var writesEACLog: Bool
     /// What a look at the disc before the rip found of CD+G graphics (`DiscProbe.cdGraphics`),
-    /// for the report. Nil if no one looked.
+    /// for the report, and to save each track's graphics (`CDGraphicsReader`). Nil if no one
+    /// looked: the rip then looks itself.
     public var cdGraphics: Bool?
     /// True if that look found CD+EG graphics too (`DiscProbe.cdExtendedGraphics`).
     public var cdExtendedGraphics = false
@@ -131,6 +132,10 @@ public enum DiscRipEvent: Sendable {
     case trackStarted(TOC.Track, position: Int, count: Int)
     /// A read of the track goes on (see `RipEvent`).
     case reading(RipEvent)
+    /// The track's CD+G graphics are being read from its subchannel, before its audio: the fraction read.
+    case readingGraphics(track: Int, fraction: Double)
+    /// The track's graphics could not be read; the rip goes on without them.
+    case graphicsFailed(track: Int, message: String)
     /// A track is done. `summary` says how it compares with AccurateRip, for people to read.
     case trackFinished(RipReport.Track, summary: String, seconds: Int)
     /// The control bits of every track, after the last one: pre-emphasis, digital copy permitted, four-channel audio.
@@ -454,6 +459,18 @@ public struct DiscRip {
         // The files written in the folder, for the report: a later deletion takes only these.
         var written = Set<String>()
 
+        // CD+G graphics, saved from each track's subchannel: the look before the rip says
+        // whether the disc has them, or this rip looks, as the CLI does not.
+        var cdGraphics = options.cdGraphics
+        var cdExtendedGraphics = options.cdExtendedGraphics
+        if cdGraphics == nil {
+            let probe = try await blocking { [stop] in DiscProbe.probe(drive, toc: toc, stop: stop) }
+            try stop.check()
+            cdGraphics = probe.cdGraphics
+            cdExtendedGraphics = probe.cdExtendedGraphics
+        }
+        var readsGraphics = cdGraphics == true
+
         // Audio before track 1, if the disc hides a track there; silence is not kept.
         var hiddenTrack: RipReport.HiddenTrack?
         var hiddenAreaUnreadable: Int?
@@ -507,6 +524,26 @@ public struct DiscRip {
             try stop.check()
             events(.trackStarted(track, position: position + 1, count: selected.count))
             let start = ContinuousClock.now
+            // The graphics first: the MATSHITA gives the wrong subchannel for sectors it has
+            // just read as audio.
+            var graphics: RipReport.Graphics?
+            if readsGraphics {
+                do {
+                    graphics = try await blocking { [stop] in
+                        try CDGraphicsReader.read(
+                            track, in: toc, drive: drive,
+                            to: folder.appending(path: RipReport.Graphics.fileName(track: track.number)), stop: stop
+                        ) { events(.readingGraphics(track: track.number, fraction: $0)) }
+                    }
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    // A drive that gives no subchannel gives none for the next track either.
+                    readsGraphics = false
+                    events(.graphicsFailed(track: track.number, message: "\(error)"))
+                }
+                if let graphics { written.insert(graphics.file) }
+            }
             // The track's rip, with the pooling and the files, on the reading thread.
             let (audio, ripped, ripSummary, copyPadding) = try await blocking { [self] in
                 let kept = keptTrack(
@@ -523,6 +560,7 @@ public struct DiscRip {
                 report.recordChecksums(
                     of: samples, isFirstTrack: index == 0, isLastTrack: index == toc.audioTracks.count - 1)
                 report.recordDTS(in: samples)
+                report.graphics = graphics
                 if options.testAndCopy && report.keptFrom == nil {
                     let test = try testRead(track, toc: toc, reader: reader, cacheFlushSectors: flushSectors)
                     report.testCRC32 = CRC32.hex(test.crc)
@@ -588,6 +626,7 @@ public struct DiscRip {
                 summary += hdcd.changesAudio ? ", HDCD codes (\(hdcd.featuresText))" : ", HDCD codes"
             }
             if report.dts == true { summary += ", a DTS stream" }
+            if let graphics = report.graphics { summary += ", " + graphics.summary }
             events(.trackFinished(report, summary: summary, seconds: report.seconds ?? 0))
         }
 
@@ -694,8 +733,8 @@ public struct DiscRip {
         report.ctdbSeconds = ctdbSeconds
         report.mcn = mcn
         report.media = media
-        report.cdGraphics = options.cdGraphics
-        report.cdExtendedGraphics = options.cdExtendedGraphics ? true : nil
+        report.cdGraphics = cdGraphics
+        report.cdExtendedGraphics = cdExtendedGraphics ? true : nil
         report.hiddenTrack = hiddenTrack
         report.hiddenAreaUnreadableSectors = hiddenAreaUnreadable
         let padded = paddedEdges(of: reports)

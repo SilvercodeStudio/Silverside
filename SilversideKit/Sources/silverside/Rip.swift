@@ -399,6 +399,11 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print("Pool: \(file.url.path) was not used: \(file.reason).")
         case .trackStarted(let track, let position, let count):
             progress.label = String(format: "%2d", track.number) + (count > 1 ? " (\(position)/\(count))" : "")
+        case .readingGraphics(_, let fraction):
+            progress.showText("Track \(progress.label)  " + String(format: "CD+G graphics %3.0f%%", fraction * 100))
+        case .graphicsFailed(let track, let message):
+            progress.clear()
+            Swift.print("Track \(track): the CD+G graphics were not saved: \(message)")
         case .reading(let event):
             progress.show(event)
         case .trackFinished(let report, let summary, let seconds):

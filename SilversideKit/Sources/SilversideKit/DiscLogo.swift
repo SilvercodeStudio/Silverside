@@ -21,6 +21,8 @@ public enum DiscLogo: String, CaseIterable, Sendable {
     case mixedMode
     /// A recordable disc (CD-R), as a burned copy or a small release is.
     case recordable
+    /// A rewritable disc (CD-RW), a burned copy too.
+    case rewritable
     /// A disc with CD-Text.
     case cdText
     /// Compact Disc Digital Audio (Red Book).
@@ -54,6 +56,7 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         if toc.isEnhanced || format == "ENHANCED CD" { return .compactDiscPlus }
         if toc.tracks.first?.kind == .data || format == "MIXED MODE CD" { return .mixedMode }
         if media == .recordable || format == "CD-R" { return .recordable }
+        if media == .rewritable { return .rewritable }
         if hasCDText { return .cdText }
         return .compactDisc
     }
@@ -126,6 +129,7 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         case .compactDiscPlus: "Enhanced CD (CD Extra): music, then data in a session of its own"
         case .mixedMode: "Mixed Mode CD: data in track 1, then music"
         case .recordable: "Compact Disc Recordable (CD-R)"
+        case .rewritable: "Compact Disc ReWritable (CD-RW)"
         case .cdText: "Compact Disc Digital Audio, with CD-Text"
         case .compactDisc: "Compact Disc Digital Audio"
         case .dvd: "DVD"
@@ -147,6 +151,7 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         case .compactDiscPlus: "Enhanced CD"
         case .mixedMode: "Mixed Mode"
         case .recordable: "CD-R"
+        case .rewritable: "CD-RW"
         case .cdText: "CD-Text"
         case .compactDisc: "CD"
         case .dvd: "DVD"

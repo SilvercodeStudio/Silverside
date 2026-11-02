@@ -500,9 +500,11 @@ struct NoDiscView: View {
 struct BlankDiscView: View {
     var media: DiscMediaType?
 
+    private var logo: DiscLogo { media == .rewritable ? .rewritable : .recordable }
+
     var body: some View {
         VStack(spacing: 14) {
-            Image(DiscLogo.recordable.assetName).resizable().scaledToFit().frame(maxWidth: 220, maxHeight: 110)
+            Image(logo.assetName).resizable().scaledToFit().frame(maxWidth: 220, maxHeight: 110)
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 10)
                 .accessibilityHidden(true)

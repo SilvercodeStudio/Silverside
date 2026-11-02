@@ -12,8 +12,11 @@ command-line tool.
   drive that gives the subchannel, a CD+G disc gets a second of each
   track looked at, since CD+EG graphics can be in later tracks only.
   `silverside info` says "CD+G and CD+EG graphics".
+- The CD-RW logo (Compact Disc ReWritable), for a CD-RW with music on it,
+  and on the drive's page for a blank CD-RW. Before, such a disc got the
+  plain Compact Disc logo.
 - A blank CD-R or CD-RW is named as one: the drive's page says "This is a
-  blank CD-R" with the CD-R logo, the sidebar says "Blank CD-R", and
+  blank CD-R" with the CD-R or CD-RW logo, the sidebar says "Blank CD-R", and
   `silverside drives` says "a blank CD-R"; `info`, `rip`, and the other
   commands say the disc is blank. Before, it was a disc whose TOC could
   not be read.

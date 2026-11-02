@@ -7,12 +7,13 @@ struct DiscLogoTests {
     let audio = try! TOC(audioTrackStarts: [0, 20000], leadOutLBA: 40000)
 
     /// One logo: the first that fits, in the order DTS, HDCD, SACD, CD+G, Copy Control, Enhanced CD, CD-R,
-    /// CD-Text, Compact Disc.
+    /// CD-RW, CD-Text, Compact Disc.
     @Test func choosesTheMostTellingLogo() {
         #expect(DiscLogo.logo(toc: audio, format: "CD") == .compactDisc)
         #expect(DiscLogo.logo(toc: audio, format: nil, hasCDText: true) == .cdText)
         #expect(DiscLogo.logo(toc: audio, format: "CD", media: .recordable, hasCDText: true) == .recordable)
         #expect(DiscLogo.logo(toc: audio, format: "CD-R") == .recordable)
+        #expect(DiscLogo.logo(toc: audio, format: "CD", media: .rewritable, hasCDText: true) == .rewritable)
         #expect(DiscLogo.logo(toc: audio, format: "Enhanced CD", media: .recordable) == .compactDiscPlus)
         #expect(DiscLogo.logo(toc: audio, format: "CD+G") == .cdGraphics)
         #expect(DiscLogo.logo(toc: audio, format: "Hybrid SACD (CD layer)") == .sacd)
@@ -197,6 +198,9 @@ extension DiscLogoTests {
         cdText.titles = [0: "Paris '49"]
         report.cdText = cdText
         #expect(DiscLogo.logo(for: report) == .cdText)
+        report.media = .rewritable
+        #expect(DiscLogo.logo(for: report) == .rewritable)
+        #expect(DiscLogo.medium(of: report) == "CD-RW")
         report.media = .recordable
         #expect(DiscLogo.logo(for: report) == .recordable)
         report.cdGraphics = true

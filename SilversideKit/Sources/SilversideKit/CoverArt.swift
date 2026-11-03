@@ -147,6 +147,12 @@ public struct CoverArtClient: Sendable {
         return try await client.data(from: url).map(CoverImage.init)
     }
 
+    /// A small copy (250 pixels) of the release's front cover, for a list of releases to choose
+    /// from. Nil if the archive has no front for it.
+    public func frontThumbnail(releaseID: String) async throws -> Data? {
+        try await client.data(from: URL(string: "https://coverartarchive.org/release/\(releaseID)/front-250")!)
+    }
+
     /// One image, at the size it was uploaded.
     public func download(_ image: CoverArtImage) async throws -> CoverImage? {
         try await client.data(from: image.url).map(CoverImage.init)

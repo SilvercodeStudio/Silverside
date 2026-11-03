@@ -50,9 +50,18 @@ struct AppCommands: Commands {
                 .keyboardShortcut(".", modifiers: .command)
                 .disabled(model.selectedDrive?.rip?.isRunning != true)
             Divider()
-            Button("Look Up Metadata") { model.selectedDrive?.lookUpAgain() }
-                .keyboardShortcut("l", modifiers: .command)
-                .disabled(model.selectedDrive?.disc == nil)
+            Button("Look Up Metadata") {
+                if let slot = model.selectedDrive {
+                    slot.lookUpAgain()
+                } else if let rip = model.selectedRip {
+                    model.lookUpAgain(rip)
+                }
+            }
+            .keyboardShortcut("l", modifiers: .command)
+            .disabled(
+                model.selectedDrive.map { $0.disc == nil }
+                    ?? !(model.selectedRip.map { $0.report.release?.isManual == false && model.canChangeRelease($0) }
+                    ?? false))
             Button("New Release in MusicBrainz…") {
                 if let disc = model.selectedDrive?.disc, let release = disc.release {
                     ResultChips.openNewRelease(copying: release, toc: disc.toc)
@@ -70,10 +79,13 @@ struct AppCommands: Commands {
             Button("Repair Rip…") { if let rip = model.selectedRip { model.startRepair(rip) } }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(!canRepair)
-            Button(model.customSetCandidateIsInSet ? "Change Custom Set…" : "Put in Custom Set…") {
-                model.customSetTarget = model.customSetCandidate
+            Button("Search MusicBrainz…") { model.releaseSearchTarget = model.discCandidate }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .disabled(model.discCandidate == nil)
+            Button(model.discCandidateIsInSet ? "Change Custom Set…" : "Put in Custom Set…") {
+                model.customSetTarget = model.discCandidate
             }
-            .disabled(model.customSetCandidate == nil)
+            .disabled(model.discCandidate == nil)
             Button("Change Release…") { model.changingRelease = model.selectedRip }
                 .disabled(model.selectedRip.map(model.canChangeRelease) != true)
             Divider()

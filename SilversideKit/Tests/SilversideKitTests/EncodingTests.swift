@@ -684,6 +684,63 @@ extension EncodingTests {
         #expect(update.files.isEmpty || update.files[0].lastPathComponent.contains("Typed Title"))
     }
 
+    /// Keep My Track Titles: each track keeps the title it has now, typed or the old release's;
+    /// the album's names, the date, and the IDs are the new release's.
+    @Test func keepsTheTrackTitlesOnAnotherRelease() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let discJSON = folder.appending(path: "disc.json")
+        try MetadataEdits(album: "My Album", tracks: [1: .init(title: "Help on the Way (Live)")]).save(
+            inReportAt: discJSON)
+        let toc = try TOC(ctdbTOCString: try RipReport.read(from: discJSON).toc)
+        var single = try #require(try RipReport.read(from: discJSON).release)
+        single.id = "single"
+        single.title = "Giants Stadium 1991"
+        single.date = "1991"
+        single.media = [single.media[1]]
+        single.media[0].position = 1
+        single.media[0].discIDs = [toc.musicBrainzDiscID]
+        single.media[0].tracks[1].title = "Slipknot"
+        _ = try DiscEncoder(format: .flac).changeRelease(
+            reportAt: discJSON, to: single, keepingTrackTitles: true, library: library,
+            editsStore: ReleaseEditsStore(url: root.appending(path: "edits.json")),
+            coverStore: ReleaseCoverStore(folder: root.appending(path: "covers")),
+            choiceStore: ReleaseChoiceStore(url: root.appending(path: "choices.json")))
+        let edits = try #require(MetadataEdits.read(fromDiscJSONOf: folder))
+        #expect(edits.album == nil && edits.date == nil)
+        #expect(edits.tracks == [1: .init(title: "Help on the Way (Live)"), 2: .init(title: "Slipknot!")])
+        let named = edits.applied(to: try #require(try RipReport.read(from: discJSON).release), toc: toc)
+        #expect(named.title == "Giants Stadium 1991" && named.date == "1991")
+    }
+
+    /// Look Up Metadata on an earlier rip: the release as MusicBrainz has it now, with the disc
+    /// ID added since, goes into the rip's report and the album folder's; the rip's edits stay.
+    @Test func refreshesTheReleaseInBothReports() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = try DiscEncoder(format: .flac).encode(try RippedDisc(folder: folder), into: library)
+        let discJSON = folder.appending(path: "disc.json")
+        try MetadataEdits(tracks: [1: .init(title: "Typed")]).save(inReportAt: discJSON)
+        let toc = try TOC(ctdbTOCString: try RipReport.read(from: discJSON).toc)
+        var fresh = try #require(try RipReport.read(from: discJSON).release)
+        #expect(fresh.lacksDiscID(of: toc))
+        fresh.media[1].discIDs = [toc.musicBrainzDiscID]
+        try DiscEncoder(format: .flac).refreshRelease(reportAt: discJSON, with: fresh, library: library)
+        let album = files[0].deletingLastPathComponent().appending(path: "Rip Report (Disc 2).json")
+        for report in [discJSON, album] {
+            let release = try RipReport.read(from: report).release
+            #expect(release?.lacksDiscID(of: toc) == false, "\(report.lastPathComponent)")
+        }
+        #expect(MetadataEdits.read(fromDiscJSONOf: folder)?.tracks[1]?.title == "Typed")
+        var other = fresh
+        other.id = "other"
+        #expect(throws: EncodingError.self) {
+            try DiscEncoder(format: .flac).refreshRelease(reportAt: discJSON, with: other)
+        }
+    }
+
     /// No disc of the release has the rip's TOC: nothing changes.
     @Test func refusesAReleaseWithoutTheDisc() throws {
         let (folder, library) = try makeRip()

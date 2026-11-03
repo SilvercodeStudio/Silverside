@@ -5,8 +5,11 @@ import SwiftUI
 struct ReleasePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     var disc: DiscInfo
+    /// Uses a release that a search found.
+    var useFound: (MusicBrainzRelease) -> Void
     var choose: (MusicBrainzRelease) -> Void
     @State private var selected: String?
+    @State private var searchShown = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -41,6 +44,8 @@ struct ReleasePickerSheet: View {
                 }
                 .disabled(selected == nil)
                 .help(ResultChips.newReleaseHelp.replacingOccurrences(of: "this one", with: "the selected one"))
+                Button("Search MusicBrainz…") { searchShown = true }
+                    .help("None of these is your release: find it by its names, barcode, or catalog number")
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Use This Release") {
@@ -54,6 +59,13 @@ struct ReleasePickerSheet: View {
         .padding(20)
         .frame(width: 640, height: 440)
         .onAppear { selected = disc.release?.id ?? disc.releases.first?.id }
+        .sheet(isPresented: $searchShown) {
+            ReleaseSearchSheet(toc: disc.toc, initialQuery: disc.searchText, actionTitle: "Use This Release") {
+                found, _ in
+                useFound(found)
+                dismiss()
+            }
+        }
     }
 
     /// "2003-11-18 · US · disc 1 of 2 · barcode … · Capitol CDP 7243 5 95713 2 4": what tells editions apart.
@@ -91,6 +103,9 @@ struct ChangeReleaseSheet: View {
     @State private var isLookingUp = true
     @State private var failure: String?
     @State private var selected: String?
+    @State private var searchShown = false
+    /// Keep My Track Titles, remembered for the next change.
+    @AppStorage("changeReleaseKeepsTitles") private var keepsTitles = false
 
     private var toc: TOC? { try? TOC(ctdbTOCString: rip.report.toc) }
     private var current: MusicBrainzRelease? { rip.report.release }
@@ -100,11 +115,15 @@ struct ChangeReleaseSheet: View {
             Text("Change the release of “\(rip.title)”").font(.headline)
             Text(
                 "The encoded files get the release's names, tags, and cover, and are renamed to match. The audio "
-                    + "does not change. Names you changed on this rip go back to the release's. The other discs of a "
-                    + "set keep their release."
+                    + "does not change. Names you changed on this rip go back to the release's, unless you keep the "
+                    + "track titles. The other discs of a set keep their release."
             )
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+            Toggle("Keep my track titles", isOn: $keepsTitles)
+                .help(
+                    "Each track keeps the title it has now. The album's names, the date, the composers, and the MusicBrainz IDs are the new release's."
+                )
             if let current, current.isManual {
                 Text("This rip has no MusicBrainz release: its names were typed in.").font(.callout)
             }
@@ -151,11 +170,14 @@ struct ChangeReleaseSheet: View {
                 Button("Look Up Again") { Task { await lookUp(fresh: true) } }
                     .disabled(isLookingUp)
                     .help("Ask MusicBrainz again, for a release or a disc ID added since the rip")
+                Button("Search MusicBrainz…") { searchShown = true }
+                    .disabled(!model.canChangeRelease(rip))
+                    .help("Find the disc's release by its names, barcode, or catalog number")
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Change Release") {
                     if let release = releases.first(where: { $0.id == selected }) {
-                        model.changeRelease(of: rip, to: release)
+                        model.changeRelease(of: rip, to: release, keepingTitles: keepsTitles)
                     }
                     dismiss()
                 }
@@ -165,7 +187,17 @@ struct ChangeReleaseSheet: View {
         }
         .padding(20)
         .frame(width: 640, height: 460)
-        .task { await lookUp(fresh: false) }
+        // Asked fresh: a change of release often follows an edit in MusicBrainz, such as a disc ID
+        // added, which a cached answer from the rip would not show.
+        .task { await lookUp(fresh: true) }
+        .sheet(isPresented: $searchShown) {
+            if let toc {
+                ReleaseSearchTargetSheet.forRip(rip, toc: toc) { found, keepsTitles in
+                    model.changeRelease(of: rip, to: found, keepingTitles: keepsTitles)
+                    dismiss()
+                }
+            }
+        }
     }
 
     /// The releases with the disc, from the cache unless `fresh`: the rip looked the disc up.

@@ -143,7 +143,7 @@ extension String {
 /// The custom set sheet for the disc in a drive or an earlier rip (`AppModel.customSetTarget`).
 struct CustomSetTargetSheet: View {
     @Environment(AppModel.self) private var model
-    let target: AppModel.CustomSetTarget
+    let target: AppModel.DiscTarget
 
     var body: some View {
         switch target {

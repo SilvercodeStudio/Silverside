@@ -111,6 +111,9 @@ struct MainWindow: View {
         .sheet(item: $model.customSetTarget) { target in
             CustomSetTargetSheet(target: target)
         }
+        .sheet(item: $model.releaseSearchTarget) { target in
+            ReleaseSearchTargetSheet(target: target)
+        }
         .onAppear {
             // The first launch opens the welcome. `-welcomeDone 0` opens it again, and `-welcomeDone 1` keeps it shut.
             if !UserDefaults.standard.bool(forKey: WelcomeView.doneKey) { openWindow(id: "welcome") }
@@ -158,6 +161,10 @@ struct MainWindow: View {
                         else { return }
                         model.selection = .rip(rip.file)
                         if UserDefaults.standard.bool(forKey: "repair") { model.startRepair(rip) }
+                        // `-searchMusicBrainz 1` opens the MusicBrainz search for it.
+                        if UserDefaults.standard.bool(forKey: "searchMusicBrainz") {
+                            model.releaseSearchTarget = .rip(rip)
+                        }
                     }
                 }
             #endif

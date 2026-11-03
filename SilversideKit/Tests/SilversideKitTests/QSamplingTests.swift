@@ -57,8 +57,10 @@ struct QSamplingTests {
                 $0.readSpeed = 10
                 $0.qReadCost = cost
             }
-            let measured = try #require(QReadCost.measure(drive: drive, toc: toc))
-            #expect(TrackRipper.qEvery(forReadCost: measured) == (cost > 1 ? 6 : 1), "\(measured) for \(cost)")
+            // The median of three, as other tests that run at once can stall one measurement.
+            let runs = try (0..<3).map { _ in try #require(QReadCost.measure(drive: drive, toc: toc)) }.sorted()
+            let measured = runs[1]
+            #expect(TrackRipper.qEvery(forReadCost: measured) == (cost > 1 ? 6 : 1), "\(runs) for \(cost)")
         }
         #expect(TrackRipper.qEvery(forReadCost: nil) == 1)
         #expect(TrackRipper.qEvery(forReadCost: 1.05) == 1)

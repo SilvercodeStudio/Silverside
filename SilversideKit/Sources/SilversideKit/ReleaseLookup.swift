@@ -11,6 +11,9 @@ public struct ReleaseLookupResult: Sendable {
     /// Why the chosen release's own lookup failed, if it did. `chosen` is then the disc
     /// lookup's release: the names are all there, but not the writers or the genre.
     public var detailsFailure: String?
+    /// The disc ID and the TOC found nothing, and the releases came from the disc's barcode
+    /// (its MCN), with a disc whose tracks fit this one's.
+    public var foundByBarcode = false
 
     /// The number of releases other than the chosen one.
     public var otherCount: Int {
@@ -44,7 +47,12 @@ public enum ReleaseLookup {
         client: MusicBrainzClient = MusicBrainzClient(), store: ReleaseChoiceStore = ReleaseChoiceStore(),
         useCache: Bool = true
     ) async throws -> ReleaseLookupResult {
-        let lookup = try await client.lookup(toc, useCache: useCache)
+        var lookup = try await client.lookup(toc, useCache: useCache)
+        var foundByBarcode = false
+        if lookup.releases.isEmpty, let mcn {
+            lookup.releases = await barcodeMatches(mcn: mcn, toc: toc, client: client, useCache: useCache)
+            foundByBarcode = !lookup.releases.isEmpty
+        }
         let discID = toc.musicBrainzDiscID
         let remembered = store.choices(forDiscID: discID)
         let others = store.allChoices()
@@ -63,7 +71,8 @@ public enum ReleaseLookup {
                 (chosen, failure) = try await detailed(summary, client: client, useCache: useCache)
             }
             return ReleaseLookupResult(
-                ranked: ranked, chosen: chosen, isExact: lookup.isExact, detailsFailure: failure)
+                ranked: ranked, chosen: chosen, isExact: lookup.isExact, detailsFailure: failure,
+                foundByBarcode: foundByBarcode)
         }
         var chosen = ranked.first { $0.id == releaseID }
         var failure: String?
@@ -74,7 +83,30 @@ public enum ReleaseLookup {
         }
         guard let chosen else { throw ReleaseLookupError.noSuchRelease(releaseID) }
         try store.remember(chosen)
-        return ReleaseLookupResult(ranked: ranked, chosen: chosen, isExact: lookup.isExact, detailsFailure: failure)
+        return ReleaseLookupResult(
+            ranked: ranked, chosen: chosen, isExact: lookup.isExact, detailsFailure: failure,
+            foundByBarcode: foundByBarcode)
+    }
+
+    /// The releases with the disc's barcode (its MCN) that have a disc whose tracks fit this
+    /// one's, by count and then by length (`MusicBrainzRelease.medium(for:)`): for a pressing
+    /// whose disc ID MusicBrainz does not have. One search, and a lookup of each release whose
+    /// track counts fit (at most 3). A failure finds none: the barcode is only a second chance.
+    static func barcodeMatches(
+        mcn: String, toc: TOC, client: MusicBrainzClient, useCache: Bool
+    ) async -> [MusicBrainzRelease] {
+        guard MusicBrainzClient.barcodeQuery(for: mcn) != nil,
+            let found = try? await client.searchReleases(mcn, limit: 10, useCache: useCache)
+        else { return [] }
+        var releases = [MusicBrainzRelease]()
+        for result in found.filter({ !$0.positions(withTrackCount: toc.audioTracks.count).isEmpty }).prefix(3) {
+            if let release = try? await client.release(id: result.id, useCache: useCache),
+                release.medium(for: toc) != nil
+            {
+                releases.append(release)
+            }
+        }
+        return releases
     }
 
     /// The release looked up by its ID, or the summary and why that lookup failed.

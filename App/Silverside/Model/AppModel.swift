@@ -909,8 +909,15 @@ final class AppModel {
     /// files up to date (`DiscEncoder.changeRelease`), with the release's cover if the Cover Art
     /// Archive has one. The other encoded discs of the old and the new release are brought up to
     /// date after it, for their album gain. The selection follows a report that moved.
-    func changeRelease(of rip: RecentRip, to chosen: MusicBrainzRelease) {
+    func changeRelease(of rip: RecentRip, to chosen: MusicBrainzRelease, keepingTitles: Bool = false) {
         guard canChangeRelease(rip) else { return }
+        // A disc of a custom set that moves to a release of MusicBrainz's leaves the set, so
+        // that it is not named as the set's when it goes in a drive again.
+        if rip.report.release?.isCustomSet == true, !chosen.isCustomSet,
+            let toc = try? TOC(ctdbTOCString: rip.report.toc)
+        {
+            try? CustomSetStore().remove(toc)
+        }
         let old = rip.report.release?.id
         let others = recentRips.filter { other in
             other.file != rip.file && (other.report.encoding != nil || !other.hasAudio)
@@ -926,7 +933,7 @@ final class AppModel {
             }
             let run = LibraryRun(
                 title: rip.title, encode: [], update: others,
-                change: .init(rip: rip, release: release, cover: cover))
+                change: .init(rip: rip, release: release, cover: cover, keepsTrackTitles: keepingTitles))
             library = run
             libraryShown = true
             run.start(settings: settings, cover: nil) { [self] in
@@ -970,8 +977,8 @@ final class AppModel {
         }
     }
 
-    /// What the custom set sheet is for: the disc in a drive, or an earlier rip.
-    enum CustomSetTarget: Identifiable {
+    /// What a sheet about a disc is for: the disc in a drive, or an earlier rip.
+    enum DiscTarget: Identifiable {
         case drive(DriveSlot)
         case rip(RecentRip)
 
@@ -984,11 +991,14 @@ final class AppModel {
     }
 
     /// The disc or rip the custom set sheet shows, if it shows.
-    var customSetTarget: CustomSetTarget?
+    var customSetTarget: DiscTarget?
 
-    /// What Disc › Put in Custom Set… would show the sheet for: the selected drive's disc, before
+    /// The disc or rip the MusicBrainz search shows, if it shows.
+    var releaseSearchTarget: DiscTarget?
+
+    /// What Disc › Put in Custom Set… and Search MusicBrainz… would show the sheet for: the selected drive's disc, before
     /// or after a rip but not during one, or the selected earlier rip, while nothing works on its files.
-    var customSetCandidate: CustomSetTarget? {
+    var discCandidate: DiscTarget? {
         if let slot = selectedDrive, let disc = slot.disc, !disc.toc.audioTracks.isEmpty, slot.rip?.isRunning != true {
             return .drive(slot)
         }
@@ -997,8 +1007,8 @@ final class AppModel {
     }
 
     /// True if the candidate is in a custom set already, for the menu's title.
-    var customSetCandidateIsInSet: Bool {
-        switch customSetCandidate {
+    var discCandidateIsInSet: Bool {
+        switch discCandidate {
         case .drive(let slot): slot.disc?.customSet != nil
         case .rip(let rip): rip.report.release?.isCustomSet == true
         case nil: false
@@ -1049,6 +1059,54 @@ final class AppModel {
         run.start(settings: settings, cover: nil) { [self] in
             if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
             refreshRecentRips()
+        }
+    }
+
+    /// Look Up Metadata for an earlier rip: its release as MusicBrainz has it now (a disc ID
+    /// added there since the rip, or names changed), into the reports of every rip of the
+    /// release, so a set's discs all follow. The encoded files are brought up to date when names
+    /// changed; a disc ID alone changes no file.
+    func lookUpAgain(_ rip: RecentRip) {
+        guard let release = rip.report.release, !release.isManual, library?.isRunning != true else { return }
+        Task { @MainActor in
+            let fresh: MusicBrainzRelease?
+            do {
+                fresh = try await MusicBrainzClient().release(id: release.id, useCache: false)
+            } catch {
+                alert = AppAlert(title: "MusicBrainz did not answer", message: "\(error)")
+                return
+            }
+            guard let fresh else {
+                alert = AppAlert(
+                    title: "MusicBrainz no longer has this release",
+                    message: "It may have been merged into another. Use Change Release… to choose it.")
+                return
+            }
+            let rips = recentRips.filter { $0.report.release?.id == release.id && canChangeRelease($0) }
+            var renamed = [RecentRip]()
+            for other in rips {
+                do {
+                    try DiscEncoder(settings: settings).refreshRelease(
+                        reportAt: other.file, with: fresh, library: settings.libraryURL)
+                } catch {
+                    alert = AppAlert(title: "\(other.title) could not be updated", message: "\(error)")
+                    continue
+                }
+                // Disc IDs change no name; other changes go into the files.
+                func names(_ release: MusicBrainzRelease?) -> MusicBrainzRelease? {
+                    guard var release else { return nil }
+                    for index in release.media.indices { release.media[index].discIDs = [] }
+                    return release
+                }
+                if names(other.report.release) != names(fresh), other.report.encoding != nil || !other.hasAudio {
+                    renamed.append(other)
+                }
+            }
+            if renamed.isEmpty {
+                refreshRecentRips()
+            } else {
+                startLibraryRun(title: fresh.title, encode: [], update: renamed)
+            }
         }
     }
 

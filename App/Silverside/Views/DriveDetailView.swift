@@ -49,7 +49,7 @@ struct DriveDetailView: View {
         .toolbar { toolbar }
         .sheet(isPresented: $releasePickerShown) {
             if let disc = slot.disc {
-                ReleasePickerSheet(disc: disc) { release in slot.choose(release) }
+                ReleasePickerSheet(disc: disc, useFound: { slot.useFound($0) }) { release in slot.choose(release) }
             }
         }
         #if DEBUG
@@ -715,7 +715,7 @@ struct AlbumHeader: View {
                 help: "Several releases in MusicBrainz have this disc. Click to choose the one you have.",
                 action: { releasePickerShown = true })
         case .found where disc.isFuzzy:
-            ResultChips.lengthsMatch(toc: disc.toc)
+            ResultChips.lengthsMatch(toc: disc.toc, how: disc.matchKind)
         case .found:
             Chip(
                 text: "MusicBrainz · Disc ID match", tone: .good, systemImage: "checkmark",
@@ -732,6 +732,11 @@ struct AlbumHeader: View {
                 (disc.namesFromEarlierRip
                     ? "The names and the cover are those you gave your newest rip of this disc. " : "")
                     + "The files get no MusicBrainz IDs. Edit the names here; they are kept with the rip.")
+            Chip(
+                text: "Search MusicBrainz…", systemImage: "magnifyingglass",
+                help:
+                    "Find the disc's release in MusicBrainz by its names, barcode, or catalog number: it may have the release, but not this pressing's disc ID.",
+                action: canChange ? { model.releaseSearchTarget = .drive(slot) } : nil)
             if let (set, position) = disc.suggestedSet {
                 Chip(
                     text: "Add to “\(set.title)” as Disc \(position)", systemImage: "plus.square.on.square",
@@ -1399,13 +1404,50 @@ enum ResultChips {
 
     /// For a release that MusicBrainz matched by its track lengths: a click opens the page
     /// that adds the disc ID to it.
-    static func lengthsMatch(toc: TOC) -> Chip {
+    static func lengthsMatch(toc: TOC, how: MatchKind = .lengths) -> Chip {
         Chip(
-            text: "MusicBrainz · nearly the same TOC", tone: .warning, systemImage: "approximatelyequal",
-            help: "MusicBrainz does not know this disc ID, so the release was matched by its track lengths. "
+            text: how.chipText, tone: .warning, systemImage: how.systemImage,
+            help: how.help
                 + "Click to add the disc ID to the right release in MusicBrainz (you need an account); "
-                + "after that, every ripper finds the disc by its ID.",
+                + "after that, every ripper finds the disc by its ID. Then use Disc › Look Up Metadata (⌘L) "
+                + "to see it here.",
             link: MusicBrainzRelease.submissionURL(for: toc))
+    }
+
+    /// How a release without the disc's ID was found.
+    enum MatchKind {
+        /// The disc ID lookup's fuzzy match of the TOC.
+        case lengths
+        /// The disc's barcode (its MCN), then its track lengths.
+        case barcode
+        /// The user's search, then its track lengths.
+        case search
+
+        var chipText: String {
+            switch self {
+            case .lengths: "MusicBrainz · nearly the same TOC"
+            case .barcode: "MusicBrainz · barcode match"
+            case .search: "MusicBrainz · found by search"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .lengths: "approximatelyequal"
+            case .barcode: "barcode"
+            case .search: "magnifyingglass"
+            }
+        }
+
+        var help: String {
+            switch self {
+            case .lengths: "MusicBrainz does not know this disc ID, so the release was matched by its track lengths. "
+            case .barcode:
+                "MusicBrainz does not know this disc ID; the disc's barcode found the release, and one of its discs fits this one's track lengths. "
+            case .search:
+                "MusicBrainz does not know this disc ID; you found the release, and one of its discs fits this one's track lengths. "
+            }
+        }
     }
 
     /// For a disc whose ID MusicBrainz has on other releases only, when a release of earlier

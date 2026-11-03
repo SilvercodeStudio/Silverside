@@ -347,7 +347,11 @@ private final class RipPrinter: @unchecked Sendable {
             }
             Swift.print(
                 "MusicBrainz: " + chosen.summary(for: toc)
-                    + (lookup.isExact ? "" : " (a fuzzy match of the TOC; MusicBrainz does not know this disc ID)")
+                    + (lookup.isExact
+                        ? ""
+                        : lookup.foundByBarcode
+                            ? " (found by the disc's barcode; MusicBrainz does not know this disc ID)"
+                            : " (a fuzzy match of the TOC; MusicBrainz does not know this disc ID)")
                     + (lookup.otherCount > 0 ? "; \(lookup.otherCount) other releases (see silverside metadata)" : ""))
             if !lookup.isExact {
                 Swift.print("  To add the disc ID: \(MusicBrainzRelease.submissionURL(for: toc).absoluteString)")

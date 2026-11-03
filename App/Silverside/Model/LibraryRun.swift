@@ -39,6 +39,8 @@ final class LibraryRun: Identifiable {
         var release: MusicBrainzRelease
         var cover: CoverImage?
         var keepsTrackNames = false
+        /// Keep My Track Titles: each track keeps its title now.
+        var keepsTrackTitles = false
     }
 
     let id = UUID()
@@ -116,7 +118,7 @@ final class LibraryRun: Identifiable {
                     encoder.log = { line in onMain { run.add("  \(line)") } }
                     let result = try encoder.changeRelease(
                         reportAt: rip.file, to: change.release, keepingTrackEdits: change.keepsTrackNames,
-                        cover: change.cover, library: library)
+                        keepingTrackTitles: change.keepsTrackTitles, cover: change.cover, library: library)
                     onMain {
                         run.changedReport = (rip.file, result.report)
                         run.add(

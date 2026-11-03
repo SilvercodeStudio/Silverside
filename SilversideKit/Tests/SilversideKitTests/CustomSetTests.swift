@@ -90,7 +90,8 @@ struct CustomSetTests {
         #expect(store.set(containing: disc3)?.id == other.id)
         #expect(store.sets().map(\.id) == [other.id, set.id])
         try store.remove(disc2)
-        #expect(store.set(containing: disc2) == nil && store.set(id: set.id) != nil)
+        // The set had disc 2 only, after disc 3 moved: with none left, it goes.
+        #expect(store.set(containing: disc2) == nil && store.set(id: set.id) == nil && store.sets().count == 1)
     }
 
     /// A disc that MusicBrainz has, put in a set, keeps MusicBrainz's names but none of its IDs.

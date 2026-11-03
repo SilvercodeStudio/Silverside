@@ -54,6 +54,8 @@ struct DiscInfo {
     var medium: MusicBrainzRelease.Medium?
     /// MusicBrainz does not know the disc ID; `releases` have nearly the same TOC.
     var isFuzzy = false
+    /// How the release was found when MusicBrainz does not know the disc ID.
+    var matchKind = ResultChips.MatchKind.lengths
     /// The ranking could not settle on a release, and the user has not chosen one.
     var isAmbiguous = false
     var cover: Data?
@@ -286,6 +288,7 @@ struct DiscInfo {
         }
         releases = result.ranked
         isFuzzy = !result.isExact
+        matchKind = result.foundByBarcode ? .barcode : .lengths
         guard let chosen = result.chosen else {
             lookup = .notFound
             release = nil
@@ -304,6 +307,26 @@ struct DiscInfo {
             return
         }
         await use(chosen)
+    }
+
+    /// Uses a release that a search of MusicBrainz found, which has a disc that fits this one:
+    /// as if the lookup had found it by the disc's track lengths.
+    mutating func useFound(_ found: MusicBrainzRelease) async {
+        releases.removeAll { $0.id == found.id }
+        releases.insert(found, at: 0)
+        lookup = .found
+        isFuzzy = found.medium(withDiscID: toc.musicBrainzDiscID) == nil
+        matchKind = .search
+        lookupChoice = found
+        await choose(found)
+    }
+
+    /// What to search MusicBrainz for: the artist and the album, without a disc number in the
+    /// title ("Dave Brubeck Seven Classic LPs").
+    var searchText: String {
+        let title = CDTextHints.disc(inAlbumTitle: self.title)?.title ?? self.title
+        return [artist, title].filter { !$0.isEmpty && $0 != "Unknown Artist" && $0 != "Unknown Album" }
+            .joined(separator: " ")
     }
 
     /// The release the lookup chose, kept for a disc in a custom set, to go back to if it leaves the set.

@@ -28,6 +28,24 @@ command-line tool.
   to join the set at once. An earlier rip can join a set too, and so can a
   disc that MusicBrainz has, from Disc › Put in Custom Set…: a disc in your
   set is named as the set's, whatever MusicBrainz finds for it.
+- Search MusicBrainz…, for a disc whose ID MusicBrainz does not know, or
+  whose release it got wrong: on the disc's page, in Disc, in the release
+  picker, and in Change Release…. Search by names, barcode, or catalog
+  number; each release shows its cover, what tells editions apart, and
+  whether one of its discs has as many tracks as yours. The release you
+  choose must have a disc whose track lengths fit yours.
+- Change Release… (and its search) can keep your track titles: each track
+  keeps the title it has now, and the album's names, the date, the
+  composers, and the MusicBrainz IDs become the new release's. A disc of
+  your own set that moves to a MusicBrainz release leaves the set.
+- Look Up Metadata (⌘L) works on an earlier rip too: it asks MusicBrainz for
+  the rip's release again, for a disc ID you added there since or names that
+  changed, and every rip of the release follows, so a set's discs lose
+  "nearly the same TOC" at once. New names go into the files; a disc ID
+  alone changes none. Change Release… asks MusicBrainz afresh as well.
+- A disc that MusicBrainz does not know by its ID is looked for by its
+  barcode (its MCN, when the disc has one), and a release with a disc whose
+  tracks fit is used, as a match by the track lengths is.
 
 ### Changed
 

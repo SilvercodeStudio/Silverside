@@ -204,6 +204,15 @@ final class DriveSlot: Identifiable {
         }
     }
 
+    /// Uses a release that a search of MusicBrainz found (`DiscInfo.useFound`).
+    func useFound(_ release: MusicBrainzRelease) {
+        guard var info = disc else { return }
+        Task { @MainActor in
+            await info.useFound(release)
+            disc = info
+        }
+    }
+
     func lookUpAgain() {
         guard var info = disc else { return }
         disc?.lookup = .lookingUp

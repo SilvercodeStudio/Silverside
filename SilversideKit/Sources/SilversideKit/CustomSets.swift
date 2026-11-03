@@ -120,10 +120,12 @@ public struct CustomSetStore: Sendable {
         }
     }
 
-    /// Takes the disc with this TOC out of its set. The set stays, for its other discs.
+    /// Takes the disc with this TOC out of its set. The set stays for its other discs; a set
+    /// with none left goes.
     public func remove(_ toc: TOC) throws {
         try change { all in
             for index in all.indices { all[index].discs.removeAll { $0.discID == toc.musicBrainzDiscID } }
+            all.removeAll { $0.discs.isEmpty }
         }
     }
 

@@ -209,7 +209,7 @@ struct DiscInfo {
         return toc.audioTracks.enumerated().map { index, track in
             var row = Track(
                 number: track.number, title: "Track \(track.number)", sectors: toc.sectorRange(of: track).count)
-            if source == .cdText, let title = cdText?.titles[track.number] {
+            if source == .cdText, let title = cdText?.trackTitles[track.number] {
                 row.title = title
                 if let performer = cdText?.performers[track.number], performer != cdText?.performers[0] {
                     row.artist = performer
@@ -221,7 +221,7 @@ struct DiscInfo {
                 row.composers = named.composers
                 row.lyricists = named.lyricists
                 row.recordingID = named.recordingID
-            } else if let title = cdText?.titles[track.number] {
+            } else if let title = cdText?.trackTitles[track.number] {
                 row.title = title
                 if let performer = cdText?.performers[track.number], performer != cdText?.performers[0] {
                     row.artist = performer
@@ -317,14 +317,19 @@ struct DiscInfo {
         medium = made.media.first
         edits = MetadataEdits()
         namesFromEarlierRip = false
-        // A cover given before a rip that did not finish (`useCover`).
-        if userCover == nil { userCover = ReleaseCoverStore().cover(forReleaseID: made.id) }
+        if let set = CustomSetStore().set(containing: toc) {
+            useCustomSet(set)
+        } else if userCover == nil {
+            // A cover given before a rip that did not finish (`useCover`).
+            userCover = ReleaseCoverStore().cover(forReleaseID: made.id)
+        }
         let toc = toc
         guard
             let earlier = await Task.detached(operation: { RipHistory().newestNamedRip(of: toc) }).value,
             let names = MetadataEdits.read(fromReportAt: earlier)
         else { return }
-        edits = names
+        // In a custom set, the album's names are the set's: only the tracks' come from the rip.
+        edits = manual?.isCustomSet == true ? edits.merged(with: names.trackLevel) : names
         namesFromEarlierRip = true
         let report = try? RipReport.read(from: earlier)
         if userCover == nil,
@@ -333,6 +338,51 @@ struct DiscInfo {
         {
             userCover = CoverImage(data: data)
         }
+    }
+
+    /// The custom set this disc is in, if any.
+    var customSet: CustomSet? {
+        guard let manual, manual.isCustomSet else { return nil }
+        return CustomSetStore().set(id: manual.id)
+    }
+
+    /// A custom set made for another disc of the same box, with the place for this one free:
+    /// CD-Text's album title, such as "Seven Classic LPs [Disc 2]", names the set and the place.
+    var suggestedSet: (set: CustomSet, position: Int)? {
+        guard manual != nil, customSet == nil, let shown = shownRelease,
+            let hint = CDTextHints.disc(inAlbumTitle: cdText?.titles[0] ?? shown.title),
+            let set = CustomSetSheet.set(in: CustomSetStore().sets(), named: hint.title, artist: shown.artist),
+            hint.position <= set.discCount, set.disc(at: hint.position) == nil
+        else { return nil }
+        return (set, hint.position)
+    }
+
+    /// The disc's own release, as Silverside names it without a set: from CD-Text, or "Track N".
+    var singleRelease: MusicBrainzRelease { MusicBrainzRelease.manual(toc: toc, cdText: cdText) }
+
+    /// Names the disc as a disc of `set`, which has it: the set's album names and cover, and the
+    /// names already typed for its tracks.
+    mutating func useCustomSet(_ set: CustomSet) {
+        let release = set.release
+        manual = release
+        medium = release.medium(for: toc)
+        edits = (ReleaseEditsStore().edits(forReleaseID: release.id) ?? MetadataEdits()).merged(with: edits.trackLevel)
+        keptCover = ReleaseCoverStore().cover(forReleaseID: release.id)
+    }
+
+    /// Takes the disc out of its custom set: it is a disc of its own again, with the set's names
+    /// for it as its own, so nothing typed is lost.
+    mutating func leaveCustomSet() {
+        guard manual?.isCustomSet == true, let shown = shownRelease else { return }
+        try? CustomSetStore().remove(toc)
+        let single = singleRelease
+        manual = single
+        medium = single.media.first
+        var names = MetadataEdits(album: shown.title, albumArtist: shown.artist).merged(with: edits.trackLevel)
+        if names.album == single.title { names.album = nil }
+        if names.albumArtist == single.artist { names.albumArtist = nil }
+        edits = names
+        keptCover = nil
     }
 
     /// A cover the user dropped or chose: shown now, and kept at once for the release (with

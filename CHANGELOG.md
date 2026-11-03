@@ -20,6 +20,12 @@ command-line tool.
   `silverside drives` says "a blank CD-R"; `info`, `rip`, and the other
   commands say the disc is blank. Before, it was a disc whose TOC could
   not be read.
+- Your own sets, for the discs of a box that MusicBrainz does not know: Part
+  of a Set… puts a disc in one, with the set's title, artist, and number of
+  discs, and the discs become one album, as a MusicBrainz set's do. When
+  CD-Text's album title gives the disc's number ("Seven Classic LPs [Disc 2]"),
+  the set and the number are filled in, and the next disc of the box offers
+  to join the set at once. An earlier rip can join a set too.
 
 ### Changed
 
@@ -55,6 +61,13 @@ command-line tool.
 
 ### Fixed
 
+- MP3 files show their year in the Finder and other Apple software. Apple
+  reads the year only from an older tag frame (TYER), so Silverside now
+  writes it there too. A date such as "1962-1964", which the MP3 date frame
+  cannot hold, gives its first year there. Update the Library adds it to MP3s
+  encoded before.
+- CD-Text titles that start with their track's number ("01 St. Louis Blues")
+  lose the number, when every titled track has its own.
 - The track table's columns can be resized during a rip. Before, the table
   was drawn again at every step of a read, and a drag did not hold.
 - "100 matchs" in Rip History's search is "100 matches".

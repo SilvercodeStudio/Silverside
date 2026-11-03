@@ -52,12 +52,15 @@ struct ResultsView: View {
     @FocusState private var focusedName: NameField?
     /// Tracks whose artist field shows, though they have no artist of their own.
     @State private var artistRows: Set<Int> = []
+    @State private var customSetShown = false
 
     private var toc: TOC? { try? TOC(ctdbTOCString: report.toc) }
 
     /// The chips for a disc that MusicBrainz did not know at the rip, with the names as they are now.
     private var addToMusicBrainzChip: [Chip] {
         guard let toc, report.release?.isManual == true, let release = shownRelease else { return [] }
+        // A set of the user's own is not offered to MusicBrainz.
+        if release.isCustomSet { return [ResultChips.addDiscID(toc: toc)] }
         return [ResultChips.addToMusicBrainz(release, toc: toc), ResultChips.addDiscID(toc: toc)]
     }
 
@@ -160,7 +163,7 @@ struct ResultsView: View {
         .onAppear {
             edits = MetadataEdits.read(fromReportAt: recentRip.file) ?? MetadataEdits()
             savedEdits = edits
-            if let release = report.release, !release.isManual {
+            if let release = report.release, release.sharesAlbumEdits {
                 keptEdits = ReleaseEditsStore().edits(forReleaseID: release.id) ?? MetadataEdits()
                 savedKeptEdits = keptEdits
             }
@@ -314,7 +317,7 @@ struct ResultsView: View {
     /// encoded files up to date with them.
     private func saveNames() {
         guard edits != savedEdits || keptEdits != savedKeptEdits else { return }
-        if keptEdits != savedKeptEdits, let release = report.release, !release.isManual {
+        if keptEdits != savedKeptEdits, let release = report.release, release.sharesAlbumEdits {
             do {
                 try ReleaseEditsStore().remember(keptEdits, forReleaseID: release.id)
             } catch {
@@ -349,7 +352,7 @@ struct ResultsView: View {
         func keep(_ text: String, _ field: WritableKeyPath<MetadataEdits, String?>, original: String?) {
             let trimmed = text.trimmingCharacters(in: .whitespaces)
             let value = trimmed.isEmpty || trimmed == original ? nil : trimmed
-            if release.isManual {
+            if !release.sharesAlbumEdits {
                 edits[keyPath: field] = value
             } else {
                 keptEdits[keyPath: field] = value
@@ -545,6 +548,22 @@ struct ResultsView: View {
                     if let set = model.set(for: report.release) {
                         Button(setText(set)) { model.selection = .set(set.releaseID) }
                             .help("The whole set: each disc's state, the album's names, and the work left")
+                    }
+                    if let release = report.release, release.isManual, let toc {
+                        let rip = model.allRips.first { $0.file == recentRip.file } ?? recentRip
+                        Button(release.isCustomSet ? "Change Set…" : "Part of a Set…") { customSetShown = true }
+                            .disabled(!model.canChangeRelease(rip))
+                            .help(
+                                "Put this disc in a set of your own with the other discs of its box, so that they become one album"
+                            )
+                            .sheet(isPresented: $customSetShown) {
+                                CustomSetSheet(
+                                    toc: toc, albumTitle: shownRelease?.title ?? release.title,
+                                    artist: shownRelease?.artist ?? release.artist,
+                                    current: release.isCustomSet ? CustomSetStore().set(id: release.id) : nil,
+                                    onSave: { set, position in model.putInCustomSet(rip, set: set, at: position) },
+                                    onLeave: { model.takeOutOfCustomSet(rip) })
+                            }
                     }
                     if report.release != nil {
                         // The model's rip knows whether its files are still there.

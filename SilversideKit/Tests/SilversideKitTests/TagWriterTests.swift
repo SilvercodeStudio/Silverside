@@ -1,3 +1,4 @@
+import AudioToolbox
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -232,5 +233,28 @@ struct MP3Tests {
         try ID3Tags.write([("TITLE", "Again")], cover: nil, to: url)
         #expect(try ID3Tags.readTextFrames(url)["TIT2"] == "Again")
         #expect(abs(try AudioEncoder.decode(url).count - decoded.count) == 0)
+    }
+
+    /// TDRC and TDOR take a timestamp, so a range gives its first year; the year goes into TYER
+    /// too, the only frame Apple's frameworks read it from. Checked with AudioToolbox's own reader.
+    @Test(.enabled(if: MP3Encoder.lame() != nil, "lame is not installed"))
+    func writesADateThatPlayersRead() throws {
+        #expect(ID3Tags.timestamp("1962-1964") == "1962" && ID3Tags.timestamp("1962-05-01") == "1962-05-01")
+        #expect(ID3Tags.timestamp("1962") == "1962" && ID3Tags.timestamp("c. 1965") == "1965")
+        #expect(ID3Tags.timestamp("unknown") == "unknown" && ID3Tags.year(in: "19621") == nil)
+        let url = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID()).mp3")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try MP3Encoder.encode(AudioEncoderTests.samples, to: url, lame: try #require(MP3Encoder.lame()))
+        try ID3Tags.write([("TITLE", "t"), ("DATE", "1962-1964"), ("ORIGINALDATE", "1962-1964")], cover: nil, to: url)
+        let frames = try ID3Tags.readTextFrames(url)
+        #expect(frames["TDRC"] == "1962" && frames["TYER"] == "1962" && frames["TDOR"] == "1962")
+        var file: AudioFileID?
+        #expect(AudioFileOpenURL(url as CFURL, .readPermission, 0, &file) == noErr)
+        defer { if let file { AudioFileClose(file) } }
+        var size = UInt32(MemoryLayout<Unmanaged<CFDictionary>?>.size)
+        var info: Unmanaged<CFDictionary>?
+        #expect(AudioFileGetProperty(try #require(file), kAudioFilePropertyInfoDictionary, &size, &info) == noErr)
+        let dictionary = info?.takeRetainedValue() as? [String: Any]
+        #expect(dictionary?["year"] as? String == "1962")
     }
 }

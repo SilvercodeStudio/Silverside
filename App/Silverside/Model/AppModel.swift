@@ -937,6 +937,77 @@ final class AppModel {
         }
     }
 
+    /// Puts an earlier rip of a disc that MusicBrainz does not know in a custom set, at `position`,
+    /// and brings its files up to date, as Change Release does; the rip keeps its names for its
+    /// tracks, and the album's are the set's. The set's other encoded discs follow, for their gain.
+    func putInCustomSet(_ rip: RecentRip, set: CustomSet, at position: Int) {
+        guard canChangeRelease(rip), let own = rip.report.release, let toc = try? TOC(ctdbTOCString: rip.report.toc)
+        else { return }
+        var set = set
+        set.put(toc, at: position, namedAs: own)
+        do {
+            try CustomSetStore().save(set)
+        } catch {
+            alert = AppAlert(title: "The set could not be saved", message: "\(error)")
+            return
+        }
+        let release = set.release
+        let others = recentRips.filter { other in
+            other.file != rip.file && (other.report.encoding != nil || !other.hasAudio)
+                && [own.id, release.id].contains(other.report.release?.id)
+        }
+        let run = LibraryRun(
+            title: rip.title, encode: [], update: others,
+            change: .init(
+                rip: rip, release: release, cover: ReleaseCoverStore().cover(forReleaseID: release.id),
+                keepsTrackNames: true))
+        library = run
+        libraryShown = true
+        run.start(settings: settings, cover: nil) { [self] in
+            if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
+            coverVersion += 1
+            refreshRecentRips()
+        }
+    }
+
+    /// Puts the disc in a drive in a custom set, at `position`, before its rip.
+    func putInCustomSet(_ slot: DriveSlot, set: CustomSet, at position: Int) {
+        guard let disc = slot.disc else { return }
+        var set = set
+        set.put(disc.toc, at: position, namedAs: disc.singleRelease)
+        do {
+            try CustomSetStore().save(set)
+        } catch {
+            alert = AppAlert(title: "The set could not be saved", message: "\(error)")
+            return
+        }
+        slot.disc?.useCustomSet(set)
+    }
+
+    /// Takes an earlier rip out of its custom set: it becomes a disc of its own again, named as
+    /// the set had it.
+    func takeOutOfCustomSet(_ rip: RecentRip) {
+        guard canChangeRelease(rip), let own = rip.report.release, own.isCustomSet,
+            let toc = try? TOC(ctdbTOCString: rip.report.toc)
+        else { return }
+        try? CustomSetStore().remove(toc)
+        var single = MusicBrainzRelease.manual(toc: toc)
+        // The names the set had for the disc, and the set's album names, as its own.
+        let named = MetadataEdits.current(forReportAt: rip.file, release: own).applied(to: own, toc: toc)
+        single.title = named.title
+        single.artistCredit = named.artistCredit
+        if let medium = named.medium(for: toc) { single.media[0].tracks = medium.tracks }
+        let run = LibraryRun(
+            title: rip.title, encode: [], update: [],
+            change: .init(rip: rip, release: single, cover: nil))
+        library = run
+        libraryShown = true
+        run.start(settings: settings, cover: nil) { [self] in
+            if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
+            refreshRecentRips()
+        }
+    }
+
     /// Library updates for changed names, one after another, so two never touch one album at once.
     @ObservationIgnored private var namesUpdate: Task<Void, Never>?
     /// The rips whose files are being brought up to date with their names.

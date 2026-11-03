@@ -199,7 +199,7 @@ extension DiscEncoder {
                 }
                 coverFile = try cover.write(to: destination)
             }
-            if remember, !release.isManual { try coverStore.remember(cover, forReleaseID: release.id) }
+            if remember, release.sharesAlbumEdits { try coverStore.remember(cover, forReleaseID: release.id) }
         } else {
             coverFile = [albumFolder, folder].compactMap { $0 }
                 .flatMap { folder in ["cover.jpg", "cover.png"].map { folder.appending(path: $0) } }
@@ -367,10 +367,13 @@ extension DiscEncoder {
     /// names; the album edits kept for the new release apply. The album folder's report gets
     /// the release too, under its new name when the disc's number in the set changes, and the
     /// choice is kept for the disc (`ReleaseChoiceStore`). `cover`, if given, becomes the cover;
-    /// else the rip keeps its own. Throws before it changes anything when no disc of `release`
-    /// is the rip's, or when the album folder has another report under the new name.
+    /// else the rip keeps its own. With `keepingTrackEdits`, as for a disc put in a custom set,
+    /// whose tracks have the names Silverside gave them, the rip's names for its tracks stay.
+    /// Throws before it changes anything when no disc of `release` is the rip's, or when the
+    /// album folder has another report under the new name.
     public func changeRelease(
-        reportAt file: URL, to release: MusicBrainzRelease, cover: CoverImage? = nil, library: URL? = nil,
+        reportAt file: URL, to release: MusicBrainzRelease, keepingTrackEdits: Bool = false, cover: CoverImage? = nil,
+        library: URL? = nil,
         editsStore: ReleaseEditsStore = ReleaseEditsStore(), coverStore: ReleaseCoverStore = ReleaseCoverStore(),
         choiceStore: ReleaseChoiceStore = ReleaseChoiceStore()
     ) throws -> LibraryUpdate {
@@ -422,10 +425,13 @@ extension DiscEncoder {
         let audio = (album.flatMap { album in encoding?.files.map { album.appending(path: $0.file) } } ?? [])
             .filter { FileManager.default.fileExists(atPath: $0.path) }
         do {
-            // The release in each report, without the rip's own edits.
+            // The release in each report, without the rip's own edits (but for its tracks').
+            let trackEdits =
+                keepingTrackEdits
+                ? (MetadataEdits.read(fromReportAt: file) ?? MetadataEdits()).trackLevel : MetadataEdits()
             for target in reports {
                 try RipReport.update(reportAt: target) { $0.release = release }
-                try MetadataEdits().save(inReportAt: target)
+                try trackEdits.save(inReportAt: target)
             }
             var updated = file
             if let albumReport, let renamedReport, oldPart != newPart {

@@ -174,7 +174,12 @@ public enum ID3Tags {
         }
         for key in order {
             let list = values[key]!
-            if let id = textFrames[key] {
+            if key == "DATE" || key == "ORIGINALDATE", let date = list.first {
+                text(textFrames[key]!, [timestamp(date)])
+                // Apple's frameworks (AudioToolbox, Spotlight, the Finder) read the year from
+                // ID3v2.3's TYER only, never from TDRC (2026-11-03), so the year goes there too.
+                if key == "DATE", let year = year(in: date) { text("TYER", [year]) }
+            } else if let id = textFrames[key] {
                 text(id, list)
             } else if let description = userFrames[key] {
                 frames += frame(
@@ -197,6 +202,19 @@ public enum ID3Tags {
         }
         frames += Data(count: paddingBytes)
         return Data("ID3".utf8) + Data([4, 0, 0]) + syncsafe(frames.count) + frames
+    }
+
+    /// A date as ID3v2.4 allows it in TDRC and TDOR, a timestamp ("1962", "1962-05", or
+    /// "1962-05-01"): the date as it is if it is one, else its first year, so that a range such
+    /// as "1962-1964" still gives the year; else the text as it is.
+    static func timestamp(_ date: String) -> String {
+        if date.wholeMatch(of: /\d{4}(-\d{2}(-\d{2})?)?/) != nil { return date }
+        return year(in: date) ?? date
+    }
+
+    /// The first year in a date: "1962" in "1962-1964" or "c. 1962".
+    static func year(in date: String) -> String? {
+        date.firstMatch(of: /(?:^|\D)(?<year>\d{4})(?!\d)/).map { String($0.output.year) }
     }
 
     static func frame(_ id: String, _ body: Data) -> Data {

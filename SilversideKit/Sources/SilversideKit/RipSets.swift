@@ -160,7 +160,7 @@ public struct RipSet: Equatable, Identifiable, Sendable {
     public static func sets(in rips: [Rip]) -> [RipSet] {
         var sets = [String: RipSet]()
         for rip in rips.sorted(by: { $0.report.date > $1.report.date }) {
-            guard let release = rip.report.release, !release.isManual, release.cdPositions.count > 1,
+            guard let release = rip.report.release, release.sharesAlbumEdits, release.cdPositions.count > 1,
                 let position = rip.report.discPosition
             else { continue }
             var set =

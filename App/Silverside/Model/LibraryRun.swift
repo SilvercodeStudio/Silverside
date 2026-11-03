@@ -32,11 +32,13 @@ final class LibraryRun: Identifiable {
         var suffix = " (DTS 5.1)"
     }
 
-    /// Change Release: another release for an earlier rip, with its cover if it has one.
+    /// Change Release: another release for an earlier rip, with its cover if it has one. A
+    /// custom set keeps the rip's names for its tracks.
     struct ReleaseChange {
         var rip: RecentRip
         var release: MusicBrainzRelease
         var cover: CoverImage?
+        var keepsTrackNames = false
     }
 
     let id = UUID()
@@ -113,7 +115,8 @@ final class LibraryRun: Identifiable {
                     var encoder = DiscEncoder(settings: settings)
                     encoder.log = { line in onMain { run.add("  \(line)") } }
                     let result = try encoder.changeRelease(
-                        reportAt: rip.file, to: change.release, cover: change.cover, library: library)
+                        reportAt: rip.file, to: change.release, keepingTrackEdits: change.keepsTrackNames,
+                        cover: change.cover, library: library)
                     onMain {
                         run.changedReport = (rip.file, result.report)
                         run.add(

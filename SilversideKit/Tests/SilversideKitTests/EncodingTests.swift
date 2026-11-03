@@ -663,6 +663,27 @@ extension EncodingTests {
         #expect(choices.choices(forDiscID: toc.musicBrainzDiscID) == ["single"])
     }
 
+    /// A disc put in a custom set after its rip keeps the names typed for its tracks; the album's
+    /// names are the set's.
+    @Test func keepsTheTrackNamesOfADiscPutInACustomSet() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let discJSON = folder.appending(path: "disc.json")
+        try MetadataEdits(album: "Old Album", tracks: [1: .init(title: "Typed Title")]).save(inReportAt: discJSON)
+        let toc = try TOC(ctdbTOCString: try RipReport.read(from: discJSON).toc)
+        var set = CustomSet(title: "Seven Classic LPs", artist: "Dave Brubeck", discCount: 4)
+        set.put(toc, at: 2, namedAs: .manual(toc: toc))
+        let update = try DiscEncoder(format: .flac).changeRelease(
+            reportAt: discJSON, to: set.release, keepingTrackEdits: true, library: library,
+            editsStore: ReleaseEditsStore(url: root.appending(path: "edits.json")),
+            coverStore: ReleaseCoverStore(folder: root.appending(path: "covers")),
+            choiceStore: ReleaseChoiceStore(url: root.appending(path: "choices.json")))
+        #expect(MetadataEdits.read(fromDiscJSONOf: folder) == MetadataEdits(tracks: [1: .init(title: "Typed Title")]))
+        #expect(try RipReport.read(from: discJSON).discPosition == 2)
+        #expect(update.files.isEmpty || update.files[0].lastPathComponent.contains("Typed Title"))
+    }
+
     /// No disc of the release has the rip's TOC: nothing changes.
     @Test func refusesAReleaseWithoutTheDisc() throws {
         let (folder, library) = try makeRip()

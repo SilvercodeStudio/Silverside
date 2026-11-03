@@ -85,6 +85,7 @@ struct Metadata: AsyncParsableCommand {
 
         let choice = try await ReleaseLookup.find(toc: toc, mcn: mcn, releaseID: release, details: true)
         var chosen = choice.chosen
+        if chosen == nil { chosen = CustomSetStore().set(containing: toc)?.release }
         if chosen == nil, manual { chosen = MusicBrainzRelease.manual(toc: toc, cdText: cdText) }
         guard let chosen else {
             print("MusicBrainz has no release with this disc. --manual makes one to name with --set.")
@@ -114,7 +115,7 @@ struct Metadata: AsyncParsableCommand {
         let store = ReleaseEditsStore()
         var edits =
             folder.flatMap(MetadataEdits.read(fromDiscJSONOf:))
-            ?? (chosen.isManual ? nil : store.edits(forReleaseID: chosen.id)) ?? MetadataEdits()
+            ?? (chosen.sharesAlbumEdits ? store.edits(forReleaseID: chosen.id) : nil) ?? MetadataEdits()
         if clearEdits { edits = MetadataEdits() }
         for assignment in sets { try Self.apply(assignment, to: &edits) }
         let changed = clearEdits || !sets.isEmpty
@@ -126,7 +127,7 @@ struct Metadata: AsyncParsableCommand {
         if !edits.isEmpty { print("Edited: " + Self.describe(edits)) }
 
         guard let folder else {
-            if changed, !chosen.isManual {
+            if changed, chosen.sharesAlbumEdits {
                 try store.remember(edits, forReleaseID: chosen.id)
                 print("Kept the album's names for the release, for each of its discs.")
             }
@@ -134,7 +135,7 @@ struct Metadata: AsyncParsableCommand {
         }
         try chosen.save(inDiscJSONOf: folder)
         try edits.save(inDiscJSONOf: folder)
-        if changed, !chosen.isManual { try store.remember(edits, forReleaseID: chosen.id) }
+        if changed, chosen.sharesAlbumEdits { try store.remember(edits, forReleaseID: chosen.id) }
         print()
         print(
             "Saved the release" + (edits.isEmpty ? "" : " and the edits")

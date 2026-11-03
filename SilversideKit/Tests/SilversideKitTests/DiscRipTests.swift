@@ -23,7 +23,8 @@ struct DiscRipTests {
     /// leaves it to be measured.
     func rip(
         trackSectors: [Int] = [800, 900], hidesFirstTrack: Bool = false, tracks: [Int]? = nil, web: FakeWeb? = nil,
-        cover: CoverImage? = nil, coverStore: ReleaseCoverStore? = nil, qReadCost: Double? = 1,
+        cover: CoverImage? = nil, coverStore: ReleaseCoverStore? = nil, customSets: CustomSetStore? = nil,
+        qReadCost: Double? = 1,
         prepare: (SimulatedDrive) -> Void = { _ in },
         configure: (inout DiscRipOptions) -> Void = { _ in }
     ) async throws -> (DiscRipResult, [DiscRipEvent], samples: [UInt32], root: URL) {
@@ -53,6 +54,7 @@ struct DiscRipTests {
             settings: settings, options: options, profiles: profiles)
         if let web { rip.webClient = await web.client(in: root.appending(path: "cache")) }
         if let coverStore { rip.coverStore = coverStore }
+        if let customSets { rip.customSets = customSets }
         // The offset comes from the options, since the drive is not in AccurateRip's list.
         rip.options.readOffset = 6
         let events = DiscRipEvents()

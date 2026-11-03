@@ -41,6 +41,9 @@ public struct MetadataEdits: Equatable, Sendable {
         MetadataEdits(album: album, albumArtist: albumArtist, date: date)
     }
 
+    /// The edits of this disc's tracks only: no album edits.
+    public var trackLevel: MetadataEdits { MetadataEdits(tracks: tracks) }
+
     /// These edits, with `other`'s on top where it has them.
     public func merged(with other: MetadataEdits) -> MetadataEdits {
         var result = self
@@ -110,7 +113,7 @@ public struct MetadataEdits: Equatable, Sendable {
         let medium = release.medium(for: toc) ?? medium
         for (position, track) in toc.audioTracks.enumerated() {
             let named = medium.flatMap { position < $0.tracks.count ? $0.tracks[position] : nil }
-            if let title = name(cdText.titles[track.number]), title != named?.title {
+            if let title = name(cdText.trackTitles[track.number]), title != named?.title {
                 setTitle(title, ofTrack: track.number)
             }
             if let performer = name(cdText.performers[track.number]), performer != named?.artist {
@@ -136,12 +139,13 @@ public struct MetadataEdits: Equatable, Sendable {
     }
 
     /// The names a rip has now: its own edits, with the album edits kept for its release on
-    /// top, as the library update writes them. A release Silverside made has only its own.
+    /// top, as the library update writes them. A disc Silverside named has only its own; a
+    /// custom set has the set's too.
     public static func current(
         forReportAt url: URL, release: MusicBrainzRelease, store: ReleaseEditsStore = ReleaseEditsStore()
     ) -> MetadataEdits {
         let own = read(fromReportAt: url) ?? MetadataEdits()
-        guard !release.isManual, let kept = store.edits(forReleaseID: release.id) else { return own }
+        guard release.sharesAlbumEdits, let kept = store.edits(forReleaseID: release.id) else { return own }
         return own.merged(with: kept)
     }
 
@@ -244,7 +248,7 @@ extension MusicBrainzRelease {
         let tracks = toc.audioTracks.enumerated().map { index, track in
             Track(
                 position: index + 1, number: String(index + 1),
-                title: cdText?.titles[track.number].flatMap { $0.isEmpty ? nil : $0 } ?? "Track \(track.number)",
+                title: cdText?.trackTitles[track.number].flatMap { $0.isEmpty ? nil : $0 } ?? "Track \(track.number)",
                 length: toc.sectorRange(of: track).count * 1000 / CDDA.sectorsPerSecond,
                 artistCredit: [.init(name: cdText?.performers[track.number] ?? albumArtist)], recordingID: nil)
         }

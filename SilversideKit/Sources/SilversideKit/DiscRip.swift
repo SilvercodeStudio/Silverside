@@ -252,6 +252,8 @@ public struct DiscRip {
     public var webClient = WebClient.shared
     /// The covers kept for releases, and the box sets whose discs take their own sleeves.
     public var coverStore = ReleaseCoverStore()
+    /// The user's sets of discs that MusicBrainz does not know (`CustomSet`).
+    public var customSets = CustomSetStore()
     /// Stops the rip when set, from any thread.
     public var stop = StopToken()
 
@@ -367,15 +369,17 @@ public struct DiscRip {
             }
         }
         if chosen == nil, let manual = options.manualRelease { chosen = manual }
+        // A disc MusicBrainz does not know, that the user put in a set of their own.
+        if chosen == nil, let set = customSets.set(containing: toc) { chosen = set.release }
         // The edits kept for the release, with this rip's on top; the folder is named after them.
         var edits = options.edits ?? MetadataEdits()
-        if let chosen, !chosen.isManual, let kept = ReleaseEditsStore().edits(forReleaseID: chosen.id) {
+        if let chosen, chosen.sharesAlbumEdits, let kept = ReleaseEditsStore().edits(forReleaseID: chosen.id) {
             edits = kept.merged(with: edits)
         }
         let named = chosen.map { edits.applied(to: $0, toc: toc) }
         // The user's cover: this rip's, else the one kept for the release by an earlier disc or rip.
         var userCover = options.cover
-        if userCover == nil, let chosen, !chosen.isManual {
+        if userCover == nil, let chosen, chosen.sharesAlbumEdits {
             userCover = coverStore.cover(forReleaseID: chosen.id)
         }
         // A box set whose discs each take their own sleeve from the Cover Art Archive (the
@@ -642,7 +646,7 @@ public struct DiscRip {
                 let file = try cover.write(to: folder)
                 written.insert(Self.relativePath(of: file, in: folder))
                 // Only a cover given for this rip is new; one kept already would end the sleeves.
-                if options.cover != nil, let chosen, !chosen.isManual {
+                if options.cover != nil, let chosen, chosen.sharesAlbumEdits {
                     try? coverStore.remember(cover, forReleaseID: chosen.id)
                 }
                 events(.artwork(.saved([file])))
@@ -702,7 +706,7 @@ public struct DiscRip {
         // The audio's rip is whole before the data tracks are read: a drive can fail there, or
         // stop answering, and the rip is then usable all the same.
         try writeReport()
-        if !edits.isEmpty, let chosen, !chosen.isManual, options.edits != nil {
+        if !edits.isEmpty, let chosen, chosen.sharesAlbumEdits, options.edits != nil {
             try ReleaseEditsStore().remember(edits, forReleaseID: chosen.id)
         }
         if stoppedInCTDB { throw CancellationError() }

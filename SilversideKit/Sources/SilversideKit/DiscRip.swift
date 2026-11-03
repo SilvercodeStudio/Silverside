@@ -133,6 +133,9 @@ public enum DiscRipEvent: Sendable {
     case trackFinished(RipReport.Track, summary: String, seconds: Int)
     /// The control bits of every track, after the last one: pre-emphasis, digital copy permitted, four-channel audio.
     case controlBits(String)
+    /// The drive reads `readCost` times as long with the Q subchannel, so each track's first
+    /// read takes Q from every `every`-th chunk only (`TrackRipper.qEvery`).
+    case qSubchannelSampled(readCost: Double, every: Int)
     /// A data track is being saved as an ISO image: the fraction read.
     case savingDataTrack(number: Int, fraction: Double)
     case dataTrackSaved(RipReport.DataTrack)
@@ -418,6 +421,15 @@ public struct DiscRip {
         reader.readableLeadOut = try await blocking { AudioReader.sessionLeadOut(of: toc, drive: drive) }
         var ripper = TrackRipper(reader: reader, records: records)
         ripper.readsC2 = options.readsC2
+        // Measured once for each drive, at its first rip: some drives read at half speed with Q.
+        if profile.qReadCost == nil, let cost = try await blocking({ QReadCost.measure(drive: drive, toc: toc) }) {
+            profile.qReadCost = cost
+            try? profiles.save(profile)
+        }
+        ripper.qEvery = TrackRipper.qEvery(forReadCost: profile.qReadCost)
+        if ripper.qEvery > 1, let cost = profile.qReadCost {
+            events(.qSubchannelSampled(readCost: cost, every: ripper.qEvery))
+        }
         var secure = SecureRipper(ripper: ripper)
         secure.cacheFlushSectors = profile.cacheFlushSectors
         let events = self.events
@@ -537,7 +549,12 @@ public struct DiscRip {
             progress.paddedEdges = (paddedEdges(of: reports) + earlierPadding.filter { !done.contains($0.track) })
                 .sorted { ($0.track, $0.atEnd ? 1 : 0) < ($1.track, $1.atEnd ? 1 : 0) }
             try? progress.write(to: progressFile)
-            if let c2 = report.c2Sectors, !c2.isEmpty { summary += ", C2 errors in \(c2.count) sectors" }
+            if let c2 = report.c2Sectors, !c2.isEmpty {
+                summary +=
+                    report.c2Ignored == true
+                    ? ", C2 errors in \(c2.count) of \(report.sectors) sectors, too many to mean anything: not used"
+                    : ", C2 errors in \(c2.count) sectors"
+            }
             if let unreadable = report.unreadableSectors, !unreadable.isEmpty {
                 summary += ", \(unreadable.count) sectors could not be read"
             }
@@ -968,6 +985,7 @@ public struct DiscRip {
         report.suspectSectors = rip.suspectSectors
         report.unresolvedSectors = rip.unresolvedSectors
         report.c2Sectors = rip.c2Sectors
+        report.c2Ignored = rip.c2FlagsIgnored ? true : nil
         report.shiftedReads = rip.shiftedReads
         report.unreadableSectors = rip.unreadableSectors
         report.recordSubchannel(rip.subchannel)

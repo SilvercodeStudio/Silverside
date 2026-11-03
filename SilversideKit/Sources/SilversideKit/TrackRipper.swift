@@ -38,6 +38,9 @@ public struct TrackRip: Sendable {
     /// The positions in the valid ADR 1 frames of the read, the track's and the next pregap's,
     /// for its index points (`PregapFinder.indexes`). Empty if the drive did not read Q frames.
     public var qPositions: [QSubchannel.Position] = []
+    /// True if the read took Q from some chunks only, found an index after 01 there, and so
+    /// read the track's whole Q subchannel again (`TrackRipper.qEvery`).
+    public var qReadInFull = false
 }
 
 /// Rips tracks with offset correction and checks them against AccurateRip.
@@ -51,6 +54,20 @@ public struct TrackRipper {
     /// If true, the first read of each track reads its Q subchannel too, for the control bits
     /// (pre-emphasis, copy permitted, four-channel). A drive that refuses gives a read without it.
     public var readsQ = true
+
+    /// The first read takes Q from every `qEvery`-th chunk: 1 for every chunk. Some drives read
+    /// at half speed with Q (`DriveProfile.qReadCost`), so they take it from some chunks only:
+    /// enough frames for the control bits, and for any index that lasts longer than
+    /// `qEvery + 1` chunks. A track where those frames show an index after 01 then has its whole
+    /// Q subchannel read, so that a shorter index next to it is not missed.
+    public var qEvery = 1
+
+    /// `qEvery` for a drive whose reads with Q take this many times as long as without, or
+    /// 1 if they cost little more (MATSHITA and ASUS: no more; GUC0N and PLDS DS8A5SH: 2.2).
+    public static func qEvery(forReadCost cost: Double?) -> Int {
+        guard let cost, cost >= 1.6 else { return 1 }
+        return 6
+    }
 
     /// Samples read before and after each track, so other offsets can be checked.
     /// AccurateRip skips this many samples at the disc's edges.
@@ -111,14 +128,31 @@ public struct TrackRipper {
                 )
             }
         }
-        if readsC2, let withC2 = try? reader.read(positions, withC2: true, withQ: readsQ, progress: report) {
+        if readsC2,
+            let withC2 = try? reader.read(positions, withC2: true, withQ: readsQ, qEvery: qEvery, progress: report)
+        {
             // Flags that the drive gave count even if some chunks came without them.
             (read, flagged) = (withC2, withC2.c2Available || !withC2.flagged.isEmpty ? withC2.flagged : nil)
         } else {
-            read = try reader.read(positions, withC2: false, withQ: readsQ, progress: report)
+            read = try reader.read(positions, withC2: false, withQ: readsQ, qEvery: qEvery, progress: report)
+        }
+        var frames = read.q
+        var qReadInFull = false
+        if readsQ && qEvery > 1
+            && frames.contains(where: { $0.position.map { $0.track == track.number && $0.index >= 2 } ?? false })
+        {
+            frames = try reader.readQ(sectors) { done, count in
+                progress?(
+                    .readingIndexes(
+                        track: track.number,
+                        progress: ReadProgress(
+                            sectorsRead: done, sectors: count, flaggedSectors: 0, unreadableSectors: 0)
+                    ))
+            }
+            qReadInFull = true
         }
         var subchannel = SubchannelControl()
-        subchannel.add(read.q, track: track.number)
+        subchannel.add(frames, track: track.number)
         let buffer = read.samples
         // The checksum of the track as if the drive's offset were `shift` samples more.
         func checksum(shiftedBy shift: Int) -> AccurateRipChecksum {
@@ -161,6 +195,7 @@ public struct TrackRipper {
             matchingOffsets: matchingOffsets,
             c2Samples: flagged?.map { $0 - margin }.filter { (0..<length).contains($0) },
             unreadableSamples: read.unreadable.map { $0 - margin }.filter { (0..<length).contains($0) },
-            subchannel: subchannel.frames > 0 ? subchannel : nil, qPositions: read.q.compactMap(\.position))
+            subchannel: subchannel.frames > 0 ? subchannel : nil, qPositions: frames.compactMap(\.position),
+            qReadInFull: qReadInFull)
     }
 }

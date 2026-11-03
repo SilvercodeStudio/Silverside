@@ -283,10 +283,10 @@ struct StatusCell: View {
                 systemImage: "arrow.clockwise"
             )
             .foregroundStyle(Theme.warning)
-        case .testing(let fraction):
+        case .testing(let fraction), .readingIndexes(let fraction):
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
-                    Text("Test read").font(.callout)
+                    Text(state == .testing(fraction: fraction) ? "Test read" : "Index points").font(.callout)
                     Spacer()
                     Text("\(Int(fraction * 100))%").font(.callout).foregroundStyle(.secondary).monospacedDigit()
                 }

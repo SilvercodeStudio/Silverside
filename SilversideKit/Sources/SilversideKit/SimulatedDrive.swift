@@ -127,6 +127,17 @@ public final class SimulatedDrive: CDDrive {
     /// If true, C2 reads flag the bytes of corrupt and unstable sectors that read wrong.
     public var reportsC2 = false
 
+    /// With `readSpeed`, how many times as long a read takes with Q than without, as the
+    /// HL-DT-ST GUC0N and the PLDS DS8A5SH read (about 2.2).
+    public var qReadCost = 1.0
+
+    /// The sectors whose Q frames reads have asked for so far.
+    public private(set) var qSectorsRead = 0
+
+    /// If true (with `reportsC2`), C2 reads flag every byte, right or wrong: flags that say
+    /// nothing, as a drive's flags read in the wrong order did (`SectorRead.Layout`).
+    public var flagsEveryByte = false
+
     /// How many sectors the drive caches. A read of sectors that are all in the
     /// cache returns the cached data, as real drives do, and the cache removes the
     /// sectors used least recently. Zero turns the cache off.
@@ -250,7 +261,8 @@ public final class SimulatedDrive: CDDrive {
 
         var bytes = [UInt8]()
         bytes.reserveCapacity(count * CDDA.bytesPerSector)
-        var flags = [UInt8](repeating: 0, count: count * CDDA.errorFlagBytesPerSector)
+        var flags = [UInt8](
+            repeating: reportsC2 && flagsEveryByte ? 0xFF : 0, count: count * CDDA.errorFlagBytesPerSector)
         for position in firstPosition..<(firstPosition + count * CDDA.samplesPerSector) {
             let source = activeSlip.map { position >= $0.from ? position + $0.shift : position } ?? position
             var sample = samples.indices.contains(source) ? samples[source] : 0
@@ -288,6 +300,10 @@ public final class SimulatedDrive: CDDrive {
 
     public func readQSubchannel(at lba: Int, count: Int) throws -> [QSubchannel] {
         let sectors = lba..<(lba + count)
+        qSectorsRead += count
+        if let readSpeed, readSpeed > 0, qReadCost > 1 {
+            Thread.sleep(forTimeInterval: (qReadCost - 1) * Double(count) / (readSpeed * Double(CDDA.sectorsPerSecond)))
+        }
         guard sectors.clamped(to: 0..<toc.leadOutLBA) == sectors else {
             throw DriveError.sectorOutOfRange(lba: sectors.first { !(0..<toc.leadOutLBA).contains($0) }!)
         }

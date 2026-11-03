@@ -72,6 +72,58 @@ public struct SectorRead: Sendable {
         self.errorFlags = errorFlags
         self.q = q
     }
+
+    /// The order of the C2 flags and the Q subchannel after each sector's user area, in a read
+    /// that asks for both. MMC puts the flags first, as the MATSHITA and the ASUS do. The PLDS
+    /// DS8A5SH and the HL-DT-ST GUC0N put the 16 bytes of Q first (2026-11-03): read in MMC's
+    /// order, every sector then had C2 errors (Q's bits) and no valid Q frame.
+    public enum Layout: Sendable {
+        case flagsThenQ
+        case qThenFlags
+    }
+
+    /// Splits a read of `count` sectors, each its user area (2352 bytes), then its C2 flags (294
+    /// bytes) if `c2` and its Q subchannel (16 bytes, 12 used) if `q`, in `layout`'s order.
+    public init(raw: [UInt8], count: Int, c2: Bool, q: Bool, layout: Layout = .flagsThenQ) {
+        let flagBytes = c2 ? CDDA.errorFlagBytesPerSector : 0
+        let qBytes = q ? Self.qBytes : 0
+        let sectorSize = CDDA.bytesPerSector + flagBytes + qBytes
+        let qFirst = c2 && q && layout == .qThenFlags
+        self.init(audio: [])
+        audio.reserveCapacity(count * CDDA.bytesPerSector)
+        errorFlags.reserveCapacity(count * flagBytes)
+        for sector in 0..<count {
+            let start = sector * sectorSize
+            let tail = start + CDDA.bytesPerSector
+            audio += raw[start..<tail]
+            let flagStart = qFirst ? tail + qBytes : tail
+            errorFlags += raw[flagStart..<(flagStart + flagBytes)]
+            if q {
+                let qStart = qFirst ? tail : tail + flagBytes
+                self.q.append(QSubchannel(bytes: Array(raw[qStart..<(qStart + QSubchannel.byteCount)])))
+            }
+        }
+    }
+
+    /// The layout of a read of `count` sectors with C2 flags and Q: where more of its Q frames
+    /// are valid. Nil if no frame is valid at either place (a damaged stretch, for example).
+    public static func layout(of raw: [UInt8], count: Int) -> Layout? {
+        let sectorSize = CDDA.bytesPerSector + CDDA.errorFlagBytesPerSector + qBytes
+        var valid = (flagsThenQ: 0, qThenFlags: 0)
+        for sector in 0..<count {
+            let tail = sector * sectorSize + CDDA.bytesPerSector
+            func isValid(at start: Int) -> Bool {
+                QSubchannel(bytes: Array(raw[start..<(start + QSubchannel.byteCount)])).isValid
+            }
+            if isValid(at: tail + CDDA.errorFlagBytesPerSector) { valid.flagsThenQ += 1 }
+            if isValid(at: tail) { valid.qThenFlags += 1 }
+        }
+        if valid.flagsThenQ == valid.qThenFlags { return nil }
+        return valid.flagsThenQ > valid.qThenFlags ? .flagsThenQ : .qThenFlags
+    }
+
+    /// The bytes of Q subchannel that a drive returns for each sector.
+    static let qBytes = 16
 }
 
 extension CDDrive {

@@ -10,6 +10,8 @@ struct DiscGraph: View {
         var sectors: Int
         /// Sectors with a C2 error.
         var flagged: Set<Int> = []
+        /// The drive flagged nearly every sector, so the rip did not use the flags, and the graph does not draw them.
+        var c2Ignored = false
         var unreadable: Set<Int> = []
         /// Sectors that reads disagreed on, and were re-read.
         var suspect: Set<Int> = []
@@ -25,7 +27,9 @@ struct DiscGraph: View {
         var dataState: String?
         var id: Int { number }
 
-        var hasTrouble: Bool { !(flagged.isEmpty && unreadable.isEmpty && suspect.isEmpty && unresolved.isEmpty) }
+        var hasTrouble: Bool {
+            !((flagged.isEmpty || c2Ignored) && unreadable.isEmpty && suspect.isEmpty && unresolved.isEmpty)
+        }
 
         /// "12 sectors re-read, 2 never agreed, C2 in 5 sectors", for the hover text.
         var troubleText: String {
@@ -34,7 +38,11 @@ struct DiscGraph: View {
             if !unresolved.isEmpty {
                 parts.append("\(unresolved.count) " + (isVerified ? "fixed by CTDB" : "never agreed"))
             }
-            if !flagged.isEmpty { parts.append("C2 in " + Format.count(flagged.count, "sector")) }
+            if !flagged.isEmpty {
+                parts.append(
+                    "C2 in " + Format.count(flagged.count, "sector") + (c2Ignored ? " (too many to mean anything)" : "")
+                )
+            }
             if !unreadable.isEmpty { parts.append(Format.count(unreadable.count, "sector") + " unreadable") }
             return parts.isEmpty ? "no trouble" : parts.joined(separator: ", ")
         }
@@ -147,7 +155,9 @@ struct DiscGraph: View {
                 guard sector >= 0, sector < track.sectors else { return nil }
                 return min(columns - 1, Int(Double(sector) / perColumn))
             }
-            for sector in track.flagged { if let column = column(of: sector) { counts[column].flagged += 1 } }
+            for sector in track.flagged where !track.c2Ignored {
+                if let column = column(of: sector) { counts[column].flagged += 1 }
+            }
             for sector in track.suspect where !track.unresolved.contains(sector) {
                 if let column = column(of: sector) { counts[column].suspect += 1 }
             }
@@ -184,6 +194,7 @@ struct DiscGraph: View {
         let audio = report.tracks.map { track in
             var row = Track(number: track.number, sectors: track.sectors)
             row.flagged = Set(track.c2Sectors ?? [])
+            row.c2Ignored = track.c2Ignored == true
             row.unreadable = Set(track.unreadableSectors ?? [])
             row.suspect = Set(track.suspectSectors)
             row.unresolved = Set(track.unresolvedSectors)

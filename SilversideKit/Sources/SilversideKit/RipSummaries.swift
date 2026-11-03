@@ -252,3 +252,13 @@ extension RipReport {
         return text
     }
 }
+
+extension TrackRipper {
+    /// The log's line for a rip whose first reads take Q from some chunks only.
+    public static func qSamplingSummary(readCost: Double, every: Int) -> String {
+        String(
+            format: "Q subchannel: this drive reads %.1f times as long with it, so each track's first read"
+                + " takes it from one chunk in %d, and reads it in full where an index point shows",
+            readCost, every)
+    }
+}

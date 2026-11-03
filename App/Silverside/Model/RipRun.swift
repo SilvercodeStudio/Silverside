@@ -23,6 +23,8 @@ final class RipRun {
         case rereading(round: Int, maximumRounds: Int, suspectSectors: Int)
         /// The test read of test and copy, after the rip's own reads.
         case testing(fraction: Double)
+        /// The track's Q subchannel read in full for its index points, after the first read.
+        case readingIndexes(fraction: Double)
         case finished(RipReport.Track)
         case skipped
     }
@@ -225,7 +227,7 @@ final class RipRun {
         guard let currentTrack else { return false }
         switch trackStates[currentTrack] {
         case .reading(let pass, _, _): return pass > 1
-        case .rereading, .testing: return true
+        case .rereading, .testing, .readingIndexes: return true
         default: return false
         }
     }
@@ -579,6 +581,7 @@ final class RipRun {
             case .rereading(let round, let maximum, let suspects):
                 text += " · re-reading \(Format.count(suspects, "sector")), round \(round) of \(maximum)"
             case .testing: text += " · test read"
+            case .readingIndexes: text += " · index points"
             default: break
             }
             return text
@@ -701,6 +704,8 @@ final class RipRun {
                     + summary)
         case .controlBits(let summary):
             add("Control bits: " + summary)
+        case .qSubchannelSampled(let cost, let every):
+            add(TrackRipper.qSamplingSummary(readCost: cost, every: every))
         case .savingDataTrack(let number, let fraction):
             // After the audio's report, and the CTDB check.
             phase = .ripping
@@ -832,6 +837,10 @@ final class RipRun {
         case .testing(let track, let progress):
             let fraction = progress.sectors > 0 ? Double(progress.sectorsRead) / Double(progress.sectors) : 0
             trackStates[track] = .testing(fraction: fraction)
+            onProgress?()
+        case .readingIndexes(let track, let progress):
+            let fraction = progress.sectors > 0 ? Double(progress.sectorsRead) / Double(progress.sectors) : 0
+            trackStates[track] = .readingIndexes(fraction: fraction)
             onProgress?()
         }
     }

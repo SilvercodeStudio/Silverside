@@ -48,6 +48,43 @@ struct C2Tests {
         #expect(rip.rounds > 0)
     }
 
+    /// A drive that flags every sector says nothing with its flags: the track is read twice and
+    /// not re-read sector by sector, and a sector that reads differently is still found.
+    @Test func ignoresFlagsOnEverySector() throws {
+        for withRecords in [false, true] {
+            var (secure, toc, samples, drive) = try setUp(corrupt: [], withRecords: withRecords)
+            drive.flagsEveryByte = true
+            // A flush the disc has room for, so that the second read counts as independent.
+            secure.cacheFlushSectors = 100
+            let track = toc.tracks[1]
+            let rip = try secure.rip(track)
+            let sectors = toc.sectorRange(of: track)
+            #expect(rip.c2Sectors?.count == sectors.count)
+            #expect(rip.c2FlagsIgnored && rip.usableC2Samples.isEmpty)
+            #expect(rip.suspectSectors.isEmpty && rip.rounds == 0)
+            if case .accurate = rip.status {
+                #expect(withRecords)
+            } else {
+                #expect(!withRecords && rip.status == .consistent, "\(rip.status)")
+            }
+            #expect(rip.samples == Array(samples[(sectors.lowerBound * 588)..<(sectors.upperBound * 588)]))
+            #expect(TrackAudio(rip).alternatives.isEmpty)
+        }
+        let (secure, toc, _, drive) = try setUp(corrupt: [], withRecords: false)
+        drive.flagsEveryByte = true
+        drive.unstableSectors = [600]
+        let rip = try secure.rip(toc.tracks[1])
+        #expect(rip.c2FlagsIgnored && rip.suspectSectors == [140])
+    }
+
+    @Test func flagsMeanNothingOnNearlyEverySector() {
+        #expect(SecureRipper.c2FlagsMeanNothing(flagged: 1000, sectors: 1000))
+        #expect(SecureRipper.c2FlagsMeanNothing(flagged: 900, sectors: 1000))
+        #expect(!SecureRipper.c2FlagsMeanNothing(flagged: 899, sectors: 1000))
+        #expect(!SecureRipper.c2FlagsMeanNothing(flagged: 273, sectors: 15037))
+        #expect(!SecureRipper.c2FlagsMeanNothing(flagged: 0, sectors: 0))
+    }
+
     /// Four sectors that read wrong every time, at the same place in four rows: 4 errors in
     /// each of their columns, too many for 6 syndromes, unless C2 shows where they are.
     @Test func repairsWithC2Erasures() async throws {

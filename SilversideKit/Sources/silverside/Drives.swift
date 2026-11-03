@@ -120,6 +120,12 @@ struct Drives: ParsableCommand {
                         : String(format: "  Cache: about %d sectors (%.1f MB)", sectors, megabytes))
                 print("  Cache flush before re-reads: \(profile.cacheFlushSectors) sectors")
             }
+            if let cost = profile.qReadCost {
+                let every = TrackRipper.qEvery(forReadCost: cost)
+                print(
+                    String(format: "  Q subchannel: reads take %.1f times as long with it", cost)
+                        + (every > 1 ? "; first reads take it from one chunk in \(every)" : ""))
+            }
         }
     }
 

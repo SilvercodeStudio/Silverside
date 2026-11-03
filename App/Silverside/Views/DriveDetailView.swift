@@ -1004,9 +1004,10 @@ struct StatusBar: View {
             }
             switch rip.trackStates[track.number] {
             case .reading(_, _, let fraction): row.readFraction = fraction
-            case .rereading, .testing: row.readFraction = 1
+            case .rereading, .testing, .readingIndexes: row.readFraction = 1
             case .finished(let report):
                 row.readFraction = 1
+                row.c2Ignored = report.c2Ignored == true
                 let verdict = TrackVerdict(report, ctdb: rip.ctdb)
                 row.isVerified = verdict == .verified || verdict == .repaired
             case .skipped: row.isSkipped = true

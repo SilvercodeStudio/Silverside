@@ -160,7 +160,11 @@ extension RipReport {
                         ? "\(track.fullReads) + \(track.rereadRounds) rounds" : String(track.fullReads))
             let suspect = track.suspectSectors.isEmpty ? "" : String(track.suspectSectors.count)
             cells.append(suspect + (unresolved > 0 ? " (\(unresolved) unresolved)" : ""))
-            cells.append(track.c2Sectors.map { $0.isEmpty ? "" : String($0.count) } ?? "not read")
+            cells.append(
+                track.c2Sectors.map {
+                    $0.isEmpty ? "" : String($0.count) + (track.c2Ignored == true ? " (not used)" : "")
+                }
+                    ?? "not read")
             cells.append(track.unreadableSectors.map { $0.isEmpty ? "" : String($0.count) } ?? "")
             cells.append(track.repairedSamples > 0 ? String(track.repairedSamples) : "")
             cells.append(track.isrc ?? "")
@@ -171,6 +175,13 @@ extension RipReport {
             "Reads: whole reads of the track, then rounds of re-reads of its suspect sectors. Suspect, C2, and"
                 + " unreadable: sectors. Repaired: samples.")
         lines.append("")
+        if tracks.contains(where: { $0.c2Ignored == true }) {
+            lines.append(
+                "C2 not used: the drive flagged C2 errors in nearly every sector. Some drives do this on some discs"
+                    + " even when the audio is right, so the flags say nothing about where errors are. Reads that"
+                    + " disagree, and AccurateRip and CTDB, still find errors.")
+            lines.append("")
+        }
         if let kept = keptText {
             lines.append(kept)
             lines.append("")

@@ -53,6 +53,8 @@ public struct SecureTrackRip: Sendable {
     public var subchannel: SubchannelControl?
     /// The positions in the valid ADR 1 frames of the first read (see `TrackRip.qPositions`).
     public var qPositions: [QSubchannel.Position] = []
+    /// True if the track's whole Q subchannel was read again for its index points (`TrackRip.qReadInFull`).
+    public var qReadInFull = false
     /// A requested cache flush could not read enough independent sectors.
     public var cacheFlushIncomplete = false
 
@@ -64,6 +66,13 @@ public struct SecureTrackRip: Sendable {
 
     /// The sectors, counted from the track's start, with C2 errors in the first read.
     public var c2Sectors: [Int]? { c2Samples.map { Array(Set($0.map { $0 / CDDA.samplesPerSector })).sorted() } }
+
+    /// True if the drive flagged C2 errors in nearly every sector (`SecureRipper.c2FlagsMeanNothing`),
+    /// so the flags were not used: no sector is suspect, or a repair's erasure, for its flag alone.
+    public var c2FlagsIgnored = false
+
+    /// The samples whose C2 flags count: none when the flags were ignored.
+    public var usableC2Samples: [Int] { c2FlagsIgnored ? [] : c2Samples ?? [] }
 }
 
 /// Rips a track, and re-reads the sectors that read differently until the track
@@ -109,6 +118,21 @@ public struct SecureRipper {
     /// Extra reads of the whole track when a read is shifted.
     public var maximumShiftedReads = 2
 
+    /// A track with C2 flags in at least this share of its sectors has flags that say nothing
+    /// (see `c2FlagsMeanNothing`).
+    public var meaninglessC2Share = 0.9
+
+    /// True if C2 flags in `flagged` of a track's `sectors` say nothing about where errors are.
+    /// A scratch flags a few hundred sectors, not a whole track. Flags on every sector come
+    /// from a drive that reports them wrong: the PLDS DS8A5SH and the HL-DT-ST GUC0N, read in
+    /// the wrong order (`SectorRead.Layout`), gave them on every track of discs that were
+    /// accurate in AccurateRip. Taken as suspects, such flags would make the secure rip read
+    /// every sector again and again, and make every sample a CTDB erasure, more than any
+    /// repair can take.
+    public static func c2FlagsMeanNothing(flagged: Int, sectors: Int, share: Double = 0.9) -> Bool {
+        sectors > 0 && Double(flagged) >= share * Double(sectors)
+    }
+
     public init(ripper: TrackRipper) {
         self.ripper = ripper
     }
@@ -153,6 +177,12 @@ public struct SecureRipper {
             track: track, samples: first.samples, status: .consistent, suspectSectors: [], unresolvedSectors: [],
             rounds: 0, matchingOffsets: first.matchingOffsets, c2Samples: first.c2Samples,
             unreadableSamples: first.unreadableSamples, subchannel: first.subchannel, qPositions: first.qPositions)
+        result.qReadInFull = first.qReadInFull
+        if let flagged = result.c2Sectors {
+            result.c2FlagsIgnored = Self.c2FlagsMeanNothing(
+                flagged: flagged.count, sectors: ripper.reader.toc.sectorRange(of: track).count,
+                share: meaninglessC2Share)
+        }
         if case .accurate(let v1, let v2) = first.verification {
             result.status = .accurate(v1Confidence: v1, v2Confidence: v2)
             return result
@@ -174,9 +204,11 @@ public struct SecureRipper {
         var base = first.samples
         var versions = [Int: Versions]()
         // Sectors with C2 errors are suspect even if every read agrees, so they are re-read
-        // too. A sector that could not be read has no version yet: its silence is not data.
+        // too, unless the drive flagged nearly all of them. A sector that could not be read
+        // has no version yet: its silence is not data.
+        let c2Suspects = result.c2FlagsIgnored ? [] : result.c2Sectors ?? []
         func seedSuspectSectors(unreadable: [Int]) {
-            for index in result.c2Sectors ?? [] where versions[index] == nil {
+            for index in c2Suspects where versions[index] == nil {
                 versions[index] = Versions()
                 versions[index]!.add(block(base, index))
             }

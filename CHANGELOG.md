@@ -30,9 +30,24 @@ command-line tool.
   hidden track" before a rip, and a chip in the result says the disc has
   one. Before, the track was ripped and encoded, but only the log and the
   report said so.
+- Rips are almost twice as fast in drives that read at half speed when they
+  read the Q subchannel too (the HL-DT-ST GUC0N and PLDS DS8A5SH). Silverside
+  times this at a drive's first rip. Such a drive reads the Q subchannel in
+  one stretch of each track in six, which is enough for the track's flags
+  and index points, and reads all of it only for a track where an index
+  point shows.
+- A drive that flags C2 errors in nearly every sector of a track no longer
+  makes a secure rip read the whole track again, sector by sector. Such
+  flags say nothing about where errors are, so they are not used for that
+  track, and the log and the report say so. The disc graph no longer fills
+  the track with "Flagged by the drive".
 
 ### Fixed
 
+- In some drives (the PLDS DS8A5SH and the HL-DT-ST GUC0N), every
+  sector showed C2 errors, and the rip had none of the disc's Q subchannel
+  (pre-emphasis marked there only, index points). These drives return the
+  two in the other order. The audio was not affected.
 - In some drives (the MATSHITA UJ260AF), a CD+G disc did not get its logo:
   the drive gave the wrong subchannel for audio it had just read. The look
   before a rip now reads the subchannel first.

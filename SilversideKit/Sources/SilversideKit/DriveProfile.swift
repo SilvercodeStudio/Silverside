@@ -31,6 +31,9 @@ public struct DriveProfile: Codable, Equatable, Sendable {
     public var observations: [Observation] = []
     /// The drive's cache, in sectors, as `CacheProbe` measured it.
     public var cacheSectors: Int?
+    /// How many times as long the drive's reads take with the Q subchannel, as `QReadCost`
+    /// measured it at the first rip. Nil if not measured yet.
+    public var qReadCost: Double?
 
     /// Sectors to read far away so that the cache holds none of a track: twice the
     /// measured cache, for a margin, or 4,000 (more than drives were seen to cache).
@@ -53,6 +56,7 @@ public struct DriveProfile: Codable, Equatable, Sendable {
         try container.encode(listedOffset, forKey: .listedOffset)
         try container.encode(observations, forKey: .observations)
         try container.encode(cacheSectors, forKey: .cacheSectors)
+        try container.encode(qReadCost, forKey: .qReadCost)
     }
 
     /// The key for this drive in a `DriveProfileStore`.

@@ -11,6 +11,10 @@ public enum RipEvent: Equatable, Sendable {
     /// The test read of test and copy: one more read of the whole track, after the rip, for a
     /// CRC-32 to compare with the copy's.
     case testing(track: Int, progress: ReadProgress)
+    /// A read of the track's Q subchannel alone, for its index points: after a first read that
+    /// took Q from some chunks only (`TrackRipper.qEvery`) and found an index after 01 there.
+    /// The progress counts sectors.
+    case readingIndexes(track: Int, progress: ReadProgress)
 }
 
 /// How far a read has come, as `AudioReader` reports it after each chunk.

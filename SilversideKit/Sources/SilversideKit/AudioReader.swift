@@ -75,10 +75,12 @@ public struct AudioReader {
     }
 
     /// Reads the true samples at the given positions, with C2 error flags if `withC2`, and the
-    /// sectors' Q frames if `withQ`. If `unreadableRetries` is set, a sector that cannot be read
-    /// is silence, not an error.
+    /// sectors' Q frames if `withQ`: in every chunk, or in every `qEvery`-th chunk only, for a
+    /// drive that reads slower with Q (`DriveProfile.qReadCost`). If `unreadableRetries` is set,
+    /// a sector that cannot be read is silence, not an error.
     public func read(
-        _ positions: Range<Int>, withC2: Bool, withQ: Bool = false, progress: ((ReadProgress) -> Void)? = nil
+        _ positions: Range<Int>, withC2: Bool, withQ: Bool = false, qEvery: Int = 1,
+        progress: ((ReadProgress) -> Void)? = nil
     ) throws -> Read {
         var result = Read(samples: [UInt32](repeating: 0, count: positions.count))
         result.c2Available = withC2
@@ -115,11 +117,15 @@ public struct AudioReader {
         // Include optional payloads in the USB transfer limit, not just the audio.
         let sectorBytes = CDDA.bytesPerSector + (withC2 ? CDDA.errorFlagBytesPerSector : 0) + (withQ ? 16 : 0)
         let chunkSize = max(1, min(sectorsPerRead, 65_536 / sectorBytes))
+        var chunks = 0
         for part in parts {
             for lba in stride(from: part.lowerBound, to: part.upperBound, by: chunkSize) {
                 try stop?.check()
                 let count = min(chunkSize, part.upperBound - lba)
-                let (sectors, unreadable, hasFlags) = try readChunk(at: lba, count: count, extras: &extras)
+                let asksQ = chunks % max(1, qEvery) == 0
+                chunks += 1
+                let (sectors, unreadable, hasFlags) = try readChunk(
+                    at: lba, count: count, asksQ: asksQ, extras: &extras)
                 if withC2 && !hasFlags { result.c2Available = false }
                 let (bytes, flags) = (sectors.audio, sectors.errorFlags)
                 result.q += sectors.q
@@ -181,11 +187,11 @@ public struct AudioReader {
     /// Reads one chunk. If it fails, and `unreadableRetries` is set, reads it sector by
     /// sector. `hasFlags` is false if a sector that was read came without its C2 flags.
     private func readChunk(
-        at lba: Int, count: Int, extras: inout Extras
+        at lba: Int, count: Int, asksQ: Bool = true, extras: inout Extras
     ) throws -> (sectors: SectorRead, unreadable: [Int], hasFlags: Bool) {
         let flagBytes = CDDA.errorFlagBytesPerSector
         do {
-            let sectors = try readRaw(at: lba, count: count, extras: &extras)
+            let sectors = try readRaw(at: lba, count: count, asksQ: asksQ, extras: &extras)
             return (sectors, [], sectors.errorFlags.count == count * flagBytes)
         } catch DriveError.readFailed where unreadableRetries != nil {
             var sectors = SectorRead(audio: [])
@@ -197,7 +203,7 @@ public struct AudioReader {
                 for _ in 0...max(0, unreadableRetries!) where data == nil {
                     try stop?.check()
                     do {
-                        data = try readRaw(at: sector, count: 1, extras: &extras)
+                        data = try readRaw(at: sector, count: 1, asksQ: asksQ, extras: &extras)
                     } catch DriveError.readFailed {
                         continue
                     }
@@ -217,14 +223,15 @@ public struct AudioReader {
         }
     }
 
-    /// Reads sectors with the parts that `extras` asks for. If that fails, tries again
-    /// without the parts that the drive has not given yet, one at a time and then together,
-    /// and counts a read that then works as a refusal of each part left out.
-    private func readRaw(at lba: Int, count: Int, extras: inout Extras) throws -> SectorRead {
+    /// Reads sectors with the parts that `extras` asks for (Q only if `asksQ`). If that fails,
+    /// tries again without the parts that the drive has not given yet, one at a time and then
+    /// together, and counts a read that then works as a refusal of each part left out.
+    private func readRaw(at lba: Int, count: Int, asksQ: Bool = true, extras: inout Extras) throws -> SectorRead {
         // As asked, then without Q, without C2, and without both, for each part not yet given:
         // a drive that refuses one part keeps the other.
+        let wantsQ = extras.q && asksQ
         let c2Choices = extras.c2 && !extras.c2Works ? [true, false] : [extras.c2]
-        let qChoices = extras.q && !extras.qWorks ? [true, false] : [extras.q]
+        let qChoices = wantsQ && !extras.qWorks ? [true, false] : [wantsQ]
         let attempts = c2Choices.flatMap { c2 in qChoices.map { q in (c2: c2, q: q) } }
         var failure: any Error = DriveError.readFailed(lba: lba)
         for attempt in attempts {
@@ -232,7 +239,7 @@ public struct AudioReader {
                 let read = try drive.readAudioSectors(at: lba, count: count, c2: attempt.c2, q: attempt.q)
                 if attempt.q { extras.qWorks = true }
                 if attempt.c2 { extras.c2Works = true }
-                if extras.q && !attempt.q {
+                if wantsQ && !attempt.q {
                     extras.qRefusals += 1
                     if extras.qRefusals >= Extras.refusalsToStop { extras.q = false }
                 }
@@ -248,6 +255,21 @@ public struct AudioReader {
             }
         }
         throw failure
+    }
+
+    /// Reads the Q frames of `sectors` (drive sectors), a chunk at a time, for a track's index
+    /// points after a read that took Q from some chunks only. A chunk that cannot be read gives
+    /// no frames. `progress` hears the sectors read so far, and the count.
+    public func readQ(_ sectors: Range<Int>, progress: ((Int, Int) -> Void)? = nil) throws -> [QSubchannel] {
+        var frames = [QSubchannel]()
+        let chunkSize = max(1, sectorsPerRead)
+        for lba in stride(from: sectors.lowerBound, to: sectors.upperBound, by: chunkSize) {
+            try stop?.check()
+            let count = min(chunkSize, sectors.upperBound - lba)
+            if let read = try? drive.readQSubchannel(at: lba, count: count) { frames += read }
+            progress?(lba + count - sectors.lowerBound, sectors.count)
+        }
+        return frames
     }
 
     public func readTrack(_ track: TOC.Track) throws -> [UInt32] {

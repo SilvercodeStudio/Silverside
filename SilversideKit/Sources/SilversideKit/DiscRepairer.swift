@@ -31,8 +31,8 @@ public struct TrackAudio: Sendable {
     }
 
     /// From a secure rip: its samples, with the other versions of its suspect sectors.
-    /// Samples with C2 errors, or from sectors that could not be read, are suspect too, with
-    /// no other value if no read gave one.
+    /// Samples with C2 errors (unless the rip ignored the drive's flags), or from sectors that
+    /// could not be read, are suspect too, with no other value if no read gave one.
     public init(_ rip: SecureTrackRip) {
         var alternatives = [Int: [UInt32]]()
         for (sector, versions) in rip.sectorVersions {
@@ -42,7 +42,7 @@ public struct TrackAudio: Sendable {
                 if !others.isEmpty { alternatives[sample] = others }
             }
         }
-        for sample in (rip.c2Samples ?? []) + rip.unreadableSamples where alternatives[sample] == nil {
+        for sample in rip.usableC2Samples + rip.unreadableSamples where alternatives[sample] == nil {
             alternatives[sample] = []
         }
         self.init(samples: rip.samples, alternatives: alternatives)

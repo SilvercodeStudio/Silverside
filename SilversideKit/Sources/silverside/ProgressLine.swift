@@ -30,6 +30,10 @@ final class ProgressLine {
             // The test read comes after every other read of the track: pass 0 stands for it.
             guard let line = readLine(progress, pass: 0, name: "test read, to compare") else { return }
             text = line
+        case .readingIndexes(_, let progress):
+            // After the first read, before any other: pass -1 stands for it.
+            guard let line = readLine(progress, pass: -1, name: "Q subchannel, for index points") else { return }
+            text = line
         case .rereading(_, let round, let maximum, let suspects, let versions):
             pass = nil
             text =

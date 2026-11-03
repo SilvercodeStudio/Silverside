@@ -131,8 +131,13 @@ public final class IOKitDrive: CDDrive {
         try readAudioSectors(at: lba, count: count, c2: false, q: true).q
     }
 
+    /// The order of the C2 flags and Q in a read with both, as the drive's last read that
+    /// showed it (`SectorRead.layout(of:count:)`). MMC's order until a read shows otherwise.
+    private var layout = SectorRead.Layout.flagsThenQ
+
     /// Reads the user area, and the C2 flags and Q subchannel as asked, in one command. Each
-    /// sector comes back as its user area, then its flags, then 16 bytes of Q (12 used).
+    /// sector comes back as its user area, then its flags, then 16 bytes of Q (12 used), or
+    /// with Q before the flags in some drives (`SectorRead.Layout`).
     public func readAudioSectors(at lba: Int, count: Int, c2: Bool, q: Bool) throws -> SectorRead {
         guard lba >= 0 else { throw DriveError.sectorOutOfRange(lba: lba) }
         let flagBytes = c2 ? CDDA.errorFlagBytesPerSector : 0
@@ -156,19 +161,8 @@ public final class IOKitDrive: CDDrive {
         }
         guard request.bufferLength == bytes.count else { throw DriveError.readFailed(lba: lba) }
         guard c2 || q else { return SectorRead(audio: bytes) }
-        var read = SectorRead(audio: [])
-        read.audio.reserveCapacity(count * CDDA.bytesPerSector)
-        read.errorFlags.reserveCapacity(count * flagBytes)
-        for sector in 0..<count {
-            let start = sector * sectorSize
-            read.audio += bytes[start..<(start + CDDA.bytesPerSector)]
-            read.errorFlags += bytes[(start + CDDA.bytesPerSector)..<(start + CDDA.bytesPerSector + flagBytes)]
-            if q {
-                let qStart = start + CDDA.bytesPerSector + flagBytes
-                read.q.append(QSubchannel(bytes: Array(bytes[qStart..<(qStart + QSubchannel.byteCount)])))
-            }
-        }
-        return read
+        if c2 && q, let shown = SectorRead.layout(of: bytes, count: count) { layout = shown }
+        return SectorRead(raw: bytes, count: count, c2: c2, q: q, layout: layout)
     }
 
     /// Reads the user area with the raw P–W subchannel, in one command: the ASUS gives the

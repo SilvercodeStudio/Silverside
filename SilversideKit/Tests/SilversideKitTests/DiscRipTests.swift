@@ -18,10 +18,13 @@ final class DiscRipEvents: @unchecked Sendable {
 struct DiscRipTests {
     /// A rip of a simulated disc into a temporary folder, and the events it sent. Offline,
     /// unless `web` answers the lookups. With `hidesFirstTrack`, the first of `trackSectors`
-    /// is audio before track 1. `prepare` can damage the drive.
+    /// is audio before track 1. `prepare` can damage the drive. `qReadCost` goes into the
+    /// drive's profile (1: no cost, so that timing noise cannot change a test's reads); nil
+    /// leaves it to be measured.
     func rip(
         trackSectors: [Int] = [800, 900], hidesFirstTrack: Bool = false, tracks: [Int]? = nil, web: FakeWeb? = nil,
-        cover: CoverImage? = nil, coverStore: ReleaseCoverStore? = nil, prepare: (SimulatedDrive) -> Void = { _ in },
+        cover: CoverImage? = nil, coverStore: ReleaseCoverStore? = nil, qReadCost: Double? = 1,
+        prepare: (SimulatedDrive) -> Void = { _ in },
         configure: (inout DiscRipOptions) -> Void = { _ in }
     ) async throws -> (DiscRipResult, [DiscRipEvent], samples: [UInt32], root: URL) {
         let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
@@ -43,6 +46,7 @@ struct DiscRipTests {
         var profiles = try DriveProfileStore(url: root.appending(path: "DriveProfiles.json"))
         var profile = DriveProfile(vendor: "SIM", product: "DRIVE", revision: "1.0")
         profile.cacheSectors = drive.cacheSectors
+        profile.qReadCost = qReadCost
         try profiles.save(profile)
         var rip = DiscRip(
             drive: drive, identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"),
@@ -277,6 +281,26 @@ struct DiscRipTests {
     }
 
     /// The *Denon Audio Technical CD* sets pre-emphasis in the Q subchannel and not in the TOC.
+    /// A drive that flags C2 errors in every sector: the report and the log say the flags were not used.
+    @Test func saysWhenC2FlagsWereNotUsed() async throws {
+        let (result, events, _, root) = try await rip(
+            prepare: {
+                $0.reportsC2 = true
+                $0.flagsEveryByte = true
+            },
+            configure: { $0.readsC2 = true })
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(result.report.tracks.map(\.c2Ignored) == [true, true])
+        #expect(result.report.tracks.allSatisfy { $0.suspectSectors.isEmpty })
+        let summaries = events.compactMap { event -> String? in
+            if case .trackFinished(_, let summary, _) = event { return summary }
+            return nil
+        }
+        #expect(summaries[1].contains("C2 errors in 900 of 900 sectors, too many to mean anything: not used"))
+        #expect(result.report.markdown.contains("| 900 (not used) |"))
+        #expect(result.report.markdown.contains("C2 not used: the drive flagged C2 errors in nearly every sector."))
+    }
+
     /// The rip finds it in the first read's Q frames, and the report and the log say where it was.
     @Test func findsPreEmphasisInTheQSubchannelOnly() async throws {
         let (result, events, _, root) = try await rip(trackSectors: [800, 900, 700]) { $0.qControl = [2: 0x1] }

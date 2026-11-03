@@ -67,6 +67,9 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var unresolvedSectors: [Int]
         /// Sectors, counted from the track's start, with C2 errors in the first read. Nil if C2 was not read.
         public var c2Sectors: [Int]?
+        /// True if the drive flagged C2 errors in nearly every sector, so the rip did not use
+        /// the flags (`SecureTrackRip.c2FlagsIgnored`).
+        public var c2Ignored: Bool?
         /// The shifts, in samples, of reads that lost their place and were left out.
         public var shiftedReads: [Int]?
         /// Sectors, counted from the track's start, that the first read could not read.

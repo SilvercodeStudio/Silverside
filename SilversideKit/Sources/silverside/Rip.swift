@@ -384,6 +384,8 @@ private final class RipPrinter: @unchecked Sendable {
                     + summary)
         case .controlBits(let summary):
             Swift.print("Control bits: " + summary)
+        case .qSubchannelSampled(let cost, let every):
+            Swift.print(TrackRipper.qSamplingSummary(readCost: cost, every: every))
         case .savingDataTrack(let number, let fraction):
             progress.showText(String(format: "Data track %d: %3.0f%%", number, fraction * 100))
         case .dataTrackSaved(let track):

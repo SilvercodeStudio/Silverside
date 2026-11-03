@@ -231,7 +231,6 @@ struct AlbumHeader: View {
     /// The cover's file while Quick Look shows it.
     @State private var coverPreview: URL?
     @State private var archivePickerShown = false
-    @State private var customSetShown = false
     /// The picker starts with another release's images (Other Releases' Cover Art…).
     @State private var pickerStartsWithOthers = false
     /// The release whose images the picker starts with, as the badge asks; nil for the usual.
@@ -477,13 +476,7 @@ struct AlbumHeader: View {
                 }
                 .padding(.top, 2)
                 .task(id: copiesKey) { await model.findEarlierCopies(for: slot, stamp: copiesKey.stamp) }
-                .sheet(isPresented: $customSetShown) {
-                    CustomSetSheet(
-                        toc: disc.toc, albumTitle: disc.cdText?.titles[0] ?? disc.title, artist: disc.artist,
-                        current: disc.customSet,
-                        onSave: { set, position in model.putInCustomSet(slot, set: set, at: position) },
-                        onLeave: { slot.disc?.leaveCustomSet() })
-                }
+
             }
         }
     }
@@ -696,6 +689,21 @@ struct AlbumHeader: View {
     }
 
     @ViewBuilder private var lookupChip: some View {
+        let canChange = slot.rip?.isRunning != true
+        // A disc in a set of the user's own is the set's, whatever MusicBrainz found.
+        if let set = disc.customSet, let position = set.disc(with: disc.toc)?.position {
+            Chip(
+                text: "Disc \(position) of \(set.discCount) · your set", systemImage: "square.stack",
+                help: "This disc is in a set of your own, “\(set.title)”"
+                    + (disc.lookupChoice == nil ? "" : ", in place of the release MusicBrainz found for it")
+                    + ". Click to change its place, or to take it out.",
+                action: canChange ? { model.customSetTarget = .drive(slot) } : nil)
+        } else {
+            lookupChips(canChange: canChange)
+        }
+    }
+
+    @ViewBuilder private func lookupChips(canChange: Bool) -> some View {
         switch disc.lookup {
         case .notLookedUp:
             Chip(text: "MusicBrainz · not looked up", systemImage: "minus")
@@ -724,27 +732,17 @@ struct AlbumHeader: View {
                 (disc.namesFromEarlierRip
                     ? "The names and the cover are those you gave your newest rip of this disc. " : "")
                     + "The files get no MusicBrainz IDs. Edit the names here; they are kept with the rip.")
-            let canChange = slot.rip?.isRunning != true
-            if let set = disc.customSet, let position = set.disc(with: disc.toc)?.position {
+            if let (set, position) = disc.suggestedSet {
                 Chip(
-                    text: "Disc \(position) of \(set.discCount) · your set", systemImage: "square.stack",
-                    help:
-                        "This disc is in a set of your own, “\(set.title)”. Click to change its place, or to take it out.",
-                    action: canChange ? { customSetShown = true } : nil)
-            } else {
-                if let (set, position) = disc.suggestedSet {
-                    Chip(
-                        text: "Add to “\(set.title)” as Disc \(position)", systemImage: "plus.square.on.square",
-                        help: "Its CD-Text names it disc \(position) of a set you made for another disc of the box.",
-                        action: canChange ? { model.putInCustomSet(slot, set: set, at: position) } : nil)
-                }
-                Chip(
-                    text: "Part of a Set…", systemImage: "square.stack",
-                    help:
-                        "Put this disc in a set of your own with the other discs of its box, so they become one album.",
-                    action: canChange ? { customSetShown = true } : nil)
-                if let release = disc.shownRelease { ResultChips.addToMusicBrainz(release, toc: disc.toc) }
+                    text: "Add to “\(set.title)” as Disc \(position)", systemImage: "plus.square.on.square",
+                    help: "Its CD-Text names it disc \(position) of a set you made for another disc of the box.",
+                    action: canChange ? { model.putInCustomSet(slot, set: set, at: position) } : nil)
             }
+            Chip(
+                text: "Part of a Set…", systemImage: "square.stack",
+                help: "Put this disc in a set of your own with the other discs of its box, so they become one album.",
+                action: canChange ? { model.customSetTarget = .drive(slot) } : nil)
+            if let release = disc.shownRelease { ResultChips.addToMusicBrainz(release, toc: disc.toc) }
             ResultChips.addDiscID(toc: disc.toc)
         case .failed(let error):
             Chip(

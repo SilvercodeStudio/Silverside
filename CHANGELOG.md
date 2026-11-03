@@ -25,7 +25,9 @@ command-line tool.
   discs, and the discs become one album, as a MusicBrainz set's do. When
   CD-Text's album title gives the disc's number ("Seven Classic LPs [Disc 2]"),
   the set and the number are filled in, and the next disc of the box offers
-  to join the set at once. An earlier rip can join a set too.
+  to join the set at once. An earlier rip can join a set too, and so can a
+  disc that MusicBrainz has, from Disc › Put in Custom Set…: a disc in your
+  set is named as the set's, whatever MusicBrainz finds for it.
 
 ### Changed
 

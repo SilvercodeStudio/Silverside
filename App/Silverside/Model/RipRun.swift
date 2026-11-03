@@ -648,6 +648,8 @@ final class RipRun {
                             ? "disc not in the database"
                             : "\($0.entries) entries, up to \($0.mostSubmissions) submissions"
                     } ?? "not checked"))
+        case .customSet(let set, let position):
+            add("Your set: \(set.artist) – \(set.title), disc \(position) of \(set.discCount)")
         case .release(let lookup):
             if let chosen = lookup?.chosen {
                 add("MusicBrainz: " + chosen.summary(for: disc.toc))

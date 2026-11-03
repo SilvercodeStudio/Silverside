@@ -70,6 +70,10 @@ struct AppCommands: Commands {
             Button("Repair Rip…") { if let rip = model.selectedRip { model.startRepair(rip) } }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(!canRepair)
+            Button(model.customSetCandidateIsInSet ? "Change Custom Set…" : "Put in Custom Set…") {
+                model.customSetTarget = model.customSetCandidate
+            }
+            .disabled(model.customSetCandidate == nil)
             Button("Change Release…") { model.changingRelease = model.selectedRip }
                 .disabled(model.selectedRip.map(model.canChangeRelease) != true)
             Divider()

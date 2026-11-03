@@ -116,6 +116,8 @@ public enum DiscRipEvent: Sendable {
     }
     /// The MusicBrainz lookup. Nil if the rip is offline.
     case release(ReleaseLookupResult?)
+    /// The disc is in a set of the user's own, at `position`, so MusicBrainz is not asked.
+    case customSet(CustomSet, position: Int)
     case releaseLookupFailed(any Error)
     /// The rip's folder, and the folder it would have used if another disc's rip did not hold it.
     case folder(URL, insteadOf: URL?)
@@ -353,7 +355,11 @@ public struct DiscRip {
         let drive = self.drive
         let mcn = try await blocking { try? SubchannelCodes.mcn(in: toc, drive: drive) }
         var chosen: MusicBrainzRelease?
-        if options.offline {
+        if let set = customSets.set(containing: toc), let position = set.disc(with: toc)?.position {
+            // A disc the user put in a set of their own is the set's, whatever MusicBrainz has.
+            chosen = set.release
+            events(.customSet(set, position: position))
+        } else if options.offline {
             chosen = options.release
             events(.release(nil))
         } else {
@@ -369,8 +375,6 @@ public struct DiscRip {
             }
         }
         if chosen == nil, let manual = options.manualRelease { chosen = manual }
-        // A disc MusicBrainz does not know, that the user put in a set of their own.
-        if chosen == nil, let set = customSets.set(containing: toc) { chosen = set.release }
         // The edits kept for the release, with this rip's on top; the folder is named after them.
         var edits = options.edits ?? MetadataEdits()
         if let chosen, chosen.sharesAlbumEdits, let kept = ReleaseEditsStore().edits(forReleaseID: chosen.id) {

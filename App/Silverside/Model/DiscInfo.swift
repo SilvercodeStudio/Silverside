@@ -296,11 +296,23 @@ struct DiscInfo {
         isAmbiguous = ReleaseRanking.isAmbiguous(
             result.ranked, mcn: mcn, chosen: remembered, chosenForOtherDiscs: ReleaseChoiceStore().allChoices())
         lookup = .found
+        lookupChoice = chosen
+        // A disc the user put in a set of their own is the set's, though MusicBrainz has it.
+        if let set = CustomSetStore().set(containing: toc) {
+            release = nil
+            useCustomSet(set)
+            return
+        }
         await use(chosen)
     }
 
-    /// Uses a release the user chose, and remembers it for the other discs of the release.
+    /// The release the lookup chose, kept for a disc in a custom set, to go back to if it leaves the set.
+    var lookupChoice: MusicBrainzRelease?
+
+    /// Uses a release the user chose, and remembers it for the other discs of the release. A disc
+    /// in a custom set leaves it: the user chose MusicBrainz's release over it.
     mutating func choose(_ chosen: MusicBrainzRelease) async {
+        if customSet != nil { try? CustomSetStore().remove(toc) }
         try? ReleaseChoiceStore().remember(chosen)
         isAmbiguous = false
         // The picker's releases are the lookup's summaries; the details come by ID.
@@ -349,7 +361,7 @@ struct DiscInfo {
     /// A custom set made for another disc of the same box, with the place for this one free:
     /// CD-Text's album title, such as "Seven Classic LPs [Disc 2]", names the set and the place.
     var suggestedSet: (set: CustomSet, position: Int)? {
-        guard manual != nil, customSet == nil, let shown = shownRelease,
+        guard release == nil, manual != nil, customSet == nil, let shown = shownRelease,
             let hint = CDTextHints.disc(inAlbumTitle: cdText?.titles[0] ?? shown.title),
             let set = CustomSetSheet.set(in: CustomSetStore().sets(), named: hint.title, artist: shown.artist),
             hint.position <= set.discCount, set.disc(at: hint.position) == nil
@@ -360,21 +372,36 @@ struct DiscInfo {
     /// The disc's own release, as Silverside names it without a set: from CD-Text, or "Track N".
     var singleRelease: MusicBrainzRelease { MusicBrainzRelease.manual(toc: toc, cdText: cdText) }
 
+    /// The disc's tracks as they are named now, for putting it in a set: MusicBrainz's names, if
+    /// a release has it, else its own.
+    var tracksForSet: [MusicBrainzRelease.Track] {
+        if let tracks = medium?.tracks, tracks.count == toc.audioTracks.count { return tracks }
+        return singleRelease.media[0].tracks
+    }
+
     /// Names the disc as a disc of `set`, which has it: the set's album names and cover, and the
     /// names already typed for its tracks.
     mutating func useCustomSet(_ set: CustomSet) {
         let release = set.release
+        // MusicBrainz's release, if it has the disc, stays in `releases` for Other Releases.
+        self.release = nil
+        cover = nil
+        sleeve = nil
         manual = release
         medium = release.medium(for: toc)
         edits = (ReleaseEditsStore().edits(forReleaseID: release.id) ?? MetadataEdits()).merged(with: edits.trackLevel)
         keptCover = ReleaseCoverStore().cover(forReleaseID: release.id)
     }
 
-    /// Takes the disc out of its custom set: it is a disc of its own again, with the set's names
-    /// for it as its own, so nothing typed is lost.
-    mutating func leaveCustomSet() {
+    /// Takes the disc out of its custom set: MusicBrainz's release again, if the lookup found one,
+    /// else a disc of its own, with the set's names for it as its own, so nothing typed is lost.
+    mutating func leaveCustomSet() async {
         guard manual?.isCustomSet == true, let shown = shownRelease else { return }
         try? CustomSetStore().remove(toc)
+        if let lookupChoice {
+            await use(lookupChoice)
+            return
+        }
         let single = singleRelease
         manual = single
         medium = single.media.first

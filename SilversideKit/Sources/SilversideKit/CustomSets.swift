@@ -5,6 +5,9 @@ import Foundation
 /// discs does. Its release (`release`) is one Silverside made, so it gets no MusicBrainz IDs
 /// and is never offered to MusicBrainz; unlike a single disc's, its album names and cover are
 /// kept by its ID (`MusicBrainzRelease.sharesAlbumEdits`), so every disc of the set gets them.
+/// A disc that the user put in a set is named as the set's, also when MusicBrainz has it: the
+/// user chose the set over it (*Seven Classic LPs*: three discs MusicBrainz did not know, and a
+/// fourth that its track lengths found).
 public struct CustomSet: Codable, Equatable, Identifiable, Sendable {
     /// One disc of the set that was put in it: its disc ID, and its tracks as Silverside named
     /// them (from CD-Text, or "Track N"). The user's names for them stay with each rip.
@@ -46,12 +49,25 @@ public struct CustomSet: Codable, Equatable, Identifiable, Sendable {
     /// The positions that no disc has yet.
     public var freePositions: [Int] { (1...max(discCount, 1)).filter { disc(at: $0) == nil } }
 
-    /// Puts the disc with `toc` at `position`, named as `release` names it (a single disc's
-    /// manual release); it leaves any other position it had, and a disc that had `position` goes.
+    /// Puts the disc with `toc` at `position`, named as `release` names it: a single disc's
+    /// manual release, or the release MusicBrainz has it on. It leaves any other position it had,
+    /// and a disc that had `position` goes.
     public mutating func put(_ toc: TOC, at position: Int, namedAs release: MusicBrainzRelease) {
-        let tracks = release.medium(for: toc)?.tracks ?? release.media.first?.tracks ?? []
+        let medium = release.medium(for: toc) ?? (release.media.count == 1 ? release.media.first : nil)
+        put(toc, at: position, tracks: medium?.tracks ?? MusicBrainzRelease.manual(toc: toc).media[0].tracks)
+    }
+
+    /// Puts the disc with `toc` at `position`, with these tracks' names. MusicBrainz's IDs in
+    /// them are left out, since the set's files get none.
+    public mutating func put(_ toc: TOC, at position: Int, tracks: [MusicBrainzRelease.Track]) {
+        let named = tracks.map { track in
+            var plain = track
+            plain.recordingID = nil
+            plain.artistCredit = track.artistCredit.map { .init(name: $0.name, joinPhrase: $0.joinPhrase) }
+            return plain
+        }
         discs.removeAll { $0.discID == toc.musicBrainzDiscID || $0.position == position }
-        discs.append(Disc(position: position, discID: toc.musicBrainzDiscID, tracks: tracks))
+        discs.append(Disc(position: position, discID: toc.musicBrainzDiscID, tracks: named))
         discs.sort { $0.position < $1.position }
         discCount = max(discCount, position)
     }

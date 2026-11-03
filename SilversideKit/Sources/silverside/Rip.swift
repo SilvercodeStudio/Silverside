@@ -338,6 +338,8 @@ private final class RipPrinter: @unchecked Sendable {
                     } ?? "not checked"))
         case .release(nil):
             break
+        case .customSet(let set, let position):
+            Swift.print("Your set: \(set.artist) - \(set.title), disc \(position) of \(set.discCount)")
         case .release(let lookup?):
             guard let chosen = lookup.chosen, let toc else {
                 Swift.print("MusicBrainz: no release has this disc")

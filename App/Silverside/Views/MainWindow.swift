@@ -108,6 +108,9 @@ struct MainWindow: View {
         .sheet(item: $model.changingRelease) { rip in
             ChangeReleaseSheet(rip: rip)
         }
+        .sheet(item: $model.customSetTarget) { target in
+            CustomSetTargetSheet(target: target)
+        }
         .onAppear {
             // The first launch opens the welcome. `-welcomeDone 0` opens it again, and `-welcomeDone 1` keeps it shut.
             if !UserDefaults.standard.bool(forKey: WelcomeView.doneKey) { openWindow(id: "welcome") }

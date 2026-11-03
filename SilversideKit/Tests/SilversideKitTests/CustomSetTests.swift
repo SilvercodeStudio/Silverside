@@ -93,7 +93,23 @@ struct CustomSetTests {
         #expect(store.set(containing: disc2) == nil && store.set(id: set.id) != nil)
     }
 
-    /// A rip of a disc in a custom set takes the set's release, and its discs make a set.
+    /// A disc that MusicBrainz has, put in a set, keeps MusicBrainz's names but none of its IDs.
+    @Test func takesADiscThatMusicBrainzHas() throws {
+        let (toc, _) = try makeDisc(trackSectors: [800, 900])
+        var release = MusicBrainzRelease.manual(toc: toc)
+        release.id = "mbid"
+        release.media[0].tracks[0].title = "Theme From Mr. Broadway"
+        release.media[0].tracks[0].recordingID = "rec"
+        release.media[0].tracks[0].artistCredit = [.init(name: "Dave Brubeck", artistID: "artist")]
+        var set = CustomSet(title: "Seven Classic LPs", artist: "Dave Brubeck", discCount: 4)
+        set.put(toc, at: 4, namedAs: release)
+        let track = try #require(set.release.medium(for: toc)?.tracks.first)
+        #expect(track.title == "Theme From Mr. Broadway" && track.recordingID == nil)
+        #expect(track.artistCredit.map(\.name) == ["Dave Brubeck"] && track.artistCredit[0].artistID == nil)
+    }
+
+    /// A rip of a disc in a custom set takes the set's release, even when MusicBrainz could
+    /// answer for the disc, and its discs make a set.
     @Test func ripsADiscOfACustomSet() async throws {
         let (store, storeRoot) = store()
         defer { try? FileManager.default.removeItem(at: storeRoot) }
@@ -101,8 +117,10 @@ struct CustomSetTests {
         var set = CustomSet(title: "Seven Classic LPs", artist: "Dave Brubeck", discCount: 4)
         set.put(toc, at: 2, namedAs: .manual(toc: toc))
         try store.save(set)
-        let (result, _, _, root) = try await DiscRipTests().rip(customSets: store)
+        let (result, events, _, root) = try await DiscRipTests().rip(customSets: store)
         defer { try? FileManager.default.removeItem(at: root) }
+        #expect(events.contains { if case .customSet(_, 2) = $0 { true } else { false } })
+        #expect(!events.contains { if case .release = $0 { true } else { false } })
         #expect(result.report.release?.id == set.id && result.report.discPosition == 2)
         #expect(result.folder.lastPathComponent == "Dave Brubeck - Seven Classic LPs (Disc 2)")
         let sets = RipSet.sets(

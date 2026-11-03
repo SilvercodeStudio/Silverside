@@ -970,11 +970,55 @@ final class AppModel {
         }
     }
 
+    /// What the custom set sheet is for: the disc in a drive, or an earlier rip.
+    enum CustomSetTarget: Identifiable {
+        case drive(DriveSlot)
+        case rip(RecentRip)
+
+        var id: String {
+            switch self {
+            case .drive(let slot): "drive " + slot.id
+            case .rip(let rip): "rip " + rip.file.path
+            }
+        }
+    }
+
+    /// The disc or rip the custom set sheet shows, if it shows.
+    var customSetTarget: CustomSetTarget?
+
+    /// What Disc › Put in Custom Set… would show the sheet for: the selected drive's disc, before
+    /// or after a rip but not during one, or the selected earlier rip, while nothing works on its files.
+    var customSetCandidate: CustomSetTarget? {
+        if let slot = selectedDrive, let disc = slot.disc, !disc.toc.audioTracks.isEmpty, slot.rip?.isRunning != true {
+            return .drive(slot)
+        }
+        if let rip = selectedRip, !rip.isMissing, canChangeRelease(rip) { return .rip(rip) }
+        return nil
+    }
+
+    /// True if the candidate is in a custom set already, for the menu's title.
+    var customSetCandidateIsInSet: Bool {
+        switch customSetCandidate {
+        case .drive(let slot): slot.disc?.customSet != nil
+        case .rip(let rip): rip.report.release?.isCustomSet == true
+        case nil: false
+        }
+    }
+
+    /// Takes the disc in a drive out of its custom set.
+    func takeOutOfCustomSet(_ slot: DriveSlot) {
+        guard var disc = slot.disc else { return }
+        Task { @MainActor in
+            await disc.leaveCustomSet()
+            slot.disc = disc
+        }
+    }
+
     /// Puts the disc in a drive in a custom set, at `position`, before its rip.
     func putInCustomSet(_ slot: DriveSlot, set: CustomSet, at position: Int) {
         guard let disc = slot.disc else { return }
         var set = set
-        set.put(disc.toc, at: position, namedAs: disc.singleRelease)
+        set.put(disc.toc, at: position, tracks: disc.tracksForSet)
         do {
             try CustomSetStore().save(set)
         } catch {

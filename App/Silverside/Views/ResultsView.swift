@@ -52,7 +52,6 @@ struct ResultsView: View {
     @FocusState private var focusedName: NameField?
     /// Tracks whose artist field shows, though they have no artist of their own.
     @State private var artistRows: Set<Int> = []
-    @State private var customSetShown = false
 
     private var toc: TOC? { try? TOC(ctdbTOCString: report.toc) }
 
@@ -549,21 +548,15 @@ struct ResultsView: View {
                         Button(setText(set)) { model.selection = .set(set.releaseID) }
                             .help("The whole set: each disc's state, the album's names, and the work left")
                     }
-                    if let release = report.release, release.isManual, let toc {
+                    if let release = report.release, release.isManual {
                         let rip = model.allRips.first { $0.file == recentRip.file } ?? recentRip
-                        Button(release.isCustomSet ? "Change Set…" : "Part of a Set…") { customSetShown = true }
-                            .disabled(!model.canChangeRelease(rip))
-                            .help(
-                                "Put this disc in a set of your own with the other discs of its box, so that they become one album"
-                            )
-                            .sheet(isPresented: $customSetShown) {
-                                CustomSetSheet(
-                                    toc: toc, albumTitle: shownRelease?.title ?? release.title,
-                                    artist: shownRelease?.artist ?? release.artist,
-                                    current: release.isCustomSet ? CustomSetStore().set(id: release.id) : nil,
-                                    onSave: { set, position in model.putInCustomSet(rip, set: set, at: position) },
-                                    onLeave: { model.takeOutOfCustomSet(rip) })
-                            }
+                        Button(release.isCustomSet ? "Change Set…" : "Part of a Set…") {
+                            model.customSetTarget = .rip(rip)
+                        }
+                        .disabled(!model.canChangeRelease(rip))
+                        .help(
+                            "Put this disc in a set of your own with the other discs of its box, so that they become one album"
+                        )
                     }
                     if report.release != nil {
                         // The model's rip knows whether its files are still there.

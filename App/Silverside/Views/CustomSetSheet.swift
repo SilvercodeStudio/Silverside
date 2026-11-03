@@ -139,3 +139,32 @@ struct CustomSetSheet: View {
 extension String {
     fileprivate var trimmed: String { trimmingCharacters(in: .whitespaces) }
 }
+
+/// The custom set sheet for the disc in a drive or an earlier rip (`AppModel.customSetTarget`).
+struct CustomSetTargetSheet: View {
+    @Environment(AppModel.self) private var model
+    let target: AppModel.CustomSetTarget
+
+    var body: some View {
+        switch target {
+        case .drive(let slot):
+            if let disc = slot.disc {
+                CustomSetSheet(
+                    toc: disc.toc, albumTitle: disc.cdText?.titles[0] ?? disc.title, artist: disc.artist,
+                    current: disc.customSet,
+                    onSave: { set, position in model.putInCustomSet(slot, set: set, at: position) },
+                    onLeave: { model.takeOutOfCustomSet(slot) })
+            }
+        case .rip(let rip):
+            if let release = rip.report.release, let toc = try? TOC(ctdbTOCString: rip.report.toc) {
+                let shown = MetadataEdits.current(forReportAt: rip.file, release: release).applied(
+                    to: release, toc: toc)
+                CustomSetSheet(
+                    toc: toc, albumTitle: shown.title, artist: shown.artist,
+                    current: release.isCustomSet ? CustomSetStore().set(id: release.id) : nil,
+                    onSave: { set, position in model.putInCustomSet(rip, set: set, at: position) },
+                    onLeave: { model.takeOutOfCustomSet(rip) })
+            }
+        }
+    }
+}

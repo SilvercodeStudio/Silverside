@@ -65,6 +65,12 @@ struct TrackMetadataTests {
             NameTemplate.libraryTrack.name(plain.nameValues)
                 == "18-03 Walkin' Blues [Merriweather Post Pavilion, 7-1-85]")
         #expect(PlainPunctuation.apply("Giants Stadium · East Rutherford") == "Giants Stadium · East Rutherford")
+        // A search finds typographic punctuation from plain, and the other way round.
+        #expect(PlainPunctuation.text("Dick\u{2019}s Picks, Volume 27", contains: "dick's"))
+        #expect(PlainPunctuation.text("Dick's Picks", contains: "Dick\u{2019}s"))
+        #expect(PlainPunctuation.text("Fillmore East 2/13\u{2013}14/70", contains: "13-14"))
+        #expect(PlainPunctuation.text("Sigur Rós", contains: "sigur ros"))
+        #expect(!PlainPunctuation.text("Dick\u{2019}s Picks", contains: "dicks"))
     }
 
     @Test func leavesTheStyleOutWhenADiscIsNotAShow() {

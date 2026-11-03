@@ -2,27 +2,28 @@ import SilversideKit
 import SwiftUI
 
 /// Every rip Silverside knows, from the rips folder and the library: a table to search and sort.
-/// A row opens the rip's results.
+/// A row opens the rip's results. The search, the order, and the selection are the model's, so
+/// that Back from a rip finds the table as it was.
 struct HistoryView: View {
     @Environment(AppModel.self) private var model
-    @State private var search = ""
-    @State private var selected: URL?
-    @State private var sortOrder = [KeyPathComparator(\RecentRip.date, order: .reverse)]
+    /// The rows found and sorted, worked out again only when the search, the order, or the rips change.
+    @State private var rows: [RecentRip] = []
 
-    private var rows: [RecentRip] {
-        let needle = search.trimmingCharacters(in: .whitespaces).lowercased()
+    private func findRows() {
+        let needle = model.historySearch.trimmingCharacters(in: .whitespaces)
         let found =
             needle.isEmpty
             ? model.allRips
             : model.allRips.filter {
-                $0.title.lowercased().contains(needle) || $0.artist.lowercased().contains(needle)
-                    || $0.report.drive.product.lowercased().contains(needle)
-                    || $0.medium.lowercased().contains(needle)
+                [$0.title, $0.artist, $0.report.drive.product, $0.medium].contains {
+                    PlainPunctuation.text($0, contains: needle)
+                }
             }
-        return found.sorted(using: sortOrder)
+        rows = found.sorted(using: model.historyOrder)
     }
 
     var body: some View {
+        @Bindable var model = model
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Rip History").font(.title2.weight(.semibold))
@@ -37,7 +38,7 @@ struct HistoryView: View {
             }
             .padding(16)
             Divider()
-            Table(rows, selection: $selected, sortOrder: $sortOrder) {
+            Table(rows, selection: $model.historySelection, sortOrder: $model.historyOrder) {
                 TableColumn("Date", value: \.date) { rip in DateCell(date: rip.date) }.width(min: 150, ideal: 170)
                 TableColumn("Album", value: \.title).width(min: 200, ideal: 320)
                 TableColumn("Artist", value: \.artist).width(min: 120, ideal: 200)
@@ -67,7 +68,11 @@ struct HistoryView: View {
             }
         }
         .navigationTitle("Rip History")
-        .searchable(text: $search, placement: .toolbar, prompt: "Album, artist, medium, or drive")
+        .tableSearch($model.historySearch, prompt: "Album, artist, medium, or drive")
+        .onAppear(perform: findRows)
+        .onChange(of: model.historySearch, findRows)
+        .onChange(of: model.historyOrder, findRows)
+        .onChange(of: model.listsVersion, findRows)
     }
 
     private var summary: String {
@@ -76,7 +81,7 @@ struct HistoryView: View {
         var text = Format.count(all.count, "rip")
         if unverified > 0 { text += ", \(unverified) not verified" }
         if !model.missingRips.isEmpty { text += ", \(model.missingRips.count) moved or deleted" }
-        if !search.isEmpty { text += " · \(Format.count(rows.count, "match"))" }
+        if !model.historySearch.isEmpty { text += " · \(Format.count(rows.count, "match", plural: "matches"))" }
         return text
     }
 

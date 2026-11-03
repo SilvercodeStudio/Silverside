@@ -73,6 +73,8 @@ struct RipSetTests {
         #expect(set.discs.keys.sorted() == [1, 3] && set.discs[1]?.folder == folder.appending(path: "disc1"))
         #expect(set.discs[1]?.stateText == "ripped, not verified" && set.discs[3]?.stateText == "verified and encoded")
         #expect(set.missing == [2] && set.unfinished == [1] && !set.isComplete)
+        #expect(set.discsText == "2 of 3 discs" && set.id == release.id)
+        #expect(set.lastRipped == set.discs.values.map(\.date).max() && set.lastRipped > old)
         #expect(set.summary == "Discs 1 and 3 of 3 ripped; disc 2 still to do; disc 1 not verified")
         // A disc's own page names the others only (*Eagles Live* disc 2 said "Disc 2 of 2" twice).
         #expect(set.summary(besides: 3) == "disc 2 still to do; disc 1 not verified")
@@ -86,6 +88,7 @@ struct RipSetTests {
         #expect(complete.summary == "Discs 1, 2, and 3 of 3 ripped; disc 2 not encoded")
         complete.discs[2]?.isEncoded = true
         #expect(complete.isComplete && complete.summary == "All 3 discs verified and encoded")
+        #expect(complete.discsText == "3 discs")
         #expect(complete.summary(besides: 2) == "all 3 discs verified and encoded")
         // Two discs are "both", not "all 2".
         #expect(RipSet.all(2, "discs", capitalized: true) == "Both discs" && RipSet.all(2) == "both")

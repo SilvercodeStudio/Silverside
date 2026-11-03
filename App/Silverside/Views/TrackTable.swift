@@ -278,11 +278,15 @@ struct StatusCell: View {
                 SheenProgressBar(fraction: fraction)
             }
         case .rereading(let round, let maximum, let suspects):
-            Label(
-                "Re-reading \(Format.count(suspects, "sector")) · round \(round) of \(maximum)",
-                systemImage: "arrow.clockwise"
-            )
-            .foregroundStyle(Theme.warning)
+            // Two lines, as a read's state has: on one, the column cut off the round.
+            VStack(alignment: .leading, spacing: 1) {
+                Label("Re-reading \(Format.count(suspects, "sector"))", systemImage: "arrow.clockwise")
+                    .font(.callout)
+                    .foregroundStyle(Theme.warning)
+                Text("Round \(round) of up to \(maximum)").font(.caption).foregroundStyle(.secondary)
+            }
+            .lineLimit(1)
+            .help("Re-reading \(Format.count(suspects, "sector")), round \(round) of up to \(maximum)")
         case .testing(let fraction), .readingIndexes(let fraction):
             VStack(alignment: .leading, spacing: 3) {
                 HStack {

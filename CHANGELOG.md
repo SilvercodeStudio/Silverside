@@ -42,8 +42,24 @@ command-line tool.
   track, and the log and the report say so. The disc graph no longer fills
   the track with "Flagged by the drive".
 
+- The sidebar lists the 8 sets with the newest rips, not every set, and All
+  Sets (in the sidebar and the View menu) shows every set in a table to
+  search and sort. A set opens its page, and its discs their results.
+- Find (⌘F) puts the insertion point in the search field of Rip History, or
+  of All Sets when that shows. Typing there no longer slows down: the table
+  is searched when you stop typing. A search ignores case, accents, and
+  curly quotes and dashes, so "dick's" finds Dick’s Picks. Back from a rip or a set finds the table
+  with its search, order, and selection as they were.
+- A track being re-read shows the sectors and the round on two lines, so
+  the round is not cut off.
+
 ### Fixed
 
+- The track table's columns can be resized during a rip. Before, the table
+  was drawn again at every step of a read, and a drag did not hold.
+- "100 matchs" in Rip History's search is "100 matches".
+- The mouse's back and forward buttons go back and forward in the main window,
+  as they do in the Help window.
 - In some drives (the PLDS DS8A5SH and the HL-DT-ST GUC0N), every
   sector showed C2 errors, and the rip had none of the disc's Q subchannel
   (pre-emphasis marked there only, index points). These drives return the

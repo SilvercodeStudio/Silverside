@@ -34,7 +34,7 @@ COMMIT := $(shell scripts/commit-id.sh)
 COMMIT_PLIST = $(PACKAGE)/.build/commit/Info-$(COMMIT).plist
 COMMIT_FLAGS = $(if $(COMMIT),-Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker $(abspath $(COMMIT_PLIST)))
 
-.PHONY: help build run app cli test hwtest core format lint release commit-plist install install-cli-local install-app uninstall site rip-art
+.PHONY: help build run app cli test hwtest core format lint release commit-plist install install-cli-local install-app open-app uninstall site rip-art
 
 # Where make install puts silverside and its shell completions. /usr/local may need sudo; PREFIX=~/.local does not.
 PREFIX ?= /usr/local
@@ -60,6 +60,7 @@ help:
 	@echo "make install        install silverside and its zsh, bash, and fish completions under PREFIX ($(PREFIX))"
 	@echo "make install-cli-local  the same, under ~/.local (no sudo)"
 	@echo "make install-app    build the app for release (Apple silicon and Intel) and copy it to APP_DIR ($(APP_DIR))"
+	@echo "make open-app       make install-app, open the app, and install the CLI under ~/.local"
 	@echo "make uninstall      remove what make install put under PREFIX"
 	@echo "make site           serve the website (docs/site) at http://localhost:8000"
 	@echo "make rip-art        render the Rip button's pictures from SilversideRipIcon.icon (after the icon changes)"
@@ -129,6 +130,16 @@ install-app:
 	touch "$(APP_DIR)/$$(basename "$$app")"; \
 	$(LSREGISTER) -f "$(APP_DIR)/$$(basename "$$app")"; \
 	echo "Installed $(APP_DIR)/$$(basename "$$app")"
+
+# install-app, then open the app. The CLI builds and installs under ~/.local at the same time;
+# its output goes to SilversideKit/.build/open-app-cli.log.
+open-app:
+		@if pgrep -f "$(APP_DIR)/Silverside.app/Contents/MacOS/Silverside" >/dev/null; then \
+				echo "Quit Silverside first: install-app replaces it."; exit 1; fi
+		@mkdir -p "$(PACKAGE)/.build"
+		@( $(MAKE) install-cli-local > "$(PACKAGE)/.build/open-app-cli.log" 2>&1 \
+				|| echo "The CLI did not install: see $(PACKAGE)/.build/open-app-cli.log" ) &
+		@$(MAKE) install-app && open "$(APP_DIR)/Silverside.app"
 
 uninstall:
 	rm -f "$(PREFIX)/bin/silverside" "$(PREFIX)/share/zsh/site-functions/_silverside" "$(PREFIX)/etc/bash_completion.d/silverside" \

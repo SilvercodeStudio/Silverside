@@ -4,7 +4,7 @@ import Foundation
 /// discs of a set are ripped, which are verified and encoded, and which are still to do. A
 /// release of one disc is not a set. Only the release's CDs count: a box set's DVD is not a
 /// disc to rip.
-public struct RipSet: Equatable, Sendable {
+public struct RipSet: Equatable, Identifiable, Sendable {
     /// One ripped disc of the set: the newest rip of it.
     public struct Disc: Equatable, Sendable {
         public var position: Int
@@ -46,6 +46,7 @@ public struct RipSet: Equatable, Sendable {
     }
 
     public var releaseID: String
+    public var id: String { releaseID }
     public var title: String
     public var artist: String
     /// The positions of the release's CDs, in order.
@@ -63,6 +64,14 @@ public struct RipSet: Equatable, Sendable {
 
     /// How many CDs the release has.
     public var discCount: Int { positions.count }
+
+    /// When a disc of the set was last ripped.
+    public var lastRipped: Date { discs.values.map(\.date).max() ?? .distantPast }
+
+    /// "2 of 3 discs", or "3 discs" when every disc is ripped.
+    public var discsText: String {
+        discs.count == discCount ? "\(discCount) discs" : "\(discs.count) of \(discCount) discs"
+    }
 
     /// The positions of the discs that are not ripped yet.
     public var missing: [Int] { positions.filter { discs[$0] == nil } }

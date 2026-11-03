@@ -50,6 +50,7 @@ struct MainWindow: View {
                 }
         }
         .frame(minWidth: 980, minHeight: 600)
+        .focusedSceneValue(\.isMainWindow, true)
         .alert(
             model.alert?.title ?? "",
             isPresented: Binding(get: { model.alert != nil }, set: { if !$0 { model.alert = nil } }),
@@ -119,6 +120,12 @@ struct MainWindow: View {
                 // `-selectHistory 1` shows the rip history; `-selectSet 1` the first multi-disc set,
                 // and `-selectSetTitle Dozin` the first whose title starts so.
                 if UserDefaults.standard.bool(forKey: "selectHistory") { model.selection = .history }
+                // `-selectSets 1` shows the table of every set, and `-search Dead` searches it or the history.
+                if UserDefaults.standard.bool(forKey: "selectSets") { model.selection = .sets }
+                if let search = UserDefaults.standard.string(forKey: "search") {
+                    model.historySearch = search
+                    model.setsSearch = search
+                }
                 let setTitle = UserDefaults.standard.string(forKey: "selectSetTitle")
                 if UserDefaults.standard.bool(forKey: "selectSet") || setTitle != nil {
                     Task { @MainActor in
@@ -170,6 +177,8 @@ struct DetailView: View {
                     DriveDetailView(slot: slot).id(slot.id)
                 } else if model.selection == .history {
                     HistoryView()
+                } else if model.selection == .sets {
+                    SetsView()
                 } else if let set = model.selectedSet {
                     SetView(ripSet: set)
                 } else if let rip = model.selectedRip, rip.isMissing {
@@ -201,7 +210,8 @@ struct DetailView: View {
 }
 
 /// ⌘← and ⌘→ go back and forward in the main window, as in Safari, except in a text field,
-/// where they move the insertion point. The View menu has ⌘[ and ⌘].
+/// where they move the insertion point, and so do the mouse's back and forward buttons. The
+/// View menu has ⌘[ and ⌘].
 private struct BackKeys: NSViewRepresentable {
     let model: AppModel
 
@@ -224,8 +234,18 @@ private struct BackKeys: NSViewRepresentable {
             if let monitor { NSEvent.removeMonitor(monitor) }
             monitor = nil
             guard window != nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self, let window = self.window, event.window === window,
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .otherMouseDown]) { [weak self] event in
+                guard let self, let window = self.window, event.window === window else { return event }
+                // Buttons 4 and 5, numbered 3 and 4 from 0, as in the Help window.
+                if event.type == .otherMouseDown {
+                    switch event.buttonNumber {
+                    case 3 where model.canGoBack: model.goBack()
+                    case 4 where model.canGoForward: model.goForward()
+                    default: return event
+                    }
+                    return nil
+                }
+                guard
                     event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.numericPad, .function])
                         == .command,
                     !(window.firstResponder is NSText)
@@ -290,16 +310,20 @@ struct SidebarView: View {
                 }
             }
             if !model.sets.isEmpty {
+                // The sets with the newest rips; the rest are in All Sets.
                 Section("Sets") {
-                    ForEach(model.sets, id: \.releaseID) { set in
+                    ForEach(model.sets.prefix(Self.recentCount)) { set in
                         SidebarRow(
-                            title: set.title,
-                            subtitle: set.isComplete
-                                ? "\(set.discCount) discs" : "\(set.discs.count) of \(set.discCount) discs",
+                            title: set.title, subtitle: set.discsText,
                             systemImage: "square.stack", tone: set.isComplete ? .good : .neutral
                         )
                         .tag(SidebarItem.set(set.releaseID))
                         .help(set.summary)
+                    }
+                    if model.sets.count > Self.recentCount || model.selection == .sets {
+                        Label("All Sets (\(model.sets.count))", systemImage: "square.stack.3d.up")
+                            .tag(SidebarItem.sets)
+                            .help("Every multi-disc set Silverside knows, in a table you can search and sort")
                     }
                 }
             }

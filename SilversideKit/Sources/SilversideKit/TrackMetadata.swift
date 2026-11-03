@@ -93,6 +93,12 @@ public enum PlainPunctuation {
         guard text.contains(where: { replacements[$0] != nil }) else { return text }
         return text.map { replacements[$0] ?? String($0) }.joined()
     }
+
+    /// True if `text` has `search` in it, as a search field finds it: case, accents, and
+    /// typographic punctuation do not count, so "dick's" finds MusicBrainz's "Dick’s Picks".
+    public static func text(_ text: String, contains search: String) -> Bool {
+        apply(text).localizedStandardContains(apply(search))
+    }
 }
 
 /// The names and tags of one track, from its release. File names and tags come from

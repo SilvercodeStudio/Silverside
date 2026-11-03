@@ -174,38 +174,47 @@ struct DiscView: View {
             // The Rip button floats over the table's lower right. As a safe area inset (the
             // table does not take content margins), it lets the last tracks scroll out from under it.
             TrackTable(slot: slot)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    HStack(alignment: .bottom, spacing: 0) {
-                        if let logo = slot.discLogo, DiscLogoPlace.atTableCorner {
-                            DiscLogoView(logo: logo).discLogoBackdrop()
-                                .padding(.leading, 10).padding(.bottom, RipButton.inset - 4)
-                        }
-                        Spacer(minLength: 0)
-                        // The disc's logo beside the button: the Compact Disc logo centered
-                        // on it, and the logos built on that one with their tops in line.
-                        if let logo = slot.discLogo, !DiscLogoPlace.atTableCorner {
-                            let top = (RipButton.size - DiscLogo.compactDiscHeight) / 2
-                            // On glass, as at an earlier rip's table corner, so that the rows under it
-                            // do not show through; the logo stays where it was, inside the glass's padding.
-                            DiscLogoView(logo: logo).discLogoBackdrop()
-                                .padding(
-                                    .bottom,
-                                    RipButton.inset - DiscLogo.backdropPadding
-                                        + (logo.hangsFromTop
-                                            ? RipButton.size - top - logo.height : (RipButton.size - logo.height) / 2)
-                                )
-                                .padding(.trailing, 6)
-                        }
-                        RipButton(slot: slot)
-                            .padding([.top, .bottom, .leading], RipButton.inset)
-                            .padding(.trailing, RipButton.trailingInset)
-                    }
-                }
+                .safeAreaInset(edge: .bottom, spacing: 0) { TableCorner(slot: slot) }
                 .background(ScrollersPastInset(table: slot.rip != nil))
             Divider()
             StatusBar(slot: slot)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
+        }
+    }
+}
+
+/// The Rip button over the track table's lower right, and the disc's logo beside it. A view of
+/// its own: the logo follows the tracks ripped so far, so reading it in `DiscView` redrew the
+/// whole table at every step of a read, and a column could not be resized during a rip.
+private struct TableCorner: View {
+    var slot: DriveSlot
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            if let logo = slot.discLogo, DiscLogoPlace.atTableCorner {
+                DiscLogoView(logo: logo).discLogoBackdrop()
+                    .padding(.leading, 10).padding(.bottom, RipButton.inset - 4)
+            }
+            Spacer(minLength: 0)
+            // The disc's logo beside the button: the Compact Disc logo centered
+            // on it, and the logos built on that one with their tops in line.
+            if let logo = slot.discLogo, !DiscLogoPlace.atTableCorner {
+                let top = (RipButton.size - DiscLogo.compactDiscHeight) / 2
+                // On glass, as at an earlier rip's table corner, so that the rows under it
+                // do not show through; the logo stays where it was, inside the glass's padding.
+                DiscLogoView(logo: logo).discLogoBackdrop()
+                    .padding(
+                        .bottom,
+                        RipButton.inset - DiscLogo.backdropPadding
+                            + (logo.hangsFromTop
+                                ? RipButton.size - top - logo.height : (RipButton.size - logo.height) / 2)
+                    )
+                    .padding(.trailing, 6)
+            }
+            RipButton(slot: slot)
+                .padding([.top, .bottom, .leading], RipButton.inset)
+                .padding(.trailing, RipButton.trailingInset)
         }
     }
 }

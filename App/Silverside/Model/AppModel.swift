@@ -10,6 +10,8 @@ enum SidebarItem: Hashable {
     case rip(URL)
     /// Every earlier rip, in a table.
     case history
+    /// Every multi-disc set, in a table.
+    case sets
     /// A multi-disc release among the earlier rips, by its MusicBrainz ID.
     case set(String)
 }
@@ -38,11 +40,46 @@ final class AppModel {
     private(set) var drives: [DriveSlot] = []
     /// A drive whose rip waits for the user to agree to rip only discs they own.
     var agreementSlot: DriveSlot?
-    private(set) var recentRips: [RecentRip] = []
+    private(set) var recentRips: [RecentRip] = [] {
+        didSet { listsChanged() }
+    }
     /// Rips that only the history has: their files were moved or deleted.
-    private(set) var missingRips: [RecentRip] = []
-    /// Every rip in the history, there or not, the newest first.
-    var allRips: [RecentRip] { (recentRips + missingRips).sorted { $0.report.date > $1.report.date } }
+    private(set) var missingRips: [RecentRip] = [] {
+        didSet { listsChanged() }
+    }
+    /// Every rip in the history, there or not, the newest first. Kept, not worked out at each
+    /// use: the history's table and the sidebar read it for every change.
+    private(set) var allRips: [RecentRip] = []
+    /// The multi-disc releases among the earlier rips, with the discs ripped so far, the one
+    /// with the newest rip first. Kept, as `allRips` is.
+    private(set) var sets: [RipSet] = []
+
+    /// Goes up when `allRips` or `sets` change, for a table that keeps its rows.
+    private(set) var listsVersion = 0
+
+    private func listsChanged() {
+        listsVersion += 1
+        allRips = (recentRips + missingRips).sorted { $0.report.date > $1.report.date }
+        sets = RipSet.sets(
+            in: recentRips.map { .init(folder: $0.folder, file: $0.file, report: $0.report, hasAudio: $0.hasAudio) }
+        ).sorted { $0.lastRipped > $1.lastRipped }
+    }
+
+    /// The history's search and order, and the sets', kept here so that Back to the table finds
+    /// them as they were.
+    var historySearch = ""
+    var historyOrder = [KeyPathComparator(\RecentRip.date, order: .reverse)]
+    var setsSearch = ""
+    var setsOrder = [KeyPathComparator(\RipSet.lastRipped, order: .reverse)]
+    var historySelection: URL?
+    /// True when Find (⌘F) asks the table on screen to put the insertion point in its search field.
+    var wantsSearchField = false
+
+    /// Find (⌘F): the search field of the sets' table when it shows, else the history's.
+    func find() {
+        if selection != .sets { selection = .history }
+        wantsSearchField = true
+    }
     let history = RipHistory()
     var selection: SidebarItem? {
         didSet {
@@ -139,7 +176,7 @@ final class AppModel {
         switch item {
         case .drive(let id): drives.contains { $0.id == id }
         case .rip(let url): allRips.contains { $0.file == url }
-        case .history: true
+        case .history, .sets: true
         case .set(let id): sets.contains { $0.releaseID == id }
         }
     }
@@ -152,12 +189,6 @@ final class AppModel {
     /// The earlier rips of a disc that still have their audio, by its TOC: the pool for a new rip or a repair.
     func earlierRips(of tocString: String) -> [RecentRip] {
         recentRips.filter { $0.hasAudio && $0.report.toc == tocString }
-    }
-
-    /// The multi-disc releases among the earlier rips, with the discs ripped so far.
-    var sets: [RipSet] {
-        RipSet.sets(
-            in: recentRips.map { .init(folder: $0.folder, file: $0.file, report: $0.report, hasAudio: $0.hasAudio) })
     }
 
     func set(for release: MusicBrainzRelease?) -> RipSet? {

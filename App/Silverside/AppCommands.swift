@@ -2,9 +2,15 @@ import SilversideDarwin
 import SilversideKit
 import SwiftUI
 
+extension FocusedValues {
+    /// True in the main window, so that a command for its tables does nothing in another window.
+    @Entry var isMainWindow: Bool?
+}
+
 struct AppCommands: Commands {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.isMainWindow) private var isMainWindow
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
@@ -18,9 +24,16 @@ struct AppCommands: Commands {
             Divider()
             Button("Silverside Website") { NSWorkspace.shared.open(AboutView.website) }
         }
+        CommandGroup(before: .textEditing) {
+            Button("Find…", action: model.find)
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(isMainWindow != true)
+        }
         CommandGroup(after: .sidebar) {
             Button("Rip History") { model.selection = .history }
                 .keyboardShortcut("y", modifiers: .command)
+            Button("All Sets") { model.selection = .sets }
+                .disabled(model.sets.isEmpty)
             Divider()
             Button("Back", action: model.goBack)
                 .keyboardShortcut("[", modifiers: .command)

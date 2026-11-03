@@ -30,9 +30,10 @@ it comes with no warranty (see [LICENSE](LICENSE)).
 - ReplayGain tags for consistent playback volume
 - Excellent handling of multi-CD sets and online metadata lookup (track titles, etc.)
 - Other supported formats for audio extraction:
+  - Proper pre-emphasis handling (these discs are rare and from the early/mid 80s.)
   - DTS-CD - when ffmpeg is installed
   - DVD-Audio (MLP lossless high-resolution surround) - coming soon
-  - DVD-Video - coming soon
+  - CD+G (CDs with graphics) - extraction as a video file - coming soon
   - Super Audio CD (SACD) extraction is not possible with a standard
     PC CD/DVD/BD drive. The CD layer of hybrid CD/SACD discs can still
     be ripped as standard CD audio.

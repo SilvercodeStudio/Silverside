@@ -242,6 +242,9 @@ public enum DVDExtraction {
     static func pcmCodec(_ bits: Int) -> String { bits == 24 ? "pcm_s24le" : "pcm_s16le" }
     static func flacArguments(_ p: DVDPresentation, track: Int? = nil) -> [String] {
         var args = [
+            // MLP's 80-sample frames can otherwise become FLAC blocks that Apple's
+            // decoder refuses. Reblock without changing PCM or track boundaries.
+            "-frame_size", "4096",
             "-c:a", "flac", "-sample_fmt", p.format!.bits == 24 ? "s32" : "s16", "-bits_per_raw_sample",
             String(p.format!.bits), "-map_metadata", "-1",
         ]

@@ -75,7 +75,8 @@ public enum ReplayGain {
     /// Analyzes surround audio, as BS.1770 weighs its channels: the surround channels count
     /// 1.41 times (+1.5 dB), the low-frequency effects channel not at all, and its peak is
     /// the highest of every channel's.
-    public static func analyze(_ audio: SurroundPCM, sampleRate: Double = 44100) -> Analysis {
+    public static func analyze(_ audio: SurroundPCM, sampleRate: Double? = nil) -> Analysis {
+        let sampleRate = sampleRate ?? audio.sampleRate
         let channels = audio.channels
         // WAVE's bits, in channel order: back left and right, side left and right, back center.
         var weights = [Double]()

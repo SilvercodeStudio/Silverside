@@ -155,6 +155,9 @@ The full list is in `docs/internal/Milestones.md`. Keep both up to date.
 8. Mostly done: the Markdown rip report, CUE sheets, pregaps, CD-Text (`silverside cdtext`), hidden track one audio, AIFF and WAV tags; and the drive report (`silverside drives --report`).
 9. Mostly done: multi-disc releases (shared release choice, album edits, and cover; the set view; ReplayGain over the whole release) and the naming styles as named settings (no recipe language, decided 2026-10-23); deferred: a second format for a set, Foundation Models, the single-show style.
 10. In progress: the app.
+11. DVD-Audio: initial FLAC CLI and native-rate FLAC/ALAC engine groundwork; next,
+    saved-rip metadata with explicit release selection, then audio-only GUI integration
+    (see `docs/internal/DVD.md`).
 
 The CLI is finished for daily use, and the app is in daily use. The loose ends (built but not tested on hardware, and deferred work) are in `docs/internal/Milestones.md`.
 

@@ -417,9 +417,17 @@ continuous timeline separately. Output must be new; failures/cancellation leave
 an incomplete report. The existing personal-use agreement also covers DVD rips.
 See [DVD.md](DVD.md) for evidence, command examples and remaining limitations.
 
-Next: broaden title/layout coverage with the incoming DVD-Audio discs, finish
-Developer ID/notarization and clean-machine testing, parse optional Audio Text,
-then integrate presentation selection and output into the GUI. DVD-Video
+Native-rate engine groundwork (2026-11-03): explicit rate/precision/speakers,
+bounded FLAC/ALAC conversion with PCM verification, and Apple-compatible FLAC
+blocks. Synthetic high-resolution tests and full saved American Beauty stereo
+and surround tracks pass without drive access; details and hashes in DVD.md.
+The existing DVD CLI still writes FLAC; format selection and tagging are next.
+
+Next: saved-rip metadata using a pasted MusicBrainz release URL/ID or manual
+entry, reviewed presentation-specific track mapping, artwork and tagged
+FLAC/ALAC output; then reuse it for the audio-only GUI workflow. Also broaden
+title/layout coverage with incoming discs, finish Developer ID/notarization
+and clean-machine testing, and parse optional Audio Text. DVD-Video
 LPCM/chapter extraction and decrypted disc images remain separate follow-ups.
 Blu-ray audio (including the user's BD-R copy of The Dark Side of the Moon)
 remains exploratory. More DTS-CD titles are also on the way for CD-path testing.

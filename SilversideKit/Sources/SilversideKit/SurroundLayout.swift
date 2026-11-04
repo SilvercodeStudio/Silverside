@@ -17,10 +17,10 @@ struct SurroundLayout: Equatable {
     /// The layout for audio with `mask`'s speakers in `format`: the smallest of the encoder's
     /// layouts that has a place for each speaker. Nil for a format whose encoder takes any
     /// layout (AIFF), which keeps the source's channels as they are.
-    static func of(mask: UInt32, format: AudioFormat) throws -> SurroundLayout? {
+    static func of(mask: UInt32, format: AudioFormat, sampleRate: Double = 44_100) throws -> SurroundLayout? {
         guard let formatID = formatID(of: format) else { return nil }
         let speakers = Self.speakers(of: mask)
-        for tag in encoderTags(formatID: formatID, channels: speakers.count) {
+        for tag in encoderTags(formatID: formatID, channels: speakers.count, sampleRate: sampleRate) {
             if let sources = assign(speakers, to: labels(of: tag)) { return SurroundLayout(tag: tag, sources: sources) }
         }
         throw DTSError.noLayout(format, layout: SurroundPCM(values: [], channels: speakers.count, channelMask: mask))
@@ -52,10 +52,12 @@ struct SurroundLayout: Equatable {
 
     /// The encoder's layouts with `channels` channels or more, fewest first. The encoders
     /// list them for every count.
-    private static func encoderTags(formatID: AudioFormatID, channels: Int) -> [AudioChannelLayoutTag] {
+    private static func encoderTags(formatID: AudioFormatID, channels: Int, sampleRate: Double)
+        -> [AudioChannelLayoutTag]
+    {
         var format = AudioStreamBasicDescription()
         format.mFormatID = formatID
-        format.mSampleRate = 44_100
+        format.mSampleRate = sampleRate
         format.mChannelsPerFrame = UInt32(channels)
         let formatSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         var size: UInt32 = 0

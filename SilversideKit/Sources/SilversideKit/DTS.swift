@@ -301,18 +301,22 @@ extension SurroundPCM {
             else { throw DTSError.unexpectedDecode("not a WAV file") }
             var index = 12
             var channels = 0
+            var sampleRate = 0
             var mask: UInt32?
             while index + 8 <= bytes.count {
                 let id = String(decoding: bytes[index..<(index + 4)], as: UTF8.self)
                 let size = long(index + 4)
                 if id == "fmt ", index + 8 + 16 <= bytes.count {
                     channels = word(index + 10)
+                    sampleRate = long(index + 12)
                     guard word(index + 22) == 32 else { throw DTSError.unexpectedDecode("not 32-bit samples") }
                     // WAVE_FORMAT_EXTENSIBLE names the channels.
                     if word(index + 8) == 0xFFFE, size >= 40 { mask = UInt32(long(index + 8 + 20)) }
                 }
                 if id == "data" {
-                    guard channels > 0 else { throw DTSError.unexpectedDecode("no format before the audio") }
+                    guard channels > 0, sampleRate > 0 else {
+                        throw DTSError.unexpectedDecode("no format before the audio")
+                    }
                     let start = index + 8
                     let end = size == 0 || start + size > bytes.count ? bytes.count : start + size
                     let count = (end - start) / 4 / channels * channels
@@ -322,7 +326,8 @@ extension SurroundPCM {
                     }
                     return SurroundPCM(
                         values: values, channels: channels,
-                        channelMask: mask ?? SurroundPCM.standardMask(channels: channels))
+                        channelMask: mask ?? SurroundPCM.standardMask(channels: channels),
+                        sampleRate: Double(sampleRate))
                 }
                 index += 8 + size + (size & 1)
             }
@@ -425,6 +430,9 @@ public struct DTSDecoder: Sendable {
                     lastError = error
                 }
                 guard let decoded, decoded.frameCount == run.count * framesPerFrame else { return false }
+                guard decoded.sampleRate == 44_100 else {
+                    throw DTSError.unexpectedDecode("DTS-CD decode must be 44100 Hz, got \(decoded.sampleRate)")
+                }
                 if result == nil {
                     result = SurroundPCM(
                         values: [Int32](repeating: 0, count: samples.count * decoded.channels),

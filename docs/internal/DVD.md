@@ -1,6 +1,6 @@
 # DVD audio extraction
 
-Status: initial CLI implementation, following exploration started 2026-10-31. DVD-Audio extraction to multichannel FLAC is the primary goal. Audio extraction from DVD-Video is a secondary goal. This is not a commitment to a particular Silverside release.
+Status: initial CLI implementation, following exploration started 2026-10-31. The primary product goal is a CD-like GUI workflow for tagged, lossless DVD-Audio extraction to multichannel/stereo FLAC or ALAC. Audio extraction from DVD-Video is a secondary goal. Optional movie export is planned for 2.0; the audio workflow has no new release commitment here.
 
 ### Current checkpoint — 2026-11-01
 
@@ -90,13 +90,129 @@ Given a supported disc, image, or extracted directory, enumerate its audio prese
 
 Start with a development command, then a reusable engine workflow and CLI, then the app. Establish correct navigation and audio before building selection UI. A decoded surround presentation must never silently become stereo or 44.1 kHz.
 
+### Product priorities agreed 2026-11-03
+
+The first main user-facing goal is to open Silverside, insert a DVD-Audio title,
+and get an experience comparable to ripping a CD:
+
+1. Recognize the disc and show its available audio presentations and tracks.
+2. Identify the release and obtain metadata and artwork where feasible. Allow
+   release selection, custom album/artist/track entry, and corrections when
+   identification is missing, ambiguous, or incomplete.
+3. Choose the existing high-resolution 5.1/surround presentation, stereo
+   presentation, or both, and choose FLAC or ALAC output.
+4. Hit Rip and receive properly named, tagged, lossless track files with artwork,
+   preserved source resolution and speaker assignments, and a rip report.
+   Keep the two presentations distinguishable when exporting both.
+
+Reuse the CD workflow's metadata editing, artwork, naming and library conventions
+where appropriate, while keeping DVD navigation and verification separate from
+CD-specific assumptions. AAC could be an additional convenience output later,
+but is not a priority or a prerequisite for this high-resolution lossless goal.
+The initial CLI currently produces FLAC with numbered placeholders; the GUI,
+metadata integration and DVD ALAC output remain implementation work.
+
+The user supplied a MusicBrainz screenshot identifying an American Beauty
+[DVD-Audio release](https://musicbrainz.org/release/cf06a267-acd5-4745-99d8-07842afab847)
+on 2026-11-03. This establishes a useful metadata candidate, not an automatic
+disc match; other DVD-Audio releases have not yet been checked. The user checked
+that this entry has no Disc ID. MusicBrainz's [libdiscid](https://github.com/metabrainz/libdiscid)
+derives Disc IDs from audio-CD tables of contents; the existing CD lookup is not
+a DVD-Audio identification mechanism. The first metadata workflow should accept
+a pasted MusicBrainz **release** URL or MBID, fetch it through the existing client,
+and show the selected medium and track mapping for confirmation. Manual artist,
+album and track entry must also work without a MusicBrainz entry. Artist/album or
+barcode search can later suggest candidates, with presentation-specific counts
+and durations as supporting evidence, rather than claim an automatic match.
+Use the existing rate-limited MusicBrainz and artwork clients. Do not fabricate
+a CD disc ID or assume that MusicBrainz's track list maps one-to-one to every
+DVD group, alternate mix, bonus item or short navigation program. Preserve the
+source track map and require resolution of ambiguous metadata assignments.
+
+The next product milestone is this audio-only GUI workflow. The phase headings
+below describe work areas, not a requirement to finish DVD-Video extraction
+before integrating DVD-Audio into the app. Movie export is a separate 2.0
+addition and must not delay the primary workflow. This update records the plan;
+it does not start implementation of the movie feature.
+
+### Native-rate engine groundwork — 2026-11-03
+
+Implemented ahead of GUI integration:
+
+- `SurroundPCM` now carries sample rate as well as precision and speaker mask.
+  Its existing CD/DTS callers default to 44,100 Hz; the DTS WAV reader retains
+  the actual header rate, and the DTS-CD timeline rejects non-44,100-Hz audio.
+- `PCMFormat`, `PCMFileReader`, and the streaming encoder preserve explicit
+  integer PCM format without resampling or downmixing. Reads use 16,384-frame
+  chunks by default. The native lossless path accepts 16/20/24-bit PCM and
+  rejects ambiguous multichannel layouts, floating-point sources and invalid
+  sample alignment instead of silently converting them.
+- `AudioEncoder.transcodeLossless` writes FLAC or ALAC to a private temporary
+  file, rereads it, checks rate/precision/speakers/frame count and a canonical
+  PCM SHA-256, then publishes a new output without overwriting an existing file.
+  Cancellation and failures discard its temporary output. This is an engine
+  API, not yet a DVD CLI format option or a GUI feature; tagging is separate.
+  Layouts that require extra silent channels (for example quad to Apple's
+  5.0 ALAC layout) fail the strict format check for now.
+- ReplayGain analysis of `SurroundPCM` defaults to its recorded rate. DVD
+  track/album ReplayGain tagging and bounded album analysis are still future work.
+
+Two compatibility findings came from testing, not just changing the 44,100-Hz
+constants:
+
+1. Poorly compressible multichannel 24-bit ALAC packets could exceed
+   AudioToolbox's default conversion buffer and yield empty/incomplete output.
+   Native readers/writers now set a bounded 1 MiB I/O buffer after configuring
+   the client format. Full-precision random samples exercise this case.
+2. FFmpeg inherited 80-sample MLP frame sizes when producing earlier DVD FLACs.
+   Apple's decoder rejects those files here, although FFmpeg and VLC read them.
+   DVD FLAC output now explicitly uses 4,096-sample blocks, without altering
+   decoded PCM or track cuts. A regression test converts an 80-sample-block
+   fixture through the production output arguments, then verifies native ALAC.
+   Existing extractions are untouched; this native reader does not automatically
+   repair/reblock old files. A future saved-rip workflow needs an explicit
+   compatibility path for them.
+
+Synthetic checks cover FLAC and ALAC at 44.1/48/88.2/96 kHz in stereo and 5.1,
+176.4/192 kHz in stereo, and 16/20/24-bit precision. FFmpeg independently
+decodes the 24-bit 96-kHz 5.1 and 192-kHz stereo outputs, checking every sample
+and speaker role. Back/side naming of a single surround pair can differ between
+decoder conventions; this does not permit moving a channel's audio.
+
+Full saved American Beauty track 1 ("Box of Rain") passed native ALAC conversion
+in both stereo and surround after reblocking separate temporary FLAC copies:
+30,736,000 frames each, 96 kHz/24-bit. The conversion hashes below also match
+FFmpeg's independent S32LE decode of each **original** saved FLAC:
+
+| Presentation | SHA-256, interleaved left-aligned S32LE PCM |
+| --- | --- |
+| Stereo | `bc46396f18b7b7090faf38dad5f45c2b42cbdd47b8578777f9fb360571bce4b2` |
+| Surround | `aecfdce461fca8f30415fd972393e0855ed1a1001ce543e35440efcd2b75d073` |
+
+These hashes use 32-bit storage, unlike the earlier S24LE research hashes.
+No optical drives were accessed for this milestone. Saved-file integration
+tests are opt-in with `SILVERSIDE_TEST_PCM_SOURCE`; normal tests use fixtures.
+
+Validation completed after the interrupted session, 2026-11-04: `make format`,
+`make lint`, and the full `make test` pass (481 engine tests, 5 Darwin tests,
+2 helper tests), with hardware tests explicitly disabled. The final check also
+covers rejecting a layout-changing conversion and removing only its temporary
+output. Publishing a verified file uses an exclusive rename, so it does not
+overwrite a destination or require filesystem hard-link support.
+
+Next: add a saved-DVD-rip workflow that accepts a release URL/MBID or manual
+metadata, reviews presentation-to-track assignments, applies names/artwork/tags,
+and writes verified native-resolution FLAC/ALAC. Preserve short navigation
+programs and alternate presentations independently of the chosen MusicBrainz
+track list. This can be developed without a drive, then reused by the GUI.
+
 ### Scope and presentation choices agreed during exploration
 
-- The product goal is usable, high-quality extraction of audio, primarily multichannel FLAC, with track demarcations and correct speaker assignments.
+- The product goal is usable, high-quality lossless extraction to FLAC or ALAC, especially multichannel, with track demarcations and correct speaker assignments.
 - Discover actual presentations and offer surround, stereo, or both when available. Distinguish an authored MLP stereo substream from a separately stored stereo program and from a software-generated downmix. An authored stereo substream is an encoding/production choice, not something every MLP release necessarily contains; Meridian's encoder exposes an optional stereo-downmix setting ([encoder guide](https://www.meridian-audio.info/public/mlpencoderuser%5B2523%5D.pdf), pages 21 and 43).
 - Present selection in the extraction workflow; the exact UI (selector, saved preference, or prompt) is still open. Do not silently synthesize stereo when the user asks for an existing stereo presentation. If both are extracted, keep their files and metadata distinguishable.
 - Speaker mapping is essential for faithful audio. Reproducing optional dynamic-range instructions and other DVD playback behavior is not an initial requirement. Keep archival decoding free of optional dynamics processing, and record known unsupported behavior without making it a prerequisite for audio extraction.
-- Menus, still frames, and other visual presentation are outside the initial scope. A video export with audio/still imagery is a possible later stretch goal. A video file would not necessarily retain interactive DVD menus; preserving the whole interactive experience is a separate problem.
+- Menus, still frames, and other visual presentation are outside the initial audio workflow. An optional movie export with lossless audio and associated visuals is a 2.0 goal (see below). A linear movie does not retain interactive DVD navigation; preserving the whole interactive experience is a separate problem.
 - A physical 5.1 listening setup is not required to continue development. Validate channel identities/order with synthetic fixtures and inspect channels independently; stereo listening remains useful but cannot establish acoustic surround placement.
 
 ## Evidence and starting material
@@ -246,7 +362,7 @@ The full-album extraction and verification in steps 1–3 completed later on 202
 
 Introduce a DVD source/navigation model alongside the CD model. CD TOCs, 75 sectors per second, 588 stereo frames per sector, read offsets, AccurateRip, CTDB, and CD CUE conventions do not apply to DVD audio.
 
-Reuse naming, metadata editing, cover handling, tagging, history, progress, and atomic output where their assumptions fit. Audit `AudioEncoder`, `SurroundPCM`, `SurroundLayout`, `DiscEncoder`, reports, and playback before reuse. In particular, current `SurroundPCM` stores channel mask and precision but no sample rate: it is not yet a general DVD PCM representation. Prefer bounded streaming to holding an entire high-resolution multichannel album in memory. Consider RF64/WAVE64/CAF or streamed raw PCM with explicit format metadata for intermediates beyond WAV's usual size limits.
+Reuse naming, metadata editing, cover handling, tagging, history, progress, and atomic output where their assumptions fit. Audit `AudioEncoder`, `SurroundPCM`, `SurroundLayout`, `DiscEncoder`, reports, and playback before reuse. The 2026-11-03 engine groundwork adds an explicit sample rate to `SurroundPCM`, a `PCMFormat` describing rate/precision/speakers, and bounded native-rate file conversion (details below). The older `TrackPCM` and stereo CD decoding APIs remain CD-specific; do not route DVD audio through them. Consider RF64/WAVE64/CAF or streamed raw PCM with explicit format metadata for intermediates beyond WAV's usual size limits.
 
 Persist a versioned DVD manifest with source identity, domain, group/title/track selection, extents, original codec, PCM format, tool versions, protection/read/decode outcomes, transformations, and output hashes. Keep source-stream preservation and decoded FLAC as distinct artifacts. Avoid collisions between stereo and surround editions. Resume only when source identity and selection match.
 
@@ -268,11 +384,57 @@ Exit criterion: correct selected-stream extraction and chapter cuts on a known D
 
 ## Phase 6: app and distribution
 
-The app shows each available presentation with verified codec/rate/precision/layout and track list. Prefer the user's multichannel FLAC workflow, while allowing stereo selection explicitly. Never select an arbitrary first stream when several presentations exist. Show dependency availability and actionable errors. Ensure optical-drive access is coordinated with existing CD jobs and previews.
+The app shows each available presentation with verified codec/rate/precision/layout and track list. Deliver the CD-like metadata/artwork/editing workflow described above, with tagged FLAC or ALAC output and explicit surround, stereo, or both selection. Never select an arbitrary first stream when several presentations exist. Show dependency availability and actionable errors. Ensure optical-drive access is coordinated with existing CD jobs and previews.
 
 Developer ID distribution remains the target, not the Mac App Store. A bundled hardened helper loading Homebrew libraries may need `com.apple.security.cs.disable-library-validation`; scope it to that executable and keep the main app's validation enabled. This exception is compatible with notarization, but test a real signed/notarized build on a clean machine and macOS 15. It neither grants drive privileges nor provides process sandboxing. Check architectures, dependency discovery, transitive libraries, launch environment, and termination behavior. Do not broadly enable DYLD injection exceptions.
 
 Upstream commit `81e4dcd` implements the personal-use acknowledgment in the app and CLI, using shared `Settings.agreedToPersonalUse` and `silverside --accept-disclaimer` for noninteractive acceptance. Future DVD integration should use the existing policy and wording. No separate acknowledgment implementation is needed for these inventory experiments.
+
+## 2.0: optional movie export with lossless audio
+
+Agreed 2026-11-03; deferred until the main audio workflow is usable. Add an
+optional, default-off choice such as **Also export a video file** alongside the
+normal audio rip. It creates an additional movie; the tagged FLAC/ALAC tracks
+remain the primary output. Initial format candidates are **ALAC audio with
+H.264 or H.265/HEVC video in an MP4 container**, assembled using AVFoundation.
+Video codec choice and the supported container/player combinations need a
+prototype; do not assume that a television supports multichannel ALAC merely
+because it plays MP4. AAC compatibility audio is optional future work and must
+not silently replace the lossless movie soundtrack.
+
+DVD-Audio visual material needs its own inventory and navigation model:
+
+- Audio Still Video (ASV) contains MPEG-2 still pictures associated with audio
+  playback, potentially with subpicture overlays and buttons. The audio-side
+  picture set normally uses `AUDIO_SV.VOB` and `AUDIO_SV.IFO`; audio-manager
+  menus can also occupy `AUDIO_TS.VOB`.
+- Companion DVD-Video titles and menus live in `VIDEO_TS`. They may be the
+  presentation seen on an ordinary DVD-Video player and must not be assumed to
+  share the high-resolution audio program's exact edit or timeline.
+- Authored picture sequences can be timed, manually browsed, random or shuffled.
+  Recover automatic timing where available. A manually advanced gallery needs
+  an explicit export policy for order and duration; any generated timing must
+  be identified as such. Render relevant overlays deliberately and distinguish
+  a linear visual presentation from preservation of working DVD menus.
+
+See the [Sonic authoring manual](https://www.quadraphonic.info/DVD-Audio-SACD-Blu-Ray/manuals/Sonic-DAC_Guide-draft2.pdf)
+for ASV behavior and [AVAssetWriter](https://developer.apple.com/documentation/avfoundation/avassetwriter)
+for movie assembly and output capability checks. The helper/FFmpeg can handle
+disc access and MPEG-2 extraction/decoding before AVFoundation receives the
+picture/video timeline and decoded audio. ALAC is the lossless audio candidate;
+verify its rate, precision, channel layout and decoded PCM in the completed
+movie against the selected audio extraction. Preserve song demarcations as
+movie chapters where supported, and resolve offsets or edit differences before
+combining DVD-Video visuals with DVD-Audio sound. Keep original visual assets
+and recovered timing available for inspection during development.
+
+American Beauty is the first candidate: the saved inventory contains an
+approximately 20.6 MB `AUDIO_SV.VOB`, its IFO, an approximately 2.1 MB
+`AUDIO_TS.VOB`, and three DVD-Video title sets. The user has confirmed interesting
+visual content in playback; the exact assets and navigation path have not yet
+been mapped. When work on this feature begins, first extract a contact sheet
+and picture/timing inventory, then make a one-track movie with verified
+lossless audio before attempting a complete album export.
 
 ## Validation matrix
 

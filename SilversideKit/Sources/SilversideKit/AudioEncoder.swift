@@ -57,6 +57,7 @@ public enum AudioFormat: String, CaseIterable, Codable, Sendable {
 public enum AudioEncoderError: Error, Equatable, CustomStringConvertible {
     case audioToolbox(operation: String, status: Int32)
     case notThroughAudioToolbox(AudioFormat)
+    case invalidPCM(String)
 
     public var description: String {
         switch self {
@@ -65,6 +66,7 @@ public enum AudioEncoderError: Error, Equatable, CustomStringConvertible {
                 bytes.allSatisfy { (0x20...0x7E).contains($0) } ? " ('\(String(decoding: bytes, as: UTF8.self))')" : ""
             }
             return "\(operation) failed with status \(status)\(code)"
+        case .invalidPCM(let reason): return reason
         case .notThroughAudioToolbox(let format):
             return "\(format.rawValue) is not written through AudioToolbox"
         }
@@ -97,24 +99,30 @@ public enum TrackPCM: Equatable, Sendable {
     }
 }
 
-/// Audio of more channels than two, as a DTS decode gives it: interleaved 32-bit values (as in
+/// Stereo or multichannel audio, as a DTS/DVD decode gives it: interleaved 32-bit values (as in
 /// `TrackPCM.wide`) in WAVE's channel order, which `channelMask` names with WAVE's bits.
 /// Core Audio's channel bitmap gives the bits the same meanings.
 public struct SurroundPCM: Equatable, Sendable {
     public var values: [Int32]
     public var channels: Int
     public var channelMask: UInt32
-    /// The bits that the values use: 20 or 24 (FLAC and Apple Lossless keep these).
+    public var sampleRate: Double
+    /// The meaningful high bits of each left-aligned Int32 sample.
     public var bits: Int
 
-    public init(values: [Int32], channels: Int, channelMask: UInt32, bits: Int = 24) {
+    public init(values: [Int32], channels: Int, channelMask: UInt32, bits: Int = 24, sampleRate: Double = 44_100) {
         self.values = values
         self.channels = channels
         self.channelMask = channelMask
         self.bits = bits
+        self.sampleRate = sampleRate
     }
 
-    public var frameCount: Int { values.count / channels }
+    public var frameCount: Int { channels > 0 ? values.count / channels : 0 }
+
+    public var pcmFormat: PCMFormat {
+        PCMFormat(sampleRate: sampleRate, channels: channels, channelMask: channelMask, bits: bits)
+    }
 
     /// The usual channels for a count, as FLAC orders them: 5.1 for 6.
     static func standardMask(channels: Int) -> UInt32 {
@@ -290,21 +298,39 @@ public enum AudioEncoder {
     public static func encode(
         _ audio: SurroundPCM, format: AudioFormat, to url: URL, aac: AACOptions = AACOptions()
     ) throws {
+        try audio.pcmFormat.validate()
+        try audio.pcmFormat.validate(values: audio.values)
+        var next: [Int32]? = audio.values
+        try encode(pcm: audio.pcmFormat, format: format, to: url, aac: aac) {
+            defer { next = nil }
+            return next
+        }
+    }
+
+    /// Writes left-aligned Int32 PCM in bounded chunks, in WAVE speaker order, at
+    /// the supplied source rate. Like the array encoders, this replaces the target;
+    /// use transcodeLossless for verified conversion into an exclusive new output.
+    public static func encode(
+        pcm: PCMFormat, format: AudioFormat, to url: URL, aac: AACOptions = AACOptions(),
+        parts next: () throws -> [Int32]?
+    ) throws {
+        try pcm.validate()
         guard holdsSurround(format) else { throw DTSError.noSurround(format) }
         // The channels in the layout's order, so that AudioToolbox converts none (`SurroundLayout`).
-        let layout = try SurroundLayout.of(mask: audio.channelMask, format: format)
-        let values = layout?.arrange(audio) ?? audio.values
-        let channels = UInt32(layout?.channels ?? audio.channels)
+        let layout = try SurroundLayout.of(mask: pcm.channelMask, format: format, sampleRate: pcm.sampleRate)
+        let channels = UInt32(layout?.channels ?? pcm.channels)
         var destination = AudioStreamBasicDescription()
-        destination.mSampleRate = 44_100
+        destination.mSampleRate = pcm.sampleRate
         destination.mChannelsPerFrame = channels
         let bitsFlag =
-            audio.bits == 20 ? kAppleLosslessFormatFlag_20BitSourceData : kAppleLosslessFormatFlag_24BitSourceData
+            pcm.bits == 16
+            ? kAppleLosslessFormatFlag_16BitSourceData
+            : pcm.bits == 20 ? kAppleLosslessFormatFlag_20BitSourceData : kAppleLosslessFormatFlag_24BitSourceData
         var fileLayout = AudioChannelLayout()
         if let layout {
             fileLayout.mChannelLayoutTag = layout.tag
         } else {
-            fileLayout = Self.layout(bitmap: audio.channelMask)
+            fileLayout = Self.layout(bitmap: pcm.channelMask)
         }
         let fileType: AudioFileTypeID
         switch format {
@@ -343,21 +369,28 @@ public enum AudioEncoder {
         guard let file else { throw AudioEncoderError.audioToolbox(operation: "ExtAudioFileCreateWithURL", status: -1) }
         var closed = false
         defer { if !closed { ExtAudioFileDispose(file) } }
-        try setClient(of: file, channels: Int(channels))
+        try setClient(of: file, channels: Int(channels), sampleRate: pcm.sampleRate)
         if format == .aac { try configure(aac, of: file) }
         let bytesPerFrame = 4 * Int(channels)
-        try values.withUnsafeBytes { bytes in
-            let frames = bytes.count / bytesPerFrame
-            var start = 0
-            while start < frames {
-                let count = min(44_100, frames - start)
-                var list = AudioBufferList(
-                    mNumberBuffers: 1,
-                    mBuffers: AudioBuffer(
-                        mNumberChannels: channels, mDataByteSize: UInt32(count * bytesPerFrame),
-                        mData: UnsafeMutableRawPointer(mutating: bytes.baseAddress! + start * bytesPerFrame)))
-                try check("ExtAudioFileWrite", ExtAudioFileWrite(file, UInt32(count), &list))
-                start += count
+        while let input = try next() {
+            try pcm.validate(values: input)
+            let chunk = SurroundPCM(
+                values: input, channels: pcm.channels, channelMask: pcm.channelMask,
+                bits: pcm.bits, sampleRate: pcm.sampleRate)
+            let values = layout?.arrange(chunk) ?? input
+            try values.withUnsafeBytes { bytes in
+                let frames = bytes.count / bytesPerFrame
+                var start = 0
+                while start < frames {
+                    let count = min(16_384, frames - start)
+                    var list = AudioBufferList(
+                        mNumberBuffers: 1,
+                        mBuffers: AudioBuffer(
+                            mNumberChannels: channels, mDataByteSize: UInt32(count * bytesPerFrame),
+                            mData: UnsafeMutableRawPointer(mutating: bytes.baseAddress! + start * bytesPerFrame)))
+                    try check("ExtAudioFileWrite", ExtAudioFileWrite(file, UInt32(count), &list))
+                    start += count
+                }
             }
         }
         closed = true
@@ -368,19 +401,23 @@ public enum AudioEncoder {
     public static func decodeSurround(_ url: URL) throws -> SurroundPCM {
         let file = try readChannels(url)
         if let bitmap = file.bitmap, SurroundLayout.speakers(of: bitmap).count == file.channels {
-            return SurroundPCM(values: file.values, channels: file.channels, channelMask: bitmap)
+            return SurroundPCM(
+                values: file.values, channels: file.channels, channelMask: bitmap, bits: file.bits,
+                sampleRate: file.sampleRate)
         }
         guard let labels = file.labels, let speakers = SurroundLayout.speakers(of: labels) else {
             return SurroundPCM(
                 values: file.values, channels: file.channels,
-                channelMask: SurroundPCM.standardMask(channels: file.channels))
+                channelMask: SurroundPCM.standardMask(channels: file.channels), bits: file.bits,
+                sampleRate: file.sampleRate)
         }
         // WAVE's order is the speakers' bits from the lowest.
         let order = speakers.indices.sorted { speakers[$0] < speakers[$1] }
         let source = SurroundPCM(values: file.values, channels: file.channels, channelMask: 0)
         let layout = SurroundLayout(tag: 0, sources: order)
         return SurroundPCM(
-            values: layout.arrange(source), channels: file.channels, channelMask: speakers.reduce(0, |))
+            values: layout.arrange(source), channels: file.channels, channelMask: speakers.reduce(0, |),
+            bits: file.bits, sampleRate: file.sampleRate)
     }
 
     /// Reads a file written from audio with `mask`'s speakers: each speaker's channel, in the
@@ -390,20 +427,23 @@ public enum AudioEncoder {
         let file = try readChannels(url)
         let speakers = SurroundLayout.speakers(of: mask)
         if file.bitmap == mask || (file.labels == nil && file.channels == speakers.count) {
-            return SurroundPCM(values: file.values, channels: file.channels, channelMask: mask)
+            return SurroundPCM(
+                values: file.values, channels: file.channels, channelMask: mask, bits: file.bits,
+                sampleRate: file.sampleRate)
         }
         guard let labels = file.labels, let places = SurroundLayout.assign(speakers, to: labels) else { return nil }
         // The file channel of each speaker, in the speakers' order.
         let order = speakers.indices.map { speaker in places.firstIndex(of: speaker)! }
         let source = SurroundPCM(values: file.values, channels: file.channels, channelMask: 0)
         let picked = SurroundLayout(tag: 0, sources: order).arrange(source)
-        return SurroundPCM(values: picked, channels: speakers.count, channelMask: mask)
+        return SurroundPCM(
+            values: picked, channels: speakers.count, channelMask: mask, bits: file.bits, sampleRate: file.sampleRate)
     }
 
     /// A file's values in its own channel order, and the speakers its layout names: a bitmap,
     /// or Core Audio's labels.
     private static func readChannels(_ url: URL) throws -> (
-        values: [Int32], channels: Int, bitmap: UInt32?, labels: [AudioChannelLabel]?
+        values: [Int32], channels: Int, sampleRate: Double, bits: Int, bitmap: UInt32?, labels: [AudioChannelLabel]?
     ) {
         var file: ExtAudioFileRef?
         try check("ExtAudioFileOpenURL", ExtAudioFileOpenURL(url as CFURL, &file))
@@ -416,11 +456,11 @@ public enum AudioEncoder {
             ExtAudioFileGetProperty(file, kExtAudioFileProperty_FileDataFormat, &size, &format))
         let channels = Int(format.mChannelsPerFrame)
         let (bitmap, labels) = fileSpeakers(of: file)
-        try setClient(of: file, channels: channels)
+        try setClient(of: file, channels: channels, sampleRate: format.mSampleRate)
         var values = [Int32]()
-        var part = [Int32](repeating: 0, count: 44_100 * channels)
+        var part = [Int32](repeating: 0, count: 16_384 * channels)
         while true {
-            var frames = UInt32(44_100)
+            var frames = UInt32(16_384)
             let status = part.withUnsafeMutableBytes { bytes -> OSStatus in
                 var list = AudioBufferList(
                     mNumberBuffers: 1,
@@ -433,7 +473,10 @@ public enum AudioEncoder {
             if frames == 0 { break }
             values += part[0..<(Int(frames) * channels)]
         }
-        return (values, channels, bitmap, labels.flatMap { $0.count == channels ? $0 : nil })
+        return (
+            values, channels, format.mSampleRate, sourceBits(format), bitmap,
+            labels.flatMap { $0.count == channels ? $0 : nil }
+        )
     }
 
     private static func layout(bitmap: UInt32) -> AudioChannelLayout {
@@ -444,7 +487,7 @@ public enum AudioEncoder {
     }
 
     /// The speakers the file's layout names: a bitmap, or the labels of its channels.
-    private static func fileSpeakers(of file: ExtAudioFileRef) -> (bitmap: UInt32?, labels: [AudioChannelLabel]?) {
+    static func fileSpeakers(of file: ExtAudioFileRef) -> (bitmap: UInt32?, labels: [AudioChannelLabel]?) {
         var size: UInt32 = 0
         // A layout with no channel descriptions is shorter than `AudioChannelLayout`, which has room for one.
         let header = MemoryLayout<AudioChannelLayout>.offset(of: \.mChannelDescriptions)!
@@ -469,9 +512,9 @@ public enum AudioEncoder {
 
     /// Sets the file's client format to interleaved 32-bit values in the file's own channel
     /// order: no client layout, so AudioToolbox moves no channel.
-    private static func setClient(of file: ExtAudioFileRef, channels: Int) throws {
+    static func setClient(of file: ExtAudioFileRef, channels: Int, sampleRate: Double) throws {
         var client = AudioStreamBasicDescription(
-            mSampleRate: 44_100, mFormatID: kAudioFormatLinearPCM,
+            mSampleRate: sampleRate, mFormatID: kAudioFormatLinearPCM,
             mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
             mBytesPerPacket: UInt32(4 * channels), mFramesPerPacket: 1, mBytesPerFrame: UInt32(4 * channels),
             mChannelsPerFrame: UInt32(channels), mBitsPerChannel: 32, mReserved: 0)
@@ -480,14 +523,23 @@ public enum AudioEncoder {
             ExtAudioFileSetProperty(
                 file, kExtAudioFileProperty_ClientDataFormat, UInt32(MemoryLayout<AudioStreamBasicDescription>.size),
                 &client))
+        // A 4096-frame, 24-bit, eight-channel ALAC packet can exceed the default
+        // disk-conversion buffer when the audio compresses poorly.
+        var ioBytes: UInt32 = 1_048_576
+        try check(
+            "IOBufferSizeBytes",
+            ExtAudioFileSetProperty(
+                file, kExtAudioFileProperty_IOBufferSizeBytes, UInt32(MemoryLayout<UInt32>.size), &ioBytes))
     }
 
-    /// Reads a file that AudioToolbox can decode (FLAC, ALAC, AAC, AIFF, WAV, MP3) as Silverside samples.
+    /// Reads as CD-format stereo/16-bit/44100 Hz samples, converting if necessary.
+    /// Use PCMFileReader for native-rate lossless file conversion.
     public static func decode(_ url: URL) throws -> [UInt32] {
         try read(url, client: clientFormat, as: UInt32.self)
     }
 
-    /// Reads a file as 32-bit values (`TrackPCM.wide`), so a 20-bit or 24-bit file keeps its bits.
+    /// Reads as stereo/44100 Hz, with left-aligned 32-bit values (`TrackPCM.wide`).
+    /// Use PCMFileReader to also preserve a file's native sample rate and speakers.
     public static func decodeWide(_ url: URL) throws -> [Int32] {
         try read(url, client: wideClientFormat, as: Int32.self)
     }
@@ -580,7 +632,7 @@ public enum AudioEncoder {
                 file, kExtAudioFileProperty_ConverterConfig, UInt32(MemoryLayout<UnsafeRawPointer?>.size), &none))
     }
 
-    private static func check(_ operation: String, _ status: OSStatus) throws {
+    static func check(_ operation: String, _ status: OSStatus) throws {
         guard status == noErr else { throw AudioEncoderError.audioToolbox(operation: operation, status: status) }
     }
 }

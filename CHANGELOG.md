@@ -246,6 +246,11 @@ command-line tool.
 
 ### Fixed
 
+- DVD-Audio FLAC output uses blocks that Apple's audio decoder can read,
+  preserving the same samples and track boundaries. Earlier extractions
+  could play in VLC but fail to open through Apple's audio frameworks.
+- Multichannel ALAC encoding handles poorly compressible 24-bit audio
+  without producing an empty or incomplete file.
 - After CTDB's repair data was tried and the errors were too many, the
   advice said that the matching entries had no repair data. It now says
   the errors were too many.

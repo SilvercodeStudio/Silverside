@@ -1397,8 +1397,9 @@ public struct DiscEncoder: Sendable {
             let decoded = try AudioEncoder.decodeSurround(url, as: surround.channelMask)
             matches =
                 decoded.map {
-                    format.isLossless
-                        ? $0.values == surround.values : abs($0.frameCount - surround.frameCount) < 4 * 1152
+                    $0.sampleRate == surround.sampleRate
+                        && (format.isLossless
+                            ? $0.values == surround.values : abs($0.frameCount - surround.frameCount) < 4 * 1152)
                 } ?? false
         case .pcm(.cd(let samples)):
             let decoded = try AudioEncoder.decode(url)

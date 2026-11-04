@@ -33,11 +33,16 @@ command-line tool.
   picker, and in Change Release…. Search by names, barcode, or catalog
   number; each release shows its cover, what tells editions apart, and
   whether one of its discs has as many tracks as yours. The release you
-  choose must have a disc whose track lengths fit yours.
+  choose must have a disc whose track lengths fit yours, each within a few
+  seconds, so another recording of the same works does not pass for it.
 - Change Release… (and its search) can keep your track titles: each track
   keeps the title it has now, and the album's names, the date, the
   composers, and the MusicBrainz IDs become the new release's. A disc of
   your own set that moves to a MusicBrainz release leaves the set.
+- Notes on a rip: Edit Notes… (in Rip History's and Recent Rips' menus, and
+  in Disc) keeps your own text with the rip, such as "stealth HDCD, no logo".
+  Rip History has a Notes column and searches them, the rip's page shows
+  them, and the report has them. They stay when the rip's files move or go.
 - Look Up Metadata (⌘L) works on an earlier rip too: it asks MusicBrainz for
   the rip's release again, for a disc ID you added there since or names that
   changed, and every rip of the release follows, so a set's discs lose

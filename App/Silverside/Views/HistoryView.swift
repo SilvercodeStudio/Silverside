@@ -15,7 +15,7 @@ struct HistoryView: View {
             needle.isEmpty
             ? model.allRips
             : model.allRips.filter {
-                [$0.title, $0.artist, $0.report.drive.product, $0.medium].contains {
+                [$0.title, $0.artist, $0.report.drive.product, $0.medium, $0.notes].contains {
                     PlainPunctuation.text($0, contains: needle)
                 }
             }
@@ -47,11 +47,17 @@ struct HistoryView: View {
                 TableColumn("Medium", value: \.medium).width(min: 80, ideal: 130)
                 TableColumn("Drive", value: \.driveName).width(min: 150, ideal: 220)
                 TableColumn("Where", value: \.location).width(min: 80, ideal: 100)
+                TableColumn("Notes", value: \.notes) { rip in
+                    Text(rip.notes.replacingOccurrences(of: "\n", with: " ")).lineLimit(1).foregroundStyle(.secondary)
+                        .help(rip.notes)
+                }
+                .width(min: 80, ideal: 200)
             }
             .alternatingRowBackgrounds(.disabled)
             .contextMenu(forSelectionType: URL.self) { files in
                 if let file = files.first, let rip = model.allRips.first(where: { $0.file == file }) {
                     Button("Show Results") { model.selection = .rip(rip.file) }
+                    Button("Edit Notes…") { model.notesRip = rip }
                     if rip.isMissing {
                         Button("Look for Moved Rips…") { model.locateMissingRips() }
                         Button("Remove from History") { model.forget(rip) }
@@ -68,7 +74,7 @@ struct HistoryView: View {
             }
         }
         .navigationTitle("Rip History")
-        .tableSearch($model.historySearch, prompt: "Album, artist, medium, or drive")
+        .tableSearch($model.historySearch, prompt: "Album, artist, medium, drive, or notes")
         .onAppear(perform: findRows)
         .onChange(of: model.historySearch, findRows)
         .onChange(of: model.historyOrder, findRows)

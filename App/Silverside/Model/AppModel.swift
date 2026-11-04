@@ -993,6 +993,19 @@ final class AppModel {
     /// The disc or rip the custom set sheet shows, if it shows.
     var customSetTarget: DiscTarget?
 
+    /// The rip whose notes the notes sheet edits, if it shows.
+    var notesRip: RecentRip?
+
+    /// Saves the user's notes on an earlier rip (`RipReport.saveNotes`).
+    func saveNotes(_ notes: String, of rip: RecentRip) {
+        do {
+            try RipReport.saveNotes(notes, of: rip.report, at: rip.file, hasAudio: rip.hasAudio, history: history)
+        } catch {
+            alert = AppAlert(title: "The notes could not be saved", message: "\(error)")
+        }
+        refreshRecentRips()
+    }
+
     /// The disc or rip the MusicBrainz search shows, if it shows.
     var releaseSearchTarget: DiscTarget?
 

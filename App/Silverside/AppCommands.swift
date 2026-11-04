@@ -86,6 +86,8 @@ struct AppCommands: Commands {
                 model.customSetTarget = model.discCandidate
             }
             .disabled(model.discCandidate == nil)
+            Button("Edit Notes…") { model.notesRip = model.selectedRip }
+                .disabled(model.selectedRip == nil)
             Button("Change Release…") { model.changingRelease = model.selectedRip }
                 .disabled(model.selectedRip.map(model.canChangeRelease) != true)
             Divider()

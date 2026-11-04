@@ -530,6 +530,16 @@ struct ResultsView: View {
                 if let advice = report.advice {
                     Text(advice).font(.callout).foregroundStyle(.secondary)
                 }
+                if let notes = report.notes {
+                    Button {
+                        model.notesRip = model.allRips.first { $0.file == recentRip.file } ?? recentRip
+                    } label: {
+                        Label(notes, systemImage: "note.text").font(.callout).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading).lineLimit(4)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Your notes on this rip. Click to edit them.")
+                }
                 if let fraction = model.savingDataTrack[recentRip.file] {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)

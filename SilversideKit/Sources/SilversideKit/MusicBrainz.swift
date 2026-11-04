@@ -174,6 +174,53 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
         return ranked[0].0
     }
 
+    /// How a medium of a release that the user found fits a disc (`fit(for:)`).
+    public struct MediumFit: Equatable, Sendable {
+        public enum Kind: Equatable, Sendable {
+            /// The medium has the disc's ID.
+            case discID
+            /// As many tracks, and each length that MusicBrainz has agrees with the disc's
+            /// (`lengthsAgree`).
+            case lengths
+            /// As many tracks, but MusicBrainz has no length to compare.
+            case trackCountOnly
+        }
+
+        public var medium: Medium
+        public var kind: Kind
+    }
+
+    /// The medium that can be this disc, for a release found by a search, not by the disc's ID.
+    /// Stricter than `medium(for:)`, which trusts MusicBrainz's own match: the track count must
+    /// be the disc's, and each known length must agree. A release with another recording of the
+    /// same works (*Mozart's Last Symphonies* for Karajan's) has as many tracks, but not their
+    /// lengths. Nil if no medium fits.
+    public func fit(for toc: TOC) -> MediumFit? {
+        if let medium = medium(withDiscID: toc.musicBrainzDiscID) { return MediumFit(medium: medium, kind: .discID) }
+        let lengths = toc.audioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
+        var best: (medium: Medium, distance: Int)?
+        var countOnly: Medium?
+        for medium in media where medium.tracks.count == lengths.count {
+            let known = zip(medium.tracks, lengths).compactMap { track, length in track.length.map { ($0, length) } }
+            if known.isEmpty {
+                countOnly = countOnly ?? medium
+                continue
+            }
+            guard known.allSatisfy({ Self.lengthsAgree($0.0, $0.1) }) else { continue }
+            let distance = known.reduce(0) { $0 + abs($1.0 - $1.1) }
+            if best.map({ distance < $0.distance }) ?? true { best = (medium, distance) }
+        }
+        if let best { return MediumFit(medium: best.medium, kind: .lengths) }
+        return countOnly.map { MediumFit(medium: $0, kind: .trackCountOnly) }
+    }
+
+    /// True if MusicBrainz's length of a track (milliseconds) can be the disc's: within 5
+    /// seconds, or 3% of a long track. Pressings of one master differ by a frame or two, and a
+    /// length typed from a sleeve by a second or two; another recording differs by more.
+    public static func lengthsAgree(_ listed: Int, _ disc: Int) -> Bool {
+        abs(listed - disc) <= max(5000, disc * 3 / 100)
+    }
+
     /// True if MusicBrainz gave this release for the disc without the disc's ID: a match of
     /// the track lengths, as for a release no one has added the disc ID to (`submissionURL`).
     /// False for a manual release, which is not MusicBrainz's.

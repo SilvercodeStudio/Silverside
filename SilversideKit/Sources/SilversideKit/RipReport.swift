@@ -337,6 +337,8 @@ public struct RipReport: Codable, Equatable, Sendable {
     public var ctdb: CTDBResult
     /// The disc's MCN (barcode), from the Q subchannel.
     public var mcn: String?
+    /// The user's own notes on the rip, from Rip History or the rip's page (`saveNotes`).
+    public var notes: String?
     /// What the disc is: pressed, or a CD-R or CD-RW. Nil if the drive could not tell, and in older reports.
     public var media: DiscMediaType?
     /// The disc's CD-Text, if it has any.
@@ -692,6 +694,41 @@ extension RipReport {
         if url.lastPathComponent == "disc.json", FileManager.default.fileExists(atPath: markdown.path) {
             try read(from: url).writeReadable(to: markdown)
         }
+    }
+
+    /// Saves the user's notes on a rip; empty notes are none. They go into its report file, and
+    /// for a rip folder's report into the album folder's copy too, keeping every other key; and
+    /// into the history (`RipHistory`), so that a rip whose files moved or went keeps them. A
+    /// report that is not there any more (`report` is the history's copy) changes the history only.
+    public static func saveNotes(
+        _ notes: String?, of report: RipReport, at file: URL, hasAudio: Bool, history: RipHistory = RipHistory()
+    ) throws {
+        let trimmed = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let kept = trimmed?.isEmpty == false ? trimmed : nil
+        var files = [URL]()
+        if FileManager.default.fileExists(atPath: file.path) {
+            files.append(file)
+            if file.lastPathComponent == "disc.json", let encoding = report.encoding {
+                let album = URL(filePath: encoding.folder, directoryHint: .isDirectory)
+                    .appending(path: "Rip Report\(try DiscEncoder.discPart(of: report)).json")
+                if FileManager.default.fileExists(atPath: album.path) { files.append(album) }
+            }
+        }
+        for url in files {
+            var object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any] ?? [:]
+            if var nested = object["ripReport"] as? [String: Any] {
+                nested["notes"] = kept
+                object["ripReport"] = nested
+            } else {
+                object["notes"] = kept
+            }
+            let data = try JSONSerialization.data(
+                withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+            try data.write(to: url, options: .atomic)
+        }
+        var updated = report
+        updated.notes = kept
+        try history.record(updated, file: file, hasAudio: hasAudio)
     }
 
     /// The tracks that AccurateRip and CTDB do not prove, by number.

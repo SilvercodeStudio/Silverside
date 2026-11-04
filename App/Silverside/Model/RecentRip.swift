@@ -62,6 +62,8 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     /// What the disc is: "CD", "Enhanced CD", "HDCD, decoded".
     var medium: String { DiscLogo.medium(of: report) ?? "" }
     var date: Date { report.date }
+    /// The user's notes on the rip, or "".
+    var notes: String { report.notes ?? "" }
 
     /// A rip that a database did not have, or that is not verified, with its audio to check
     /// again: its WAV files, or the album's lossless files, not an HDCD decode.

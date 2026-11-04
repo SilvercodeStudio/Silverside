@@ -170,6 +170,41 @@ struct MusicBrainzTests {
         #expect(release.medium(for: try TOC(audioTrackStarts: [0, 100], leadOutLBA: 200)) == nil)
     }
 
+    /// A release that a search found fits only when its lengths agree: another recording of the
+    /// same works has as many tracks, but not their lengths.
+    @Test func fitsAFoundReleaseByItsLengths() throws {
+        func release(_ lengths: [Int?]) -> MusicBrainzRelease {
+            MusicBrainzRelease(
+                id: "r", title: "Mozart", artistCredit: [], date: nil, country: nil, status: nil, barcode: nil,
+                disambiguation: nil, labels: [], releaseGroup: nil,
+                media: [
+                    .init(
+                        position: 1, format: "CD", title: nil, discIDs: [],
+                        tracks: lengths.enumerated().map {
+                            .init(
+                                position: $0.offset + 1, number: String($0.offset + 1), title: "T",
+                                length: $0.element, artistCredit: [], recordingID: nil)
+                        })
+                ], hasFrontCover: false)
+        }
+        // Karajan's Haffner and Linz on the DTS-CD's sleeve: 5:39, 4:19, 3:24, 3:55, 8:13, 7:11, 4:32, 5:20.
+        let seconds = [339, 259, 204, 235, 493, 431, 272, 320]
+        var starts = [0]
+        for length in seconds.dropLast() { starts.append(starts.last! + length * 75) }
+        let toc = try TOC(audioTrackStarts: starts, leadOutLBA: starts.last! + seconds.last! * 75)
+        // A pressing whose lengths are off by a second or two fits; the loose match takes any 8 tracks.
+        let pressing = release(seconds.map { $0 * 1000 + 1500 })
+        #expect(pressing.fit(for: toc)?.kind == .lengths)
+        let other = release([380, 300, 230, 240, 600, 450, 280, 330].map { $0 * 1000 })
+        #expect(other.fit(for: toc) == nil && other.medium(for: toc) != nil)
+        // No lengths to compare: the count alone, said as such; some lengths: those must agree.
+        #expect(release(Array(repeating: nil, count: 8)).fit(for: toc)?.kind == .trackCountOnly)
+        #expect(release([339_000, nil, nil, nil, nil, nil, nil, 380_000]).fit(for: toc) == nil)
+        #expect(release(Array(repeating: 300_000, count: 7)).fit(for: toc) == nil)
+        // 3% of a long track: 15 seconds of 8:20 agree, 16 do not.
+        #expect(MusicBrainzRelease.lengthsAgree(515_000, 500_000) && !MusicBrainzRelease.lengthsAgree(516_000, 500_000))
+    }
+
     /// A release matched by its track lengths lacks the disc ID; one found by the ID, and a
     /// manual release, do not.
     @Test func tellsAMatchOfTheLengthsFromAMatchOfTheDiscID() throws {

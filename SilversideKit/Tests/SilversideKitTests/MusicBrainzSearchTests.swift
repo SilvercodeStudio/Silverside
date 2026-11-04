@@ -49,6 +49,7 @@ struct MusicBrainzSearchTests {
         let release = try #require(
             try MusicBrainzClient.release(fromJSON: tests.fixture("seven-classic-lps-release")) as MusicBrainzRelease?)
         #expect(release.medium(for: toc)?.position == 1 && release.medium(withDiscID: toc.musicBrainzDiscID) == nil)
+        #expect(release.fit(for: toc).map { ($0.medium.position, $0.kind) } ?? (0, .discID) == (1, .lengths))
 
         let result = try await ReleaseLookup.find(
             toc: toc, mcn: "0823564030142", client: client,

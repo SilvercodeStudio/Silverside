@@ -114,6 +114,9 @@ struct MainWindow: View {
         .sheet(item: $model.releaseSearchTarget) { target in
             ReleaseSearchTargetSheet(target: target)
         }
+        .sheet(item: $model.notesRip) { rip in
+            NotesSheet(rip: rip)
+        }
         .onAppear {
             // The first launch opens the welcome. `-welcomeDone 0` opens it again, and `-welcomeDone 1` keeps it shut.
             if !UserDefaults.standard.bool(forKey: WelcomeView.doneKey) { openWindow(id: "welcome") }
@@ -305,6 +308,7 @@ struct SidebarView: View {
                     .help(rip.details)
                     .contextMenu {
                         Button("Show in Finder") { model.revealInFinder(rip.folder) }
+                        Button("Edit Notes…") { model.notesRip = rip }
                         Button("Change Release…") { model.changingRelease = rip }
                             .disabled(!model.canChangeRelease(rip))
                         Divider()

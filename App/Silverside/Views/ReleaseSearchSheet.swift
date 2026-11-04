@@ -74,7 +74,7 @@ struct ReleaseSearchSheet: View {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button(actionTitle) { use() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(detailed?.medium(for: toc) == nil)
+                    .disabled(detailed?.fit(for: toc) == nil)
             }
         }
         .padding(20)
@@ -173,17 +173,26 @@ struct ReleaseSearchSheet: View {
                 if let detailFailure {
                     Text(detailFailure).foregroundStyle(Theme.warning)
                 } else if let detailed {
-                    if let medium = detailed.medium(for: toc) {
-                        Label(
-                            detailed.media.count > 1
-                                ? "Disc \(medium.position) of \(detailed.media.count) fits this disc's track lengths."
-                                : "Its track lengths fit this disc's.",
-                            systemImage: "checkmark.circle"
-                        )
-                        .foregroundStyle(Theme.good)
+                    if let fit = detailed.fit(for: toc) {
+                        let disc =
+                            detailed.media.count > 1 ? "Disc \(fit.medium.position) of \(detailed.media.count)" : "It"
+                        switch fit.kind {
+                        case .discID:
+                            Label("\(disc) has this disc's ID.", systemImage: "checkmark.circle")
+                                .foregroundStyle(Theme.good)
+                        case .lengths:
+                            Label("\(disc) fits this disc's track lengths.", systemImage: "checkmark.circle")
+                                .foregroundStyle(Theme.good)
+                        case .trackCountOnly:
+                            Label(
+                                "\(disc) has \(Format.count(trackCount, "track")), but MusicBrainz has no lengths to compare. Check the titles in MusicBrainz first.",
+                                systemImage: "questionmark.circle"
+                            )
+                            .foregroundStyle(Theme.warning)
+                        }
                     } else {
                         Label(
-                            "No disc of this release fits this one: the number of tracks or their lengths differ.",
+                            "No disc of this release fits this one: the number of tracks or their lengths differ, so it may be another recording.",
                             systemImage: "xmark.circle"
                         )
                         .foregroundStyle(Theme.warning)
@@ -243,7 +252,7 @@ struct ReleaseSearchSheet: View {
     }
 
     private func use() {
-        guard let detailed, detailed.medium(for: toc) != nil else { return }
+        guard let detailed, detailed.fit(for: toc) != nil else { return }
         choose(detailed, offersKeepingTitles && keepsTitles)
         dismiss()
     }

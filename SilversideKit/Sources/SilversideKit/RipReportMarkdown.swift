@@ -13,6 +13,12 @@ extension RipReport {
         lines.append(
             "\(program), \(ISO8601DateFormatter().string(from: date)). \(secure ? "Secure rip" : "Single pass").")
         lines.append("")
+        if let notes, !notes.isEmpty {
+            lines.append("## Notes")
+            lines.append("")
+            lines.append(notes)
+            lines.append("")
+        }
 
         lines.append("## Result")
         lines.append("")

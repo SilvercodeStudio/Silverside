@@ -39,4 +39,28 @@ struct RipNotesTests {
         #expect(try RipReport.read(from: file).notes == nil)
         #expect(history.entries()[key]?.report.notes == "The first try")
     }
+
+    /// An older rip whose encoded album a later rip of the disc replaced: its notes go into its
+    /// own disc.json, not into the later rip's album report.
+    @Test func leavesAnotherRipsAlbumReportAlone() throws {
+        let (folder, library) = try EncodingTests().makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = folder.appending(path: "disc.json")
+        let (files, record) = try DiscEncoder(format: .flac).encodeWithRecord(
+            try RippedDisc(folder: folder), into: library)
+        try #require(record).save(inReportAt: file)
+        let own = try RipReport.read(from: file)
+        let album = try #require(files.first).deletingLastPathComponent()
+            .appending(path: "Rip Report\(try DiscEncoder.discPart(of: own)).json")
+        try RipReport.update(reportAt: album) {
+            $0.date = own.date.addingTimeInterval(3600)
+            $0.notes = "Newer rip notes"
+        }
+        try RipReport.saveNotes(
+            "Older rip notes", of: own, at: file, hasAudio: true,
+            history: RipHistory(directory: root.appending(path: "history")))
+        #expect(try RipReport.read(from: file).notes == "Older rip notes")
+        #expect(try RipReport.read(from: album).notes == "Newer rip notes")
+    }
 }

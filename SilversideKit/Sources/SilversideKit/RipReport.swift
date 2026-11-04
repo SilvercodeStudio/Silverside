@@ -717,7 +717,8 @@ extension RipReport {
             if file.lastPathComponent == "disc.json", let encoding = report.encoding {
                 let album = URL(filePath: encoding.folder, directoryHint: .isDirectory)
                     .appending(path: "Rip Report\(try DiscEncoder.discPart(of: report)).json")
-                if FileManager.default.fileExists(atPath: album.path) { files.append(album) }
+                // The album's report too, if it is still this rip's: a later rip may have replaced it.
+                if (try? read(from: album)).map({ RipHistory.sameRip($0, report) }) == true { files.append(album) }
             }
         }
         for url in files {

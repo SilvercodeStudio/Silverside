@@ -1078,27 +1078,40 @@ final class AppModel {
         }
         var set = set
         set.put(disc.toc, at: position, tracks: disc.tracksForSet)
-        do {
-            try CustomSetStore().save(set)
-        } catch {
-            alert = AppAlert(title: "The set could not be saved", message: "\(error)")
-            return
+        let toc = disc.toc
+        func commit() {
+            do {
+                try CustomSetStore().save(set)
+            } catch {
+                alert = AppAlert(title: "The set could not be saved", message: "\(error)")
+                return
+            }
+            if slot.disc?.toc.musicBrainzDiscID == toc.musicBrainzDiscID { slot.disc?.useCustomSet(set) }
         }
-        slot.disc?.useCustomSet(set)
-        guard !displaced.isEmpty else { return }
+        guard !displaced.isEmpty else { return commit() }
+        // The set changes only once the rips of the disc there have left it: else two rips
+        // would be that disc of the set.
         let others = recentRips.filter { other in
             !displaced.contains { $0.file == other.file } && (other.report.encoding != nil || !other.hasAudio)
                 && other.report.release?.id == set.id
         }
-        startLeavingRun(title: set.title, leaving: displaced, update: others)
-    }
-
-    /// A library run that takes rips out of their custom set and brings the set's other discs up to date.
-    private func startLeavingRun(title: String, leaving: [RecentRip], update: [RecentRip]) {
-        let run = LibraryRun(title: title, encode: [], update: update, leaving: leaving)
+        let run = LibraryRun(title: set.title, encode: [], update: others, leaving: displaced)
         library = run
         libraryShown = true
-        run.start(settings: settings, cover: nil) { [self] in refreshRecentRips() }
+        run.start(settings: settings, cover: nil) { [self] in
+            if displaced.allSatisfy({ run.leftRips.contains($0.file) }) {
+                commit()
+            } else {
+                // A rip that left is out of the set either way; the disc in the drive is not in it.
+                for gone in displaced where run.leftRips.contains(gone.file) {
+                    if let toc = try? TOC(ctdbTOCString: gone.report.toc) { try? CustomSetStore().remove(toc) }
+                }
+                alert = AppAlert(
+                    title: "The disc was not put in the set",
+                    message: "The earlier rip of disc \(position) could not leave the set. The log says why.")
+            }
+            refreshRecentRips()
+        }
     }
 
     /// Takes an earlier rip out of its custom set: it becomes a disc of its own again, with the

@@ -99,6 +99,20 @@ public struct RipHistory: Sendable {
         (try? RipReport.read(from: entry.url)).map { Self.key(of: $0, file: entry.url) } == key
     }
 
+    /// True if two reports are of one rip: the same disc, ripped (and repaired) at the same
+    /// time. A report read from its file keeps whole seconds only, so the times may differ by
+    /// less than a second.
+    public static func sameRip(_ a: RipReport, _ b: RipReport) -> Bool {
+        func near(_ x: Date?, _ y: Date?) -> Bool {
+            switch (x, y) {
+            case (nil, nil): true
+            case (let x?, let y?): abs(x.timeIntervalSince(y)) < 1
+            default: false
+            }
+        }
+        return a.toc == b.toc && near(a.date, b.date) && near(a.repaired, b.repaired)
+    }
+
     /// Takes a rip out of the history.
     public func forget(key: String) throws {
         try FileManager.default.removeItem(at: directory.appending(path: key + ".json"))

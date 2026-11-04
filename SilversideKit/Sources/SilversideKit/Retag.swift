@@ -365,7 +365,7 @@ extension DiscEncoder {
     /// and nothing else changes; `updateLibrary` then brings the files up to date with new names.
     /// Throws if `release` is not the report's release, or has no disc that fits the rip's.
     /// A rip encoded from the terminal has no record of its encoding in its disc.json; its album
-    /// folder is then the one the templates name in `library`.
+    /// folder is then the one the templates name in `library`, and the report gets the record.
     public func refreshRelease(
         reportAt file: URL, with release: MusicBrainzRelease, library: URL? = nil,
         editsStore: ReleaseEditsStore = ReleaseEditsStore()
@@ -377,10 +377,12 @@ extension DiscEncoder {
         guard release.medium(for: toc) != nil else { throw EncodingError.notOnRelease(folder) }
         var reports = [file]
         var encoding = report.encoding
+        var foundByName = false
         if file.lastPathComponent == "disc.json", encoding == nil, let library {
             let named = MetadataEdits.current(forReportAt: file, release: original, store: editsStore)
                 .applied(to: original, toc: toc)
             encoding = encodingByName(reportAt: file, release: original, named: named, toc: toc, library: library)
+            foundByName = encoding != nil
         }
         if file.lastPathComponent == "disc.json", let encoding {
             let album = URL(filePath: encoding.folder, directoryHint: .isDirectory)
@@ -388,6 +390,9 @@ extension DiscEncoder {
             if FileManager.default.fileExists(atPath: album.path) { reports.append(album) }
         }
         for target in reports { try RipReport.update(reportAt: target) { $0.release = release } }
+        // The album found by the old names is kept in the rip's report: by the new names, the
+        // library update would look for it where it is not yet.
+        if foundByName, let encoding { try encoding.save(inReportAt: file) }
     }
 
     /// Takes an earlier rip of a custom set out of the set: it becomes a disc of its own again

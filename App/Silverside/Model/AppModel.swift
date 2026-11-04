@@ -912,13 +912,11 @@ final class AppModel {
     /// date after it, for their album gain. The selection follows a report that moved.
     func changeRelease(of rip: RecentRip, to chosen: MusicBrainzRelease, keepingTitles: Bool = false) {
         guard canChangeRelease(rip) else { return }
-        // A disc of a custom set that moves to a release of MusicBrainz's leaves the set, so
-        // that it is not named as the set's when it goes in a drive again.
-        if rip.report.release?.isCustomSet == true, !chosen.isCustomSet,
-            let toc = try? TOC(ctdbTOCString: rip.report.toc)
-        {
-            try? CustomSetStore().remove(toc)
-        }
+        // A disc of a custom set that moves to a release of MusicBrainz's leaves the set, once
+        // the change is made, so that it is not named as the set's when it goes in a drive again.
+        let leavesSet =
+            rip.report.release?.isCustomSet == true && !chosen.isCustomSet
+            ? try? TOC(ctdbTOCString: rip.report.toc) : nil
         let old = rip.report.release?.id
         let others = recentRips.filter { other in
             other.file != rip.file && (other.report.encoding != nil || !other.hasAudio)
@@ -938,6 +936,7 @@ final class AppModel {
             library = run
             libraryShown = true
             run.start(settings: settings, cover: nil) { [self] in
+                if run.changedReport != nil, let leavesSet { try? CustomSetStore().remove(leavesSet) }
                 if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
                 coverVersion += 1
                 refreshRecentRips()
@@ -962,12 +961,6 @@ final class AppModel {
         }
         var set = set
         set.put(toc, at: position, namedAs: own)
-        do {
-            try CustomSetStore().save(set)
-        } catch {
-            alert = AppAlert(title: "The set could not be saved", message: "\(error)")
-            return
-        }
         let release = set.release
         let others = recentRips.filter { other in
             other.file != rip.file && !displaced.contains { $0.file == other.file }
@@ -983,6 +976,19 @@ final class AppModel {
         library = run
         libraryShown = true
         run.start(settings: settings, cover: nil) { [self] in
+            // The set changes only once the rip's files have: a change that failed left them as
+            // they were. A disc that left its place for this one is out of the set either way.
+            if run.changedReport != nil {
+                do {
+                    try CustomSetStore().save(set)
+                } catch {
+                    alert = AppAlert(title: "The set could not be saved", message: "\(error)")
+                }
+            } else {
+                for gone in displaced where run.leftRips.contains(gone.file) {
+                    if let toc = try? TOC(ctdbTOCString: gone.report.toc) { try? CustomSetStore().remove(toc) }
+                }
+            }
             if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
             coverVersion += 1
             refreshRecentRips()
@@ -1102,7 +1108,6 @@ final class AppModel {
         guard canChangeRelease(rip), let own = rip.report.release, own.isCustomSet,
             let toc = try? TOC(ctdbTOCString: rip.report.toc)
         else { return }
-        try? CustomSetStore().remove(toc)
         let others = recentRips.filter { other in
             other.file != rip.file && (other.report.encoding != nil || !other.hasAudio)
                 && other.report.release?.id == own.id
@@ -1113,6 +1118,8 @@ final class AppModel {
         library = run
         libraryShown = true
         run.start(settings: settings, cover: nil) { [self] in
+            // The set changes only once the rip's files have.
+            if run.changedReport != nil { try? CustomSetStore().remove(toc) }
             if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
             refreshRecentRips()
         }
@@ -1158,7 +1165,9 @@ final class AppModel {
                     for index in release.media.indices { release.media[index].discIDs = [] }
                     return release
                 }
-                if names(other.report.release) != names(fresh), other.report.encoding != nil || !other.hasAudio {
+                // A rip encoded from the terminal has its album's record only now (`refreshRelease`).
+                let encoded = (try? RipReport.read(from: other.file))?.encoding != nil
+                if names(other.report.release) != names(fresh), encoded || !other.hasAudio {
                     renamed.append(other)
                 }
             }

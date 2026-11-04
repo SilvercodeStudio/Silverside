@@ -71,4 +71,20 @@ struct MusicBrainzSearchTests {
         #expect(none.ranked.isEmpty && !none.foundByBarcode)
         #expect(await web.requests.count == 3)
     }
+
+    /// A release with a length that MusicBrainz lacks on one disc: the disc whose known lengths
+    /// fit is the one checked, and the one the files get.
+    @Test func checksTheMediumTheFilesGet() throws {
+        let toc = try TOC(audioTrackStarts: [0, 15000], leadOutLBA: 30000)
+        var release = MusicBrainzRelease.manual(toc: toc)
+        release.id = "search-result"
+        release.media[0].discIDs = []
+        release.media[0].tracks[1].length = nil
+        var other = release.media[0]
+        other.position = 2
+        other.tracks[0].length = 207000
+        other.tracks[1].length = 200000
+        release.media.append(other)
+        #expect(release.fit(for: toc)?.medium.position == 1 && release.medium(for: toc)?.position == 1)
+    }
 }

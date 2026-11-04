@@ -66,6 +66,8 @@ final class LibraryRun: Identifiable {
     private(set) var decodedDiscs = 0
     private(set) var problems = 0
     private(set) var leftSet = 0
+    /// The report files of the rips in `leaving` that left their set.
+    private(set) var leftRips: Set<URL> = []
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private let stopToken = StopToken()
 
@@ -127,6 +129,7 @@ final class LibraryRun: Identifiable {
                     _ = try encoder.leaveCustomSet(reportAt: rip.file, library: library)
                     onMain {
                         run.leftSet += 1
+                        run.leftRips.insert(rip.file)
                         run.add("\(rip.title): taken out of the set, a disc of its own with the names it had there.")
                     }
                 } catch {

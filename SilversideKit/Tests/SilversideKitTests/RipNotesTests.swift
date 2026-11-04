@@ -29,5 +29,14 @@ struct RipNotesTests {
         let gone = root.appending(path: "gone/disc.json")
         try RipReport.saveNotes("Moved to the NAS", of: report, at: gone, hasAudio: false, history: history)
         #expect(history.entries().values.contains { $0.report.notes == "Moved to the NAS" && $0.url == gone })
+
+        // An older rip of the disc whose folder a later rip took: its notes go to the history
+        // only, not into the later rip's report.
+        var older = report
+        older.date = report.date.addingTimeInterval(-3600)
+        let key = try history.record(older, file: file, hasAudio: true)
+        try RipReport.saveNotes("The first try", of: older, at: file, hasAudio: true, history: history)
+        #expect(try RipReport.read(from: file).notes == nil)
+        #expect(history.entries()[key]?.report.notes == "The first try")
     }
 }

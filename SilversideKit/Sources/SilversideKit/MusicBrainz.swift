@@ -160,7 +160,15 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
     public func medium(for toc: TOC) -> Medium? {
         if let medium = medium(withDiscID: toc.musicBrainzDiscID) { return medium }
         let lengths = toc.audioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
-        let candidates = media.filter { $0.tracks.count == lengths.count }
+        var candidates = media.filter { $0.tracks.count == lengths.count }
+        // A medium with a length that cannot be the disc's is not the disc, as for `fit(for:)`,
+        // so a release that a search found is encoded as the medium the search accepted.
+        let agreeing = candidates.filter { medium in
+            zip(medium.tracks, lengths).allSatisfy { track, length in
+                track.length.map { Self.lengthsAgree($0, length) } ?? true
+            }
+        }
+        if !agreeing.isEmpty { candidates = agreeing }
         guard candidates.count > 1 else { return candidates.first }
         // The total difference in track lengths, in milliseconds; unknown lengths count as far.
         func distance(_ medium: Medium) -> Int {
@@ -194,24 +202,18 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
     /// Stricter than `medium(for:)`, which trusts MusicBrainz's own match: the track count must
     /// be the disc's, and each known length must agree. A release with another recording of the
     /// same works (*Mozart's Last Symphonies* for Karajan's) has as many tracks, but not their
-    /// lengths. Nil if no medium fits.
+    /// lengths. The medium is `medium(for:)`'s, the one the files get. Nil if it does not fit,
+    /// or if `medium(for:)` finds none (two media that fit equally well).
     public func fit(for toc: TOC) -> MediumFit? {
         if let medium = medium(withDiscID: toc.musicBrainzDiscID) { return MediumFit(medium: medium, kind: .discID) }
+        // The medium that naming and encoding use (`medium(for:)`), so that what is checked
+        // here is what the files get.
+        guard let medium = medium(for: toc) else { return nil }
         let lengths = toc.audioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
-        var best: (medium: Medium, distance: Int)?
-        var countOnly: Medium?
-        for medium in media where medium.tracks.count == lengths.count {
-            let known = zip(medium.tracks, lengths).compactMap { track, length in track.length.map { ($0, length) } }
-            if known.isEmpty {
-                countOnly = countOnly ?? medium
-                continue
-            }
-            guard known.allSatisfy({ Self.lengthsAgree($0.0, $0.1) }) else { continue }
-            let distance = known.reduce(0) { $0 + abs($1.0 - $1.1) }
-            if best.map({ distance < $0.distance }) ?? true { best = (medium, distance) }
-        }
-        if let best { return MediumFit(medium: best.medium, kind: .lengths) }
-        return countOnly.map { MediumFit(medium: $0, kind: .trackCountOnly) }
+        let known = zip(medium.tracks, lengths).compactMap { track, length in track.length.map { ($0, length) } }
+        if known.isEmpty { return MediumFit(medium: medium, kind: .trackCountOnly) }
+        guard known.allSatisfy({ Self.lengthsAgree($0.0, $0.1) }) else { return nil }
+        return MediumFit(medium: medium, kind: .lengths)
     }
 
     /// True if MusicBrainz's length of a track (milliseconds) can be the disc's: within 5

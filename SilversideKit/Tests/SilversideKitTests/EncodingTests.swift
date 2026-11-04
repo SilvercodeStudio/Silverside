@@ -684,6 +684,26 @@ extension EncodingTests {
         #expect(update.files.isEmpty || update.files[0].lastPathComponent.contains("Typed Title"))
     }
 
+    /// A rip encoded from the terminal, whose album's title MusicBrainz corrects: the album found
+    /// by the old title is kept in the rip's report, so the library update finds it and renames it.
+    @Test func keepsTheAlbumOfARefreshedReleaseFoundByTheOldName() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let encoder = DiscEncoder(format: .flac)
+        let file = folder.appending(path: "disc.json")
+        let files = try encoder.encode(try RippedDisc(folder: folder), into: library)
+        #expect(try RipReport.read(from: file).encoding == nil)
+        var fresh = try #require(try RipReport.read(from: file).release)
+        fresh.title = "Corrected Album Title"
+        let edits = ReleaseEditsStore(url: root.appending(path: "edits.json"))
+        try encoder.refreshRelease(reportAt: file, with: fresh, library: library, editsStore: edits)
+        #expect(try RipReport.read(from: file).encoding != nil)
+        let update = try encoder.updateLibrary(reportAt: file, library: library, editsStore: edits)
+        #expect(update.files.count == files.count)
+        #expect(update.albumFolder?.lastPathComponent == fresh.title)
+    }
+
     /// A disc that leaves a custom set is a disc of its own again, and keeps the names it had in
     /// the set as its own edits: the set's album names, and its tracks'. Its release is the
     /// plain one Silverside makes, so Clear Edits can go back to it.

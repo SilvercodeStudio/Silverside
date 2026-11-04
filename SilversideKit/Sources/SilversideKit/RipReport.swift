@@ -699,16 +699,20 @@ extension RipReport {
     /// Saves the user's notes on a rip; empty notes are none. They go into its report file, and
     /// for a rip folder's report into the album folder's copy too, keeping every other key; and
     /// into the history (`RipHistory`), so that a rip whose files moved or went keeps them. A
-    /// report that is not there any more (`report` is the history's copy) changes the history only.
+    /// report that is not there any more, or not this rip's (`report` is the history's copy),
+    /// changes the history only.
     public static func saveNotes(
         _ notes: String?, of report: RipReport, at file: URL, hasAudio: Bool, history: RipHistory = RipHistory()
     ) throws {
         let trimmed = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
         let kept = trimmed?.isEmpty == false ? trimmed : nil
-        // The report as it is now: a library update since `report` was read may have changed it.
-        let report = (try? read(from: file)) ?? report
+        // The report as it is now, if the file is still this rip's: a library update since
+        // `report` was read may have changed it, and a later rip of the disc may have taken its
+        // folder (`RipHistory.isThere`), whose notes these are not.
+        let onDisk = (try? read(from: file)).flatMap { RipHistory.sameRip($0, report) ? $0 : nil }
+        let report = onDisk ?? report
         var files = [URL]()
-        if FileManager.default.fileExists(atPath: file.path) {
+        if onDisk != nil {
             files.append(file)
             if file.lastPathComponent == "disc.json", let encoding = report.encoding {
                 let album = URL(filePath: encoding.folder, directoryHint: .isDirectory)

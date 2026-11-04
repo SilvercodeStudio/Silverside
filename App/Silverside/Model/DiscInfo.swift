@@ -417,22 +417,25 @@ struct DiscInfo {
     }
 
     /// Takes the disc out of its custom set: MusicBrainz's release again, if the lookup found one,
-    /// else a disc of its own, with the set's names for it as its own, so nothing typed is lost.
+    /// with the names typed for its tracks; else a disc of its own, with every name the set had
+    /// for it (the album's, the date, the tracks') as its own edits, and its cover, as an earlier
+    /// rip that leaves a set keeps them (`DiscEncoder.leaveCustomSet`). Nothing typed is lost.
     mutating func leaveCustomSet() async {
         guard manual?.isCustomSet == true, let shown = shownRelease else { return }
         try? CustomSetStore().remove(toc)
+        let typed = edits.trackLevel
         if let lookupChoice {
             await use(lookupChoice)
+            edits = edits.merged(with: typed)
             return
         }
+        let cover = userCover ?? keptCover
         let single = singleRelease
         manual = single
         medium = single.media.first
-        var names = MetadataEdits(album: shown.title, albumArtist: shown.artist).merged(with: edits.trackLevel)
-        if names.album == single.title { names.album = nil }
-        if names.albumArtist == single.artist { names.albumArtist = nil }
-        edits = names
+        edits = MetadataEdits(keeping: shown, on: single, toc: toc)
         keptCover = nil
+        if let cover { useCover(cover) }
     }
 
     /// Keeps what the user changed on the disc on show (`now`) since this copy was made from

@@ -11,6 +11,20 @@ command-line tool.
   rippers that inspired Silverside, in one line at the end, after the
   services and programs that Silverside uses.
 
+### Fixed
+
+- Notes on an older rip whose folder a later rip of the disc took went into
+  the later rip's report. They now stay with the older rip, in Rip History.
+- A release found by Search MusicBrainz… whose lengths MusicBrainz lacks in
+  part could be checked against one of its discs and named as another.
+- Look Up Metadata on a rip encoded with the command-line tool lost its
+  album when MusicBrainz had changed the album's title: Update the Library
+  then found no files.
+- A change to your own set that failed (a file in the way, for one) still
+  changed the set, so the disc went in as the wrong set's the next time.
+- A disc in a drive that left your set lost the date and the cover it had
+  there, and the track titles typed for it.
+
 ## 0.9.4 (2026-11-04)
 
 ### Added

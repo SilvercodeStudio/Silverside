@@ -34,7 +34,7 @@ COMMIT := $(shell scripts/commit-id.sh)
 COMMIT_PLIST = $(PACKAGE)/.build/commit/Info-$(COMMIT).plist
 COMMIT_FLAGS = $(if $(COMMIT),-Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker $(abspath $(COMMIT_PLIST)))
 
-.PHONY: help build run app cli test hwtest core format lint release commit-plist install install-cli-local install-app open-app uninstall site rip-art
+.PHONY: help build run app cli test hwtest core format lint release commit-plist install install-cli-local install-app open-app dist uninstall site rip-art
 
 # Where make install puts silverside and its shell completions. /usr/local may need sudo; PREFIX=~/.local does not.
 PREFIX ?= /usr/local
@@ -61,6 +61,7 @@ help:
 	@echo "make install-cli-local  the same, under ~/.local (no sudo)"
 	@echo "make install-app    build the app for release (Apple silicon and Intel) and copy it to APP_DIR ($(APP_DIR))"
 	@echo "make open-app       make install-app, open the app, and install the CLI under ~/.local"
+	@echo "make dist           the app for others: Developer ID, notarized, stapled, zipped in build/dist (NOTARIZE=0 stops before Apple)"
 	@echo "make uninstall      remove what make install put under PREFIX"
 	@echo "make site           serve the website (docs/site) at http://localhost:8000"
 	@echo "make rip-art        render the Rip button's pictures from SilversideRipIcon.icon (after the icon changes)"
@@ -140,6 +141,11 @@ open-app:
 		@( $(MAKE) install-cli-local > "$(PACKAGE)/.build/open-app-cli.log" 2>&1 \
 				|| echo "The CLI did not install: see $(PACKAGE)/.build/open-app-cli.log" ) &
 		@$(MAKE) install-app && open "$(APP_DIR)/Silverside.app"
+
+# The app as others get it: archived, exported with Developer ID, notarized, stapled, and zipped
+# in build/dist. See scripts/dist.sh for NOTARY_PROFILE, NOTARIZE=0, and ALLOW_DIRTY=1.
+dist:
+	@scripts/dist.sh
 
 uninstall:
 	rm -f "$(PREFIX)/bin/silverside" "$(PREFIX)/share/zsh/site-functions/_silverside" "$(PREFIX)/etc/bash_completion.d/silverside" \

@@ -305,7 +305,7 @@ Built and tested with the simulator, but not yet on hardware:
 - Shifted-read detection (`SecureRipper`), made after *One from the Vault* disc 2 on the ASUS.
 - The media type: a CD-RW in a drive (a CD-R shows as one since 2026-10-23). The user has CD-Rs but likely no CD-RW now.
 - Rip on insertion (2026-10-23) with a real disc going in; the demo drive does not go through it.
-- Add to Music (2026-10-23), for 1.0 with the signed build: the Automation prompt (the app's `NSAppleEventsUsageDescription`, with `osascript` as the child process), and Music's answer for several files. With the hardened runtime of a Developer ID build, the app needs the `com.apple.security.automation.apple-events` entitlement.
+- Add to Music (2026-10-23), for 1.0 with the signed build: the Automation prompt (the app's `NSAppleEventsUsageDescription`, with `osascript` as the child process), and Music's answer for several files. The hardened runtime is on since 2026-11-04, with the `com.apple.security.automation.apple-events` entitlement (from the build setting `AUTOMATION_APPLE_EVENTS`; a debug build has both); not yet tried in a signed, notarized build.
 
 Discs that are not yet fully verified:
 

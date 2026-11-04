@@ -75,7 +75,7 @@ notarized release (a Developer ID team in the project, the hardened runtime,
   with the embedded Info.plist of its commit, signed with the hardened runtime
   before the app is signed and notarized.
 - How it gets there is open: a build phase in the app (slow: `swift build -c
-  release`), or `make release` copying it in before signing.
+  release`), or `make dist` copying it in before signing.
 - **Install Command Line Tool…** (in the app menu, or Settings): a symbolic
   link to the helper, so that each app update brings a new CLI. Where to:
   `/usr/local/bin` needs an administrator password (`osascript … with
@@ -97,11 +97,13 @@ notarized release (a Developer ID team in the project, the hardened runtime,
 - Sign the DMG (`codesign`), notarize it (that covers the app inside), and
   staple it.
 
-### `make release`
+### `make dist`
 
-1. Archive and export with Developer ID; the CLI inside, signed.
+1. Archive and export with Developer ID; the CLI inside, signed. (Done
+   2026-11-04, without the CLI: `scripts/dist.sh`.)
 2. Build the DMG.
-3. `notarytool submit --wait`, then `stapler staple`.
+3. `notarytool submit --wait`, then `stapler staple`. (Done 2026-11-04, for a
+   zip of the app; the DMG takes its place.)
 4. `generate_appcast`.
 5. `gh release create`, with the DMG.
 6. Commit `appcast.xml` and the notes page to `docs/site`, and push `main`.

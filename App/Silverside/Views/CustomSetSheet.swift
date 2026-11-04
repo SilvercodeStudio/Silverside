@@ -143,6 +143,7 @@ extension String {
 /// The custom set sheet for the disc in a drive or an earlier rip (`AppModel.customSetTarget`).
 struct CustomSetTargetSheet: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     let target: AppModel.DiscTarget
 
     var body: some View {
@@ -153,7 +154,12 @@ struct CustomSetTargetSheet: View {
                     toc: disc.toc, albumTitle: disc.cdText?.titles[0] ?? disc.title, artist: disc.artist,
                     current: disc.customSet,
                     onSave: { set, position in model.putInCustomSet(slot, set: set, at: position) },
-                    onLeave: { model.takeOutOfCustomSet(slot) })
+                    onLeave: { model.takeOutOfCustomSet(slot) }
+                )
+                // The sheet is for this disc only: another in the drive, or none, closes it.
+                .onChange(of: slot.disc?.toc.musicBrainzDiscID) { dismiss() }
+            } else {
+                Color.clear.frame(width: 1, height: 1).onAppear { dismiss() }
             }
         case .rip(let rip):
             if let release = rip.report.release, let toc = try? TOC(ctdbTOCString: rip.report.toc) {

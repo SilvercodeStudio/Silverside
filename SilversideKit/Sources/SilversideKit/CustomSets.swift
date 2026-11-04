@@ -105,7 +105,8 @@ public struct CustomSetStore: Sendable {
     /// The set that has the disc with this TOC, if one does.
     public func set(containing toc: TOC) -> CustomSet? { load().first { $0.disc(with: toc) != nil } }
 
-    /// Saves the set, in place of one with its ID. A disc of it leaves any other set it was in.
+    /// Saves the set, in place of one with its ID. A disc of it leaves any other set it was in,
+    /// and a set with no disc left goes.
     public func save(_ set: CustomSet) throws {
         try change { all in
             let discIDs = Set(set.discs.map(\.discID))
@@ -117,6 +118,7 @@ public struct CustomSetStore: Sendable {
             } else {
                 all.append(set)
             }
+            all.removeAll { $0.id != set.id && $0.discs.isEmpty }
         }
     }
 
@@ -136,15 +138,18 @@ public struct CustomSetStore: Sendable {
         defer { close(lock) }
         flock(lock, LOCK_EX)
         defer { flock(lock, LOCK_UN) }
-        var all = load()
+        // A file that is there but does not read is not replaced by the one set being saved.
+        var all = FileManager.default.fileExists(atPath: url.path) ? try read() : []
         body(&all)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(all).write(to: url, options: .atomic)
     }
 
-    private func load() -> [CustomSet] {
-        (try? JSONDecoder().decode([CustomSet].self, from: Data(contentsOf: url))) ?? []
+    private func load() -> [CustomSet] { (try? read()) ?? [] }
+
+    private func read() throws -> [CustomSet] {
+        try JSONDecoder().decode([CustomSet].self, from: Data(contentsOf: url))
     }
 }
 

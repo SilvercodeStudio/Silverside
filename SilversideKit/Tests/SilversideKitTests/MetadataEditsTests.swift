@@ -20,6 +20,21 @@ struct MetadataEditsTests {
             ], hasFrontCover: true)
     }
 
+    /// Names typed while a copy of the edits changed elsewhere: only what the user changed is taken.
+    @Test func takesOnlyWhatChanged() {
+        let before = MetadataEdits(album: "Typed", tracks: [1: .init(title: "One"), 2: .init(title: "Two")])
+        var after = before
+        after.setTitle("Two, retyped", ofTrack: 2)
+        after.setTitle("Three", ofTrack: 3)
+        after.setTitle(nil, ofTrack: 1)
+        // The copy: another release, with its own album edits and a title for track 4.
+        var copy = MetadataEdits(album: "Kept for the release", tracks: [4: .init(title: "Four")])
+        copy.apply(changesFrom: before, to: after)
+        #expect(copy.album == "Kept for the release")
+        #expect(copy.tracks[1] == nil && copy.tracks[2]?.title == "Two, retyped" && copy.tracks[3]?.title == "Three")
+        #expect(copy.tracks[4]?.title == "Four")
+    }
+
     @Test func appliesAlbumAndTrackEdits() throws {
         let toc = try TOC(audioTrackStarts: [0, 75], leadOutLBA: 150)
         var edits = MetadataEdits(album: "Barton Hall", albumArtist: "The Dead", date: "1977")

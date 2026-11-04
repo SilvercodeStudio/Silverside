@@ -62,12 +62,13 @@ extension MusicBrainzClient {
     /// in the title, the artist, the label, and so on ("dave brubeck seven classic lps" finds
     /// the box first); characters that the query language uses are escaped. A barcode (12 or 13
     /// digits) is looked for as a barcode, with and without its leading 0, as MusicBrainz may
-    /// keep a UPC or an EAN. A query that names a field ("catno:EN4CD9161") goes as it is.
+    /// keep a UPC or an EAN. A query that names a field ("catno:EN4CD9161") goes as it is; a
+    /// title such as "Soundtracks: Vol. 1" or "Classic Country: Hits" does not name one.
     public static func searchQuery(for text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         if let barcode = barcodeQuery(for: trimmed) { return barcode }
-        let fields = ["release:", "artist:", "barcode:", "catno:", "label:", "date:", "country:", "format:", "tracks:"]
-        if fields.contains(where: { trimmed.lowercased().contains($0) }) { return trimmed }
+        let field = /(^|[\s(])(release|artist|barcode|catno|label|date|country|format|tracks):[^\s]/
+        if trimmed.lowercased().contains(field) { return trimmed }
         let special = Set("+-&|!(){}[]^\"~*?:\\/")
         return String(trimmed.flatMap { special.contains($0) ? ["\\", $0] : [$0] })
     }
@@ -87,6 +88,8 @@ extension MusicBrainzClient {
             URLQueryItem(name: "query", value: query), URLQueryItem(name: "limit", value: String(limit)),
             URLQueryItem(name: "fmt", value: "json"),
         ]
+        // URLComponents leaves "+" as it is, and the server reads it as a space.
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         return components.url!
     }
 

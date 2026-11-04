@@ -2,11 +2,10 @@ import SilversideKit
 import SwiftUI
 
 /// Every multi-disc set among the earlier rips: a table to search and sort. A row opens the
-/// set's page, whose discs open their results as the history's rows do. The search and the
-/// order are the model's, so that Back from a set finds the table as it was.
+/// set's page, whose discs open their results as the history's rows do. The search, the
+/// order, and the selection are the model's, so that Back from a set finds the table as it was.
 struct SetsView: View {
     @Environment(AppModel.self) private var model
-    @State private var selected: String?
     /// The rows found and sorted, worked out again only when the search, the order, or the sets change.
     @State private var rows: [RipSet] = []
 
@@ -29,7 +28,7 @@ struct SetsView: View {
             }
             .padding(16)
             Divider()
-            Table(rows, selection: $selected, sortOrder: $model.setsOrder) {
+            Table(rows, selection: $model.setsSelection, sortOrder: $model.setsOrder) {
                 TableColumn("Last Ripped", value: \.lastRipped) { set in DateCell(date: set.lastRipped) }
                     .width(min: 150, ideal: 170)
                 TableColumn("Album", value: \.title).width(min: 200, ideal: 320)

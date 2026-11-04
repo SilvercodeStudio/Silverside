@@ -50,7 +50,7 @@ public enum ReleaseLookup {
         var lookup = try await client.lookup(toc, useCache: useCache)
         var foundByBarcode = false
         if lookup.releases.isEmpty, let mcn {
-            lookup.releases = await barcodeMatches(mcn: mcn, toc: toc, client: client, useCache: useCache)
+            lookup.releases = try await barcodeMatches(mcn: mcn, toc: toc, client: client, useCache: useCache)
             foundByBarcode = !lookup.releases.isEmpty
         }
         let discID = toc.musicBrainzDiscID
@@ -89,19 +89,25 @@ public enum ReleaseLookup {
     }
 
     /// The releases with the disc's barcode (its MCN) that have a disc whose tracks fit this
-    /// one's, by count and then by length (`MusicBrainzRelease.medium(for:)`): for a pressing
-    /// whose disc ID MusicBrainz does not have. One search, and a lookup of each release whose
-    /// track counts fit (at most 3). A failure finds none: the barcode is only a second chance.
+    /// one's, by count and by each length (`MusicBrainzRelease.fit(for:)`): for a pressing whose
+    /// disc ID MusicBrainz does not have. A reissue can keep the barcode and change the tracks.
+    /// One search, and a lookup of each release whose track counts can fit (at most 3): a search
+    /// counts a Mixed Mode CD's data track, or a hidden track, which the release's lookup leaves
+    /// out. A failure finds none: the barcode is only a second chance.
     static func barcodeMatches(
         mcn: String, toc: TOC, client: MusicBrainzClient, useCache: Bool
-    ) async -> [MusicBrainzRelease] {
+    ) async throws -> [MusicBrainzRelease] {
         guard MusicBrainzClient.barcodeQuery(for: mcn) != nil,
             let found = try? await client.searchReleases(mcn, limit: 10, useCache: useCache)
         else { return [] }
+        let count = toc.audioTracks.count
         var releases = [MusicBrainzRelease]()
-        for result in found.filter({ !$0.positions(withTrackCount: toc.audioTracks.count).isEmpty }).prefix(3) {
+        for result in found.filter({
+            !($0.positions(withTrackCount: count) + $0.positions(withTrackCount: count + 1)).isEmpty
+        }).prefix(3) {
+            try Task.checkCancellation()
             if let release = try? await client.release(id: result.id, useCache: useCache),
-                release.medium(for: toc) != nil
+                let fit = release.fit(for: toc), fit.kind != .trackCountOnly
             {
                 releases.append(release)
             }

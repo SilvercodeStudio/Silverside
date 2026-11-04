@@ -705,6 +705,8 @@ extension RipReport {
     ) throws {
         let trimmed = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
         let kept = trimmed?.isEmpty == false ? trimmed : nil
+        // The report as it is now: a library update since `report` was read may have changed it.
+        let report = (try? read(from: file)) ?? report
         var files = [URL]()
         if FileManager.default.fileExists(atPath: file.path) {
             files.append(file)

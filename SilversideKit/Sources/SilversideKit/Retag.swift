@@ -390,6 +390,26 @@ extension DiscEncoder {
         for target in reports { try RipReport.update(reportAt: target) { $0.release = release } }
     }
 
+    /// Takes an earlier rip of a custom set out of the set: it becomes a disc of its own again
+    /// (`MusicBrainzRelease.manual`), as `changeRelease` does, and keeps every name it had in the
+    /// set (the set's album names, and its own for its tracks) as its own edits, not in its
+    /// release. It keeps its cover. The set itself (`CustomSetStore`) is the caller's to change.
+    public func leaveCustomSet(
+        reportAt file: URL, library: URL? = nil, editsStore: ReleaseEditsStore = ReleaseEditsStore(),
+        coverStore: ReleaseCoverStore = ReleaseCoverStore(), choiceStore: ReleaseChoiceStore = ReleaseChoiceStore()
+    ) throws -> LibraryUpdate {
+        let report = try RipReport.read(from: file)
+        guard let set = report.release, set.isCustomSet else {
+            throw EncodingError.noRelease(file.deletingLastPathComponent())
+        }
+        let toc = try TOC(ctdbTOCString: report.toc)
+        let named = MetadataEdits.current(forReportAt: file, release: set, store: editsStore).applied(to: set, toc: toc)
+        let single = MusicBrainzRelease.manual(toc: toc, cdText: report.cdText)
+        return try changeRelease(
+            reportAt: file, to: single, edits: MetadataEdits(keeping: named, on: single, toc: toc), library: library,
+            editsStore: editsStore, coverStore: coverStore, choiceStore: choiceStore)
+    }
+
     /// `edits` with a title edit for each track whose title in `old` (the names a rip has now)
     /// differs from the title in `new`, so that the track keeps it.
     static func keepingTitles(
@@ -419,11 +439,12 @@ extension DiscEncoder {
     /// With `keepingTrackTitles` (Change Release's Keep My Track Titles), each track keeps the
     /// title it has now, as an edit where the new release names it otherwise; everything else,
     /// the album's names and date, the composers, and the IDs, is the new release's.
+    /// With `edits`, these are the rip's edits after the change, in place of all of that.
     /// Throws before it changes anything when no disc of `release` is the rip's, or when the
     /// album folder has another report under the new name.
     public func changeRelease(
         reportAt file: URL, to release: MusicBrainzRelease, keepingTrackEdits: Bool = false,
-        keepingTrackTitles: Bool = false, cover: CoverImage? = nil, library: URL? = nil,
+        keepingTrackTitles: Bool = false, edits: MetadataEdits? = nil, cover: CoverImage? = nil, library: URL? = nil,
         editsStore: ReleaseEditsStore = ReleaseEditsStore(), coverStore: ReleaseCoverStore = ReleaseCoverStore(),
         choiceStore: ReleaseChoiceStore = ReleaseChoiceStore()
     ) throws -> LibraryUpdate {
@@ -486,6 +507,7 @@ extension DiscEncoder {
                         .applied(to: original, toc: toc),
                     on: release, toc: toc, edits: trackEdits)
             }
+            if let edits { trackEdits = edits }
             for target in reports {
                 try RipReport.update(reportAt: target) { $0.release = release }
                 try trackEdits.save(inReportAt: target)

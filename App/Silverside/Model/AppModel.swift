@@ -72,6 +72,7 @@ final class AppModel {
     var setsSearch = ""
     var setsOrder = [KeyPathComparator(\RipSet.lastRipped, order: .reverse)]
     var historySelection: URL?
+    var setsSelection: String?
     /// True when Find (⌘F) asks the table on screen to put the insertion point in its search field.
     var wantsSearchField = false
 
@@ -946,10 +947,19 @@ final class AppModel {
 
     /// Puts an earlier rip of a disc that MusicBrainz does not know in a custom set, at `position`,
     /// and brings its files up to date, as Change Release does; the rip keeps its names for its
-    /// tracks, and the album's are the set's. The set's other encoded discs follow, for their gain.
+    /// tracks, and the album's are the set's. A disc that was at `position` leaves the set first,
+    /// as Take Out of Set does. The set's other encoded discs follow, for their gain.
     func putInCustomSet(_ rip: RecentRip, set: CustomSet, at position: Int) {
         guard canChangeRelease(rip), let own = rip.report.release, let toc = try? TOC(ctdbTOCString: rip.report.toc)
         else { return }
+        let displaced = ripsDisplaced(in: set, at: position, by: toc)
+        guard displaced.allSatisfy(canMoveToTrash) else {
+            alert = AppAlert(
+                title: "Disc \(position) cannot change now",
+                message:
+                    "Its earlier rip must leave the set, and other work is using its files. Try again when it ends.")
+            return
+        }
         var set = set
         set.put(toc, at: position, namedAs: own)
         do {
@@ -960,20 +970,32 @@ final class AppModel {
         }
         let release = set.release
         let others = recentRips.filter { other in
-            other.file != rip.file && (other.report.encoding != nil || !other.hasAudio)
+            other.file != rip.file && !displaced.contains { $0.file == other.file }
+                && (other.report.encoding != nil || !other.hasAudio)
                 && [own.id, release.id].contains(other.report.release?.id)
         }
         let run = LibraryRun(
             title: rip.title, encode: [], update: others,
             change: .init(
                 rip: rip, release: release, cover: ReleaseCoverStore().cover(forReleaseID: release.id),
-                keepsTrackNames: true))
+                keepsTrackNames: true),
+            leaving: displaced)
         library = run
         libraryShown = true
         run.start(settings: settings, cover: nil) { [self] in
             if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
             coverVersion += 1
             refreshRecentRips()
+        }
+    }
+
+    /// The earlier rips of the disc that `set` has at `position`, when the disc with `toc` takes
+    /// its place there: they leave the set, or two rips would be the same disc of one album.
+    private func ripsDisplaced(in set: CustomSet, at position: Int, by toc: TOC) -> [RecentRip] {
+        guard let there = set.disc(at: position), there.discID != toc.musicBrainzDiscID else { return [] }
+        return recentRips.filter { rip in
+            !rip.isMissing && rip.report.release?.id == set.id
+                && (try? TOC(ctdbTOCString: rip.report.toc))?.musicBrainzDiscID == there.discID
         }
     }
 
@@ -1012,7 +1034,9 @@ final class AppModel {
     /// What Disc › Put in Custom Set… and Search MusicBrainz… would show the sheet for: the selected drive's disc, before
     /// or after a rip but not during one, or the selected earlier rip, while nothing works on its files.
     var discCandidate: DiscTarget? {
-        if let slot = selectedDrive, let disc = slot.disc, !disc.toc.audioTracks.isEmpty, slot.rip?.isRunning != true {
+        if let slot = selectedDrive, let disc = slot.disc, !disc.toc.audioTracks.isEmpty, disc.lookup != .lookingUp,
+            slot.rip?.isRunning != true
+        {
             return .drive(slot)
         }
         if let rip = selectedRip, !rip.isMissing, canChangeRelease(rip) { return .rip(rip) }
@@ -1030,16 +1054,22 @@ final class AppModel {
 
     /// Takes the disc in a drive out of its custom set.
     func takeOutOfCustomSet(_ slot: DriveSlot) {
-        guard var disc = slot.disc else { return }
-        Task { @MainActor in
-            await disc.leaveCustomSet()
-            slot.disc = disc
-        }
+        slot.changeDisc { await $0.leaveCustomSet() }
     }
 
-    /// Puts the disc in a drive in a custom set, at `position`, before its rip.
+    /// Puts the disc in a drive in a custom set, at `position`, before its rip. The earlier rips of
+    /// a disc that was at `position` leave the set, as Take Out of Set does, and the set's other
+    /// encoded discs follow, for their gain.
     func putInCustomSet(_ slot: DriveSlot, set: CustomSet, at position: Int) {
         guard let disc = slot.disc else { return }
+        let displaced = ripsDisplaced(in: set, at: position, by: disc.toc)
+        if !displaced.isEmpty, library?.isRunning == true || displaced.contains(where: { !canMoveToTrash($0) }) {
+            alert = AppAlert(
+                title: "Disc \(position) cannot change now",
+                message:
+                    "Its earlier rip must leave the set, and other work is using its files. Try again when it ends.")
+            return
+        }
         var set = set
         set.put(disc.toc, at: position, tracks: disc.tracksForSet)
         do {
@@ -1049,24 +1079,37 @@ final class AppModel {
             return
         }
         slot.disc?.useCustomSet(set)
+        guard !displaced.isEmpty else { return }
+        let others = recentRips.filter { other in
+            !displaced.contains { $0.file == other.file } && (other.report.encoding != nil || !other.hasAudio)
+                && other.report.release?.id == set.id
+        }
+        startLeavingRun(title: set.title, leaving: displaced, update: others)
     }
 
-    /// Takes an earlier rip out of its custom set: it becomes a disc of its own again, named as
-    /// the set had it.
+    /// A library run that takes rips out of their custom set and brings the set's other discs up to date.
+    private func startLeavingRun(title: String, leaving: [RecentRip], update: [RecentRip]) {
+        let run = LibraryRun(title: title, encode: [], update: update, leaving: leaving)
+        library = run
+        libraryShown = true
+        run.start(settings: settings, cover: nil) { [self] in refreshRecentRips() }
+    }
+
+    /// Takes an earlier rip out of its custom set: it becomes a disc of its own again, with the
+    /// names the set had for it as its own edits (`DiscEncoder.leaveCustomSet`). The set's other
+    /// encoded discs follow, for their album gain.
     func takeOutOfCustomSet(_ rip: RecentRip) {
         guard canChangeRelease(rip), let own = rip.report.release, own.isCustomSet,
             let toc = try? TOC(ctdbTOCString: rip.report.toc)
         else { return }
         try? CustomSetStore().remove(toc)
-        var single = MusicBrainzRelease.manual(toc: toc)
-        // The names the set had for the disc, and the set's album names, as its own.
-        let named = MetadataEdits.current(forReportAt: rip.file, release: own).applied(to: own, toc: toc)
-        single.title = named.title
-        single.artistCredit = named.artistCredit
-        if let medium = named.medium(for: toc) { single.media[0].tracks = medium.tracks }
+        let others = recentRips.filter { other in
+            other.file != rip.file && (other.report.encoding != nil || !other.hasAudio)
+                && other.report.release?.id == own.id
+        }
         let run = LibraryRun(
-            title: rip.title, encode: [], update: [],
-            change: .init(rip: rip, release: single, cover: nil))
+            title: rip.title, encode: [], update: others,
+            change: .init(rip: rip, release: own, cover: nil, leavesCustomSet: true))
         library = run
         libraryShown = true
         run.start(settings: settings, cover: nil) { [self] in
@@ -1080,8 +1123,12 @@ final class AppModel {
     /// release, so a set's discs all follow. The encoded files are brought up to date when names
     /// changed; a disc ID alone changes no file.
     func lookUpAgain(_ rip: RecentRip) {
-        guard let release = rip.report.release, !release.isManual, library?.isRunning != true else { return }
+        guard let release = rip.report.release, !release.isManual, library?.isRunning != true,
+            !lookingUpReleases.contains(release.id)
+        else { return }
+        lookingUpReleases.insert(release.id)
         Task { @MainActor in
+            defer { lookingUpReleases.remove(release.id) }
             let fresh: MusicBrainzRelease?
             do {
                 fresh = try await MusicBrainzClient().release(id: release.id, useCache: false)
@@ -1122,6 +1169,9 @@ final class AppModel {
             }
         }
     }
+
+    /// The releases that Look Up Metadata asks MusicBrainz for now: one request at a time for each.
+    private(set) var lookingUpReleases: Set<String> = []
 
     /// Library updates for changed names, one after another, so two never touch one album at once.
     @ObservationIgnored private var namesUpdate: Task<Void, Never>?

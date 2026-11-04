@@ -41,6 +41,9 @@ final class LibraryRun: Identifiable {
         var keepsTrackNames = false
         /// Keep My Track Titles: each track keeps its title now.
         var keepsTrackTitles = false
+        /// Take Out of Set: the rip becomes a disc of its own, with the names it had in its
+        /// custom set (`DiscEncoder.leaveCustomSet`); `release` is not used.
+        var leavesCustomSet = false
     }
 
     let id = UUID()
@@ -51,6 +54,8 @@ final class LibraryRun: Identifiable {
     let hdcd: HDCDDecode?
     let dts: DTSDecode?
     let change: ReleaseChange?
+    /// Rips that leave their custom set before the change: a disc that another took the place of.
+    let leaving: [RecentRip]
     /// The changed rip's report, where it is after the change (an album folder's report moves
     /// when its name or folder changes).
     private(set) var changedReport: (from: URL, to: URL)?
@@ -60,12 +65,13 @@ final class LibraryRun: Identifiable {
     private(set) var updatedDiscs = 0
     private(set) var decodedDiscs = 0
     private(set) var problems = 0
+    private(set) var leftSet = 0
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private let stopToken = StopToken()
 
     init(
         title: String, encode: [RecentRip], update: [RecentRip], hdcd: HDCDDecode? = nil, dts: DTSDecode? = nil,
-        change: ReleaseChange? = nil
+        change: ReleaseChange? = nil, leaving: [RecentRip] = []
     ) {
         self.title = title
         self.encode = encode
@@ -73,6 +79,7 @@ final class LibraryRun: Identifiable {
         self.hdcd = hdcd
         self.dts = dts
         self.change = change
+        self.leaving = leaving
     }
 
     var isRunning: Bool { phase == .running }
@@ -80,7 +87,7 @@ final class LibraryRun: Identifiable {
     var headline: String {
         switch phase {
         case .running:
-            if change != nil { return "Changing the release…" }
+            if change != nil || !leaving.isEmpty { return "Changing the release…" }
             if dts != nil { return "Decoding DTS…" }
             return hdcd != nil ? "Decoding HDCD…" : encode.isEmpty ? "Updating the library…" : "Encoding…"
         case .stopped: return "Stopped after the disc under way."
@@ -88,6 +95,7 @@ final class LibraryRun: Identifiable {
         case .finished:
             var parts = [String]()
             if change != nil, changedReport != nil { parts.append("Release changed") }
+            if leftSet > 0 { parts.append("\(Format.count(leftSet, "disc")) taken out of the set") }
             if !encode.isEmpty { parts.append("\(Format.count(encodedDiscs, "disc")) encoded") }
             if !update.isEmpty { parts.append("\(Format.count(updatedDiscs, "disc")) brought up to date") }
             if hdcd != nil || dts != nil { parts.append("\(Format.count(decodedDiscs, "disc")) decoded") }
@@ -105,24 +113,47 @@ final class LibraryRun: Identifiable {
         let run = self
         let stop = self.stopToken
         let (encode, update, hdcd, dts, change) = (self.encode, self.update, self.hdcd, self.dts, self.change)
+        let leaving = self.leaving
         task = Task.detached {
             @Sendable func onMain(_ body: @escaping @MainActor () -> Void) {
                 DispatchQueue.main.async { MainActor.assumeIsolated(body) }
             }
             let library = settings.libraryURL
+            // A disc whose place in a set another takes leaves first, so that its files make way.
+            for rip in leaving {
+                do {
+                    var encoder = DiscEncoder(settings: settings)
+                    encoder.log = { line in onMain { run.add("  \(line)") } }
+                    _ = try encoder.leaveCustomSet(reportAt: rip.file, library: library)
+                    onMain {
+                        run.leftSet += 1
+                        run.add("\(rip.title): taken out of the set, a disc of its own with the names it had there.")
+                    }
+                } catch {
+                    onMain {
+                        run.problems += 1
+                        run.add("\(rip.title): not taken out of the set: \(error)")
+                    }
+                }
+            }
             // The other discs are brought up to date only after the change, for their album gain.
             if let change {
                 let rip = change.rip
                 do {
                     var encoder = DiscEncoder(settings: settings)
                     encoder.log = { line in onMain { run.add("  \(line)") } }
-                    let result = try encoder.changeRelease(
-                        reportAt: rip.file, to: change.release, keepingTrackEdits: change.keepsTrackNames,
-                        keepingTrackTitles: change.keepsTrackTitles, cover: change.cover, library: library)
+                    let result =
+                        change.leavesCustomSet
+                        ? try encoder.leaveCustomSet(reportAt: rip.file, library: library)
+                        : try encoder.changeRelease(
+                            reportAt: rip.file, to: change.release, keepingTrackEdits: change.keepsTrackNames,
+                            keepingTrackTitles: change.keepsTrackTitles, cover: change.cover, library: library)
                     onMain {
                         run.changedReport = (rip.file, result.report)
                         run.add(
-                            "\(rip.title): now \(change.release.artist) – \(change.release.title)"
+                            (change.leavesCustomSet
+                                ? "\(rip.title): taken out of the set"
+                                : "\(rip.title): now \(change.release.artist) – \(change.release.title)")
                                 + (result.albumFolder == nil
                                     ? "; not encoded yet, so the files get the names when it is."
                                     : "; wrote the tags of \(Format.count(result.files.count, "file"))"

@@ -94,6 +94,27 @@ struct CustomSetTests {
         #expect(store.set(containing: disc2) == nil && store.set(id: set.id) == nil && store.sets().count == 1)
     }
 
+    /// A set whose only disc moves to another set goes; a file that does not read is not
+    /// replaced by the one set being saved.
+    @Test func keepsTheFileSound() throws {
+        let (store, root) = store()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (disc, _) = try makeDisc(trackSectors: [800, 900])
+        let first = CustomSet(
+            title: "First", artist: "X", discCount: 2,
+            discs: [.init(position: 1, discID: disc.musicBrainzDiscID, tracks: [])])
+        let second = CustomSet(
+            title: "Second", artist: "X", discCount: 2,
+            discs: [.init(position: 2, discID: disc.musicBrainzDiscID, tracks: [])])
+        try store.save(first)
+        try store.save(second)
+        #expect(store.sets().map(\.id) == [second.id])
+
+        try Data("[{\"broken\"".utf8).write(to: root.appending(path: "CustomSets.json"))
+        #expect(throws: (any Error).self) { try store.save(first) }
+        #expect(try String(contentsOf: root.appending(path: "CustomSets.json"), encoding: .utf8) == "[{\"broken\"")
+    }
+
     /// A disc that MusicBrainz has, put in a set, keeps MusicBrainz's names but none of its IDs.
     @Test func takesADiscThatMusicBrainzHas() throws {
         let (toc, _) = try makeDisc(trackSectors: [800, 900])

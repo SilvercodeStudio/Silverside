@@ -165,8 +165,11 @@ final class DriveSlot: Identifiable {
                 selectedTracks = Set(info.toc.audioTracks.map(\.number))
                 discState = .ready
                 startProbe(make, toc: info.toc)
+                let before = info
                 await info.lookUpRelease()
                 guard !Task.isCancelled else { return }
+                // Names typed while the lookup ran stay.
+                if let now = disc { info.keepChanges(since: before, in: now) }
                 disc = info
                 looked?()
             } catch DriveError.blankDisc(let media) {
@@ -197,27 +200,34 @@ final class DriveSlot: Identifiable {
 
     /// Uses another of the releases that have the disc.
     func choose(_ release: MusicBrainzRelease) {
-        guard var info = disc else { return }
-        Task { @MainActor in
-            await info.choose(release)
-            disc = info
-        }
+        changeDisc { await $0.choose(release) }
     }
 
     /// Uses a release that a search of MusicBrainz found (`DiscInfo.useFound`).
     func useFound(_ release: MusicBrainzRelease) {
-        guard var info = disc else { return }
-        Task { @MainActor in
-            await info.useFound(release)
-            disc = info
-        }
+        changeDisc { await $0.useFound(release) }
     }
 
     func lookUpAgain() {
-        guard var info = disc else { return }
         disc?.lookup = .lookingUp
+        changeDisc { await $0.lookUpRelease(fresh: true) }
+    }
+
+    /// Changes a copy of the disc with `change`, which waits for MusicBrainz, then shows the
+    /// copy, with what the user changed on show meanwhile (names typed, a cover dropped). The
+    /// copy is dropped if another disc went in, or a rip started: the rip has what it started with.
+    func changeDisc(_ change: @escaping (inout DiscInfo) async -> Void) {
+        guard let before = disc else { return }
+        let ripBefore = rip
         Task { @MainActor in
-            await info.lookUpRelease(fresh: true)
+            var info = before
+            await change(&info)
+            guard let now = disc, now.toc.musicBrainzDiscID == info.toc.musicBrainzDiscID else { return }
+            guard rip === ripBefore else {
+                disc?.lookup = before.lookup == .lookingUp ? info.lookup : before.lookup
+                return
+            }
+            info.keepChanges(since: before, in: now)
             disc = info
         }
     }

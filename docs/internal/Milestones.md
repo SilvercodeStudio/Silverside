@@ -319,6 +319,11 @@ Deferred:
 - Developer ID signing and notarization: for 1.0. Then updates through Sparkle, with the CLI inside the app and a DMG: the plan is in `docs/internal/Sparkle.md` (2026-11-01, not started).
 - The C2 fallback (review item 16b), for 2.0 (decided 2026-10-27): `TrackRipper` asks for C2 flags with `try?`, so any error from that read, even an ejected disc, becomes a plain read. A C2 probe for each drive, kept in its profile, would be better. It needs a drive that refuses C2 to test against (all four test drives give C2 flags), and `SimulatedDrive` cannot refuse C2 yet.
 - A `DiscRip` test with `--pool`, and its cleanup of the alternatives; only `RipPool` itself is tested.
+- Drive profiles, from the 0.9.4 review (2026-11-04), for 0.9.5 or later:
+  - `QReadCost` is measured once, at a drive's first rip, from one window, and kept. A slow moment there (macOS reading the disc just after it goes in, retries on a scratch, a speed step) can make a fast drive sample Q on every rip after. Confirm a high cost with a second measurement, or measure again now and then.
+  - When the measurement gets no result (Q refused, no valid frame, a read error, no audio area of 480 sectors), nothing is kept, so every rip measures again (about 2 s). Keep that it failed.
+  - The C2/Q order that `IOKitDrive` finds (`SectorRead.Layout`) starts as MMC's for each new `IOKitDrive`. On a drive that sends Q first (GUC0N, DS8A5SH), a chunk with no valid Q frame either way is split in MMC's order, so its sectors get false C2 flags and no Q. Keep the order in the drive's profile.
+  - Rips made before 0.9.4 on the GUC0N or DS8A5SH have `.suspects` files that mark almost every sample as a C2 error. A repair that pools them gets too many erasures. Ignore C2 suspects in a pooled rip whose flags cover 90% or more of a track (`SecureRipper.c2FlagsMeanNothing`), as a new rip does.
 
 ## 9. Multi-disc releases and naming styles
 

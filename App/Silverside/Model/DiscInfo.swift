@@ -435,6 +435,13 @@ struct DiscInfo {
         keptCover = nil
     }
 
+    /// Keeps what the user changed on the disc on show (`now`) since this copy was made from
+    /// it (`before`), while the copy waited for MusicBrainz: names typed, and a cover dropped.
+    mutating func keepChanges(since before: DiscInfo, in now: DiscInfo) {
+        edits.apply(changesFrom: before.edits, to: now.edits)
+        if now.userCover != before.userCover { userCover = now.userCover }
+    }
+
     /// A cover the user dropped or chose: shown now, and kept at once for the release (with
     /// none, for the disc's own manual release), so that it is there again when the disc goes
     /// in again, even if no rip finished to save it.

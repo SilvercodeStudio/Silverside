@@ -141,7 +141,7 @@ public struct TrackRipper {
         if readsQ && qEvery > 1
             && frames.contains(where: { $0.position.map { $0.track == track.number && $0.index >= 2 } ?? false })
         {
-            frames = try reader.readQ(sectors) { done, count in
+            let full = try reader.readQ(sectors) { done, count in
                 progress?(
                     .readingIndexes(
                         track: track.number,
@@ -149,6 +149,9 @@ public struct TrackRipper {
                             sectorsRead: done, sectors: count, flaggedSectors: 0, unreadableSectors: 0)
                     ))
             }
+            // The sampled frames stay where this read got none (a chunk that failed), and no frame counts twice.
+            let fullLBAs = Set(full.compactMap(\.position?.lba))
+            frames = full + frames.filter { $0.position.map { !fullLBAs.contains($0.lba) } ?? false }
             qReadInFull = true
         }
         var subchannel = SubchannelControl()

@@ -83,32 +83,36 @@ struct Metadata: AsyncParsableCommand {
         }
         print("MusicBrainz disc ID: \(toc.musicBrainzDiscID)" + (mcn.map { ", MCN \($0)" } ?? ""))
 
-        let choice = try await ReleaseLookup.find(toc: toc, mcn: mcn, releaseID: release, details: true)
-        var chosen = choice.chosen
-        if chosen == nil { chosen = CustomSetStore().set(containing: toc)?.release }
+        // A disc in the user's own set is the set's, whatever MusicBrainz has, as in a rip: no lookup.
+        let customSet = release == nil ? CustomSetStore().set(containing: toc) : nil
+        let choice =
+            customSet == nil ? try await ReleaseLookup.find(toc: toc, mcn: mcn, releaseID: release, details: true) : nil
+        var chosen = customSet?.release ?? choice?.chosen
         if chosen == nil, manual { chosen = MusicBrainzRelease.manual(toc: toc, cdText: cdText) }
         guard let chosen else {
             print("MusicBrainz has no release with this disc. --manual makes one to name with --set.")
             return
         }
-        if chosen.isManual {
+        if let customSet, let position = customSet.disc(with: toc)?.position {
+            print("Disc \(position) of your set “\(customSet.title)”: no MusicBrainz lookup.")
+        } else if chosen.isManual {
             print(
                 "No MusicBrainz release: the names come from " + (cdText == nil ? "nowhere yet" : "the disc's CD-Text")
                     + ".")
         }
-        if let failure = choice.detailsFailure {
+        if let failure = choice?.detailsFailure {
             print("The release's own lookup failed (\(failure)): no writers or genre. Run this again later for them.")
         }
-        if !choice.isExact, !chosen.isManual {
+        if let choice, !choice.isExact, !chosen.isManual {
             print("MusicBrainz does not know this disc ID. These releases have nearly the same TOC.")
             print(
                 "To add the disc ID to the right release: \(MusicBrainzRelease.submissionURL(for: toc).absoluteString)")
         }
-        for (index, candidate) in choice.ranked.enumerated() {
+        for (index, candidate) in (choice?.ranked ?? []).enumerated() {
             let mark = candidate.id == chosen.id ? "*" : " "
             print("\(mark) \(index + 1). " + candidate.summary(for: toc))
         }
-        if !choice.ranked.contains(where: { $0.id == chosen.id }) {
+        if customSet == nil, !(choice?.ranked ?? []).contains(where: { $0.id == chosen.id }) {
             print("* " + chosen.summary(for: toc) + " (from --release)")
         }
         // The edits: the rip's, else the ones kept for the release; then this command's changes.

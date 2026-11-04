@@ -59,6 +59,19 @@ public struct MetadataEdits: Equatable, Sendable {
         return result
     }
 
+    /// Makes each change from `before` to `after` here too: for names typed on the disc on show
+    /// while a copy of it waited for MusicBrainz. Only what changed is taken, by album field and
+    /// by track, so the copy's own changes stay where the user changed nothing.
+    public mutating func apply(changesFrom before: MetadataEdits, to after: MetadataEdits) {
+        if after.album != before.album { album = after.album }
+        if after.albumArtist != before.albumArtist { albumArtist = after.albumArtist }
+        if after.date != before.date { date = after.date }
+        for number in Set(before.tracks.keys).union(after.tracks.keys)
+        where before.tracks[number] != after.tracks[number] {
+            tracks[number] = after.tracks[number]
+        }
+    }
+
     /// Sets one track's title; the original (nil) clears the edit.
     public mutating func setTitle(_ title: String?, ofTrack number: Int) {
         var track = tracks[number] ?? Track()
@@ -97,6 +110,28 @@ public struct MetadataEdits: Equatable, Sendable {
             edited.media[index].tracks[position] = changed
         }
         return edited
+    }
+
+    /// The edits that give `release` the names that `named` has for the disc with `toc`: the
+    /// album's title, artist, and date, and each track's title and artist, where they differ.
+    /// For a disc that leaves a custom set, so that it keeps every name it had there.
+    public init(keeping named: MusicBrainzRelease, on release: MusicBrainzRelease, toc: TOC) {
+        self.init()
+        if named.title != release.title { album = named.title }
+        if named.artist != release.artist { albumArtist = named.artist }
+        if let date = named.date, date != release.date { self.date = date }
+        // The tracks as the album edits alone name them: a release Silverside made credits its
+        // tracks to the album artist.
+        let base = applied(to: release, toc: toc)
+        guard let before = named.medium(for: toc) ?? (named.media.count == 1 ? named.media.first : nil),
+            let after = base.medium(for: toc)
+        else { return }
+        for (index, track) in toc.audioTracks.enumerated()
+        where index < before.tracks.count && index < after.tracks.count {
+            let (old, new) = (before.tracks[index], after.tracks[index])
+            if old.title != new.title { setTitle(old.title, ofTrack: track.number) }
+            if old.artist != new.artist { setArtist(old.artist, ofTrack: track.number) }
+        }
     }
 
     /// The edits that give a release the names in the disc's CD-Text: the album, its artist,

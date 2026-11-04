@@ -3,7 +3,7 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
-## 0.9.4 (not released yet)
+## 0.9.4 (2026-11-04)
 
 ### Added
 
@@ -27,7 +27,9 @@ command-line tool.
   the set and the number are filled in, and the next disc of the box offers
   to join the set at once. An earlier rip can join a set too, and so can a
   disc that MusicBrainz has, from Disc › Put in Custom Set…: a disc in your
-  set is named as the set's, whatever MusicBrainz finds for it.
+  set is named as the set's, whatever MusicBrainz finds for it. A disc that
+  leaves your set, or whose place in it another disc takes, keeps the names
+  it had there.
 - Search MusicBrainz…, for a disc whose ID MusicBrainz does not know, or
   whose release it got wrong: on the disc's page, in Disc, in the release
   picker, and in Change Release…. Search by names, barcode, or catalog
@@ -72,15 +74,15 @@ command-line tool.
   flags say nothing about where errors are, so they are not used for that
   track, and the log and the report say so. The disc graph no longer fills
   the track with "Flagged by the drive".
-
 - The sidebar lists the 8 sets with the newest rips, not every set, and All
   Sets (in the sidebar and the View menu) shows every set in a table to
   search and sort. A set opens its page, and its discs their results.
 - Find (⌘F) puts the insertion point in the search field of Rip History, or
   of All Sets when that shows. Typing there no longer slows down: the table
   is searched when you stop typing. A search ignores case, accents, and
-  curly quotes and dashes, so "dick's" finds Dick’s Picks. Back from a rip or a set finds the table
-  with its search, order, and selection as they were.
+  curly quotes and dashes, so "dick's" finds Dick’s Picks. Back from a rip
+  or a set finds the table with its search, order, and selection as they
+  were.
 - A track being re-read shows the sectors and the round on two lines, so
   the round is not cut off.
 

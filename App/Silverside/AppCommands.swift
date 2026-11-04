@@ -60,8 +60,10 @@ struct AppCommands: Commands {
             .keyboardShortcut("l", modifiers: .command)
             .disabled(
                 model.selectedDrive.map { $0.disc == nil }
-                    ?? !(model.selectedRip.map { $0.report.release?.isManual == false && model.canChangeRelease($0) }
-                    ?? false))
+                    ?? !(model.selectedRip.map { rip in
+                        rip.report.release.map { !$0.isManual && !model.lookingUpReleases.contains($0.id) } == true
+                            && model.canChangeRelease(rip)
+                    } ?? false))
             Button("New Release in MusicBrainz…") {
                 if let disc = model.selectedDrive?.disc, let release = disc.release {
                     ResultChips.openNewRelease(copying: release, toc: disc.toc)

@@ -262,6 +262,7 @@ struct ReleaseSearchSheet: View {
 /// rip, whose release it changes (`AppModel.releaseSearchTarget`).
 struct ReleaseSearchTargetSheet: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     let target: AppModel.DiscTarget
 
     var body: some View {
@@ -271,6 +272,10 @@ struct ReleaseSearchTargetSheet: View {
                 ReleaseSearchSheet(toc: disc.toc, initialQuery: disc.searchText, actionTitle: "Use This Release") {
                     found, _ in slot.useFound(found)
                 }
+                // The sheet is for this disc only: another in the drive, or none, closes it.
+                .onChange(of: slot.disc?.toc.musicBrainzDiscID) { dismiss() }
+            } else {
+                Color.clear.frame(width: 1, height: 1).onAppear { dismiss() }
             }
         case .rip(let rip):
             if let toc = try? TOC(ctdbTOCString: rip.report.toc) {

@@ -684,6 +684,39 @@ extension EncodingTests {
         #expect(update.files.isEmpty || update.files[0].lastPathComponent.contains("Typed Title"))
     }
 
+    /// A disc that leaves a custom set is a disc of its own again, and keeps the names it had in
+    /// the set as its own edits: the set's album names, and its tracks'. Its release is the
+    /// plain one Silverside makes, so Clear Edits can go back to it.
+    @Test func keepsTheNamesOfADiscThatLeavesACustomSet() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let discJSON = folder.appending(path: "disc.json")
+        let toc = try TOC(ctdbTOCString: try RipReport.read(from: discJSON).toc)
+        let editsStore = ReleaseEditsStore(url: root.appending(path: "edits.json"))
+        let coverStore = ReleaseCoverStore(folder: root.appending(path: "covers"))
+        let choiceStore = ReleaseChoiceStore(url: root.appending(path: "choices.json"))
+        var set = CustomSet(title: "Seven Classic LPs", artist: "Dave Brubeck", discCount: 4)
+        set.put(toc, at: 2, namedAs: .manual(toc: toc))
+        _ = try DiscEncoder(format: .flac).changeRelease(
+            reportAt: discJSON, to: set.release, library: library, editsStore: editsStore, coverStore: coverStore,
+            choiceStore: choiceStore)
+        try editsStore.remember(MetadataEdits(date: "1962"), forReleaseID: set.id)
+        try MetadataEdits(tracks: [1: .init(title: "Typed Title")]).save(inReportAt: discJSON)
+
+        let update = try DiscEncoder(format: .flac).leaveCustomSet(
+            reportAt: discJSON, library: library, editsStore: editsStore, coverStore: coverStore,
+            choiceStore: choiceStore)
+        let release = try #require(try RipReport.read(from: discJSON).release)
+        #expect(release.isManual && !release.isCustomSet && release.title == MusicBrainzRelease.manual(toc: toc).title)
+        let edits = try #require(MetadataEdits.read(fromDiscJSONOf: folder))
+        #expect(edits.album == "Seven Classic LPs" && edits.albumArtist == "Dave Brubeck" && edits.date == "1962")
+        #expect(edits.tracks[1]?.title == "Typed Title")
+        let named = edits.applied(to: release, toc: toc)
+        #expect(named.title == "Seven Classic LPs" && named.medium(for: toc)?.tracks[0].title == "Typed Title")
+        #expect(update.files.isEmpty || update.files[0].lastPathComponent.contains("Typed Title"))
+    }
+
     /// Keep My Track Titles: each track keeps the title it has now, typed or the old release's;
     /// the album's names, the date, and the IDs are the new release's.
     @Test func keepsTheTrackTitlesOnAnotherRelease() throws {

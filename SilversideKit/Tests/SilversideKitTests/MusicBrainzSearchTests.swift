@@ -16,6 +16,13 @@ struct MusicBrainzSearchTests {
             MusicBrainzClient.searchQuery(for: " dave brubeck seven classic lps ") == "dave brubeck seven classic lps")
         #expect(MusicBrainzClient.searchQuery(for: "AC/DC: Back in Black!") == "AC\\/DC\\: Back in Black\\!")
         #expect(MusicBrainzClient.searchQuery(for: "catno:EN4CD9161") == "catno:EN4CD9161")
+        #expect(MusicBrainzClient.searchQuery(for: "brubeck (catno:EN4CD9161)") == "brubeck (catno:EN4CD9161)")
+        // Titles with a field's name in them are words, not fields.
+        #expect(MusicBrainzClient.searchQuery(for: "Soundtracks: Vol. 1") == "Soundtracks\\: Vol. 1")
+        #expect(MusicBrainzClient.searchQuery(for: "Classic Country: Hits") == "Classic Country\\: Hits")
+        // A "+" reaches MusicBrainz as a "+", not a space.
+        let url = MusicBrainzClient.searchURL(query: MusicBrainzClient.searchQuery(for: "Mumford + Sons"), limit: 5)
+        #expect(url.absoluteString.contains("query=Mumford%20%5C%2B%20Sons"))
         #expect(
             MusicBrainzClient.searchQuery(for: "823564030142") == "barcode:0823564030142 OR barcode:823564030142")
         #expect(MusicBrainzClient.barcodeQuery(for: "0075596194426") == "barcode:0075596194426 OR barcode:075596194426")

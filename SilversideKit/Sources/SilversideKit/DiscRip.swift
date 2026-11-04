@@ -973,6 +973,9 @@ public struct DiscRip {
             let rip = try ripper.rip(track) { events(.reading($0)) }
             report.matchingOffsets = rip.matchingOffsets
             report.c2Sectors = rip.c2Samples.map { Array(Set($0.map { $0 / CDDA.samplesPerSector })).sorted() }
+            report.c2Ignored =
+                SecureRipper.c2FlagsMeanNothing(flagged: report.c2Sectors?.count ?? 0, sectors: report.sectors)
+                ? true : nil
             report.unreadableSectors = Array(Set(rip.unreadableSamples.map { $0 / CDDA.samplesPerSector })).sorted()
             report.recordSubchannel(rip.subchannel)
             report.recordIndexes(of: track, in: toc, positions: rip.qPositions, drive: drive)

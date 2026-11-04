@@ -173,18 +173,6 @@ private struct AcknowledgmentsSheet: View {
 
     private let entries: [(name: String, text: String)] = [
         (
-            "[Exact Audio Copy](https://www.exactaudiocopy.de)",
-            "by Andre Wiethoff set the standard for secure ripping that Silverside follows."
-        ),
-        (
-            "[XLD](https://tmkk.undo.jp/xld/index_e.html)",
-            "by tmkk, the careful CD ripper for the Mac, was an inspiration. Silverside uses no code from it."
-        ),
-        (
-            "[cyanrip](https://github.com/cyanreg/cyanrip)",
-            "by Lynne, a ripper built for today's tools, was an inspiration too. No code from it either."
-        ),
-        (
             "[AccurateRip](http://www.accuraterip.com)",
             "by Illustrate keeps the checksums of other people's rips, which prove a track is accurate."
         ),
@@ -215,6 +203,10 @@ private struct AcknowledgmentsSheet: View {
         (
             "[Claude Code](https://claude.com/claude-code)",
             "by Anthropic was the coding agent that helped write Silverside."
+        ),
+        (
+            "[Exact Audio Copy](https://www.exactaudiocopy.de), [XLD](https://tmkk.undo.jp/xld/index_e.html), and [cyanrip](https://github.com/cyanreg/cyanrip)",
+            "are the rippers that inspired Silverside. It uses no code from them."
         ),
     ]
 

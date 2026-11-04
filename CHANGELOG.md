@@ -3,6 +3,14 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.9.5 (not released yet)
+
+### Changed
+
+- About › Acknowledgments names Exact Audio Copy, XLD, and cyanrip, the
+  rippers that inspired Silverside, in one line at the end, after the
+  services and programs that Silverside uses.
+
 ## 0.9.4 (2026-11-04)
 
 ### Added

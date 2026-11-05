@@ -156,7 +156,7 @@
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h3l2-6 4 12 3-9 2 3h4"/></svg></div></div>
             <h3 class="ss-card__title">Every bit, and the extras</h3>
-            <p class="ss-card__text">Silverside copies every bit the disc holds, then keeps what a plain copy loses: HDCD decoded to 20 bits, pre-emphasis flagged or undone, DTS surround decoded, the CD-Text, and the cover from the Cover Art Archive.</p>
+            <p class="ss-card__text">Silverside copies every bit the disc holds, then keeps what a plain copy loses: HDCD decoded to 20 bits, pre-emphasis flagged or undone, DTS surround decoded, CD+G graphics, the CD-Text, and the cover from the Cover Art Archive.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/></svg></div></div>
@@ -344,7 +344,7 @@
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></div></div>
             <h3 class="ss-card__title">Hidden tracks and extras</h3>
-            <p class="ss-card__text">A song hidden before track 1 is ripped and encoded as track 0. An Enhanced CD's data track is kept as a disc image, with its files ready to open. Pregaps, index points, ISRCs, the MCN, and CD-Text go into the report and the CUE sheet.</p>
+            <p class="ss-card__text">A song hidden before track 1 is ripped and encoded as track 0. An Enhanced CD's data track is kept as a disc image, with its files ready to open. A karaoke disc's CD+G graphics are saved beside each track, and become a video of the whole disc that plays anywhere, in 256 colors for a CD+EG disc. Pregaps, index points, ISRCs, the MCN, and CD-Text go into the report and the CUE sheet.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 16h4c3 0 4-8 7-8h7"/><path d="M3 20h18"/></svg></div></div>
@@ -444,6 +444,7 @@
           <li><a href="https://ffmpeg.org">FFmpeg</a> decodes a DTS-CD's surround sound when it is installed. Silverside runs it as a separate program and does not include it.</li>
           <li>FFmpeg's HDCD decoder finds and decodes the HDCD codes in a rip. Chris Moeller wrote it from Christopher Key's HDCD library, with work by Gumboot and Burt P. Silverside includes it under its <a href="license.html#hdcd">BSD license</a>.</li>
           <li>Apple's AudioToolbox encodes FLAC, Apple Lossless, and AAC.</li>
+          <li><a href="https://adelaide.casa/cdeg/">Adélaïde Casa</a>'s notes for the Divacore record, and <a href="https://extended.graphics">Adam Gashlin</a>'s Compact Disc Extended Graphics page, made CD+EG's graphics public. Silverside's CD+EG rendering code was informed by their work.</li>
           <li><a href="https://www.exactaudiocopy.de">Exact Audio Copy</a>, <a href="https://tmkk.undo.jp/xld/index_e.html">XLD</a>, and <a href="https://github.com/cyanreg/cyanrip">cyanrip</a> are the rippers that inspired Silverside. It uses no code from them.</li>
         </ul>
         <p class="acks-note">Silverside is for archival copies of discs that you own, for your personal use. It does not support piracy. You use it at your own risk: it comes with no warranty. See the <a href="license.html#personal-use">License</a>.</p>

@@ -201,6 +201,10 @@ private struct AcknowledgmentsSheet: View {
             "finds and decodes the HDCD codes in a rip. Chris Moeller wrote it from Christopher Key's HDCD library, with work by Gumboot and Burt P. Silverside includes it under its BSD license (see License)."
         ),
         (
+            "[Adélaïde Casa](https://adelaide.casa/cdeg/) and [Adam Gashlin](https://extended.graphics)",
+            "made CD+EG's graphics public: Adélaïde Casa's notes for the Divacore record, and Adam Gashlin's Compact Disc Extended Graphics page. Silverside's CD+EG rendering code was informed by their work."
+        ),
+        (
             "[Claude Code](https://claude.com/claude-code)",
             "by Anthropic was the coding agent that helped write Silverside."
         ),

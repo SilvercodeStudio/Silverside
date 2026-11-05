@@ -101,9 +101,27 @@ struct CDGraphicsVideoTests {
         #expect(Array(player.rgb()[0..<3]) == [0, 0, 0x88])
         player.apply(Self.memoryControl(3, 3))
         #expect(Array(player.rgb()[0..<3]) == [0x88, 0, 0x88])
+        // In the 2-plane state a scroll moves only the memories it works on: the SECONDARY's
+        // picture moves, and the PRIMARY's stays where it is.
+        player.apply(Self.memoryControl(3, 2))
+        player.apply(Self.pack(24, [0, 0x03, 0x05]))
+        #expect(player.secondaryHorizontalOffset == 3 && player.secondaryVerticalOffset == 5)
+        #expect(player.horizontalOffset == 0 && player.verticalOffset == 0)
         // DM 00 with WM 01: no operation.
         player.apply(Self.memoryControl(0, 1))
         #expect(player.displayMode == 3)
+    }
+
+    /// The border shows its color, not the tiles under it, which a scroll can fill with the
+    /// picture (the IA's CD+EG videos of *Mashin Hero Wataru 3* show it plain).
+    @Test func showsTheBorderInItsColor() {
+        var screen = CDGraphicsScreen()
+        screen.apply(Self.pack(30, [0, 0, 0x3C, 0, 0x03, 0x30]))  // 0 black, 1 red, 2 green
+        screen.apply(Self.pack(1, [0, 0]))
+        screen.apply(Self.pack(2, [1]))
+        // A tile in the ring, at row 0 and column 0, all green.
+        screen.apply(Self.pack(6, [2, 2, 0, 0] + [UInt8](repeating: 0x3F, count: 12)))
+        #expect(screen.pixels[0] == 2 && Array(screen.rgb()[0..<3]) == [255, 0, 0])
     }
 
     /// One video for the disc, a chapter for each track at its start, and the audio as ripped.

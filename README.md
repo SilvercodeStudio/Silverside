@@ -33,7 +33,8 @@ it comes with no warranty (see [LICENSE](LICENSE)).
   - Proper pre-emphasis handling (these discs are rare and from the early/mid 80s.)
   - DTS-CD - when ffmpeg is installed
   - DVD-Audio (MLP lossless high-resolution surround) - coming soon
-  - CD+G (CDs with graphics) - extraction as a video file - coming soon
+  - CD+G and CD+EG (CDs with graphics, mostly karaoke) - the graphics as a
+    `.cdg` file for each track, and as a video of the whole disc
   - Super Audio CD (SACD) extraction is not possible with a standard
     PC CD/DVD/BD drive. The CD layer of hybrid CD/SACD discs can still
     be ripped as standard CD audio.
@@ -122,6 +123,14 @@ Apple, so macOS opens them without warnings.
   burned again exactly.
 - **Hidden track one audio** (a song before track 1) is ripped and encoded as
   track 0.
+- **CD+G graphics:** the pictures or karaoke lyrics in a disc's subchannel,
+  read in a drive that gives the subchannel (not every drive can) and checked
+  by their own error correction, are saved as a `.cdg` file beside each
+  track, with the track's name, as karaoke programs would pair them. Silverside
+  can also make a video of the whole disc, as a CD+G player shows it, with a
+  chapter for each track and the audio as Apple Lossless or AAC. A CD+EG disc
+  (CD+Extended Graphics, from a handful of Asian releases) gets its 256 colors, or
+  its 16-color CD+G picture, or both.
 - **Enhanced CDs:** the data track after the music is kept as a disc image
   (`Data track.iso`, both its Windows and its classic Mac file systems), with
   the Windows side's files copied into a `Data track` folder, ready to open.
@@ -244,7 +253,11 @@ Note that some of these require an external tool (ffmpeg or LAME) for full use.
 - CD-Text - song titles on disc; relatively common.
   - Additional character blocks such as Japanese MS-JIS are supported.
 - CD+G - CD+Graphics: Mainly karaoke, but a few commercial album releases use it.
-  - Currently, the audio can be extracted. Extracting the graphics as video is planned.
+  - The graphics are saved as `.cdg` files, and can be made into a video file
+    with chapters, in a drive that reads the subchannel.
+  - CD+EG (CD+Extended Graphics) - 256 colors and dissolves between pictures,
+    from a few early 1990s Japanese and Korean releases - drawn as a CD+EG player
+    such as the Sega Saturn shows it.
 - Hidden track one audio (HTOA) identification and extraction
 - Additional technical details of the discs are logged: 
   - disc IDs, MCN (Media Catalog Number), ISRC (International Standard Recording 

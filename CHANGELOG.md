@@ -34,7 +34,8 @@ command-line tool.
 
 - About › Acknowledgments names Exact Audio Copy, XLD, and cyanrip, the
   rippers that inspired Silverside, in one line at the end, after the
-  services and programs that Silverside uses.
+  services and programs that Silverside uses. It also thanks Adélaïde Casa
+  and Adam Gashlin, whose pages made CD+EG's graphics public.
 - A set's discs that MusicBrainz gives no title show their track count in
   grey italics, so it does not read as a name.
 

@@ -41,6 +41,20 @@ public struct CDGraphicsScreen: Equatable, Sendable {
     /// The fine scroll, in pixels: how far the picture is moved right (0 to 5) and down (0 to 11).
     public private(set) var horizontalOffset = 0
     public private(set) var verticalOffset = 0
+    /// The SECONDARY's fine scroll. In the 2-plane state each memory scrolls on its own, so
+    /// that one picture can move over another that stays (*The CD Graphics World*: lyrics
+    /// scrolling across a photo, a pattern scrolling down behind one); in the 1-plane state
+    /// the two move together.
+    public private(set) var secondaryHorizontalOffset = 0
+    public private(set) var secondaryVerticalOffset = 0
+    /// The border's color in each memory, from the last border or memory preset. The border,
+    /// the ring of tiles around the 288 × 192 picture, shows this color, not the memory under
+    /// it: the ring holds what a scroll brings in or wraps out of sight. (FFmpeg shows the
+    /// memory there, so a scroll leaves pieces of the picture in its border; the CD+EG videos
+    /// of the Internet Archive's *Mashin Hero Wataru 3* show a plain border while the picture
+    /// scrolls under it.)
+    public private(set) var borderColor: UInt8 = 0
+    public private(set) var secondaryBorderColor: UInt8 = 0
     /// Counts the packs that changed what the screen shows, so that a video can tell when a
     /// frame is the same as the one before.
     public private(set) var changes = 0
@@ -152,10 +166,14 @@ public struct CDGraphicsScreen: Equatable, Sendable {
     /// the SECONDARY takes 0 (clause 23.5.1).
     private mutating func preset(color: UInt8, repeat count: Int, primary: Bool, secondary: Bool) {
         guard count == 0 else { return }
-        if primary { for i in pixels.indices { pixels[i] = color } }
+        if primary {
+            for i in pixels.indices { pixels[i] = color }
+            borderColor = color
+        }
         if secondary || (extended && displayMode == 0) {
             let value = displayMode == 0 ? 0 : color
             for i in self.secondary.indices { self.secondary[i] = value }
+            secondaryBorderColor = value
         }
     }
 
@@ -164,6 +182,8 @@ public struct CDGraphicsScreen: Equatable, Sendable {
         let (w, h, tw, th) = (Self.width, Self.height, Self.tileWidth, Self.tileHeight)
         let clearsSecondary = secondary || (extended && displayMode == 0)
         let value = displayMode == 0 ? 0 : color
+        if primary { borderColor = color }
+        if clearsSecondary { secondaryBorderColor = value }
         for y in 0..<h {
             for x in 0..<w where x < tw || x >= w - tw || y < th || y >= h - th {
                 if primary { pixels[y * w + x] = color }
@@ -198,13 +218,15 @@ public struct CDGraphicsScreen: Equatable, Sendable {
         let color = data[0] & 0x0F
         let horizontal = Int(data[1] >> 4) & 0x03
         let vertical = Int(data[2] >> 4) & 0x03
-        horizontalOffset = min(Int(data[1] & 0x07), Self.tileWidth - 1)
-        verticalOffset = min(Int(data[2] & 0x0F), Self.tileHeight - 1)
+        let fine = (min(Int(data[1] & 0x07), Self.tileWidth - 1), min(Int(data[2] & 0x0F), Self.tileHeight - 1))
+        let movesSecondary = secondary || (extended && displayMode == 0)
+        if primary { (horizontalOffset, verticalOffset) = fine }
+        if movesSecondary { (secondaryHorizontalOffset, secondaryVerticalOffset) = fine }
         let dx = horizontal == 1 ? Self.tileWidth : horizontal == 2 ? -Self.tileWidth : 0
         let dy = vertical == 1 ? Self.tileHeight : vertical == 2 ? -Self.tileHeight : 0
         guard dx != 0 || dy != 0 else { return }
         if primary { Self.move(&pixels, dx: dx, dy: dy, wraps: wraps, fill: color) }
-        if secondary || (extended && displayMode == 0) {
+        if movesSecondary {
             Self.move(&self.secondary, dx: dx, dy: dy, wraps: wraps, fill: displayMode == 0 ? 0 : color)
         }
     }
@@ -272,18 +294,24 @@ public struct CDGraphicsScreen: Equatable, Sendable {
         }
     }
 
-    /// Each pixel shown, as an index into `palette()`, row by row: the border as it is, and
-    /// inside it the picture moved by the fine scroll.
+    /// Each pixel shown, as an index into `palette()`, row by row: the border in its color, and
+    /// inside it each memory's picture moved by its fine scroll.
     private func shown(_ body: (_ x: Int, _ y: Int, _ index: Int) -> Void) {
         let (w, h, tw, th) = (Self.width, Self.height, Self.tileWidth, Self.tileHeight)
+        let last = pixels.count - 1
+        let (ph, pv, sh, sv) = (horizontalOffset, verticalOffset, secondaryHorizontalOffset, secondaryVerticalOffset)
+        let border = Int(secondaryBorderColor) << 4 | Int(borderColor)
         pixels.withUnsafeBufferPointer { primary in
             secondary.withUnsafeBufferPointer { secondary in
                 for y in 0..<h {
                     for x in 0..<w {
-                        let inside = x >= tw && x < w - tw && y >= th && y < h - th
-                        let source = min(
-                            inside ? (y + verticalOffset) * w + x + horizontalOffset : y * w + x, primary.count - 1)
-                        body(x, y, Int(secondary[source]) << 4 | Int(primary[source]))
+                        guard x >= tw && x < w - tw && y >= th && y < h - th else {
+                            body(x, y, border)
+                            continue
+                        }
+                        let p = min((y + pv) * w + x + ph, last)
+                        let s = min((y + sv) * w + x + sh, last)
+                        body(x, y, Int(secondary[s]) << 4 | Int(primary[p]))
                     }
                 }
             }

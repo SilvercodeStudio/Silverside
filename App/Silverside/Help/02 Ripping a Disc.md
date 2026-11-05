@@ -201,7 +201,7 @@ On such a disc, a drive that can read past the end of the music reads the last t
 
 ### CD+G graphics
 
-Karaoke CDs, and a few others, carry pictures or lyrics beside the music, in a part of the disc that CD players skip (the subchannel). A CD+G player, or a karaoke machine, shows them on a TV. A chip in the header shows such a disc.
+Karaoke CDs, and a few others, carry pictures or lyrics beside the music, in a part of the disc that CD players skip (the subchannel). A CD+G player, or a karaoke machine, shows them on a TV. The disc's logo beside the Rip button shows such a disc as CD+G, or CD+EG.
 
 In a drive that gives the subchannel (most do; the HL-DT-ST BU50N does not), the rip saves each track's graphics before its music, as `Track 01.cdg` and so on. The graphics carry their own error correction, which the rip applies, and a part damaged past it is read again. The report has a table of what was saved.
 

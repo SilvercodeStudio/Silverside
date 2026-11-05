@@ -157,7 +157,9 @@ public struct RipSet: Equatable, Identifiable, Sendable {
 
     /// The sets among earlier rips: one for each release with more than one CD, with the
     /// newest rip of each disc. Rips with no release, or of a one-CD release, are left out.
-    public static func sets(in rips: [Rip]) -> [RipSet] {
+    /// A set's title and artist are the album's names in `editsStore`, where the user changed
+    /// them ("Bitches Brew [2015]"), else the release's.
+    public static func sets(in rips: [Rip], editsStore: ReleaseEditsStore? = nil) -> [RipSet] {
         var sets = [String: RipSet]()
         for rip in rips.sorted(by: { $0.report.date > $1.report.date }) {
             guard let release = rip.report.release, release.sharesAlbumEdits, release.cdPositions.count > 1,
@@ -165,9 +167,12 @@ public struct RipSet: Equatable, Identifiable, Sendable {
             else { continue }
             var set =
                 sets[release.id]
-                ?? RipSet(
-                    releaseID: release.id, title: release.title, artist: release.artist,
-                    positions: release.cdPositions)
+                ?? {
+                    let edits = editsStore?.edits(forReleaseID: release.id)
+                    return RipSet(
+                        releaseID: release.id, title: edits?.album ?? release.title,
+                        artist: edits?.albumArtist ?? release.artist, positions: release.cdPositions)
+                }()
             if let known = set.discs[position], known.date >= rip.report.date { continue }
             set.discs[position] = Disc(
                 position: position, folder: rip.folder, file: rip.file, date: rip.report.date, hasAudio: rip.hasAudio,

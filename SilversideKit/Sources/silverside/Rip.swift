@@ -142,6 +142,10 @@ struct Rip: AsyncParsableCommand {
                 printer.progress.clear()
                 return Self.askToOverwrite(existing)
             }
+            rip.chooseAlbumName = { [printer] shared in
+                printer.progress.clear()
+                return Self.askForAlbumName(shared)
+            }
             rip.chooseHDCD = { [printer] report, format in
                 printer.progress.clear()
                 return Self.askToDecodeHDCD(report, format: format)
@@ -204,6 +208,20 @@ struct Rip: AsyncParsableCommand {
         fflush(stdout)
         let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
         return answer == "y" || answer == "yes"
+    }
+
+    /// Asks at the terminal for a name of the album's own, as its folder holds a rip of another
+    /// release: Return takes the suggestion, and "same" puts the disc in that folder (nil).
+    static func askForAlbumName(_ shared: SharedAlbumFolder) -> String? {
+        print()
+        print(
+            "\(shared.folder.path) holds a rip of another release of the album "
+                + "(\(SharedAlbumFolder.edition(of: shared.other))). A name of its own keeps the two apart.")
+        print("Album name [\(shared.suggestedAlbum)], or \"same\" for that folder: ", terminator: "")
+        fflush(stdout)
+        let answer = readLine()?.trimmingCharacters(in: .whitespaces) ?? ""
+        if answer.lowercased() == "same" { return nil }
+        return answer.isEmpty ? shared.suggestedAlbum : answer
     }
 
     /// Asks at the terminal whether to decode a disc's HDCD codes. The default is the
@@ -433,6 +451,8 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print("  \(line)")
         case .trackEncoded, .silentTracksLeftOut:
             break
+        case .albumRenamed(let name):
+            Swift.print("Album: “\(name)”, as its folder held another release.")
         case .encodingDeclined(let existing):
             let folder = existing.first?.deletingLastPathComponent().path ?? ""
             Swift.print("Did not encode: kept the files in \(folder). The rip is kept, for silverside encode later.")

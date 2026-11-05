@@ -260,6 +260,8 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
     case duplicateDestination(URL)
     /// No disc of the release has the rip's TOC.
     case notOnRelease(URL)
+    /// The album folder holds a rip of another release, named alike (see `SharedAlbumFolder`).
+    case sharedAlbumFolder(URL, other: String, suggestedAlbum: String, rip: URL)
 
     public var description: String {
         switch self {
@@ -281,7 +283,29 @@ public enum EncodingError: Error, Equatable, CustomStringConvertible {
             "Several tracks would write to \(file.path). Choose a template with unique track names."
         case .sourceChanged(let file): "\(file.path) no longer decodes to the audio that was ripped and verified."
         case .notOnRelease(let folder): "No disc of that release is the disc that \(folder.path) holds."
+        case .sharedAlbumFolder(let folder, let other, let suggested, let rip):
+            "\(folder.path) holds a rip of another release of the album (\(other)). Give this one a name of its "
+                + "own (silverside metadata -i \"\(rip.path)\" --set album=\"\(suggested)\"), or use --overwrite "
+                + "to put it in that folder too."
         }
+    }
+}
+
+/// An album folder that holds a rip of another release, found before a disc's files go into
+/// it: two editions named alike (*Bitches Brew*: the 1992 CD and the 2015 box) would mix their
+/// files and reports there, the cover of the first would stay, and their tags would name one
+/// album. A name of its own, such as `suggestedAlbum`, keeps them apart.
+public struct SharedAlbumFolder: Sendable {
+    public var folder: URL
+    /// The other release, as its rip's report in the folder has it.
+    public var other: MusicBrainzRelease
+    /// The album's name with what tells this release apart: "Bitches Brew [2015]".
+    public var suggestedAlbum: String
+
+    /// "GB, 1992-11-12": what tells a release apart, for people to read.
+    public static func edition(of release: MusicBrainzRelease) -> String {
+        let parts = [release.disambiguation, release.country, release.date].compactMap { $0 }
+        return parts.isEmpty ? release.title : parts.joined(separator: ", ")
     }
 }
 
@@ -303,6 +327,9 @@ public struct DiscEncoder: Sendable {
     public var allowsUnverified = false
     /// Replace files that exist.
     public var overwrites = false
+    /// Put the disc in an album folder that holds a rip of another release, which the encoding
+    /// otherwise refuses (`EncodingError.sharedAlbumFolder`).
+    public var sharesAlbumFolder = false
     /// Write ReplayGain tags: each track's gain and peak, and the album's, measured as EBU R 128 does.
     public var replayGain = true
     /// Decode a disc whose HDCD codes ask for peak extend or a gain adjustment into 20-bit (24-bit for AIFF and WAV)
@@ -644,6 +671,49 @@ public struct DiscEncoder: Sendable {
         return (release, medium, jobs, leftOut)
     }
 
+    /// The album folder that the disc's files would go into, if it holds a rip of another
+    /// release: `encodeWithRecord` refuses it unless `sharesAlbumFolder` is set.
+    public func sharedAlbumFolder(_ disc: RippedDisc, into library: URL) throws -> SharedAlbumFolder? {
+        let planned = try plan(disc, into: library)
+        guard let folder = planned.jobs.first?.folder,
+            let other = Self.otherRelease(in: folder, than: planned.release.id)
+        else { return nil }
+        return SharedAlbumFolder(folder: folder, other: other, suggestedAlbum: try suggestedAlbum(disc, into: library))
+    }
+
+    /// The release of the first rip report in `folder` that is not the release with `releaseID`:
+    /// another edition's, encoded into the folder.
+    static func otherRelease(in folder: URL, than releaseID: String) -> MusicBrainzRelease? {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        for name in names.sorted() where name.hasPrefix("Rip Report") && name.hasSuffix(".json") {
+            if let other = (try? RipReport.read(from: folder.appending(path: name)))?.release, other.id != releaseID {
+                return other
+            }
+        }
+        return nil
+    }
+
+    /// The album's name with the release's year after it, "Bitches Brew [2015]", or else its
+    /// date, its year and country, or a number: the first whose folder holds no other release.
+    func suggestedAlbum(_ disc: RippedDisc, into library: URL) throws -> String {
+        guard let release = disc.release else { throw EncodingError.noRelease(disc.folder) }
+        let year = release.date.map { String($0.prefix(4)) }
+        var parts = [String]()
+        if let year { parts.append(year) }
+        if let date = release.date, date.count > 4 { parts.append(date) }
+        if let year, let country = release.country { parts.append("\(year), \(country)") }
+        parts += (2...9).map(String.init)
+        let names = parts.map { "\(release.title) [\($0)]" }
+        for name in names {
+            var renamed = disc
+            renamed.release?.title = name
+            let planned = try plan(renamed, into: library)
+            guard let folder = planned.jobs.first?.folder else { return name }
+            if Self.otherRelease(in: folder, than: planned.release.id) == nil { return name }
+        }
+        return names[0]
+    }
+
     /// Conservative across case-sensitive and case-insensitive libraries, including canonical Unicode aliases.
     static func checkUniqueDestinations(_ files: [URL]) throws {
         var seen = Set<String>()
@@ -684,6 +754,13 @@ public struct DiscEncoder: Sendable {
         let encodingStarted = Date()
         let planned = try plan(disc, into: library)
         var (release, medium, jobs) = (planned.release, planned.medium, planned.jobs)
+        if !sharesAlbumFolder, let folder = jobs.first?.folder,
+            let other = Self.otherRelease(in: folder, than: release.id)
+        {
+            throw EncodingError.sharedAlbumFolder(
+                folder, other: SharedAlbumFolder.edition(of: other),
+                suggestedAlbum: try suggestedAlbum(disc, into: library), rip: disc.folder)
+        }
         let silentTracksLeftOut = planned.leftOut.map(\.ripped.number)
         if !silentTracksLeftOut.isEmpty {
             log(

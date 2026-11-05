@@ -226,6 +226,68 @@ struct DiscRipTests {
         await #expect(throws: EncodingError.exists(first.encodedFiles[0])) { try await rip(replaces: nil) }
     }
 
+    /// A rip whose album folder holds another release asks for a name of the album's own,
+    /// keeps it as the album's edit, and encodes into the folder of that name. With no one
+    /// to ask, the encoding stops.
+    @Test func asksForANameWhenTheAlbumFolderHoldsAnotherRelease() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900])
+        var settings = Settings()
+        settings.rips = root.appending(path: "rips").path
+        settings.keepRipAfterEncoding = true
+        let library = root.appending(path: "library")
+        let asked = DiscRipEvents()
+
+        func rip(name: String??) async throws -> (DiscRipResult, [DiscRipEvent]) {
+            var options = DiscRipOptions(settings: settings)
+            options.offline = true
+            options.readOffset = 6
+            options.manualRelease = .manual(toc: toc)
+            var rip = DiscRip(
+                drive: SimulatedDrive(toc: toc, samples: samples, readOffset: 6),
+                identity: DriveIdentity(vendor: "SIM", product: "DRIVE", revision: "1.0"), settings: settings,
+                options: options, profiles: try DriveProfileStore(url: root.appending(path: "DriveProfiles.json")))
+            var encoder = DiscEncoder(format: .wav)
+            encoder.allowsUnverified = true
+            rip.encoder = encoder
+            rip.library = library
+            rip.confirmOverwrite = { _ in true }
+            if let name {
+                rip.chooseAlbumName = { shared in
+                    asked.append(.albumRenamed(shared.suggestedAlbum))
+                    return name
+                }
+            }
+            let events = DiscRipEvents()
+            rip.events = { events.append($0) }
+            return (try await rip.run(), events.list)
+        }
+
+        // The first rip's album, made another release's.
+        let (first, _) = try await rip(name: nil)
+        let album = first.encodedFiles[0].deletingLastPathComponent()
+        let albumReport = try #require(
+            try FileManager.default.contentsOfDirectory(atPath: album.path).first { $0.hasPrefix("Rip Report") })
+        var other = try RipReport.read(from: album.appending(path: albumReport))
+        other.release?.id = "another-edition"
+        try other.write(to: album.appending(path: albumReport))
+
+        await #expect(throws: EncodingError.self) { try await rip(name: nil) }
+
+        let (renamed, events) = try await rip(name: "Unknown Album (Remaster)")
+        #expect(asked.list.count == 1)
+        #expect(events.contains { if case .albumRenamed("Unknown Album (Remaster)") = $0 { true } else { false } })
+        #expect(renamed.encodedFiles.count == 2)
+        #expect(renamed.encodedFiles[0].deletingLastPathComponent().lastPathComponent == "Unknown Album (Remaster)")
+        #expect(MetadataEdits.read(fromDiscJSONOf: renamed.folder)?.album == "Unknown Album (Remaster)")
+
+        // Nil puts it in the same folder, over the first rip's files.
+        let (same, _) = try await rip(name: .some(nil))
+        #expect(same.encodedFiles.first?.deletingLastPathComponent().lastPathComponent == album.lastPathComponent)
+    }
+
     /// A rip that no database verifies is not encoded, and it asks nothing about the encoding
     /// first: the answers would not count.
     @Test func doesNotAskAboutAnEncodingOfAnUnverifiedRip() async throws {

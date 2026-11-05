@@ -106,6 +106,21 @@ public struct LibraryUpdate: Sendable {
     /// The rip's report after the update: its disc.json, or the album folder's report, which
     /// moves with the album folder.
     public var report: URL
+    /// The album folder, when it moved as a whole (or merged into another): the other discs
+    /// of a set in it moved too, and their album reports with it.
+    public var movedFolder: (from: URL, to: URL)?
+
+    /// `file` where the moves put it: a report in a folder that moved is in its new place.
+    public static func following(_ file: URL, moves: [(from: URL, to: URL)]) -> URL {
+        var file = file
+        for move in moves {
+            let from = move.from.standardizedFileURL.path
+            let path = file.standardizedFileURL.path
+            guard path.hasPrefix(from + "/") else { continue }
+            file = URL(filePath: move.to.standardizedFileURL.path + path.dropFirst(from.count))
+        }
+        return file
+    }
 }
 
 extension DiscEncoder {
@@ -162,6 +177,7 @@ extension DiscEncoder {
         if let suffix = report.encoding?.albumSuffix { release.title += suffix }
 
         var renamed = 0
+        var movedFolder: (from: URL, to: URL)?
 
         // The album folder, as the templates name it now. A set shares one folder, so a move
         // into a folder that exists merges into it. A folder that another release's rip shares
@@ -173,17 +189,24 @@ extension DiscEncoder {
             if planned.standardizedFileURL != current.standardizedFileURL,
                 FileManager.default.fileExists(atPath: current.path)
             {
-                if Self.holdsOtherRelease(current, than: original.id) {
+                if Self.otherRelease(in: current, than: original.id) != nil {
                     try Self.moveOwnFiles(of: encoding, discPart: discPart, from: current, to: planned)
                 } else if FileManager.default.fileExists(atPath: planned.path) {
                     try Self.mergeAlbum(from: current, into: planned)
+                    movedFolder = (current, planned)
                 } else {
                     try FileManager.default.createDirectory(
                         at: planned.deletingLastPathComponent(), withIntermediateDirectories: true)
                     try FileManager.default.moveItem(at: current, to: planned)
+                    movedFolder = (current, planned)
                 }
                 albumFolder = planned
                 renamed += 1
+            } else if planned.standardizedFileURL != current.standardizedFileURL,
+                (try? RipReport.read(from: planned.appending(path: "Rip Report\(discPart).json")))?.toc == report.toc
+            {
+                // Another disc of the set moved the folder, with this disc's files, already.
+                albumFolder = planned
             }
         }
 
@@ -309,7 +332,7 @@ extension DiscEncoder {
 
         // The CUE sheet again, under its new name, and the reports. In a folder that another
         // release's rip shares, only the sheets that name this rip's files are its own.
-        if Self.holdsOtherRelease(album, than: original.id) {
+        if Self.otherRelease(in: album, than: original.id) != nil {
             let names = Set(report.encoding?.files.map(\.file) ?? []).union(encoding.files.map(\.file))
             let report = album.appending(path: "Rip Report\(discPart).json")
             for sheet in Self.ownSheets(in: album, naming: names, besides: report) {
@@ -337,7 +360,8 @@ extension DiscEncoder {
         }
         if isRipFolder, report.encoding != nil { try encoding.save(inReportAt: file) }
         return LibraryUpdate(
-            files: files, renamed: renamed, albumFolder: album, report: isRipFolder ? file : albumReport)
+            files: files, renamed: renamed, albumFolder: album, report: isRipFolder ? file : albumReport,
+            movedFolder: movedFolder)
     }
 
     /// The encoding of a rip encoded from the terminal, which its disc.json does not record:
@@ -560,18 +584,6 @@ extension DiscEncoder {
         let shared = Set(
             RipRemoval.otherReportsFiles(in: album, besides: report).map { URL(filePath: $0).lastPathComponent })
         return CueSheet.sheets(in: album, namingOnly: names).filter { !CueSheet.sheet($0, namesOnly: shared) }
-    }
-
-    /// True if the album folder holds the report of a rip of another release: another edition
-    /// of the album, encoded into the folder while the two had the same name.
-    static func holdsOtherRelease(_ folder: URL, than releaseID: String) -> Bool {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-        return names.contains { name in
-            guard name.hasPrefix("Rip Report"), name.hasSuffix(".json"),
-                let other = try? RipReport.read(from: folder.appending(path: name)).release
-            else { return false }
-            return other.id != releaseID
-        }
     }
 
     /// Moves one rip's files out of an album folder that another release's rip shares: its

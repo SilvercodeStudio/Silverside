@@ -10,6 +10,8 @@ struct MainWindow: View {
 
     /// A rip that waits to hear whether to replace files in the library.
     private var questionRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.overwriteQuestion != nil } }
+    /// A rip that waits for a name of the album's own, as its folder holds another release.
+    private var albumNameRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.albumNameQuestion != nil } }
     /// A rip that waits to hear whether to decode its HDCD codes.
     private var hdcdRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.hdcdQuestion != nil } }
     /// A rip that waits to hear whether to save its data tracks.
@@ -80,6 +82,11 @@ struct MainWindow: View {
         }
         .sheet(isPresented: $model.repairShown) {
             if let run = model.repair { RepairSheet(run: run) }
+        }
+        .sheet(isPresented: Binding(get: { albumNameRip != nil }, set: { _ in })) {
+            if let rip = albumNameRip, let question = rip.albumNameQuestion {
+                AlbumNameQuestionSheet(rip: rip, question: question)
+            }
         }
         .sheet(isPresented: Binding(get: { hdcdRip != nil }, set: { _ in })) {
             if let rip = hdcdRip, let question = rip.hdcdQuestion { HDCDQuestionSheet(rip: rip, question: question) }

@@ -507,6 +507,53 @@ struct PreEmphasisQuestionSheet: View {
 /// After a rip with tracks that are all digital silence, before encoding: leave them out of the
 /// album, or keep them. Leaving them out is the advice: they are filler, such as the short
 /// silent tracks before a disc's hidden songs.
+/// After a rip, before encoding: the album's folder holds a rip of another release, named
+/// alike. A name of its own keeps the two apart, in folders and in players.
+struct AlbumNameQuestionSheet: View {
+    var rip: RipRun
+    var question: RipRun.AlbumNameQuestion
+    @State private var name = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("The library has another “\(question.album)”").font(.title3.bold())
+            Text(
+                "\(folder) holds a rip of another release of the album (\(other)). In one folder, the two "
+                    + "would mix their files and reports, the first one's cover would stay, and players would list "
+                    + "them as one album."
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Give this release a name of its own. Every disc of it gets the name, and you can change it later. "
+                    + "If the two are discs of one set that MusicBrainz took for different editions, choose Same "
+                    + "Folder, then Change Release for the disc that is wrong."
+            )
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            TextField("Album", text: $name).onSubmit(useName)
+            HStack {
+                Spacer()
+                Button("Same Folder") { rip.answerAlbumName(nil) }
+                Button("Use This Name", action: useName)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(trimmed.isEmpty || trimmed == question.album)
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
+        .onAppear { name = question.shared.suggestedAlbum }
+    }
+
+    private var folder: String { (question.shared.folder.path as NSString).abbreviatingWithTildeInPath }
+    private var other: String { SharedAlbumFolder.edition(of: question.shared.other) }
+    private var trimmed: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func useName() {
+        guard !trimmed.isEmpty, trimmed != question.album else { return }
+        rip.answerAlbumName(trimmed)
+    }
+}
+
 struct SilentTracksQuestionSheet: View {
     @Environment(AppModel.self) private var model
     var rip: RipRun

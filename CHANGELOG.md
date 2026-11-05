@@ -10,6 +10,8 @@ command-line tool.
 - About › Acknowledgments names Exact Audio Copy, XLD, and cyanrip, the
   rippers that inspired Silverside, in one line at the end, after the
   services and programs that Silverside uses.
+- A set's discs that MusicBrainz gives no title show their track count in
+  grey italics, so it does not read as a name.
 
 ### Fixed
 
@@ -24,6 +26,22 @@ command-line tool.
   changed the set, so the disc went in as the wrong set's the next time.
 - A disc in a drive that left your set lost the date and the cover it had
   there, and the track titles typed for it.
+- A rip of one edition of an album went into the album folder of another
+  edition with the same name, with no question when no file names were the
+  same: their files and reports mixed there, the first edition's cover
+  stayed, and players listed them as one album. The rip now asks for a name
+  of its own, such as "Bitches Brew [2015]", or puts it in the same folder
+  when you say so. The command-line tool stops instead, unless given
+  `--overwrite`.
+- The Cover Art Archive picker grew wider than its window for a release with
+  several labels, cutting off its left side.
+- Renaming a set's album renamed its folder with the first disc, and the
+  other discs then failed: their reports had moved with the folder.
+- A set's album name typed without pressing Return was not kept, though it
+  still showed, so Update the Library wrote the old name. A name is now kept
+  when you leave the field, and before Update the Library or Encode Discs.
+- A set whose album you renamed kept its old name in the sidebar, the sets'
+  table, and the window's title.
 
 ## 0.9.4 (2026-11-04)
 

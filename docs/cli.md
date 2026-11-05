@@ -146,7 +146,11 @@ It encodes only tracks that AccurateRip or CTDB verified,
 unless you give `--allow-unverified`. The rip's report goes into the album
 folder too, as `Rip Report (Disc 1).json`. Files that are already in the
 library stay unless you give `--overwrite`; at a terminal, `rip --encode`
-asks first. ReplayGain's album gain is the disc's own until every disc of a
+asks first. An album folder that holds a rip of another release of the same
+name (another edition) is not used either, unless you give `--overwrite`:
+give the album a name of its own with `silverside metadata -i <rip>
+--set album="Bitches Brew [2015]"`. At a terminal, `rip --encode` asks for
+one, and offers the album's name with the release's year. ReplayGain's album gain is the disc's own until every disc of a
 set is in the album folder; the last disc's encoding gives every disc the
 album gain over all of them. `--add-to-music` (or the `addToMusic` setting)
 adds the files to Apple's Music app, in every format but FLAC; the first time,

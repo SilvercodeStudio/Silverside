@@ -49,6 +49,13 @@ final class RipRun {
         var folder: URL? { existing.first?.deletingLastPathComponent() }
     }
 
+    /// The album's folder holds a rip of another release: the rip waits for `answerAlbumName(_:)`.
+    struct AlbumNameQuestion: Identifiable {
+        let id = UUID()
+        var shared: SharedAlbumFolder
+        var album: String
+    }
+
     /// The rip found HDCD codes that change the audio: it waits for `answerHDCD(decodes:)`.
     struct HDCDQuestion: Identifiable {
         let id = UUID()
@@ -166,6 +173,7 @@ final class RipRun {
     /// True if the encoded files go into Music.
     private(set) var addsToMusic = false
     private(set) var overwriteQuestion: OverwriteQuestion?
+    private(set) var albumNameQuestion: AlbumNameQuestion?
     private(set) var hdcdQuestion: HDCDQuestion?
     private(set) var preEmphasisQuestion: PreEmphasisQuestion?
     private(set) var silentTracksQuestion: SilentTracksQuestion?
@@ -188,6 +196,7 @@ final class RipRun {
     @ObservationIgnored private var tracksToRip: [Int] = []
     @ObservationIgnored private var sectorsBefore: [Int: Int] = [:]
     @ObservationIgnored private var overwriteAnswer: CheckedContinuation<Bool, Never>?
+    @ObservationIgnored private var albumNameAnswer: CheckedContinuation<String?, Never>?
     @ObservationIgnored private var hdcdAnswer: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var preEmphasisAnswer: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var silentTracksAnswer: CheckedContinuation<Bool, Never>?
@@ -195,6 +204,8 @@ final class RipRun {
     @ObservationIgnored private var dataTrackAnswer: CheckedContinuation<Bool, Never>?
     /// Hears the question about files in the library, so the app can show the drive and ask for attention.
     @ObservationIgnored var onQuestion: (@MainActor () -> Void)?
+    /// Hears the album's new name, when its folder held another release, so the drive shows it.
+    @ObservationIgnored var onAlbumRenamed: (@MainActor (String) -> Void)?
 
     init(disc: DiscInfo) {
         self.disc = disc
@@ -316,6 +327,13 @@ final class RipRun {
                         }
                     }
                 }
+                rip.chooseAlbumName = { shared in
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated { run.askAlbumName(shared, answer: continuation) }
+                        }
+                    }
+                }
                 rip.chooseSilentTracks = { report in
                     await withCheckedContinuation { continuation in
                         DispatchQueue.main.async {
@@ -400,6 +418,7 @@ final class RipRun {
         task?.cancel()
         // A rip that waits for the question stops when it hears the answer.
         if overwriteQuestion != nil { answer(replaces: false) }
+        if albumNameQuestion != nil { answerAlbumName(nil) }
         if hdcdQuestion != nil { answerHDCD(decodes: false) }
         if preEmphasisQuestion != nil { answerPreEmphasis(deEmphasizes: false) }
         if silentTracksQuestion != nil { answerSilentTracks(leavesOut: false) }
@@ -501,6 +520,24 @@ final class RipRun {
         preEmphasisAnswer.resume(returning: deEmphasizes)
     }
 
+    private func askAlbumName(_ shared: SharedAlbumFolder, answer: CheckedContinuation<String?, Never>) {
+        albumNameAnswer = answer
+        albumNameQuestion = AlbumNameQuestion(shared: shared, album: disc.title)
+        add(
+            "The album's folder holds another release (\(SharedAlbumFolder.edition(of: shared.other))). "
+                + "Waiting for an answer...")
+        onQuestion?()
+    }
+
+    /// Answers the album name question: a name of the album's own, or nil for the same folder.
+    func answerAlbumName(_ name: String?) {
+        guard let albumNameAnswer else { return }
+        self.albumNameAnswer = nil
+        albumNameQuestion = nil
+        if name == nil { add("Putting the disc in the same folder as the other release.") }
+        albumNameAnswer.resume(returning: name)
+    }
+
     private func ask(_ existing: [URL], answer: CheckedContinuation<Bool, Never>) {
         overwriteAnswer = answer
         overwriteQuestion = OverwriteQuestion(existing: existing, album: disc.title)
@@ -560,7 +597,9 @@ final class RipRun {
         switch phase {
         case .starting: return "Starting…"
         case .ripping:
-            if overwriteQuestion != nil { return "Waiting for your answer about the library…" }
+            if overwriteQuestion != nil || albumNameQuestion != nil {
+                return "Waiting for your answer about the library…"
+            }
             if hdcdQuestion != nil { return "Waiting for your answer about HDCD…" }
             if preEmphasisQuestion != nil { return "Waiting for your answer about pre-emphasis…" }
             if silentTracksQuestion != nil { return "Waiting for your answer about the silent tracks…" }
@@ -781,6 +820,9 @@ final class RipRun {
             encodeStates[number] = .encoded(file)
             startNextEncode()
             onProgress?()
+        case .albumRenamed(let name):
+            onAlbumRenamed?(name)
+            add("Album: “\(name)”, a name of its own.")
         case .encodingDeclined(let existing):
             keptFiles = existing
             for number in tracksToRip { encodeStates[number] = .notEncoded }

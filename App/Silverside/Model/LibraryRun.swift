@@ -174,12 +174,16 @@ final class LibraryRun: Identifiable {
             }
             // Every disc first takes the set's current names and the cover; an encoded one has
             // its files written again, a rip that is not encoded yet keeps them in its disc.json.
+            // A disc that renames the album folder moves the other discs' files and reports in it too.
+            var moves = [(from: URL, to: URL)]()
             for rip in update + encode where !stop.isStopped {
                 do {
                     var encoder = DiscEncoder(settings: settings)
                     encoder.log = { line in onMain { run.add("  \(line)") } }
                     let result = try encoder.updateLibrary(
-                        reportAt: rip.file, cover: cover, discCover: discCovers[rip.file] ?? .keep, library: library)
+                        reportAt: LibraryUpdate.following(rip.file, moves: moves), cover: cover,
+                        discCover: discCovers[rip.file] ?? .keep, library: library)
+                    if let moved = result.movedFolder { moves.append(moved) }
                     if update.contains(where: { $0.file == rip.file }) {
                         onMain {
                             run.updatedDiscs += 1
@@ -234,6 +238,14 @@ final class LibraryRun: Identifiable {
                         run.add(
                             "\(rip.title): the library already has \(file.lastPathComponent). Use Update the Library.")
                     }
+                } catch EncodingError.sharedAlbumFolder(let folder, let other, let suggested, _) {
+                    onMain {
+                        run.problems += 1
+                        run.add(
+                            "\(rip.title): \(folder.lastPathComponent) holds a rip of another release of the album "
+                                + "(\(other)). Give this one a name of its own, such as “\(suggested)”, and encode again."
+                        )
+                    }
                 } catch {
                     onMain {
                         run.problems += 1
@@ -250,7 +262,13 @@ final class LibraryRun: Identifiable {
                     let format = hdcd.beside ? hdcd.format : rip.report.encoding?.format ?? hdcd.format
                     var encoder = DiscEncoder(settings: settings, format: format)
                     encoder.decodesHDCD = true
-                    if hdcd.beside { encoder.albumSuffix = hdcd.suffix } else { encoder.overwrites = true }
+                    if hdcd.beside {
+                        encoder.albumSuffix = hdcd.suffix
+                    } else {
+                        // In place: the album is where it is, beside whatever else the folder holds.
+                        encoder.overwrites = true
+                        encoder.sharesAlbumFolder = true
+                    }
                     encoder.log = { line in onMain { run.add("  \(line)") } }
                     onMain {
                         run.add(
@@ -285,7 +303,13 @@ final class LibraryRun: Identifiable {
                     let format = dts.beside ? dts.format : rip.report.encoding?.format ?? dts.format
                     var encoder = DiscEncoder(settings: settings, format: format)
                     encoder.decodesDTS = true
-                    if dts.beside { encoder.albumSuffix = dts.suffix } else { encoder.overwrites = true }
+                    if dts.beside {
+                        encoder.albumSuffix = dts.suffix
+                    } else {
+                        // In place: the album is where it is, beside whatever else the folder holds.
+                        encoder.overwrites = true
+                        encoder.sharesAlbumFolder = true
+                    }
                     encoder.log = { line in onMain { run.add("  \(line)") } }
                     onMain {
                         run.add(

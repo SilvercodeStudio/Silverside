@@ -52,7 +52,7 @@ struct EncodingOptions: ParsableArguments {
     @Option(help: "One more option for lame, such as --lame-option=-q --lame-option=0. Give it once for each word.")
     var lameOption: [String] = []
 
-    @Flag(help: "Replace files that exist in the library.")
+    @Flag(help: "Replace files that exist in the library, and put an album in a folder that holds another release.")
     var overwrite = false
 
     @Flag(inversion: .prefixedNo, help: "Write ReplayGain tags: each track's gain and peak, and the album's.")
@@ -156,6 +156,7 @@ struct EncodingOptions: ParsableArguments {
         if let mp3Quality { encoder.mp3.vbrQuality = mp3Quality }
         if !lameOption.isEmpty { encoder.mp3.extraArguments = lameOption }
         encoder.overwrites = overwrite
+        encoder.sharesAlbumFolder = overwrite
         if let replayGain { encoder.replayGain = replayGain }
         encoder.decodesHDCD = hdcdChoice(settings) == .decode
         encoder.deEmphasizes = preEmphasisChoice(settings) != .keep

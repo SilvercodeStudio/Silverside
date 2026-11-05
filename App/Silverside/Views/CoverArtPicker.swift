@@ -52,7 +52,11 @@ struct CoverArtPickerSheet: View {
                         Text(source.name).tag(Optional(source.id))
                     }
                 }
-                .fixedSize()
+                // Not .fixedSize(): a long name (three labels and a catalog number) would make
+                // the sheet wider than its window. The button truncates the name; the menu and
+                // the tooltip show it whole.
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(sources.first { $0.id == (source ?? release.id) }?.name ?? "")
             }
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
             if let failure, images != nil {
@@ -114,10 +118,17 @@ struct CoverArtPickerSheet: View {
         return list
     }
 
-    /// " (Or Music OR805022, US, 2005-04-19, 3 images)".
+    /// " (Or Music OR805022, US, 2005-04-19, 3 images)". Labels that share a catalog number
+    /// name it once: "Columbia, Legacy, Sony Music 88875079792".
     private static func edition(of release: MusicBrainzRelease) -> String {
-        let labels = release.labels.compactMap { label in
-            [label.name, label.catalogNumber].compactMap { $0 }.joined(separator: " ")
+        var numbers = [String?]()
+        var names = [String?: [String]]()
+        for label in release.labels {
+            if !numbers.contains(label.catalogNumber) { numbers.append(label.catalogNumber) }
+            if let name = label.name { names[label.catalogNumber, default: []].append(name) }
+        }
+        let labels = numbers.map { number in
+            ((names[number] ?? []).joined(separator: ", ") + " " + (number ?? "")).trimmingCharacters(in: .whitespaces)
         }.filter { !$0.isEmpty }
         var parts = labels + [release.country, release.date].compactMap { $0 }
         if let count = release.artworkCount { parts.append(count == 0 ? "no images" : Format.count(count, "image")) }

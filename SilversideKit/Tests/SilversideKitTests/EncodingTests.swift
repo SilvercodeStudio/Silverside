@@ -684,6 +684,79 @@ extension EncodingTests {
         #expect(update.files.isEmpty || update.files[0].lastPathComponent.contains("Typed Title"))
     }
 
+    /// Two editions named alike (*Bitches Brew*, the 1992 CD and the 2015 box): the second is not
+    /// put in the first one's folder without asking, and the name offered for it is the
+    /// album's with its year, or else its date when that name is taken too.
+    @Test func keepsAnotherReleaseOutOfTheAlbumFolder() throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        var encoder = DiscEncoder(format: .flac)
+        let disc = try RippedDisc(folder: folder)
+        let title = try #require(disc.release?.title)
+
+        // The other edition's rip, in the folder this disc's files would go into.
+        func putOtherRelease(in album: URL, id: String) throws {
+            var other = try RipReport.read(from: folder.appending(path: "disc.json"))
+            other.release?.id = id
+            other.release?.date = "1992-11-12"
+            other.release?.country = "GB"
+            try FileManager.default.createDirectory(at: album, withIntermediateDirectories: true)
+            try other.write(to: album.appending(path: "Rip Report (Disc 2).json"))
+        }
+        #expect(try encoder.sharedAlbumFolder(disc, into: library) == nil)
+        let planned = try encoder.plannedFiles(disc, into: library)[0].deletingLastPathComponent()
+        try putOtherRelease(in: planned, id: "other")
+
+        let shared = try #require(try encoder.sharedAlbumFolder(disc, into: library))
+        #expect(shared.folder.standardizedFileURL == planned.standardizedFileURL)
+        #expect(shared.other.id == "other" && SharedAlbumFolder.edition(of: shared.other) == "GB, 1992-11-12")
+        #expect(shared.suggestedAlbum == "\(title) [2019]")
+        #expect(throws: EncodingError.self) { try encoder.encode(disc, into: library) }
+        #expect(!FileManager.default.fileExists(atPath: try encoder.plannedFiles(disc, into: library)[0].path))
+
+        // With the year's name taken by a third edition, the date tells them apart.
+        var renamed = disc
+        renamed.release?.title = shared.suggestedAlbum
+        let taken = try encoder.plannedFiles(renamed, into: library)[0].deletingLastPathComponent()
+        try putOtherRelease(in: taken, id: "third")
+        #expect(try encoder.sharedAlbumFolder(disc, into: library)?.suggestedAlbum == "\(title) [2019-09-27]")
+
+        // Asked to, it goes in all the same.
+        encoder.sharesAlbumFolder = true
+        #expect(try encoder.encode(disc, into: library).count == 2)
+    }
+
+    /// *The Beatles* renamed "The Beatles [1987]": the first disc's update moves the album
+    /// folder, with the second disc's files and report in it, and the second disc's update
+    /// finds its report in the new folder.
+    @Test func renamesASetWhoseFirstDiscMovesTheFolder() throws {
+        let (folder2, library) = try makeRip()
+        let root = folder2.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (folder1, _) = try makeRip(disc1: true)
+        defer { try? FileManager.default.removeItem(at: folder1.deletingLastPathComponent()) }
+        let encoder = DiscEncoder(format: .flac)
+        let files2 = try encoder.encode(try RippedDisc(folder: folder2), into: library)
+        _ = try encoder.encode(try RippedDisc(folder: folder1), into: library)
+        let album = files2[0].deletingLastPathComponent()
+        let edits = ReleaseEditsStore(url: root.appending(path: "edits.json"))
+        try edits.remember(MetadataEdits(album: "Renamed Album"), forReleaseID: "rel")
+
+        var moves = [(from: URL, to: URL)]()
+        let first = try encoder.updateLibrary(
+            reportAt: album.appending(path: "Rip Report (Disc 1).json"), library: library, editsStore: edits)
+        let moved = try #require(first.movedFolder)
+        #expect(moved.from.standardizedFileURL == album.standardizedFileURL)
+        #expect(moved.to.lastPathComponent == "Renamed Album")
+        moves.append(moved)
+        let second = try encoder.updateLibrary(
+            reportAt: LibraryUpdate.following(album.appending(path: "Rip Report (Disc 2).json"), moves: moves),
+            library: library, editsStore: edits)
+        #expect(second.files.count == 2 && second.movedFolder == nil)
+        #expect(second.albumFolder?.lastPathComponent == "Renamed Album")
+        #expect(try FLACTags.read(second.files[0]).contains { $0.key == "ALBUM" && $0.value == "Renamed Album" })
+    }
+
     /// A rip encoded from the terminal, whose album's title MusicBrainz corrects: the album found
     /// by the old title is kept in the rip's report, so the library update finds it and renames it.
     @Test func keepsTheAlbumOfARefreshedReleaseFoundByTheOldName() throws {
@@ -822,9 +895,12 @@ extension EncodingTests {
         let (folder1, _) = try makeRip(disc1: true)
         defer { try? FileManager.default.removeItem(at: folder1.deletingLastPathComponent()) }
         try RipReport.update(reportAt: folder1.appending(path: "disc.json")) { $0.release?.id = "japan" }
-        let encoder = DiscEncoder(format: .flac)
+        var encoder = DiscEncoder(format: .flac)
         let files2 = try encoder.encode(try RippedDisc(folder: folder2), into: library)
+        // Asked about the other edition in the folder, the user put the disc there all the same.
+        encoder.sharesAlbumFolder = true
         let files1 = try encoder.encode(try RippedDisc(folder: folder1), into: library)
+        encoder.sharesAlbumFolder = false
         let album = files2[0].deletingLastPathComponent()
         #expect(files1[0].deletingLastPathComponent() == album)
         let report1 = album.appending(path: "Rip Report (Disc 1).json")

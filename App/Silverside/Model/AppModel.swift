@@ -61,9 +61,13 @@ final class AppModel {
         listsVersion += 1
         allRips = (recentRips + missingRips).sorted { $0.report.date > $1.report.date }
         sets = RipSet.sets(
-            in: recentRips.map { .init(folder: $0.folder, file: $0.file, report: $0.report, hasAudio: $0.hasAudio) }
+            in: recentRips.map { .init(folder: $0.folder, file: $0.file, report: $0.report, hasAudio: $0.hasAudio) },
+            editsStore: ReleaseEditsStore()
         ).sorted { $0.lastRipped > $1.lastRipped }
     }
+
+    /// A set's album names changed: the sidebar and the sets' table show the new ones.
+    func setNamesChanged() { listsChanged() }
 
     /// The history's search and order, and the sets', kept here so that Back to the table finds
     /// them as they were.
@@ -531,6 +535,10 @@ final class AppModel {
         run.onQuestion = { [weak self] in
             self?.selection = .drive(slot.id)
             if !NSApp.isActive { NSApp.requestUserAttention(.criticalRequest) }
+        }
+        // The drive shows the album's new name too, as if typed there, while the disc is in it.
+        run.onAlbumRenamed = { name in
+            if slot.disc?.toc == disc.toc { slot.disc?.edits.album = name }
         }
         // A demo rip is offline, so nothing is verified, and it encodes into a library of its own.
         run.start(

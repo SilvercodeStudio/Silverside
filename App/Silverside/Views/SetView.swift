@@ -18,6 +18,10 @@ struct SetView: View {
     @State private var album = ""
     @State private var albumArtist = ""
     @State private var date = ""
+    /// The name field being edited: a name is kept when it is left, as when Return is pressed.
+    @FocusState private var focusedField: String?
+    /// The set whose names the fields hold.
+    @State private var fieldsReleaseID: String?
     /// The set's ReplayGain, from the reports in its album folder.
     @State private var replayGain: SetReplayGain?
 
@@ -66,6 +70,8 @@ struct SetView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
+                    // A name typed and not yet kept goes into the files too, as it shows.
+                    saveFields()
                     model.startLibraryRun(title: ripSet.title, encode: toEncode, update: [])
                 } label: {
                     Label("Encode \(Format.count(toEncode.count, "Disc"))", systemImage: "music.note.list")
@@ -76,6 +82,7 @@ struct SetView: View {
                         ? "Every verified disc of the set is in the library"
                         : "Encode the verified discs that are not in the library yet, as Settings say")
                 Button {
+                    saveFields()
                     model.startLibraryRun(title: ripSet.title, encode: [], update: encoded)
                 } label: {
                     Label("Update the Library", systemImage: "arrow.triangle.2.circlepath")
@@ -123,6 +130,9 @@ struct SetView: View {
         }
         .onAppear(perform: loadFields)
         .onChange(of: ripSet.releaseID) { loadFields() }
+        .onChange(of: focusedField) { left, _ in
+            if left != nil { saveFields() }
+        }
     }
 
     private var header: some View {
@@ -207,7 +217,7 @@ struct SetView: View {
                     field("Date", text: $date, prompt: release?.date ?? "").frame(width: 140)
                 }
                 Text(
-                    "The names are the set's: every disc takes them. Press Return to keep a change, then Update the Library to write it into the encoded files."
+                    "The names are the set's: every disc takes them. A change is kept when you press Return or leave the field; Update the Library writes it into the encoded files."
                 )
                 .font(.caption).foregroundStyle(.secondary)
                 HStack(spacing: 8) {
@@ -249,6 +259,7 @@ struct SetView: View {
             Text(label).font(.caption).foregroundStyle(.secondary)
             TextField(label, text: text, prompt: Text(prompt))
                 .textFieldStyle(.roundedBorder)
+                .focused($focusedField, equals: label)
                 .onSubmit(saveFields)
         }
     }
@@ -279,8 +290,8 @@ struct SetView: View {
             let seconds = tracks.compactMap(\.seconds).reduce(0, +)
             return SetRow(
                 position: position, title: medium?.title ?? Format.count(tracks.count, "track"),
-                seconds: tracks.isEmpty ? nil : seconds, disc: disc, report: report,
-                children: tracks.isEmpty ? nil : tracks)
+                titleIsPlaceholder: medium?.title == nil, seconds: tracks.isEmpty ? nil : seconds, disc: disc,
+                report: report, children: tracks.isEmpty ? nil : tracks)
         }
     }
 
@@ -297,7 +308,13 @@ struct SetView: View {
             }
             .width(min: 64, ideal: 72)
             TableColumn("Title") { row in
-                Text(row.title).foregroundStyle(row.number == nil || row.track != nil ? .primary : .secondary)
+                if row.titleIsPlaceholder {
+                    // Not a name from MusicBrainz or the user: the disc has none.
+                    Text(row.title).italic().foregroundStyle(.secondary)
+                        .help("MusicBrainz names no title for this disc")
+                } else {
+                    Text(row.title).foregroundStyle(row.number == nil || row.track != nil ? .primary : .secondary)
+                }
             }
             .width(min: 160, ideal: 280)
             TableColumn("Time") { row in
@@ -364,6 +381,8 @@ struct SetView: View {
         /// The track's number; nil for a disc.
         var number: Int?
         var title: String
+        /// The title is Silverside's ("8 tracks"), as MusicBrainz names no title for the disc.
+        var titleIsPlaceholder = false
         var seconds: Int?
         var disc: RipSet.Disc?
         var report: RipReport?
@@ -376,22 +395,28 @@ struct SetView: View {
 
     private func loadFields() {
         let edits = self.edits
+        fieldsReleaseID = ripSet.releaseID
         album = edits.album ?? ""
         albumArtist = edits.albumArtist ?? ""
         date = edits.date ?? ""
     }
 
     private func saveFields() {
+        // Fields typed for another set (the view shows a new one) are not this set's names.
+        guard fieldsReleaseID == ripSet.releaseID else { return }
         func value(_ text: String, original: String?) -> String? {
             let trimmed = text.trimmingCharacters(in: .whitespaces)
             return trimmed.isEmpty || trimmed == original ? nil : trimmed
         }
         var edits = self.edits
+        let before = edits
         edits.album = value(album, original: release?.title)
         edits.albumArtist = value(MusicBrainzRelease.albumArtist(typed: albumArtist), original: release?.artist)
         edits.date = value(date, original: release?.date)
+        guard edits != before else { return }
         do {
             try ReleaseEditsStore().remember(edits, forReleaseID: ripSet.releaseID)
+            model.setNamesChanged()
             loadFields()
         } catch {
             model.alert = AppAlert(title: "The names could not be saved", message: "\(error)")

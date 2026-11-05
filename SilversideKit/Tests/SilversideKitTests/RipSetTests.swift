@@ -117,6 +117,19 @@ struct RipSetTests {
         }
     }
 
+    /// A set renamed in its view ("Bitches Brew [2015]") is listed by its new name.
+    @Test func namesASetAsItsAlbumEdits() throws {
+        let (release, tocs) = try Self.cornell()
+        let rips = [Self.rip(URL(filePath: "/rips/d1"), Self.report(release, toc: try #require(tocs[1])))]
+        let store = ReleaseEditsStore(
+            url: FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID()).json"))
+        defer { try? FileManager.default.removeItem(at: store.url) }
+        #expect(RipSet.sets(in: rips, editsStore: store).first?.title == release.title)
+        try store.remember(MetadataEdits(album: "Renamed [1977]"), forReleaseID: release.id)
+        #expect(RipSet.sets(in: rips, editsStore: store).first?.title == "Renamed [1977]")
+        #expect(RipSet.sets(in: rips).first?.title == release.title)
+    }
+
     @Test func leavesOutReleasesOfOneDisc() throws {
         let (toc, _) = try makeDisc(trackSectors: [800, 900])
         let report = Self.report(MusicBrainzRelease.manual(toc: toc), toc: toc)

@@ -169,6 +169,8 @@ public enum DiscRipEvent: Sendable {
     /// The library already had these files of the disc, and `confirmOverwrite` kept them:
     /// nothing was encoded, and the rip is kept.
     case encodingDeclined([URL])
+    /// The album's folder held another release, and `chooseAlbumName` gave the album this name.
+    case albumRenamed(String)
     /// The files written, and the record of the encoding that the reports keep (nil if no file was written).
     case encoded([URL], format: AudioFormat, record: RipReport.Encoding?)
     /// After encoding: the rip's files were deleted, or kept because not every track is verified and encoded.
@@ -229,6 +231,12 @@ public struct DiscRip {
     /// the rip and before the encoder writes any. False keeps them, and the rip is not encoded.
     /// Nil asks nothing: the encoding stops with `EncodingError.exists` unless the encoder overwrites.
     public var confirmOverwrite: (@Sendable (_ existing: [URL]) async -> Bool)?
+    /// Asks for a name of the album's own when its folder holds a rip of another release (two
+    /// editions named alike), after the rip and before `confirmOverwrite`. The name is kept as
+    /// the album's edit, for every disc of the release; nil puts the disc in that folder all the
+    /// same. Nil asks nothing: the encoding stops with `EncodingError.sharedAlbumFolder` unless
+    /// the encoder shares folders.
+    public var chooseAlbumName: (@Sendable (_ shared: SharedAlbumFolder) async -> String?)?
     /// With `options.hdcd` at `.ask`, for a disc whose HDCD codes ask for peak extend or a gain
     /// adjustment: called after the rip, before encoding. True decodes the codes into 20-bit
     /// files. Nil asks nothing, and the disc is encoded as it is.
@@ -753,7 +761,7 @@ public struct DiscRip {
 
         if var encoder {
             try stop.check()
-            let disc = try RippedDisc(folder: folder)
+            var disc = try RippedDisc(folder: folder)
             // Before any question: a rip that is not verified is not encoded, whatever the answers.
             try encoder.checkVerified(disc)
             let library = self.library
@@ -766,6 +774,28 @@ public struct DiscRip {
                 if !report.silentTracks.isEmpty, let chooseSilentTracks {
                     encoder.leavesOutSilentTracks = await chooseSilentTracks(report)
                     try stop.check()
+                }
+            }
+            // Before the files in the library are looked at too: a name changes the album's folder.
+            if !encoder.sharesAlbumFolder, let chooseAlbumName {
+                while let shared = try encoder.sharedAlbumFolder(disc, into: library) {
+                    let name = await chooseAlbumName(shared)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    try stop.check()
+                    guard let name, !name.isEmpty else {
+                        encoder.sharesAlbumFolder = true
+                        break
+                    }
+                    var edits = disc.edits ?? MetadataEdits()
+                    edits.album = name
+                    try edits.save(inDiscJSONOf: folder)
+                    if let release = report.release, release.sharesAlbumEdits {
+                        let store = ReleaseEditsStore()
+                        var kept = store.edits(forReleaseID: release.id) ?? MetadataEdits()
+                        kept.album = name
+                        try store.remember(kept, forReleaseID: release.id)
+                    }
+                    events(.albumRenamed(name))
+                    disc = try RippedDisc(folder: folder)
                 }
             }
             if !encoder.overwrites, let confirmOverwrite {
@@ -817,7 +847,7 @@ public struct DiscRip {
             encoder.log = { events(.encodedTrack($0)) }
             encoder.trackEncoded = { events(.trackEncoded(number: $0, file: $1)) }
             encoder.tracksLeftOut = { events(.silentTracksLeftOut($0)) }
-            let encoded = try await blocking { [encoder, dts] in
+            let encoded = try await blocking { [encoder, disc, dts] in
                 try encoder.encodeWithRecord(disc, into: library, dts: dts)
             }
             let (files, record) = (encoded.files, encoded.encoding)

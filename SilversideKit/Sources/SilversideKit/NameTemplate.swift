@@ -66,9 +66,11 @@ public struct NameTemplate: Equatable, Sendable {
         }
     }
 
-    /// The name for the values, with each part made safe for the file system.
+    /// The name for the values, with each part made safe for the file system. Only a whole
+    /// name part loses the dots at its ends: a value keeps them inside it, as "R.E.M." does in
+    /// "02 R.E.M. - Radio Free Europe".
     public func name(_ values: [String: String]) -> String {
-        let safe = values.mapValues(Self.safeComponent)
+        let safe = values.mapValues(Self.safeValue)
         var result = ""
         var group: (text: String, complete: Bool)?
         var index = pattern.startIndex
@@ -112,14 +114,20 @@ public struct NameTemplate: Equatable, Sendable {
     /// characters, no spaces or dots at the ends (Finder hides names that start with a dot),
     /// and at most `maximumComponentBytes` of UTF-8.
     public static func safeComponent(_ value: String) -> String {
-        var text = String(
+        var text = safeValue(value).trimmingCharacters(in: CharacterSet(charactersIn: " ."))
+        while text.utf8.count > maximumComponentBytes { text.removeLast() }
+        return text.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// A field's value made safe inside a name: no "/" or ":" (they become "-"), no control
+    /// characters, and no spaces at its ends. Its dots stay: the name part's ends lose theirs.
+    static func safeValue(_ value: String) -> String {
+        String(
             value.unicodeScalars.map { scalar -> Character in
                 if scalar == "/" || scalar == ":" { return "-" }
                 if CharacterSet.controlCharacters.contains(scalar) { return " " }
                 return Character(scalar)
-            })
-        text = text.trimmingCharacters(in: CharacterSet(charactersIn: " .").union(.whitespacesAndNewlines))
-        while text.utf8.count > maximumComponentBytes { text.removeLast() }
-        return text.trimmingCharacters(in: .whitespaces)
+            }
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

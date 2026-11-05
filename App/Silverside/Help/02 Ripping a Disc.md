@@ -198,3 +198,20 @@ The data track is read after the music's rip is complete and its report written,
 Silverside does not yet copy a whole Enhanced CD, the music and the data track together, into one image that could be burned again or kept for an archive (in the CloneCD format, which keeps both sessions and the subchannel). That is planned. For now, the rip keeps the music, verified, and the data track as above.
 
 On such a disc, a drive that can read past the end of the music reads the last track to its end; otherwise its last few samples are silence, as the report says.
+
+### CD+G graphics
+
+Karaoke CDs, and a few others, carry pictures or lyrics beside the music, in a part of the disc that CD players skip (the subchannel). A CD+G player, or a karaoke machine, shows them on a TV. A chip in the header shows such a disc.
+
+In a drive that gives the subchannel (most do; the HL-DT-ST BU50N does not), the rip saves each track's graphics before its music, as `Track 01.cdg` and so on. The graphics carry their own error correction, which the rip applies, and a part damaged past it is read again. The report has a table of what was saved.
+
+The encoding puts each track's `.cdg` file beside its music file in the album's folder, with the same name, such as `01 What's on Your Mind.cdg` beside `01 What's on Your Mind.flac`. Karaoke programs and VLC pair the two by their names. An update of the library renames them together.
+
+**A video.** The first time you rip such a disc, Silverside asks whether to make a video of the graphics, and with which audio; the answer can be kept for every disc (Settings › Ripping). The video shows the graphics as a CD+G player draws them, over the music: the whole disc in one `.m4v` file, with a chapter for each track, named by its title. It plays in QuickTime Player, the TV app, VLC, and on most TVs and phones.
+
+- **Apple Lossless** keeps the music exactly as ripped.
+- **AAC** makes a smaller file, for a phone or a tablet.
+
+The video is made after the encoding, into the album's folder, named after the album; for a rip that is not encoded, into the rip's folder. To make a video later, or another with the other audio, choose **Make Video** in an earlier rip's toolbar. It needs the rip's WAV files, or an album in a lossless format with its `.cdg` files.
+
+**CD+EG.** A few discs, most from Japan around 1990, have CD+EG graphics too (CD+Extended Graphics): pictures in 256 colors, and effects such as dissolves between two pictures. A CD+EG player, such as a Sega Saturn, shows them; a CD+G player shows the same disc in 16 colors, often with simpler pictures. For such a disc, the question also asks which picture the video shows: the 256 colors, the 16 as a CD+G player shows them, or both, each in a file of its own ("… (CD+G).m4v") to compare. Make Video has both too. The `.cdg` files keep everything, and karaoke programs show the CD+G picture.

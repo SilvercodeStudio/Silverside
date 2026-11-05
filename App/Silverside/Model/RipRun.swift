@@ -105,6 +105,13 @@ final class RipRun {
         var isEnhanced: Bool
     }
 
+    /// The disc has CD+G graphics: the rip waits for `answerVideo(_:)` before it reads.
+    struct VideoQuestion: Identifiable {
+        let id = UUID()
+        var album: String
+        var extended: Bool
+    }
+
     /// The sectors of a track that the drive flagged, could not read, or that reads disagree on,
     /// counted from the track's start, for the error strip.
     struct TrackErrors: Equatable {
@@ -181,6 +188,10 @@ final class RipRun {
     private(set) var silentTracksQuestion: SilentTracksQuestion?
     private(set) var dtsQuestion: DTSQuestion?
     private(set) var dataTrackQuestion: DataTrackQuestion?
+    private(set) var videoQuestion: VideoQuestion?
+    /// How much of the video of the CD+G graphics is written, while it is; then the video.
+    private(set) var videoProgress: Double?
+    private(set) var videoFiles: [URL] = []
     private(set) var startDate = Date()
     private(set) var endDate: Date?
     /// Sectors read so far, over every track to rip, for the whole-rip progress.
@@ -204,6 +215,7 @@ final class RipRun {
     @ObservationIgnored private var silentTracksAnswer: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var dtsAnswer: CheckedContinuation<DTSChoice, Never>?
     @ObservationIgnored private var dataTrackAnswer: CheckedContinuation<Bool, Never>?
+    @ObservationIgnored private var videoAnswer: CheckedContinuation<CDGraphicsVideo.Request?, Never>?
     /// Hears the question about files in the library, so the app can show the drive and ask for attention.
     @ObservationIgnored var onQuestion: (@MainActor () -> Void)?
     /// Hears the album's new name, when its folder held another release, so the drive shows it.
@@ -320,6 +332,13 @@ final class RipRun {
                         }
                     }
                 }
+                rip.chooseVideo = { extended in
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated { run.askVideo(extended: extended, answer: continuation) }
+                        }
+                    }
+                }
                 rip.chooseDTS = { report, format, canDecode in
                     await withCheckedContinuation { continuation in
                         DispatchQueue.main.async {
@@ -426,6 +445,7 @@ final class RipRun {
         if silentTracksQuestion != nil { answerSilentTracks(leavesOut: false) }
         if dtsQuestion != nil { answerDTS(.keep) }
         if dataTrackQuestion != nil { answerDataTracks(saves: false) }
+        if videoQuestion != nil { answerVideo(nil) }
     }
 
     private func askDataTracks(_ tracks: [TOC.Track], answer: CheckedContinuation<Bool, Never>) {
@@ -436,6 +456,24 @@ final class RipRun {
             bytes: tracks.reduce(0) { $0 + toc.sectorRange(of: $1).count * 2048 }, isEnhanced: toc.isEnhanced)
         add("A data track. Waiting for an answer: save it, or rip the audio only...")
         onQuestion?()
+    }
+
+    private func askVideo(extended: Bool, answer: CheckedContinuation<CDGraphicsVideo.Request?, Never>) {
+        videoAnswer = answer
+        videoQuestion = VideoQuestion(album: disc.title, extended: extended)
+        add("CD+G graphics. Waiting for an answer: a video of them, or none...")
+        onQuestion?()
+    }
+
+    /// Answers the video question: the video's audio and pictures, or nil for no video.
+    func answerVideo(_ request: CDGraphicsVideo.Request?) {
+        guard let videoAnswer else { return }
+        self.videoAnswer = nil
+        videoQuestion = nil
+        add(
+            request.map { "Making a video of the CD+G graphics after the rip, with \($0.audio.name) audio." }
+                ?? "No video.")
+        videoAnswer.resume(returning: request)
     }
 
     /// Answers the data track question: true saves the data tracks.
@@ -596,6 +634,9 @@ final class RipRun {
 
     /// The text that the status bar shows.
     var statusText: String {
+        if let videoProgress, phase == .ripping || phase == .encoding {
+            return "Making the video of the CD+G graphics · \(Int(videoProgress * 100))%"
+        }
         switch phase {
         case .starting: return "Starting…"
         case .ripping:
@@ -607,6 +648,7 @@ final class RipRun {
             if silentTracksQuestion != nil { return "Waiting for your answer about the silent tracks…" }
             if dtsQuestion != nil { return "Waiting for your answer about DTS…" }
             if dataTrackQuestion != nil { return "Waiting for your answer about the data track…" }
+            if videoQuestion != nil { return "Waiting for your answer about a video…" }
             // The data track is read after the audio, while the last audio track is still current.
             if let (number, fraction) = dataTrackProgress {
                 return "Saving data track \(number) · \(Int(fraction * 100))%"
@@ -852,6 +894,16 @@ final class RipRun {
         case .addToMusicFailed(let error):
             musicResult = "Not added to Music: \(error)"
             add(musicResult!)
+        case .writingVideo(let fraction):
+            if videoProgress == nil { add("Making the video of the CD+G graphics...") }
+            videoProgress = fraction
+        case .videoWritten(let url):
+            videoProgress = nil
+            videoFiles.append(url)
+            add("Video: \(url.path)")
+        case .videoFailed(let message):
+            videoProgress = nil
+            add("The video was not made: \(message)")
         }
     }
 

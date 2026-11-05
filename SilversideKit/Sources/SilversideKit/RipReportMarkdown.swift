@@ -308,6 +308,18 @@ extension RipReport {
                 lines.append("")
                 lines.append("Data tracks: " + files.map { "`\($0)`" }.joined(separator: ", "))
             }
+            if let graphics = encoding.graphicsFiles, !graphics.isEmpty {
+                lines.append("")
+                lines.append("CD+G graphics: a `.cdg` file beside each track's file, by the same name.")
+            }
+            if let videos = encoding.videos, !videos.isEmpty {
+                lines.append("")
+                lines.append(
+                    "Video of the CD+G graphics: "
+                        + videos.map {
+                            "`\($0.file)`" + ($0.picture == .standard && videos.count > 1 ? " (CD+G only)" : "")
+                        }.joined(separator: ", "))
+            }
             if let silent = encoding.silentTracksLeftOut, !silent.isEmpty {
                 lines.append("")
                 lines.append(

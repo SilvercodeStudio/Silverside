@@ -51,7 +51,7 @@ shares. Without a terminal, as in a script, `rip` stops until you agree with
 | `check` | Looks earlier rips up in AccurateRip and CTDB again, for a new release that they did not have yet, and checks the rip's audio (its WAV files, or the album's lossless files) against them. |
 | `metadata` | Shows the MusicBrainz releases for a disc, and keeps the chosen one in a rip's `disc.json`; `--set` edits names, `--cover` gives a cover, and `--retag` writes both into the album's encoded files. |
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
-| `video` | Makes a video of a CD+G disc's rip: the graphics drawn as a CD+G player draws them, over the rip's audio (Apple Lossless, exactly as ripped), the whole disc in one `.m4v` with a chapter for each track, named by its title. `--codec hevc` makes smaller files; `--scale` sets the size (4: 1200 × 864). |
+| `video` | Makes a video of a CD+G disc's rip: the graphics drawn as a CD+G player draws them, over the rip's audio (Apple Lossless, exactly as ripped, or `--audio aac`), the whole disc in one `.m4v` with a chapter for each track, named by its title. A CD+EG disc's video shows its 256 colors, as a CD+EG player does; `--picture g` shows it as a CD+G player does, in 16 colors, as "… (CD+G).m4v", and `--picture both` makes the two. It goes into the album folder when the rip was encoded, named after the album, else into the rip's folder; an album whose rip is gone works too (give its `Rip Report.json`), if it is lossless. `--codec hevc` makes smaller files; `--scale` sets the size (4: 1200 × 864). |
 | `hdcd` | Looks for HDCD codes in audio files and folders (WAV, AIFF, FLAC, Apple Lossless), such as rips and albums from before. |
 | `config` | Shows and changes the settings. |
 | `eject` | Ejects the disc from a drive (`-d`), or from every drive (`--all`: CDs, DVDs, and Blu-ray discs). A drive named with `-d` ejects a disc that macOS never recognized, through Disc Recording as `drutil eject` does, or opens its empty tray. A drive that hangs in a read is safer to unplug than to eject. |
@@ -76,7 +76,12 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
   packs a second from its index 01, the file that karaoke players and VLC
   read. Each pack is checked by its own parity, and one or two wrong symbols
   are put right; a pack damaged past that is read again, then left out. The
-  file keeps a CD+EG disc's extended graphics too
+  file keeps a CD+EG disc's extended graphics too. The encoding copies each
+  beside its track's file in the album folder, by the same name
+  (`01 Song.cdg` beside `01 Song.flac`), as karaoke programs pair them
+- a video of the CD+G graphics (`--video`, or the `cdGraphicsVideo` setting):
+  the whole disc in one `.m4v`, named after the album, in the album folder, or
+  here when the rip is not encoded
 - `Rip Report.log`: the rip in the layout of Exact Audio Copy's logs (UTF-8,
   CR LF), for people and tools that read those; the encoding writes one beside
   the album's report too. `--no-eac-log` (or the `writeEACLog` setting) leaves it
@@ -225,6 +230,8 @@ silverside config unset aac.mode                     # back to the default
 | `silentTracks` | `ask` | for tracks that are all digital silence: `leave-out` (no files; the other tracks keep the disc's numbers), `keep`, or `ask` (`--silent-tracks`) |
 | `dts` | `ask` | for a DTS-CD: `decode` (the stream, and a decoded copy beside it), `decode-only`, `keep` the stream, or `ask` (`--dts`); decoding needs ffmpeg |
 | `dataTracks` | `ask` | for a disc with a data track (an Enhanced CD's extras): `save` it as an ISO image, copied into the album folder as `Data track.iso` with its files in a `Data track` folder; `skip` it; or `ask` at a terminal, saving otherwise (`rip --data-tracks`) |
+| `cdGraphicsVideo` | `ask` | for a disc with CD+G graphics: make a video of them after the rip with `appleLossless` or `aac` audio, make `none`, or `ask` at a terminal, making none otherwise (`rip --video`) |
+| `cdGraphicsVideoPictures` | `eg` | for a disc with CD+EG graphics: the video in 256 colors (`eg`), in 16 as a CD+G player shows it (`g`), or `both` (`rip --picture`) |
 | `writeImages` | `false` | also write a disc image when a disc is encoded (`--image`) |
 | `images` | `~/Music/Silverside Images` | the folder for disc images (`--images`) |
 | `aac.mode`, `aac.bitRate`, `aac.vbrQuality` | `vbr-constrained`, `256`, `127` | Apple's AAC encoder |

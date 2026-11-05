@@ -96,6 +96,19 @@ struct NameTemplateTests {
         #expect(NameTemplate.safeComponent(String(repeating: "é", count: 200)).utf8.count <= 240)
     }
 
+    /// A value keeps its dots inside a name; only the ends of a whole folder or file name lose them.
+    @Test func keepsDotsInsideANameAndTrimsItsEnds() {
+        let values = [
+            "albumArtist": "R.E.M.", "album": "Murmur", "track": "01", "otherArtist": "V.I.P.", "title": "SAY YES",
+        ]
+        #expect(NameTemplate.libraryFolder.name(values) == "R.E.M/Murmur")
+        #expect(NameTemplate("{albumArtist} - {album}").name(values) == "R.E.M. - Murmur")
+        #expect(NameTemplate.libraryTrack.name(values) == "01 V.I.P. - SAY YES")
+        #expect(
+            NameTemplate("{track} {title}").name(["track": "01", "title": "...And Justice for All"])
+                == "01 ...And Justice for All")
+    }
+
     /// Empty values make no empty folder names, and a name with nothing in it is "Unknown".
     @Test func neverMakesAnEmptyName() {
         #expect(NameTemplate("{albumArtist}/{album}").name(["album": "Live"]) == "Live")

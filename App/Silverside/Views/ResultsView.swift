@@ -249,6 +249,27 @@ struct ResultsView: View {
                     )
                     .disabled(model.freeDrive(with: recentRip) == nil || model.savingDataTrack[recentRip.file] != nil)
                 }
+                if model.canMakeVideo(of: recentRip) {
+                    if let fraction = model.makingVideo[recentRip.file] {
+                        Label("Making Video · \(Int(fraction * 100))%", systemImage: "film")
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Menu {
+                            if CDGraphicsVideo.hasExtendedGraphics(report) {
+                                Section("256 Colors (CD+EG)") { videoButtons(picture: .extended) }
+                                Section("16 Colors, as a CD+G Player Shows It") { videoButtons(picture: .standard) }
+                            } else {
+                                videoButtons(picture: .extended)
+                            }
+                        } label: {
+                            Label("Make Video", systemImage: "film")
+                        }
+                        .help(
+                            "Make a video of the disc's CD+G graphics over its music, the whole disc in one file with a chapter for each track, in the album's folder"
+                        )
+                    }
+                }
                 if recentRip.canCheckAgain {
                     Button {
                         model.checkAgain([recentRip])
@@ -284,6 +305,11 @@ struct ResultsView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder private func videoButtons(picture: CDGraphicsVideo.Picture) -> some View {
+        Button("With Apple Lossless Audio") { model.makeVideo(of: recentRip, audio: .appleLossless, picture: picture) }
+        Button("With AAC Audio (Smaller)") { model.makeVideo(of: recentRip, audio: .aac, picture: picture) }
     }
 
     /// The first data track of the disc that the rip did not save, for Save Data Track.

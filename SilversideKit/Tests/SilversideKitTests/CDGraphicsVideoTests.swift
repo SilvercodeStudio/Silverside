@@ -43,6 +43,69 @@ struct CDGraphicsVideoTests {
         #expect(screen == before)
     }
 
+    static func extendedPack(_ instruction: UInt8, _ data: [UInt8]) -> [UInt8] {
+        CDGraphics.pack(
+            command: 10, instruction: instruction, data: data + [UInt8](repeating: 0, count: 16 - data.count))
+    }
+
+    /// MEMORY control with DM and WM, in every data symbol.
+    static func memoryControl(_ mode: UInt8, _ memory: UInt8) -> [UInt8] {
+        extendedPack(3, [UInt8](repeating: mode << 2 | memory, count: 16))
+    }
+
+    /// A CD+EG player (IEC 60908 clause 23): in the 1-plane state each pixel is the SECONDARY's
+    /// 4 bits over the PRIMARY's, an index into 256 colors of 6 bits a channel, which show
+    /// from the next MEMORY control; a CD+G player shows the PRIMARY in its 16 colors.
+    @Test func drawsCDEGsOnePlaneState() {
+        var packs = [
+            Self.pack(30, [0, 0, 0x3C, 0]),  // CD+G: 0 black, 1 red
+            Self.memoryControl(0, 3),
+            Self.pack(1, [1, 0]),  // PRIMARY all 1, SECONDARY all 0
+            // CD+EG's color 0x21 (SECONDARY 2, PRIMARY 1): main group 4 (colors 32 to 39), the
+            // second color: red 0, green 15, blue 0 (upper bits); additional group 2 (32 to 47),
+            // the second: blue's low bits 3.
+            Self.extendedPack(16 + 4, [0, 0, 0x03, 0x30]),
+            Self.extendedPack(48 + 2, [0, 0x03]),
+        ]
+        // A tile of the SECONDARY at row 1, column 1, its top line's left half 2.
+        packs.append(Self.extendedPack(6, [0, 2, 1, 1, 0b111000]))
+        var player = CDGraphicsScreen(extended: true)
+        for pack in packs { player.apply(pack) }
+        // Not shown yet: the colors wait for the next MEMORY control.
+        #expect(player.extendedColors[33] == 0 && player.secondary[12 * 300 + 6] == 2)
+        player.apply(Self.memoryControl(0, 3))
+        #expect(player.extendedColors[33] == 0xF03 && player.displayMode == 0)
+        let rgb = player.rgb()
+        let at = (12 * 300 + 6) * 3
+        #expect(Array(rgb[at..<(at + 3)]) == [0, 243, 12])
+
+        // A CD+G player shows the same packs as the CD+G picture: red.
+        var cdg = CDGraphicsScreen()
+        for pack in packs + [Self.memoryControl(0, 3)] { cdg.apply(pack) }
+        #expect(Array(cdg.rgb()[at..<(at + 3)]) == [255, 0, 0] && cdg.secondary.allSatisfy { $0 == 0 })
+    }
+
+    /// The 2-plane state: the CD+G instructions draw in the memories that WM names, each with
+    /// its 16 colors, and DM shows one of them or the two added.
+    @Test func drawsCDEGsTwoPlaneState() {
+        var player = CDGraphicsScreen(extended: true)
+        player.apply(Self.memoryControl(1, 1))
+        player.apply(Self.pack(30, [0, 0, 0x20, 0]))  // PRIMARY: 1 is red 8
+        player.apply(Self.pack(1, [1, 0]))
+        player.apply(Self.memoryControl(1, 2))
+        player.apply(Self.pack(30, [0, 0, 0x00, 0x08]))  // SECONDARY: 1 is blue 8
+        player.apply(Self.pack(1, [1, 0]))
+        #expect(player.pixels.allSatisfy { $0 == 1 } && player.secondary.allSatisfy { $0 == 1 })
+        #expect(Array(player.rgb()[0..<3]) == [0x88, 0, 0])
+        player.apply(Self.memoryControl(2, 2))
+        #expect(Array(player.rgb()[0..<3]) == [0, 0, 0x88])
+        player.apply(Self.memoryControl(3, 3))
+        #expect(Array(player.rgb()[0..<3]) == [0x88, 0, 0x88])
+        // DM 00 with WM 01: no operation.
+        player.apply(Self.memoryControl(0, 1))
+        #expect(player.displayMode == 3)
+    }
+
     /// One video for the disc, a chapter for each track at its start, and the audio as ripped.
     @Test func writesAVideoWithChapters() async throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
@@ -99,5 +162,94 @@ struct CDGraphicsVideoTests {
         }
         let expected = audio.withUnsafeBytes { Data($0) }
         #expect(decoded == expected)
+    }
+
+    /// A rip's video goes into its album folder, named after the album, with AAC audio when
+    /// asked; the reports record it, and an update of the library renames it with the album.
+    @Test func putsTheVideoInTheAlbumFolder() async throws {
+        let (folder, library) = try EncodingTests().makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let packs = [Self.pack(30, [0, 0, 0x3C, 0]), Self.pack(1, [1, 0])]
+        try Data(packs.joined()).write(to: folder.appending(path: "Track 01.cdg"))
+        try RipReport.update(reportAt: folder.appending(path: "disc.json")) {
+            $0.tracks[0].graphics = .init(file: "Track 01.cdg")
+        }
+        let (files, record) = try DiscEncoder(format: .flac).encodeWithRecord(
+            try RippedDisc(folder: folder), into: library)
+        // As a rip records its encoding.
+        try #require(record).save(inReportAt: folder.appending(path: "disc.json"))
+        let album = files[0].deletingLastPathComponent()
+
+        var video = CDGraphicsVideo()
+        video.scale = 1
+        video.audio = .aac
+        let url = try video.write(try RippedDisc(folder: folder))
+        let name = "Saint of Circumstance- Giants Stadium · East Rutherford · NJ · 6-17-91 (Disc 2).m4v"
+        #expect(url == album.appending(path: name))
+        let albumReport = album.appending(path: "Rip Report (Disc 2).json")
+        #expect(try RipReport.read(from: albumReport).encoding?.videos == [.init(file: name, picture: .extended)])
+        #expect(
+            try RipReport.read(from: folder.appending(path: "disc.json")).encoding?.videos == [
+                .init(file: name, picture: .extended)
+            ])
+        let asset = AVURLAsset(url: url)
+        let track = try #require(try await asset.loadTracks(withMediaType: .audio).first)
+        let format = try #require(try await track.load(.formatDescriptions).first)
+        #expect(CMFormatDescriptionGetMediaSubType(format) == kAudioFormatMPEG4AAC)
+        let title = try await AVMetadataItem.metadataItems(
+            from: try await asset.load(.commonMetadata), filteredByIdentifier: .commonIdentifierTitle
+        ).first?.load(.stringValue)
+        #expect(title?.hasPrefix("Saint of Circumstance") == true)
+
+        // The album renamed: the video follows it into the new folder, by the new name.
+        try MetadataEdits(album: "Renamed").save(inDiscJSONOf: folder)
+        let update = try DiscEncoder(format: .flac).updateLibrary(
+            reportAt: folder.appending(path: "disc.json"), library: library,
+            editsStore: ReleaseEditsStore(url: root.appending(path: "edits.json")))
+        let renamed = try #require(update.albumFolder).appending(path: "Renamed (Disc 2).m4v")
+        #expect(FileManager.default.fileExists(atPath: renamed.path))
+        #expect(
+            try RipReport.read(from: renamed.deletingLastPathComponent().appending(path: "Rip Report (Disc 2).json"))
+                .encoding?.videos?.map(\.file) == ["Renamed (Disc 2).m4v"])
+    }
+
+    /// A CD+EG disc's 16-color video is a file of its own, beside the 256-color one.
+    @Test func namesACDEGDiscsCDGPicture() throws {
+        let (folder, library) = try EncodingTests().makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data(Self.extendedPack(6, [0, 2, 1, 1, 0b111000])).write(to: folder.appending(path: "Track 01.cdg"))
+        try RipReport.update(reportAt: folder.appending(path: "disc.json")) {
+            $0.tracks[0].graphics = .init(file: "Track 01.cdg", extended: true)
+        }
+        let (_, record) = try DiscEncoder(format: .flac).encodeWithRecord(try RippedDisc(folder: folder), into: library)
+        try #require(record).save(inReportAt: folder.appending(path: "disc.json"))
+        #expect(CDGraphicsVideo.hasExtendedGraphics(try RipReport.read(from: folder.appending(path: "disc.json"))))
+        var video = CDGraphicsVideo()
+        video.scale = 1
+        let urls = try CDGraphicsVideo.Pictures.both.pictures.map {
+            video.picture = $0
+            return try video.write(try RippedDisc(folder: folder))
+        }
+        #expect(urls[1].lastPathComponent.hasSuffix("(Disc 2) (CD+G).m4v"))
+        let videos = try RipReport.read(from: folder.appending(path: "disc.json")).encoding?.videos
+        #expect(
+            videos?.map(\.picture) == [.extended, .standard] && videos?.map(\.file) == urls.map(\.lastPathComponent))
+    }
+
+    /// A rip that was not encoded keeps its video in its own folder.
+    @Test func putsTheVideoBesideARipThatWasNotEncoded() throws {
+        let (folder, _) = try EncodingTests().makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        try Data(Self.pack(1, [1, 0])).write(to: folder.appending(path: "Track 02.cdg"))
+        try RipReport.update(reportAt: folder.appending(path: "disc.json")) {
+            $0.tracks[1].graphics = .init(file: "Track 02.cdg")
+        }
+        var video = CDGraphicsVideo()
+        video.scale = 1
+        let url = try video.write(try RippedDisc(folder: folder))
+        #expect(url.deletingLastPathComponent().path == folder.path, "\(url.path)")
+        #expect(FileManager.default.fileExists(atPath: url.path))
     }
 }

@@ -179,5 +179,8 @@ extension SegueMarks: ExpressibleByArgument {}
 extension HDCDChoice: ExpressibleByArgument {}
 extension PreEmphasisChoice: ExpressibleByArgument {}
 extension DataTrackChoice: ExpressibleByArgument {}
+extension CDGraphicsVideoChoice: ExpressibleByArgument {}
+extension CDGraphicsVideo.Audio: ExpressibleByArgument {}
+extension CDGraphicsVideo.Pictures: ExpressibleByArgument {}
 extension DTSChoice: ExpressibleByArgument {}
 extension SilentTrackChoice: ExpressibleByArgument {}

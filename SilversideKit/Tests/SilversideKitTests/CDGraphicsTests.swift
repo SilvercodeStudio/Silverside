@@ -95,6 +95,28 @@ struct CDGraphicsTests {
 
     /// A track's graphics are saved as a .cdg file, 4 packs a sector from its index 01, with
     /// the packs corrected; a track with none gets no file, and a drive with no subchannel throws.
+    /// A track is CD+EG's only when its CD+EG packs draw: MEMORY control alone, as in the
+    /// CD+G tracks of *The CD Graphics World*, leaves its CD+G picture as it is.
+    @Test(arguments: [false, true])
+    func marksATrackCDEGWhenItDraws(draws: Bool) throws {
+        let toc = try TOC(audioTrackStarts: [0], leadOutLBA: 300)
+        let drive = SimulatedDrive(toc: toc, samples: [UInt32](repeating: 0, count: 300 * CDDA.samplesPerSector))
+        var packs = Array(repeating: Self.realPacks[2], count: 300 * 4)
+        let control = CDGraphics.pack(command: 10, instruction: 3, data: [UInt8](repeating: 5, count: 16))
+        let draw = CDGraphics.pack(command: 10, instruction: 6, data: [0, 2, 1, 1] + [UInt8](repeating: 0, count: 12))
+        for i in 0..<12 { packs[i * 4] = draws && i >= 6 ? draw : control }
+        let pw = Self.subchannel(packs)
+        for sector in 0..<(pw.count / 96) {
+            drive.subchannelPW?[sector] = Array(pw[(sector * 96)..<(sector * 96 + 96)])
+        }
+        let folder = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let graphics = try CDGraphicsReader.read(
+            toc.audioTracks[0], in: toc, drive: drive, to: folder.appending(path: "Track 01.cdg"))
+        #expect(graphics?.extended == (draws ? true : nil))
+    }
+
     @Test func savesATracksGraphics() throws {
         let toc = try TOC(audioTrackStarts: [0, 300, 600], leadOutLBA: 900)
         let drive = SimulatedDrive(toc: toc, samples: [UInt32](repeating: 0, count: 900 * CDDA.samplesPerSector))
@@ -131,5 +153,50 @@ struct CDGraphicsTests {
         #expect(throws: DriveError.self) {
             try CDGraphicsReader.read(toc.audioTracks[0], in: toc, drive: drive, to: third)
         }
+    }
+
+    /// Each track's graphics go into the album folder beside its file, by its name, as karaoke
+    /// programs pair them; a rename in the library takes them along, and an album encoded again
+    /// from its own files keeps them.
+    @Test func encodingPutsEachTracksGraphicsBesideItsFile() throws {
+        let (folder, library) = try EncodingTests().makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let packs = Data(Self.realPacks.joined())
+        try packs.write(to: folder.appending(path: "Track 01.cdg"))
+        try RipReport.update(reportAt: folder.appending(path: "disc.json")) {
+            $0.tracks[0].graphics = .init(file: "Track 01.cdg", correctedPacks: 2)
+        }
+        let disc = try RippedDisc(folder: folder)
+        let encoder = DiscEncoder(format: .flac)
+        let planned = try encoder.plannedFiles(disc, into: library)
+        let (files, record) = try encoder.encodeWithRecord(disc, into: library)
+        let album = files[0].deletingLastPathComponent()
+        let graphics = album.appending(path: "02-01 Help on the Way.cdg")
+        #expect(planned.contains(graphics))
+        #expect(try Data(contentsOf: graphics) == packs)
+        #expect(record?.graphicsFiles == [.init(track: 1, file: "02-01 Help on the Way.cdg")])
+        #expect(!FileManager.default.fileExists(atPath: album.appending(path: "02-02 Slipknot!.cdg").path))
+        let markdown = try String(contentsOf: album.appending(path: "Rip Report (Disc 2).md"), encoding: .utf8)
+        #expect(markdown.contains("CD+G graphics: a `.cdg` file beside each track's file"))
+
+        // The library renamed: the graphics keep the track's name.
+        var renaming = DiscEncoder(format: .flac)
+        renaming.trackTemplate = NameTemplate("{title}")
+        let update = try renaming.updateLibrary(reportAt: folder.appending(path: "disc.json"), library: library)
+        let renamed = album.appending(path: "Help on the Way.cdg")
+        #expect(update.files[0].lastPathComponent == "Help on the Way.flac")
+        #expect(try Data(contentsOf: renamed) == packs && !FileManager.default.fileExists(atPath: graphics.path))
+        let albumReport = album.appending(path: "Rip Report (Disc 2).json")
+        #expect(try RipReport.read(from: albumReport).encoding?.graphicsFiles?.first?.file == "Help on the Way.cdg")
+
+        // The album encoded again from its own files, in another format and with the first
+        // names: the graphics move along with their track.
+        let (_, again) = try DiscEncoder(format: .alac).encodeWithRecord(
+            try RippedDisc(albumReportAt: albumReport), into: library)
+        #expect(again?.graphicsFiles == [.init(track: 1, file: "02-01 Help on the Way.cdg")])
+        #expect(try Data(contentsOf: graphics) == packs && !FileManager.default.fileExists(atPath: renamed.path))
+
+        // Removing the rip's files from the album takes its graphics too.
+        #expect(RipRemoval.ownFiles(of: try #require(again), in: album).contains(graphics))
     }
 }

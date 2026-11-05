@@ -729,6 +729,51 @@ final class AppModel {
         }
     }
 
+    // MARK: Make Video
+
+    /// The rips whose video of the CD+G graphics is being made, with how far.
+    private(set) var makingVideo: [URL: Double] = [:]
+
+    /// True if the rip has CD+G graphics and audio to make a video from: its WAV files, or the
+    /// album's lossless files with the graphics beside them.
+    func canMakeVideo(of rip: RecentRip) -> Bool {
+        guard !rip.isMissing, rip.report.tracks.contains(where: { $0.graphics != nil }) else { return false }
+        if rip.hasAudio { return true }
+        guard let encoding = rip.report.encoding else { return false }
+        return encoding.format.isLossless && encoding.graphicsFiles != nil && encoding.hdcdDecoded != true
+            && encoding.dtsDecoded == nil && encoding.deEmphasizedTracks == nil
+    }
+
+    /// Makes the video of a rip's CD+G graphics (`CDGraphicsVideo`): into its album folder
+    /// when it was encoded, else into the rip's folder. Finder shows it when it is done.
+    func makeVideo(of rip: RecentRip, audio: CDGraphicsVideo.Audio, picture: CDGraphicsVideo.Picture = .extended) {
+        guard makingVideo[rip.file] == nil, canMakeVideo(of: rip) else { return }
+        makingVideo[rip.file] = 0
+        let (file, folder, hasAudio) = (rip.file, rip.folder, rip.hasAudio)
+        Task { @MainActor in
+            do {
+                let url = try await Task.detached {
+                    let disc = hasAudio ? try RippedDisc(folder: folder) : try RippedDisc(albumReportAt: file)
+                    var video = CDGraphicsVideo()
+                    video.audio = audio
+                    video.picture = picture
+                    return try video.write(disc) { fraction in
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated {
+                                if self.makingVideo[file] != nil { self.makingVideo[file] = fraction }
+                            }
+                        }
+                    }
+                }.value
+                revealInFinder(url)
+            } catch {
+                alert = AppAlert(title: "The video could not be made", message: "\(error)")
+            }
+            makingVideo[file] = nil
+            refreshRecentRips()
+        }
+    }
+
     // MARK: Check Again
 
     /// The rips that Check Again is looking up, and the outcome of the latest check of each.

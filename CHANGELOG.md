@@ -17,6 +17,18 @@ command-line tool.
   CD+G player draws them, over the audio exactly as ripped (Apple Lossless),
   the whole disc in one `.m4v` file with a chapter for each track, named by
   its title. It plays in QuickTime Player, the TV app, VLC, and others.
+  Its audio is Apple Lossless, exactly as ripped, or AAC (`--audio aac`) for
+  a smaller file. It goes into the album's folder, named after the album.
+- The app asks, as a rip of a disc with CD+G graphics starts, whether to make
+  that video after the rip, and with which audio (Settings › Ripping keeps an
+  answer; `silverside rip --video`). An earlier rip's toolbar has Make Video.
+- Videos of CD+EG discs (CD+Extended Graphics, from a few Japanese releases)
+  in their 256 colors, with their dissolves between pictures, as a CD+EG
+  player such as a Sega Saturn shows them; or in 16 colors, as a CD+G player
+  shows the same disc; or both, to compare (`silverside video --picture`).
+- The encoding puts each track's CD+G graphics beside its file in the album's
+  folder, with the same name (`01 Song.cdg` beside `01 Song.flac`), as
+  karaoke programs and VLC pair them.
 
 ### Changed
 
@@ -57,6 +69,11 @@ command-line tool.
   when you leave the field, and before Update the Library or Encode Discs.
 - A set whose album you renamed kept its old name in the sidebar, the sets'
   table, and the window's title.
+- A name with a period at its end lost it inside file and folder names too:
+  "05 V.I.P - SAY YES" for the artist V.I.P., and "R.E.M - Murmur" for a
+  folder named by artist and album. Only the very end of a file or folder
+  name loses its periods now, as some file systems need. Update the Library
+  renames such files.
 
 ## 0.9.4 (2026-11-04)
 

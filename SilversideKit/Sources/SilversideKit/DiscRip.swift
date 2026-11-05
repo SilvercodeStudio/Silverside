@@ -72,6 +72,11 @@ public struct DiscRipOptions: Sendable {
     /// For a disc with data tracks (an Enhanced CD's extras): save them as ISO images beside
     /// the audio, skip them, or ask `DiscRip.chooseDataTracks`.
     public var dataTracks: DataTrackChoice
+    /// For a disc with CD+G graphics: make a video of them after the rip, with Apple Lossless
+    /// or AAC audio, make none, or ask `DiscRip.chooseVideo`.
+    public var video: CDGraphicsVideoChoice
+    /// For a disc with CD+EG graphics: the video's pictures, when `video` is not ask.
+    public var videoPictures: CDGraphicsVideo.Pictures
     /// Write an EAC-style log beside the report ("Rip Report.log", `RipReport.eacStyleLog`).
     public var writesEACLog: Bool
     /// What a look at the disc before the rip found of CD+G graphics (`DiscProbe.cdGraphics`),
@@ -93,6 +98,8 @@ public struct DiscRipOptions: Sendable {
         silentTracks = settings.silentTracks
         writesEACLog = settings.writeEACLog
         dataTracks = settings.dataTracks
+        video = settings.cdGraphicsVideo
+        videoPictures = settings.cdGraphicsVideoPictures
     }
 }
 
@@ -181,6 +188,11 @@ public enum DiscRipEvent: Sendable {
     /// After encoding: the rip's files were deleted, or kept because not every track is verified and encoded.
     case ripDeleted
     case ripKept(URL)
+    /// The video of the CD+G graphics is being written: the fraction done.
+    case writingVideo(fraction: Double)
+    case videoWritten(URL)
+    /// The video was not made; the rip and the encoding stand.
+    case videoFailed(String)
     /// The encoded files went into Apple's Music app: how many tracks it added.
     case addedToMusic(Int)
     /// Music did not take the files; the rip and the encoding stand.
@@ -208,6 +220,8 @@ public struct DiscRipResult: Sendable {
     public var folder: URL
     /// The encoded files, if the rip encoded.
     public var encodedFiles: [URL] = []
+    /// The videos of the CD+G graphics that were made.
+    public var videoFiles: [URL] = []
     public var deletedRip = false
 }
 
@@ -262,6 +276,11 @@ public struct DiscRip {
     /// For a disc with data tracks and `DiscRipOptions.dataTracks` ask: true saves them. Asked
     /// as the rip starts, so the answer is not awaited after the audio. Without it, they are saved.
     public var chooseDataTracks: (@Sendable (_ tracks: [TOC.Track]) async -> Bool)?
+    /// For a disc with CD+G graphics and `DiscRipOptions.video` ask: the video's audio, and
+    /// for a disc with CD+EG graphics too (`extended`), its pictures; or nil for no video.
+    /// Asked as the rip starts, once the disc is known to have graphics that the drive reads.
+    /// Without it, no video is made.
+    public var chooseVideo: (@Sendable (_ extended: Bool) async -> CDGraphicsVideo.Request?)?
     public var profiles: DriveProfileStore
     /// The client for every lookup and download. Tests give one with a fake transport.
     public var webClient = WebClient.shared
@@ -470,6 +489,16 @@ public struct DiscRip {
             cdExtendedGraphics = probe.cdExtendedGraphics
         }
         var readsGraphics = cdGraphics == true
+        // A video of the graphics: asked now too, so that no one waits for the question after the audio.
+        var videoRequest: CDGraphicsVideo.Request?
+        if readsGraphics {
+            if options.video == .ask {
+                if let chooseVideo { videoRequest = await chooseVideo(cdExtendedGraphics) }
+            } else {
+                videoRequest = options.video.audio.map { .init(audio: $0, pictures: options.videoPictures) }
+            }
+            try stop.check()
+        }
 
         // Audio before track 1, if the disc hides a track there; silence is not kept.
         var hiddenTrack: RipReport.HiddenTrack?
@@ -797,131 +826,172 @@ public struct DiscRip {
         }
         events(.finished(report, discOffsets: discOffsets, profile: profile))
         var result = DiscRipResult(report: report, folder: folder)
-
-        if var encoder {
-            try stop.check()
-            var disc = try RippedDisc(folder: folder)
-            // Before any question: a rip that is not verified is not encoded, whatever the answers.
-            try encoder.checkVerified(disc)
-            let library = self.library
-            // Before the files in the library are looked at: the answer changes which files there are.
-            switch options.silentTracks {
-            case .leaveOut: encoder.leavesOutSilentTracks = true
-            case .keep: encoder.leavesOutSilentTracks = false
-            case .ask:
-                encoder.leavesOutSilentTracks = true
-                if !report.silentTracks.isEmpty, let chooseSilentTracks {
-                    encoder.leavesOutSilentTracks = await chooseSilentTracks(report)
-                    try stop.check()
-                }
-            }
-            // Before the files in the library are looked at too: a name changes the album's folder.
-            if !encoder.sharesAlbumFolder, let chooseAlbumName {
-                while let shared = try encoder.sharedAlbumFolder(disc, into: library) {
-                    let name = await chooseAlbumName(shared)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                    try stop.check()
-                    guard let name, !name.isEmpty else {
-                        encoder.sharesAlbumFolder = true
-                        break
-                    }
-                    var edits = disc.edits ?? MetadataEdits()
-                    edits.album = name
-                    try edits.save(inDiscJSONOf: folder)
-                    if let release = report.release, release.sharesAlbumEdits {
-                        let store = ReleaseEditsStore()
-                        var kept = store.edits(forReleaseID: release.id) ?? MetadataEdits()
-                        kept.album = name
-                        try store.remember(kept, forReleaseID: release.id)
-                    }
-                    events(.albumRenamed(name))
-                    disc = try RippedDisc(folder: folder)
-                }
-            }
-            if !encoder.overwrites, let confirmOverwrite {
-                let existing = try encoder.plannedFiles(disc, into: library).filter {
-                    FileManager.default.fileExists(atPath: $0.path)
-                }
-                if !existing.isEmpty {
-                    let replaces = await confirmOverwrite(existing)
-                    try stop.check()
-                    guard replaces else {
-                        events(.encodingDeclined(existing))
-                        return result
-                    }
-                    encoder.overwrites = true
-                }
-            }
-            switch options.hdcd {
-            case .decode: encoder.decodesHDCD = true
-            case .keep: encoder.decodesHDCD = false
-            case .ask:
-                if report.hdcd == .featuresUsed, let chooseHDCD {
-                    encoder.decodesHDCD = await chooseHDCD(report, encoder.format)
-                    try stop.check()
-                }
-            }
-            switch options.preEmphasis {
-            case .deEmphasize: encoder.deEmphasizes = true
-            case .keep: encoder.deEmphasizes = false
-            case .ask:
-                encoder.deEmphasizes = true
-                if report.tracks.contains(where: \.preEmphasis), let choosePreEmphasis {
-                    encoder.deEmphasizes = await choosePreEmphasis(report, encoder.format)
-                    try stop.check()
-                }
-            }
-            var dts = options.dts
-            if report.dts == .stream, dts == .ask {
-                dts = await chooseDTS?(report, encoder.format, FFmpeg.program() != nil) ?? .keep
-                try stop.check()
-            }
-            // A lossy format would turn a stream that is not decoded into noise: the rip stays as it is.
-            let decodes = (dts == .decode || dts == .decodeOnly) && FFmpeg.program() != nil
-            if report.dts == .stream, !decodes, !encoder.format.isLossless {
-                events(.encodedTrack(DTSError.lossyStream(encoder.format).description + " The rip is kept."))
-                events(.ripKept(folder))
-                return result
-            }
-            events(.encoding(encoder.format))
-            encoder.log = { events(.encodedTrack($0)) }
-            encoder.trackEncoded = { events(.trackEncoded(number: $0, file: $1)) }
-            encoder.tracksLeftOut = { events(.silentTracksLeftOut($0)) }
-            let encoded = try await blocking { [encoder, disc, dts] in
-                try encoder.encodeWithRecord(disc, into: library, dts: dts)
-            }
-            let (files, record) = (encoded.files, encoded.encoding)
-            result.encodedFiles = files
-            // The rip's own report says where its tracks went, for as long as the rip is kept.
-            try record?.save(inReportAt: folder.appending(path: "disc.json"))
-            events(.encoded(files, format: record?.format ?? encoder.format, record: record))
-            if let copy = encoded.copyEncoding {
-                events(
-                    .encodedTrack(
-                        "The decoded copy: \(encoded.copyFiles.count) \(copy.format.name) files in \(copy.folder)"))
-            }
-            // Music plays a DTS stream as static, so it gets the decode, if there is one.
-            let (musicFiles, musicFormat) = encoded.musicFiles
-            if options.addsToMusic, let musicFormat, MusicApp.reads(musicFormat), !musicFiles.isEmpty {
+        // The video of the graphics, from the rip's files: into the album folder once encoded.
+        let finished = report
+        var videoMade = false
+        func makeVideo() async throws {
+            videoMade = true
+            guard let videoRequest, finished.tracks.contains(where: { $0.graphics != nil }) else { return }
+            // A CD+G disc has one picture; a CD+EG disc the ones asked for.
+            let pictures =
+                CDGraphicsVideo.hasExtendedGraphics(finished) ? videoRequest.pictures.pictures : [.extended]
+            events(.writingVideo(fraction: 0))
+            for (index, picture) in pictures.enumerated() {
                 do {
-                    events(.addedToMusic(try await blocking { try MusicApp.add(musicFiles) }))
+                    let disc = try RippedDisc(folder: folder)
+                    var video = CDGraphicsVideo()
+                    video.audio = videoRequest.audio
+                    video.picture = picture
+                    let url = try await blocking { [stop, video] in
+                        try video.write(disc, stop: stop) {
+                            events(.writingVideo(fraction: (Double(index) + $0) / Double(pictures.count)))
+                        }
+                    }
+                    result.videoFiles.append(url)
+                    events(.videoWritten(url))
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
-                    events(.addToMusicFailed(error))
+                    events(.videoFailed("\(error)"))
                 }
             }
-            // The WAV files go only if every track is verified and encoded; the report is in the album folder.
-            if !options.keepsRip {
-                let leftOut = record?.silentTracksLeftOut?.count ?? 0
-                if result.encodedFiles.count + leftOut == disc.tracks.count && disc.isFinished {
-                    if try disc.deleteRipFiles(albumFolder: record.map { URL(filePath: $0.folder) }) {
-                        result.deletedRip = true
-                        events(.ripDeleted)
+        }
+
+        // A rip that is not encoded, for whatever reason, gets its video beside it.
+        do {
+            if var encoder {
+                try stop.check()
+                var disc = try RippedDisc(folder: folder)
+                // Before any question: a rip that is not verified is not encoded, whatever the answers.
+                try encoder.checkVerified(disc)
+                let library = self.library
+                // Before the files in the library are looked at: the answer changes which files there are.
+                switch options.silentTracks {
+                case .leaveOut: encoder.leavesOutSilentTracks = true
+                case .keep: encoder.leavesOutSilentTracks = false
+                case .ask:
+                    encoder.leavesOutSilentTracks = true
+                    if !report.silentTracks.isEmpty, let chooseSilentTracks {
+                        encoder.leavesOutSilentTracks = await chooseSilentTracks(report)
+                        try stop.check()
+                    }
+                }
+                // Before the files in the library are looked at too: a name changes the album's folder.
+                if !encoder.sharesAlbumFolder, let chooseAlbumName {
+                    while let shared = try encoder.sharedAlbumFolder(disc, into: library) {
+                        let name = await chooseAlbumName(shared)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        try stop.check()
+                        guard let name, !name.isEmpty else {
+                            encoder.sharesAlbumFolder = true
+                            break
+                        }
+                        var edits = disc.edits ?? MetadataEdits()
+                        edits.album = name
+                        try edits.save(inDiscJSONOf: folder)
+                        if let release = report.release, release.sharesAlbumEdits {
+                            let store = ReleaseEditsStore()
+                            var kept = store.edits(forReleaseID: release.id) ?? MetadataEdits()
+                            kept.album = name
+                            try store.remember(kept, forReleaseID: release.id)
+                        }
+                        events(.albumRenamed(name))
+                        disc = try RippedDisc(folder: folder)
+                    }
+                }
+                if !encoder.overwrites, let confirmOverwrite {
+                    let existing = try encoder.plannedFiles(disc, into: library).filter {
+                        FileManager.default.fileExists(atPath: $0.path)
+                    }
+                    if !existing.isEmpty {
+                        let replaces = await confirmOverwrite(existing)
+                        try stop.check()
+                        guard replaces else {
+                            events(.encodingDeclined(existing))
+                            try await makeVideo()
+                            return result
+                        }
+                        encoder.overwrites = true
+                    }
+                }
+                switch options.hdcd {
+                case .decode: encoder.decodesHDCD = true
+                case .keep: encoder.decodesHDCD = false
+                case .ask:
+                    if report.hdcd == .featuresUsed, let chooseHDCD {
+                        encoder.decodesHDCD = await chooseHDCD(report, encoder.format)
+                        try stop.check()
+                    }
+                }
+                switch options.preEmphasis {
+                case .deEmphasize: encoder.deEmphasizes = true
+                case .keep: encoder.deEmphasizes = false
+                case .ask:
+                    encoder.deEmphasizes = true
+                    if report.tracks.contains(where: \.preEmphasis), let choosePreEmphasis {
+                        encoder.deEmphasizes = await choosePreEmphasis(report, encoder.format)
+                        try stop.check()
+                    }
+                }
+                var dts = options.dts
+                if report.dts == .stream, dts == .ask {
+                    dts = await chooseDTS?(report, encoder.format, FFmpeg.program() != nil) ?? .keep
+                    try stop.check()
+                }
+                // A lossy format would turn a stream that is not decoded into noise: the rip stays as it is.
+                let decodes = (dts == .decode || dts == .decodeOnly) && FFmpeg.program() != nil
+                if report.dts == .stream, !decodes, !encoder.format.isLossless {
+                    events(.encodedTrack(DTSError.lossyStream(encoder.format).description + " The rip is kept."))
+                    events(.ripKept(folder))
+                    try await makeVideo()
+                    return result
+                }
+                events(.encoding(encoder.format))
+                encoder.log = { events(.encodedTrack($0)) }
+                encoder.trackEncoded = { events(.trackEncoded(number: $0, file: $1)) }
+                encoder.tracksLeftOut = { events(.silentTracksLeftOut($0)) }
+                let encoded = try await blocking { [encoder, disc, dts] in
+                    try encoder.encodeWithRecord(disc, into: library, dts: dts)
+                }
+                let (files, record) = (encoded.files, encoded.encoding)
+                result.encodedFiles = files
+                // The rip's own report says where its tracks went, for as long as the rip is kept.
+                try record?.save(inReportAt: folder.appending(path: "disc.json"))
+                events(.encoded(files, format: record?.format ?? encoder.format, record: record))
+                if let copy = encoded.copyEncoding {
+                    events(
+                        .encodedTrack(
+                            "The decoded copy: \(encoded.copyFiles.count) \(copy.format.name) files in \(copy.folder)"))
+                }
+                // Music plays a DTS stream as static, so it gets the decode, if there is one.
+                let (musicFiles, musicFormat) = encoded.musicFiles
+                if options.addsToMusic, let musicFormat, MusicApp.reads(musicFormat), !musicFiles.isEmpty {
+                    do {
+                        events(.addedToMusic(try await blocking { try MusicApp.add(musicFiles) }))
+                    } catch {
+                        events(.addToMusicFailed(error))
+                    }
+                }
+                try await makeVideo()
+                // The WAV files go only if every track is verified and encoded; the report is in the album folder.
+                if !options.keepsRip {
+                    let leftOut = record?.silentTracksLeftOut?.count ?? 0
+                    if result.encodedFiles.count + leftOut == disc.tracks.count && disc.isFinished {
+                        if try disc.deleteRipFiles(albumFolder: record.map { URL(filePath: $0.folder) }) {
+                            result.deletedRip = true
+                            events(.ripDeleted)
+                        } else {
+                            events(.ripKept(folder))
+                        }
                     } else {
                         events(.ripKept(folder))
                     }
-                } else {
-                    events(.ripKept(folder))
                 }
+            } else {
+                try await makeVideo()
             }
+        } catch let error where !(error is CancellationError) {
+            if !videoMade { try await makeVideo() }
+            throw error
         }
         return result
     }

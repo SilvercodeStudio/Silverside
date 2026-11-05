@@ -364,6 +364,22 @@ struct RippingSettings: View {
                     "Some CDs have a data track with extras for a computer, such as videos. Save puts a disc image of it (Data track.iso) in the album's folder, and a Data track folder with the files on it, ready to open."
                 )
                 .font(.caption).foregroundStyle(.secondary)
+                Picker("Video of CD+G graphics", selection: $model.settings.cdGraphicsVideo) {
+                    Text("Ask each time").tag(CDGraphicsVideoChoice.ask)
+                    Text("Apple Lossless audio").tag(CDGraphicsVideoChoice.appleLossless)
+                    Text("AAC audio").tag(CDGraphicsVideoChoice.aac)
+                    Text("No video").tag(CDGraphicsVideoChoice.none)
+                }
+                Picker("CD+EG video picture", selection: $model.settings.cdGraphicsVideoPictures) {
+                    Text("256 colors (CD+EG)").tag(CDGraphicsVideo.Pictures.eg)
+                    Text("16 colors (CD+G)").tag(CDGraphicsVideo.Pictures.g)
+                    Text("Both, in two files").tag(CDGraphicsVideo.Pictures.both)
+                }
+                .disabled(model.settings.cdGraphicsVideo == .none)
+                Text(
+                    "Karaoke CDs and some others have pictures or lyrics on the disc, which the rip saves as a .cdg file beside each track's file. A video shows them on any screen: the whole disc in one file in the album's folder, with a chapter for each track. Apple Lossless keeps the music exactly; AAC makes a smaller file. A few discs have CD+EG graphics too, in 256 colors; a CD+G player shows them in 16."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
             Section("Reports") {
                 Toggle("Write EAC-style log", isOn: $model.settings.writeEACLog)

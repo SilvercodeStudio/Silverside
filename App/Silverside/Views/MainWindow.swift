@@ -16,6 +16,7 @@ struct MainWindow: View {
     private var hdcdRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.hdcdQuestion != nil } }
     /// A rip that waits to hear whether to save its data tracks.
     private var dataTrackRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.dataTrackQuestion != nil } }
+    private var videoRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.videoQuestion != nil } }
     /// A rip that waits to hear what to do with its DTS stream.
     private var dtsRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.dtsQuestion != nil } }
     /// A rip that waits to hear whether to leave its silent tracks out of the album.
@@ -95,6 +96,9 @@ struct MainWindow: View {
             if let rip = dataTrackRip, let question = rip.dataTrackQuestion {
                 DataTrackQuestionSheet(rip: rip, question: question)
             }
+        }
+        .sheet(isPresented: Binding(get: { videoRip != nil }, set: { _ in })) {
+            if let rip = videoRip, let question = rip.videoQuestion { VideoQuestionSheet(rip: rip, question: question) }
         }
         .sheet(isPresented: Binding(get: { silentTracksRip != nil }, set: { _ in })) {
             if let rip = silentTracksRip, let question = rip.silentTracksQuestion {

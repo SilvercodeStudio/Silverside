@@ -290,6 +290,17 @@ extension DiscEncoder {
                     url = destination
                     encoding.files[index].file = plannedName
                     renamed += 1
+                    // The track's CD+G graphics keep its name.
+                    if let graphics = encoding.graphicsFiles?.firstIndex(where: { $0.track == entry.track }) {
+                        let old = album.appending(path: encoding.graphicsFiles![graphics].file)
+                        let new = Self.graphicsFile(of: destination)
+                        if FileManager.default.fileExists(atPath: old.path),
+                            !FileManager.default.fileExists(atPath: new.path)
+                        {
+                            try FileManager.default.moveItem(at: old, to: new)
+                            encoding.graphicsFiles![graphics].file = new.lastPathComponent
+                        }
+                    }
                 }
             }
             let gain = encoding.replayGain
@@ -332,6 +343,19 @@ extension DiscEncoder {
                     copyPermitted: tocTrack.isCopyPermitted || reported?.isCopyPermitted == true))
         }
         encoding.folder = album.path
+        // The videos of the CD+G graphics keep the album's name.
+        for (index, video) in (encoding.videos ?? []).enumerated() {
+            let planned = CDGraphicsVideo.fileName(release: release, toc: toc, picture: video.picture)
+            let old = album.appending(path: video.file)
+            let new = album.appending(path: planned)
+            if planned != video.file, FileManager.default.fileExists(atPath: old.path),
+                !FileManager.default.fileExists(atPath: new.path)
+            {
+                try FileManager.default.moveItem(at: old, to: new)
+                encoding.videos?[index].file = planned
+                renamed += 1
+            }
+        }
 
         // The CUE sheet again, under its new name, and the reports. In a folder that another
         // release's rip shares, only the sheets that name this rip's files are its own.

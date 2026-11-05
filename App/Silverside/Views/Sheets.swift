@@ -635,6 +635,66 @@ struct DataTrackQuestionSheet: View {
     }
 }
 
+/// As a rip of a disc with CD+G graphics starts: a video of them after the rip, with Apple
+/// Lossless or AAC audio, or none.
+struct VideoQuestionSheet: View {
+    @Environment(AppModel.self) private var model
+    var rip: RipRun
+    var question: RipRun.VideoQuestion
+    @State private var audio = CDGraphicsVideo.Audio.appleLossless
+    @State private var pictures = CDGraphicsVideo.Pictures.eg
+    @State private var remembers = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("“\(question.album)” has \(question.extended ? "CD+EG" : "CD+G") graphics").font(.title3.bold())
+            Text(
+                .init(
+                    "The disc carries pictures or karaoke lyrics beside its music. The rip saves them as a `.cdg`"
+                        + " file for each track, beside its music file, for karaoke programs. A video shows them on"
+                        + " any screen, as a karaoke player does: the whole disc in one file, with a chapter for"
+                        + " each track, in the album's folder.")
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            if question.extended {
+                Text(
+                    "Its CD+EG graphics (CD+Extended Graphics) have 256 colors, for a CD+EG player. A CD+G player"
+                        + " shows the same disc in 16 colors."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                Picker("Picture", selection: $pictures) {
+                    Text("256 colors, as a CD+EG player shows it").tag(CDGraphicsVideo.Pictures.eg)
+                    Text("16 colors, as a CD+G player shows it").tag(CDGraphicsVideo.Pictures.g)
+                    Text("Both, in two files, to compare").tag(CDGraphicsVideo.Pictures.both)
+                }
+                .pickerStyle(.radioGroup)
+            }
+            Picker("Audio", selection: $audio) {
+                Text("Apple Lossless: the music exactly as ripped").tag(CDGraphicsVideo.Audio.appleLossless)
+                Text("AAC: a smaller file").tag(CDGraphicsVideo.Audio.aac)
+            }
+            .pickerStyle(.radioGroup)
+            Toggle("Use this answer for every disc with CD+G graphics (Settings › Ripping)", isOn: $remembers)
+            HStack {
+                Spacer()
+                Button("No Video") { answer(nil) }
+                Button("Make Video") { answer(.init(audio: audio, pictures: pictures)) }.keyboardShortcut(
+                    .defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 500)
+    }
+
+    private func answer(_ request: CDGraphicsVideo.Request?) {
+        if remembers {
+            model.settings.cdGraphicsVideo = request.map { $0.audio == .aac ? .aac : .appleLossless } ?? .none
+            if let request, question.extended { model.settings.cdGraphicsVideoPictures = request.pictures }
+        }
+        rip.answerVideo(request)
+    }
+}
+
 /// After a rip of a DTS-CD, before encoding: the album as the disc has it with a decoded copy
 /// beside it (the advice), the decode alone, or the stream alone. Without ffmpeg, it says how
 /// to get it, and the stream is kept.

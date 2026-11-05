@@ -404,11 +404,62 @@ public struct DiscEncoder: Sendable {
         let (release, medium, jobs, _) = try plan(disc, into: library)
         let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
         let data = jobs.first.map { dataTrackCopies(of: disc, into: $0.folder, discPart: discPart) } ?? []
-        // A data track's image, and the folder its files go into.
+        let graphics = graphicsCopies(of: disc, files: jobs.map { ($0.ripped.number, $0.file) })
+        // A data track's image, and the folder its files go into; a track's CD+G graphics.
         return jobs.map(\.file)
             + data.filter { !Self.sameFile($0.source, $0.target) }.flatMap {
                 [$0.target, Self.filesFolder(of: $0.target)]
             }
+            + graphics.filter { !Self.sameFile($0.source, $0.target) }.map(\.target)
+    }
+
+    /// The tracks' CD+G graphics to copy into the album folder, each beside its track's file
+    /// and named as it is ("01 Song.cdg" beside "01 Song.mp3"), as karaoke programs pair them:
+    /// from the rip's `Track NN.cdg`, or, when an album is the source, from its own. A decoded
+    /// copy beside the album gets none, as it gets no data tracks.
+    func graphicsCopies(
+        of disc: RippedDisc, files: [(track: Int, file: URL)]
+    ) -> [(track: Int, source: URL, target: URL)] {
+        guard albumSuffix == nil, let report = disc.report else { return [] }
+        let albumFiles = disc.isAlbum ? report.encoding?.graphicsFiles ?? [] : []
+        return files.compactMap { track, file in
+            guard let graphics = report.tracks.first(where: { $0.number == track })?.graphics else { return nil }
+            let source =
+                disc.isAlbum
+                ? albumFiles.first { $0.track == track }.map { disc.folder.appending(path: $0.file) }
+                : disc.folder.appending(path: graphics.file)
+            return source.map { (track, $0, Self.graphicsFile(of: file)) }
+        }
+    }
+
+    /// The `.cdg` file beside a track's file, by its name.
+    static func graphicsFile(of file: URL) -> URL {
+        file.deletingPathExtension().appendingPathExtension("cdg")
+    }
+
+    /// Copies the tracks' CD+G graphics into the album folder, and returns their names there.
+    /// An album encoded again from its own files moves its own, which a rename leaves behind.
+    func placeGraphics(_ copies: [(track: Int, source: URL, target: URL)], fromAlbum: Bool) throws
+        -> [RipReport.Encoding.File]
+    {
+        var files = [RipReport.Encoding.File]()
+        for (track, source, target) in copies {
+            if FileManager.default.fileExists(atPath: source.path), !Self.sameFile(source, target) {
+                if FileManager.default.fileExists(atPath: target.path) {
+                    try FileManager.default.removeItem(at: target)
+                }
+                if fromAlbum {
+                    try FileManager.default.moveItem(at: source, to: target)
+                } else {
+                    try FileManager.default.copyItem(at: source, to: target)
+                    log("\(target.lastPathComponent)")
+                }
+            }
+            if FileManager.default.fileExists(atPath: target.path) {
+                files.append(.init(track: track, file: target.lastPathComponent))
+            }
+        }
+        return files
     }
 
     /// The folder beside a data track's image that holds its files: "Data track" for "Data track.iso".
@@ -800,10 +851,14 @@ public struct DiscEncoder: Sendable {
         if !overwrites, let job = jobs.first(where: { FileManager.default.fileExists(atPath: $0.file.path) }) {
             throw EncodingError.exists(job.file)
         }
-        // A data track's image, or the folder of its files, which would be replaced as a whole.
+        // A data track's image, or the folder of its files, which would be replaced as a whole;
+        // a track's CD+G graphics.
+        let graphicsCopies = graphicsCopies(of: disc, files: jobs.map { ($0.ripped.number, $0.file) })
         if !overwrites,
-            let existing = dataTrackCopies.filter({ !Self.sameFile($0.source, $0.target) })
+            let existing =
+                (dataTrackCopies.filter({ !Self.sameFile($0.source, $0.target) })
                 .flatMap({ [$0.target, Self.filesFolder(of: $0.target)] })
+                + graphicsCopies.filter({ !Self.sameFile($0.source, $0.target) }).map(\.target))
                 .first(where: { FileManager.default.fileExists(atPath: $0.path) })
         {
             throw EncodingError.exists(existing)
@@ -1058,6 +1113,12 @@ public struct DiscEncoder: Sendable {
         // the audio, with the files of their ISO 9660 file systems in a folder of the same name:
         // the image alone does not open, as its file system counts from the disc's start.
         let dataTrackFiles = albumFolder != nil ? try placeDataTracks(dataTrackCopies) : []
+        // Each track's CD+G graphics, beside its file. Only the tracks encoded get theirs.
+        let graphicsFiles =
+            albumFolder != nil
+            ? try placeGraphics(
+                graphicsCopies.filter { copy in encodedFiles.contains { $0.track == copy.track } },
+                fromAlbum: disc.isAlbum) : []
         let encoding = albumFolder.map {
             // Whole seconds, as the report's JSON keeps dates, so the record returned equals the one saved.
             RipReport.Encoding(
@@ -1073,6 +1134,19 @@ public struct DiscEncoder: Sendable {
             encoding.silentTracksLeftOut = silentTracksLeftOut.isEmpty ? nil : silentTracksLeftOut
             encoding.albumSuffix = albumSuffix
             encoding.dataTrackFiles = dataTrackFiles.isEmpty ? nil : dataTrackFiles
+            encoding.graphicsFiles = graphicsFiles.isEmpty ? nil : graphicsFiles
+            // Videos made earlier stay the album's, while their files are there.
+            if albumSuffix == nil, !graphicsFiles.isEmpty {
+                let album = URL(filePath: encoding.folder, directoryHint: .isDirectory)
+                let earlier = [
+                    disc.isAlbum ? disc.report : nil,
+                    try? RipReport.read(from: album.appending(path: "Rip Report\(discPart).json")),
+                ]
+                let videos = (earlier.compactMap { $0?.encoding?.videos }.first ?? []).filter {
+                    FileManager.default.fileExists(atPath: album.appending(path: $0.file).path)
+                }
+                encoding.videos = videos.isEmpty ? nil : videos
+            }
             return encoding
         }
         if let albumFolder, let encoding {

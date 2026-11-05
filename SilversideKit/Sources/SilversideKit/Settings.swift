@@ -75,6 +75,11 @@ public struct Settings: Codable, Equatable, Sendable {
     /// What to do with each data track (an Enhanced CD's extras for a computer): save it as an
     /// ISO image, which the encoding copies into the album's folder with its files beside it.
     public var dataTracks = DataTrackChoice.ask
+    /// For a disc with CD+G graphics: make a video of them after the rip, into the album
+    /// folder (the rip's when it is not encoded), with Apple Lossless or AAC audio, or none.
+    public var cdGraphicsVideo = CDGraphicsVideoChoice.ask
+    /// For a disc with CD+EG graphics: its video in 256 colors, as a CD+G player shows it, or both.
+    public var cdGraphicsVideoPictures = CDGraphicsVideo.Pictures.eg
     /// The user agreed to rip only discs they own, for their personal use, at their own risk
     /// (`SilversideLicense.personalUseAgreement`). The app does not rip a disc without it.
     public var agreedToPersonalUse = false
@@ -226,6 +231,8 @@ public struct Settings: Codable, Equatable, Sendable {
         writeImages = try value(.writeImages, defaults.writeImages)
         images = try value(.images, defaults.images)
         dataTracks = try value(.dataTracks, defaults.dataTracks)
+        cdGraphicsVideo = try value(.cdGraphicsVideo, defaults.cdGraphicsVideo)
+        cdGraphicsVideoPictures = try value(.cdGraphicsVideoPictures, defaults.cdGraphicsVideoPictures)
         agreedToPersonalUse = try value(.agreedToPersonalUse, defaults.agreedToPersonalUse)
     }
 }

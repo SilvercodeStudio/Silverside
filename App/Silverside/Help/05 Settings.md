@@ -20,6 +20,8 @@ C2 error flags are a drive's own report of sectors it had trouble with. Silversi
 
 **Write EAC-style log** (on by default) puts `Rip Report.log` beside each rip's report: the same facts in the layout of Exact Audio Copy's logs, for people and tools that read those. See Ripping a Disc › Where the files go.
 
+**Video of CD+G graphics** says what to do with a disc that has pictures or karaoke lyrics on it: ask (the default, until you keep an answer), make a video of them with Apple Lossless or AAC audio, or make none (see Ripping a Disc › CD+G graphics). The `.cdg` files are saved either way. **CD+EG video picture** says which picture a CD+EG disc's video shows: 256 colors, as a CD+EG player shows it; 16 colors, as a CD+G player does; or both, in two files.
+
 **Data tracks** says what to do with the extras for a computer that some CDs have after the music: ask (the default, until you keep an answer), save them as `Data track.iso` with their files in a `Data track` folder in the album's folder, or rip the audio only (see Ripping a Disc › Enhanced CDs). Saving costs about a minute and twice the track's size, often 50 to 600 MB each.
 
 ## Encoding

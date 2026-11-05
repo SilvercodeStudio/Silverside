@@ -519,6 +519,23 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var image: String?
         /// The data tracks' ISO images in the album folder, such as "Data track.iso". Nil if none.
         public var dataTrackFiles: [String]?
+        /// The tracks' CD+G graphics in the album folder, each named as its track's file is,
+        /// with ".cdg" ("01 Song.cdg"). Nil if none.
+        public var graphicsFiles: [File]?
+        /// The videos of the disc's CD+G graphics in the album folder (`CDGraphicsVideo`), such
+        /// as "Information Society.m4v", and for a CD+EG disc perhaps its CD+G picture too,
+        /// "… (CD+G).m4v". Nil if none.
+        public var videos: [Video]?
+
+        public struct Video: Codable, Equatable, Sendable {
+            public var file: String
+            public var picture: CDGraphicsVideo.Picture
+
+            public init(file: String, picture: CDGraphicsVideo.Picture) {
+                self.file = file
+                self.picture = picture
+            }
+        }
 
         /// The loudness of the album and its tracks, as the ReplayGain tags have them.
         public struct ReplayGainRecord: Codable, Equatable, Sendable {

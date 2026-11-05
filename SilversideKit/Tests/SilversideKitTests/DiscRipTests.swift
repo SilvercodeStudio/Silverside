@@ -680,6 +680,24 @@ struct DiscRipTests {
         var steps = [String]()
         for step in order where steps.last != step { steps.append(step) }
         #expect(steps == ["graphics 1", "audio 1", "graphics 2", "audio 2"])
+        // Asked about a video with no one to answer: none.
+        #expect(result.videoFiles.isEmpty)
+    }
+
+    /// With a video asked for, the rip makes one after the audio: beside the rip, which is
+    /// not encoded here.
+    @Test func makesAVideoOfTheGraphics() async throws {
+        let pw = CDGraphicsTests.subchannel(Array(repeating: CDGraphicsTests.realPacks[2], count: 1700 * 4))
+        let (result, events, _, root) = try await rip(
+            prepare: { drive in
+                for sector in 0..<1700 { drive.subchannelPW?[sector] = Array(pw[(sector * 96)..<(sector * 96 + 96)]) }
+            },
+            configure: { $0.video = .aac })
+        defer { try? FileManager.default.removeItem(at: root) }
+        let video = try #require(result.videoFiles.first)
+        #expect(video.deletingLastPathComponent().path == result.folder.path)
+        #expect(FileManager.default.fileExists(atPath: video.path))
+        #expect(events.contains { if case .videoWritten = $0 { true } else { false } })
     }
 
     /// Every track's report has the CRC-32s that EAC and XLD print, and the disc's media type.

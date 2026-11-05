@@ -4,10 +4,11 @@ import Foundation
 
 /// A video of a CD+G disc: its graphics as a CD+G player draws them (`CDGraphicsScreen`) over
 /// its audio, the whole disc in one file with a chapter for each track, named by its title.
-/// The audio is ALAC, so it is the rip's audio exactly; the picture is H.264 or HEVC, each of
-/// the screen's pixels drawn `scale` × `scale`, so that its edges stay sharp. AVFoundation
-/// writes it, as a `.m4v` that QuickTime Player, the TV app, VLC, and others play, with the
-/// chapters in a text track.
+/// The audio is Apple Lossless, the rip's audio exactly, or AAC for a smaller file; the
+/// picture is H.264 or HEVC, each of the screen's pixels drawn `scale` × `scale`, so that its
+/// edges stay sharp. AVFoundation writes it, as a `.m4v` that QuickTime Player, the TV app,
+/// VLC, and others play, with the chapters in a text track. (AVFoundation writes no FLAC in a
+/// video file.)
 public struct CDGraphicsVideo: Sendable {
     /// A track of the video: its title, its `.cdg` file (nil for a track without graphics,
     /// which leaves the screen as the track before left it), and its audio.
@@ -31,6 +32,55 @@ public struct CDGraphicsVideo: Sendable {
         case hevc
     }
 
+    /// The video's audio.
+    public enum Audio: String, Codable, Sendable, CaseIterable {
+        /// Apple Lossless: the rip's audio exactly.
+        case appleLossless
+        /// AAC at `aacBitRate`: about a quarter of the size.
+        case aac
+
+        public var name: String { self == .aac ? "AAC" : "Apple Lossless" }
+    }
+
+    /// The AAC's bit rate, in bits a second.
+    public static let aacBitRate = 256_000
+
+    /// The video's picture.
+    public enum Picture: String, Codable, Sendable, CaseIterable {
+        /// As a CD+EG player shows it: the 256 colors where the disc has them, and its CD+G
+        /// pictures where it has only those. A CD+G disc's video.
+        case extended = "eg"
+        /// As a CD+G player shows a CD+EG disc: 16 colors, the CD+EG layer left out.
+        case standard = "g"
+    }
+
+    /// Which pictures a CD+EG disc's video has: the CD+EG one, the CD+G one, or both, each in
+    /// a file of its own. A CD+G disc gets one video either way.
+    public enum Pictures: String, Codable, Sendable, CaseIterable {
+        case eg
+        case g
+        case both
+
+        public var pictures: [Picture] {
+            switch self {
+            case .eg: [.extended]
+            case .g: [.standard]
+            case .both: [.extended, .standard]
+            }
+        }
+    }
+
+    /// What a rip's video is to be: its audio, and for a CD+EG disc, its pictures.
+    public struct Request: Equatable, Sendable {
+        public var audio: Audio
+        public var pictures: Pictures
+
+        public init(audio: Audio, pictures: Pictures = .eg) {
+            self.audio = audio
+            self.pictures = pictures
+        }
+    }
+
     /// Frames a second: 10 packs each, of the 300 a second that the graphics come in.
     public static let framesPerSecond = 30
     static let packsPerFrame = 10
@@ -38,8 +88,13 @@ public struct CDGraphicsVideo: Sendable {
     static let sampleRate = CDDA.samplesPerSector * CDDA.sectorsPerSecond
 
     public var codec = Codec.h264
+    public var audio = Audio.appleLossless
+    public var picture = Picture.extended
     /// Each screen pixel is drawn this many pixels wide and high: 4 makes 1200 × 864.
     public var scale = 4
+    /// The video's title and artist, in its tags: the album's, for the TV app and others.
+    public var title: String?
+    public var artist: String?
 
     public init() {}
 
@@ -60,9 +115,12 @@ public struct CDGraphicsVideo: Sendable {
     /// track has graphics.
     public static func chapters(of disc: RippedDisc) throws -> [Chapter] {
         let medium = disc.release?.medium(for: disc.toc)
-        let graphics = Dictionary(
-            (disc.report?.tracks ?? []).compactMap { track in track.graphics.map { (track.number, $0.file) } },
-            uniquingKeysWith: { first, _ in first })
+        // An album's graphics are beside its files, by their names.
+        let files =
+            disc.isAlbum
+            ? (disc.report?.encoding?.graphicsFiles ?? []).map { ($0.track, $0.file) }
+            : (disc.report?.tracks ?? []).compactMap { track in track.graphics.map { (track.number, $0.file) } }
+        let graphics = Dictionary(files, uniquingKeysWith: { first, _ in first })
         guard !graphics.isEmpty else { throw VideoError.noGraphics }
         return disc.tracks.filter { $0.number > 0 }.compactMap { track in
             guard let toc = disc.toc.track(track.number) else { return nil }
@@ -124,15 +182,31 @@ public struct CDGraphicsVideo: Sendable {
 
         var layout = AudioChannelLayout()
         layout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo
-        let audio = AVAssetWriterInput(
-            mediaType: .audio,
-            outputSettings: [
-                AVFormatIDKey: kAudioFormatAppleLossless, AVSampleRateKey: CDGraphicsVideo.sampleRate,
-                AVNumberOfChannelsKey: 2,
-                AVEncoderBitDepthHintKey: 16,
-                AVChannelLayoutKey: Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size),
-            ])
+        var audioSettings: [String: Any] = [
+            AVSampleRateKey: CDGraphicsVideo.sampleRate, AVNumberOfChannelsKey: 2,
+            AVChannelLayoutKey: Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size),
+        ]
+        switch self.audio {
+        case .appleLossless:
+            audioSettings[AVFormatIDKey] = kAudioFormatAppleLossless
+            audioSettings[AVEncoderBitDepthHintKey] = 16
+        case .aac:
+            audioSettings[AVFormatIDKey] = kAudioFormatMPEG4AAC
+            audioSettings[AVEncoderBitRateKey] = Self.aacBitRate
+        }
+        let audio = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
         audio.expectsMediaDataInRealTime = false
+        writer.metadata = [
+            (AVMetadataIdentifier.commonIdentifierTitle, title),
+            (.commonIdentifierArtist, artist),
+        ].compactMap { identifier, value in
+            value.map {
+                let item = AVMutableMetadataItem()
+                item.identifier = identifier
+                item.value = $0 as NSString
+                return item
+            }
+        }
 
         let (titles, titleFormat) = try Self.chapterSamples(chapters, width: width)
         let text = AVAssetWriterInput(mediaType: .text, outputSettings: nil, sourceFormatHint: titleFormat)
@@ -160,7 +234,7 @@ public struct CDGraphicsVideo: Sendable {
             extensions: nil, formatDescriptionOut: &audioFormat)
         guard let audioFormat else { throw VideoError.writer("no audio format") }
 
-        var screen = CDGraphicsScreen()
+        var screen = CDGraphicsScreen(extended: picture == .extended)
         var frame = 0
         var lastChanges = -1
         var lastBuffer: CVPixelBuffer?

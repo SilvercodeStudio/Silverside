@@ -43,11 +43,12 @@ public enum RipRemoval {
 
     /// An encoding's files in the album folder, and its disc image, which has a folder of its own.
     static func ownFiles(of encoding: RipReport.Encoding, in folder: URL) -> [URL] {
-        var files = encoding.files.map { folder.appending(path: $0.file) }
+        var files = (encoding.files + (encoding.graphicsFiles ?? [])).map { folder.appending(path: $0.file) }
         for image in encoding.dataTrackFiles ?? [] {
             // The image, and the folder of the files on it, which has its name.
             files += [folder.appending(path: image), folder.appending(path: (image as NSString).deletingPathExtension)]
         }
+        files += (encoding.videos ?? []).map { folder.appending(path: $0.file) }
         if let image = encoding.image.map({ URL(filePath: $0) }) {
             files += [image, image.deletingPathExtension().appendingPathExtension("cue")]
         }

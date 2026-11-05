@@ -37,6 +37,21 @@ struct Rip: AsyncParsableCommand {
     var dataTracks: DataTrackChoice?
 
     @Option(
+        help: """
+            For a disc with CD+G graphics: make a video of them after the rip, in the album folder (the \
+            rip's when it is not encoded), with appleLossless or aac audio; none; or ask (the setting's \
+            default), which asks at a terminal, and makes none otherwise.
+            """)
+    var video: CDGraphicsVideoChoice?
+
+    @Option(
+        help: """
+            For a disc with CD+EG graphics: the video's picture in 256 colors (eg), as a CD+G player shows \
+            it in 16 (g), or both, each in a file of its own.
+            """)
+    var picture: CDGraphicsVideo.Pictures?
+
+    @Option(
         name: .shortAndLong,
         help: """
             The folder for the WAV files. Default: named from the MusicBrainz release, such as \
@@ -127,6 +142,8 @@ struct Rip: AsyncParsableCommand {
         options.silentTracks = encoding.silentTrackChoice(settings)
         options.writesEACLog = encoding.eacLog ?? settings.writeEACLog
         options.dataTracks = dataTracks ?? settings.dataTracks
+        options.video = video ?? settings.cdGraphicsVideo
+        options.videoPictures = picture ?? settings.cdGraphicsVideoPictures
 
         var rip = DiscRip(
             drive: drive,
@@ -165,6 +182,10 @@ struct Rip: AsyncParsableCommand {
             rip.chooseDataTracks = { [printer] tracks in
                 printer.progress.clear()
                 return Self.askToSaveDataTracks(tracks)
+            }
+            rip.chooseVideo = { [printer] extended in
+                printer.progress.clear()
+                return Self.askForVideo(extended: extended)
             }
         }
         // Ctrl-C stops the rip after the read under way; the tracks done so far stay.
@@ -304,6 +325,31 @@ struct Rip: AsyncParsableCommand {
         fflush(stdout)
         let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
         return answer.isEmpty || answer == "y" || answer == "yes"
+    }
+
+    static func askForVideo(extended: Bool) -> CDGraphicsVideo.Request? {
+        print()
+        print(
+            "This disc has CD+G graphics. A video shows them as a karaoke player does, over the audio, the whole"
+                + " disc in one file with a chapter for each track.")
+        print("Make a video? [L]ossless audio (Apple Lossless), [a]AC (smaller), or [n]o: ", terminator: "")
+        fflush(stdout)
+        let audio: CDGraphicsVideo.Audio
+        switch readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? "" {
+        case "", "l", "lossless": audio = .appleLossless
+        case "a", "aac": audio = .aac
+        default: return nil
+        }
+        guard extended else { return .init(audio: audio) }
+        print(
+            "It has CD+EG graphics too (256 colors). Picture: [E]G, 256 colors; [g], 16 colors as a CD+G player"
+                + " shows it; or [b]oth, in two files: ", terminator: "")
+        fflush(stdout)
+        switch readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? "" {
+        case "g": return .init(audio: audio, pictures: .g)
+        case "b", "both": return .init(audio: audio, pictures: .both)
+        default: return .init(audio: audio, pictures: .eg)
+        }
     }
 
     static func trackNumbers(_ list: String) throws -> [Int] {
@@ -475,6 +521,14 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print("Added \(count) tracks to Music.")
         case .addToMusicFailed(let error):
             Swift.print("Music: \(error)")
+        case .writingVideo(let fraction):
+            progress.showText(String(format: "Video: %3.0f%%", fraction * 100))
+        case .videoWritten(let url):
+            progress.clear()
+            Swift.print("Video: \(url.path)")
+        case .videoFailed(let message):
+            progress.clear()
+            Swift.print("Video: not made. \(message)")
         }
     }
 

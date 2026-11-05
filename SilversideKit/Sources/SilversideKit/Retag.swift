@@ -342,6 +342,26 @@ extension DiscEncoder {
                         && encoding.deEmphasizedTracks?.contains(entry.track) != true,
                     copyPermitted: tocTrack.isCopyPermitted || reported?.isCopyPermitted == true))
         }
+        // The graphics of a silent track left out of the album: named as its file would be.
+        for (index, graphics) in (encoding.graphicsFiles ?? []).enumerated()
+        where !encoding.files.contains(where: { $0.track == graphics.track }) {
+            guard let trackIndex = audioTracks.firstIndex(where: { $0.number == graphics.track }),
+                medium.tracks.indices.contains(trackIndex)
+            else { continue }
+            let reported = report.tracks.first { $0.number == graphics.track }
+            let meta = metadata(
+                release: release, medium: medium, track: medium.tracks[trackIndex], isrc: reported?.isrc)
+            let planned = trackTemplate.name(meta.nameValues) + ".cdg"
+            let old = album.appending(path: graphics.file)
+            let new = album.appending(path: planned)
+            if planned != graphics.file, FileManager.default.fileExists(atPath: old.path),
+                !FileManager.default.fileExists(atPath: new.path)
+            {
+                try FileManager.default.moveItem(at: old, to: new)
+                encoding.graphicsFiles?[index].file = planned
+                renamed += 1
+            }
+        }
         encoding.folder = album.path
         // The videos of the CD+G graphics keep the album's name.
         for (index, video) in (encoding.videos ?? []).enumerated() {

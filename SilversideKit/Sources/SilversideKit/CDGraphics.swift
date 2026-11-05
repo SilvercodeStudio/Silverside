@@ -54,6 +54,21 @@ public enum CDGraphics {
         holds(packs(pw), command: 10, instructions: extendedInstructions)
     }
 
+    /// True if a CD+EG pack makes a CD+EG player show something that a CD+G player does not:
+    /// a font or color of its own, or a MEMORY control (DM in bits 3 and 2, WM in 1 and 0)
+    /// for the 1-plane state, for showing the SECONDARY or both, or for drawing the CD+G
+    /// instructions somewhere other than the PRIMARY, which a CD+G player still draws there.
+    /// DM 01 with WM 01 is CD+G's own state, and WM 11 draws in the PRIMARY too.
+    static func changesPicture(_ pack: [UInt8]) -> Bool {
+        guard pack.count >= 5, pack[0] & 0x3F == 10 else { return false }
+        let instruction = pack[1] & 0x3F
+        guard instruction == 3 else { return [6, 14].contains(instruction) || (16...63).contains(instruction) }
+        let (mode, memory) = ((pack[4] >> 2) & 3, pack[4] & 3)
+        // DM 00 with WM 01 or 10: no operation.
+        if mode == 0 { return memory == 0 || memory == 3 }
+        return mode != 1 || memory & 1 == 0
+    }
+
     static func holds(_ packs: [[UInt8]], command: UInt8, instructions: Set<UInt8>) -> Bool {
         let graphics = packs.filter { $0[0] == command }
         let valid = graphics.filter { instructions.contains($0[1]) }.count

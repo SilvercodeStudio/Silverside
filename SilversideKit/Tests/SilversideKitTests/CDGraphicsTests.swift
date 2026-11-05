@@ -199,4 +199,74 @@ struct CDGraphicsTests {
         // Removing the rip's files from the album takes its graphics too.
         #expect(RipRemoval.ownFiles(of: try #require(again), in: album).contains(graphics))
     }
+
+    /// A track of silence left out of the album keeps its graphics there, by the name its file
+    /// would have: a CD+G track can draw over silence (review of 6d31199).
+    @Test func keepsTheGraphicsOfASilentTrackLeftOut() throws {
+        let (folder, library) = try EncodingTests().makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        try WAVFile.write(
+            [UInt32](repeating: 0, count: 75 * CDDA.samplesPerSector), to: folder.appending(path: "Track 01.wav"))
+        try Data(Self.realPacks.joined()).write(to: folder.appending(path: "Track 01.cdg"))
+        try RipReport.update(reportAt: folder.appending(path: "disc.json")) {
+            $0.tracks[0].graphics = .init(file: "Track 01.cdg")
+            $0.tracks[0].crc32SkipZero = "00000000"
+        }
+        var encoder = DiscEncoder(format: .flac)
+        encoder.leavesOutSilentTracks = true
+        let (files, record) = try encoder.encodeWithRecord(try RippedDisc(folder: folder), into: library)
+        #expect(record?.silentTracksLeftOut == [1])
+        let graphics = try #require(record?.graphicsFiles?.first { $0.track == 1 })
+        #expect(graphics.file == "02-01 Help on the Way.cdg")
+        let album = files[0].deletingLastPathComponent()
+        #expect(FileManager.default.fileExists(atPath: album.appending(path: graphics.file).path))
+    }
+
+    /// An album encoded again into another library keeps its own graphics: they are copied,
+    /// not moved (review of 6d31199).
+    @Test func keepsAnAlbumsGraphicsWhenEncodedElsewhere() throws {
+        let (folder, library) = try EncodingTests().makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data(Self.realPacks.joined()).write(to: folder.appending(path: "Track 01.cdg"))
+        try RipReport.update(reportAt: folder.appending(path: "disc.json")) {
+            $0.tracks[0].graphics = .init(file: "Track 01.cdg")
+        }
+        let (files, _) = try DiscEncoder(format: .flac).encodeWithRecord(try RippedDisc(folder: folder), into: library)
+        let report = files[0].deletingLastPathComponent().appending(path: "Rip Report (Disc 2).json")
+        let original = files[0].deletingLastPathComponent().appending(
+            path: try #require(RipReport.read(from: report).encoding?.graphicsFiles?.first?.file))
+        let (_, copy) = try DiscEncoder(format: .alac).encodeWithRecord(
+            try RippedDisc(albumReportAt: report), into: root.appending(path: "second-library"))
+        #expect(copy?.graphicsFiles?.count == 1)
+        #expect(FileManager.default.fileExists(atPath: original.path))
+    }
+
+    /// A track whose CD+EG packs only change MEMORY control, so that the CD+G instructions draw
+    /// two pictures (the 2-plane state), is CD+EG: a CD+G player shows something else (review
+    /// of 6d31199).
+    @Test func marksTwoPlaneGraphicsCDEG() throws {
+        let toc = try TOC(audioTrackStarts: [0], leadOutLBA: 300)
+        let drive = SimulatedDrive(toc: toc, samples: [UInt32](repeating: 0, count: 300 * CDDA.samplesPerSector))
+        typealias Video = CDGraphicsVideoTests
+        var packs = [Video.pack(30, [0, 0, 0x3C, 0]), Video.pack(1, [1, 0])]
+        packs += Array(repeating: Video.memoryControl(1, 2), count: 12)
+        packs += [Video.pack(30, [0, 0, 0, 0x0F]), Video.pack(1, [1, 0])]
+        packs += Array(repeating: Video.memoryControl(3, 3), count: 12)
+        packs += Array(repeating: Video.pack(6, [1, 1, 1, 1]), count: 12)
+        var extended = CDGraphicsScreen(extended: true)
+        var standard = CDGraphicsScreen()
+        for pack in packs {
+            extended.apply(pack)
+            standard.apply(pack)
+        }
+        #expect(extended.rgb() != standard.rgb())
+        let pw = Self.subchannel(packs)
+        for sector in 0..<(pw.count / 96) {
+            drive.subchannelPW?[sector] = Array(pw[(sector * 96)..<(sector * 96 + 96)])
+        }
+        let file = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID()).cdg")
+        defer { try? FileManager.default.removeItem(at: file) }
+        #expect(try CDGraphicsReader.read(toc.audioTracks[0], in: toc, drive: drive, to: file)?.extended == true)
+    }
 }

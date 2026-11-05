@@ -401,10 +401,10 @@ public struct DiscEncoder: Sendable {
     /// does for a disc that cannot be encoded, but not for files that exist, so a caller can
     /// ask before it replaces them (see `overwrites`).
     public func plannedFiles(_ disc: RippedDisc, into library: URL) throws -> [URL] {
-        let (release, medium, jobs, _) = try plan(disc, into: library)
+        let (release, medium, jobs, leftOut) = try plan(disc, into: library)
         let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
         let data = jobs.first.map { dataTrackCopies(of: disc, into: $0.folder, discPart: discPart) } ?? []
-        let graphics = graphicsCopies(of: disc, files: jobs.map { ($0.ripped.number, $0.file) })
+        let graphics = graphicsCopies(of: disc, files: (jobs + leftOut).map { ($0.ripped.number, $0.file) })
         // A data track's image, and the folder its files go into; a track's CD+G graphics.
         return jobs.map(\.file)
             + data.filter { !Self.sameFile($0.source, $0.target) }.flatMap {
@@ -438,7 +438,8 @@ public struct DiscEncoder: Sendable {
     }
 
     /// Copies the tracks' CD+G graphics into the album folder, and returns their names there.
-    /// An album encoded again from its own files moves its own, which a rename leaves behind.
+    /// An album encoded again from its own files into its own folder moves its own, which a
+    /// rename would leave behind; into another folder, it keeps them.
     func placeGraphics(_ copies: [(track: Int, source: URL, target: URL)], fromAlbum: Bool) throws
         -> [RipReport.Encoding.File]
     {
@@ -448,7 +449,9 @@ public struct DiscEncoder: Sendable {
                 if FileManager.default.fileExists(atPath: target.path) {
                     try FileManager.default.removeItem(at: target)
                 }
-                if fromAlbum {
+                if fromAlbum
+                    && Self.sameFile(source.deletingLastPathComponent(), target.deletingLastPathComponent())
+                {
                     try FileManager.default.moveItem(at: source, to: target)
                 } else {
                     try FileManager.default.copyItem(at: source, to: target)
@@ -853,7 +856,10 @@ public struct DiscEncoder: Sendable {
         }
         // A data track's image, or the folder of its files, which would be replaced as a whole;
         // a track's CD+G graphics.
-        let graphicsCopies = graphicsCopies(of: disc, files: jobs.map { ($0.ripped.number, $0.file) })
+        // A track of silence left out of the album keeps its graphics, by the name its file
+        // would have: a CD+G track can draw over silence.
+        let graphicsCopies = graphicsCopies(
+            of: disc, files: (jobs + planned.leftOut).map { ($0.ripped.number, $0.file) })
         if !overwrites,
             let existing =
                 (dataTrackCopies.filter({ !Self.sameFile($0.source, $0.target) })
@@ -1117,7 +1123,9 @@ public struct DiscEncoder: Sendable {
         let graphicsFiles =
             albumFolder != nil
             ? try placeGraphics(
-                graphicsCopies.filter { copy in encodedFiles.contains { $0.track == copy.track } },
+                graphicsCopies.filter { copy in
+                    encodedFiles.contains { $0.track == copy.track } || silentTracksLeftOut.contains(copy.track)
+                },
                 fromAlbum: disc.isAlbum) : []
         let encoding = albumFolder.map {
             // Whole seconds, as the report's JSON keeps dates, so the record returned equals the one saved.

@@ -121,12 +121,11 @@ public enum CDGraphicsReader {
 
         // By the rule of the look before the rip, so that a damaged pack is not taken for graphics.
         let graphics = CDGraphics.holds(packs, command: 9, instructions: CDGraphics.instructions)
-        // CD+EG's own: a track whose CD+EG packs only set the mode (MEMORY control) shows its
-        // CD+G picture on a CD+EG player too, as tracks 1, 4, 5, 6, and 9 of *The CD Graphics
-        // World* do.
+        // CD+EG's own: a track whose CD+EG packs only keep the CD+G mode shows its CD+G picture
+        // on a CD+EG player too, as tracks 1, 4, 5, and 6 of *The CD Graphics World* do.
         let extended =
             CDGraphics.holds(packs, command: 10, instructions: CDGraphics.extendedInstructions)
-            && packs.contains { $0[0] & 0x3F == 10 && [6, 14].contains($0[1] & 0x3F) }
+            && packs.contains(where: CDGraphics.changesPicture)
         guard graphics || extended else { return nil }
         try Data(packs.joined()).write(to: url, options: .atomic)
         return RipReport.Graphics(

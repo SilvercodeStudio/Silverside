@@ -270,4 +270,32 @@ struct CDGraphicsVideoTests {
         #expect(url.deletingLastPathComponent().path == folder.path, "\(url.path)")
         #expect(FileManager.default.fileExists(atPath: url.path))
     }
+
+    /// A rip's album folder that now holds another edition's album keeps its video: the rip's
+    /// goes beside the rip (review of 6d31199).
+    @Test func leavesAnotherEditionsVideoAlone() throws {
+        let (folder, library) = try EncodingTests().makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        try Data(Self.pack(1, [1, 0])).write(to: folder.appending(path: "Track 01.cdg"))
+        try RipReport.update(reportAt: folder.appending(path: "disc.json")) {
+            $0.tracks[0].graphics = .init(file: "Track 01.cdg")
+        }
+        let (_, record) = try DiscEncoder(format: .flac).encodeWithRecord(try RippedDisc(folder: folder), into: library)
+        try #require(record).save(inReportAt: folder.appending(path: "disc.json"))
+        let disc = try RippedDisc(folder: folder)
+        let album = URL(filePath: try #require(record).folder)
+        let name = CDGraphicsVideo.fileName(release: disc.release, toc: disc.toc)
+        let other = album.appending(path: name)
+        let sentinel = Data("another edition's video".utf8)
+        try sentinel.write(to: other)
+        try RipReport.update(reportAt: album.appending(path: "Rip Report (Disc 2).json")) {
+            $0.release?.id = "another-release"
+            $0.encoding?.videos = [.init(file: name, picture: .extended)]
+        }
+        var video = CDGraphicsVideo()
+        video.scale = 1
+        let url = try video.write(disc)
+        #expect(try Data(contentsOf: other) == sentinel)
+        #expect(url.deletingLastPathComponent().path == folder.path)
+    }
 }

@@ -38,8 +38,9 @@ extension CDGraphicsVideo {
     }
 
     /// Where a disc's video goes: into the album folder, beside the audio, when the disc is an
-    /// album or its rip was encoded and the folder is there; with the album's report, which
-    /// records it. Else into the rip's own folder, with no report to record it.
+    /// album or its rip was encoded and the folder is there with this rip's report; with that
+    /// report, which records it. Else into the rip's own folder, with no report to record it: a
+    /// folder that now holds another edition's album, or another rip's, is not this rip's.
     public static func destination(of disc: RippedDisc) -> (folder: URL, albumReport: URL?) {
         if disc.isAlbum { return (disc.folder, disc.reportFile) }
         if let encoding = disc.report?.encoding, encoding.albumSuffix == nil {
@@ -48,7 +49,11 @@ extension CDGraphicsVideo {
                 (disc.release?.media.count ?? 0) > 1
                 ? disc.release?.medium(for: disc.toc).map { " (Disc \($0.position))" } ?? "" : ""
             let report = album.appending(path: "Rip Report\(discPart).json")
-            if FileManager.default.fileExists(atPath: report.path) { return (album, report) }
+            if let own = disc.report, let there = try? RipReport.read(from: report),
+                there.release?.id == own.release?.id, RipHistory.sameRip(there, own)
+            {
+                return (album, report)
+            }
         }
         return (disc.folder, nil)
     }

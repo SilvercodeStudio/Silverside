@@ -51,16 +51,22 @@ if [ "${NOTARIZE:-1}" = 0 ]; then
     exit 0
 fi
 
-echo "Sending to Apple for notarization (usually a few minutes)…"
+# The zips leave out extended attributes (--norsrc). Without it, ditto stores each file's
+# com.apple.provenance as a "._" file beside it, and a tool other than ditto or Archive Utility
+# (unzip, for one) unpacks those as files in the bundle, which breaks its seal.
+echo "Sending to Apple for notarization (usually a few minutes; a first submission can take longer)…"
 UPLOAD="$DIST/upload.zip"
-ditto -c -k --keepParent "$APP" "$UPLOAD"
-result=$(xcrun notarytool submit "$UPLOAD" --keychain-profile "$PROFILE" --wait --output-format json)
+ditto -c -k --norsrc --keepParent "$APP" "$UPLOAD"
+submitted=$(xcrun notarytool submit "$UPLOAD" --keychain-profile "$PROFILE" --output-format json)
 rm -f "$UPLOAD"
+id=$(echo "$submitted" | plutil -extract id raw -o - - 2>/dev/null || echo "")
+[ -n "$id" ] || { echo "The upload failed: $submitted"; exit 1; }
+echo "Submission $id. If this is stopped, xcrun notarytool wait $id --keychain-profile $PROFILE"
+result=$(xcrun notarytool wait "$id" --keychain-profile "$PROFILE" --output-format json || true)
 status=$(echo "$result" | plutil -extract status raw -o - - 2>/dev/null || echo unknown)
 if [ "$status" != Accepted ]; then
-    id=$(echo "$result" | plutil -extract id raw -o - - 2>/dev/null || echo "")
     echo "Notarization: $status."
-    [ -n "$id" ] && xcrun notarytool log "$id" --keychain-profile "$PROFILE"
+    xcrun notarytool log "$id" --keychain-profile "$PROFILE"
     exit 1
 fi
 
@@ -69,5 +75,6 @@ spctl --assess --type execute -vv "$APP" 2>&1 | grep -q "source=Notarized Develo
     { echo "Gatekeeper does not accept the stapled app."; spctl --assess --type execute -vv "$APP"; exit 1; }
 
 ZIP="$DIST/Silverside-$VERSION.zip"
-ditto -c -k --keepParent "$APP" "$ZIP"
+ditto -c -k --norsrc --keepParent "$APP" "$ZIP"
+zipinfo -1 "$ZIP" | grep -q '/\._' && { echo "The zip has AppleDouble files: unzip would break the seal."; exit 1; }
 echo "Notarized and stapled: $ZIP"

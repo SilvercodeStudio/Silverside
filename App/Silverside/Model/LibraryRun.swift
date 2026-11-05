@@ -122,6 +122,7 @@ final class LibraryRun: Identifiable {
             }
             let library = settings.libraryURL
             // A disc whose place in a set another takes leaves first, so that its files make way.
+            var stayed = [RecentRip]()
             for rip in leaving {
                 do {
                     var encoder = DiscEncoder(settings: settings)
@@ -133,11 +134,22 @@ final class LibraryRun: Identifiable {
                         run.add("\(rip.title): taken out of the set, a disc of its own with the names it had there.")
                     }
                 } catch {
+                    stayed.append(rip)
                     onMain {
                         run.problems += 1
                         run.add("\(rip.title): not taken out of the set: \(error)")
                     }
                 }
+            }
+            // A disc that could not leave keeps its place, so the disc that was to take it does not.
+            if let change, let first = stayed.first {
+                let message = "\(change.rip.title): not changed, as \(first.title) is still in its place in the set."
+                onMain {
+                    run.add(message)
+                    run.end(.failed(message))
+                    onFinish()
+                }
+                return
             }
             // The other discs are brought up to date only after the change, for their album gain.
             if let change {

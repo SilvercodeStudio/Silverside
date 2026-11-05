@@ -203,9 +203,12 @@ extension DiscEncoder {
                 albumFolder = planned
                 renamed += 1
             } else if planned.standardizedFileURL != current.standardizedFileURL,
-                (try? RipReport.read(from: planned.appending(path: "Rip Report\(discPart).json")))?.toc == report.toc
+                let there = try? RipReport.read(from: planned.appending(path: "Rip Report\(discPart).json")),
+                there.release?.id == original.id, RipHistory.sameRip(there, report)
             {
-                // Another disc of the set moved the folder, with this disc's files, already.
+                // Another disc of the set moved the folder, with this disc's files, already: the
+                // report there is this rip's, of this release. A disc of the same TOC there is not
+                // enough, as another edition's or another rip's files are not this rip's to tag.
                 albumFolder = planned
             }
         }

@@ -984,9 +984,10 @@ final class AppModel {
         library = run
         libraryShown = true
         run.start(settings: settings, cover: nil) { [self] in
-            // The set changes only once the rip's files have: a change that failed left them as
-            // they were. A disc that left its place for this one is out of the set either way.
-            if run.changedReport != nil {
+            // The set changes only once the rip's files have, and every rip of the disc that was
+            // there has left: else two rips would be that disc. A disc that left its place for
+            // this one is out of the set either way.
+            if run.changedReport != nil, displaced.allSatisfy({ run.leftRips.contains($0.file) }) {
                 do {
                     try CustomSetStore().save(set)
                 } catch {
@@ -995,6 +996,11 @@ final class AppModel {
             } else {
                 for gone in displaced where run.leftRips.contains(gone.file) {
                     if let toc = try? TOC(ctdbTOCString: gone.report.toc) { try? CustomSetStore().remove(toc) }
+                }
+                if !displaced.allSatisfy({ run.leftRips.contains($0.file) }) {
+                    alert = AppAlert(
+                        title: "The rip was not put in the set",
+                        message: "The earlier rip of disc \(position) could not leave the set. The log says why.")
                 }
             }
             if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }

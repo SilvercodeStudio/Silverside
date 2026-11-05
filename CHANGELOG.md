@@ -23,7 +23,9 @@ command-line tool.
   album when MusicBrainz had changed the album's title: Update the Library
   then found no files.
 - A change to your own set that failed (a file in the way, for one) still
-  changed the set, so the disc went in as the wrong set's the next time.
+  changed the set, so the disc went in as the wrong set's the next time. A
+  disc put in another's place now goes in only when that disc's rips have
+  left the set.
 - A disc in a drive that left your set lost the date and the cover it had
   there, and the track titles typed for it.
 - A rip of one edition of an album went into the album folder of another

@@ -757,6 +757,41 @@ extension EncodingTests {
         #expect(try FLACTags.read(second.files[0]).contains { $0.key == "ALBUM" && $0.value == "Renamed Album" })
     }
 
+    /// A kept rip whose album folder is gone (moved away by hand) is not taken for the album
+    /// of the name it would have now, when that holds another edition's rip of the same TOC:
+    /// those files are not this rip's to tag (review of ed745ec).
+    @Test func leavesAnotherEditionsAlbumAloneWhenItsOwnIsGone() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let encoder = DiscEncoder(format: .flac)
+        let source = folder.appending(path: "disc.json")
+        let (files, record) = try encoder.encodeWithRecord(try RippedDisc(folder: folder), into: library)
+        try #require(record).save(inReportAt: source)
+        let oldAlbum = try #require(files.first).deletingLastPathComponent()
+        try FileManager.default.moveItem(at: oldAlbum, to: root.appending(path: "archived-album"))
+        // Another edition, the same TOC and track names, in the folder the new name gives.
+        var other = try RippedDisc(folder: folder)
+        other.release?.id = "other-edition"
+        other.release?.title = "New Name"
+        other.report?.release = other.release
+        let otherDate = try #require(other.report).date.addingTimeInterval(3600)
+        other.report?.date = otherDate
+        let otherTrack = try #require(try encoder.encode(other, into: library).first)
+        let otherReport = otherTrack.deletingLastPathComponent().appending(path: "Rip Report (Disc 2).json")
+        try RipReport.update(reportAt: otherReport) {
+            $0.release = other.release
+            $0.date = otherDate
+        }
+        let before = try Data(contentsOf: otherTrack)
+        let edits = ReleaseEditsStore(url: root.appending(path: "edits.json"))
+        try edits.remember(MetadataEdits(album: "New Name"), forReleaseID: "rel")
+        _ = try? encoder.updateLibrary(reportAt: source, library: library, editsStore: edits)
+        #expect(try Data(contentsOf: otherTrack) == before)
+        #expect(
+            try FLACTags.read(otherTrack).contains { $0.key == "MUSICBRAINZ_ALBUMID" && $0.value == "other-edition" })
+    }
+
     /// A rip encoded from the terminal, whose album's title MusicBrainz corrects: the album found
     /// by the old title is kept in the rip's report, so the library update finds it and renames it.
     @Test func keepsTheAlbumOfARefreshedReleaseFoundByTheOldName() throws {

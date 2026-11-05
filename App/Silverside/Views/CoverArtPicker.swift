@@ -319,6 +319,31 @@ struct CoverArtPickerSheet: View {
 /// A badge on a cover when the Cover Art Archive has more than one image for the release,
 /// such as a digital release's art or a box set's sleeves, or for the other release whose
 /// images stand for it. It opens the picker, which the cover's menu has too.
+/// How many other images the Artwork folder has beside the cover, "+6": a click shows them
+/// in Quick Look, after the cover.
+struct ArtworkBadge: View {
+    let count: Int
+    var action: () -> Void
+
+    var body: some View {
+        if count > 0 {
+            Button(action: action) {
+                Text("+\(count)")
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .foregroundStyle(.white)
+                    .background(.black.opacity(0.6), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(5)
+            .help(
+                "\(Format.count(count, "more image")) in the Artwork folder, such as the back and the booklet. Click to see them in Quick Look; the arrow keys go from one to the next."
+            )
+        }
+    }
+}
+
 struct CoverArchiveBadge: View {
     let release: MusicBrainzRelease?
     /// The other release whose images the cover shows, and their number.

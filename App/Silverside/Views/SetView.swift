@@ -12,6 +12,10 @@ struct SetView: View {
     @State private var coverTargeted = false
     /// The cover's file while Quick Look shows it.
     @State private var coverPreview: URL?
+    /// The other images in an Artwork folder of the set's rips, which Quick Look shows after the cover.
+    @State private var artwork: [URL] = []
+    /// What Quick Look shows: the cover's file, then the Artwork folder's images.
+    @State private var previewItems: [URL] = []
     @State private var archivePickerShown = false
     /// The other images of a release, offered for the discs' Artwork folders.
     @State private var artworkOffer: ArtworkOffer?
@@ -114,6 +118,8 @@ struct SetView: View {
                         try? Data(contentsOf: disc.folder.appending(path: $0))
                     }.first
                 }.first ?? ReleaseCoverStore().cover(forReleaseID: ripSet.releaseID)?.data
+            artwork = CoverFiles.artwork(in: ArtworkOffer.folders(of: setRips))
+            previewItems = (CoverDrop.file(for: cover, name: coverFileName).map { [$0] } ?? []) + artwork
         }
         .task(id: "\(ripSet.releaseID) \(model.recentRips.count) \(model.library?.isRunning == true)") {
             guard let release else {
@@ -141,6 +147,9 @@ struct SetView: View {
                 .overlay(alignment: .bottomTrailing) {
                     CoverArchiveBadge(release: release) { archivePickerShown = true }
                 }
+                .overlay(alignment: .bottomLeading) {
+                    ArtworkBadge(count: artwork.count) { coverPreview = artwork.first }
+                }
                 .overlay {
                     if coverTargeted {
                         RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 3)
@@ -158,7 +167,7 @@ struct SetView: View {
                         chooseCover()
                     }
                 }
-                .quickLookPreview($coverPreview)
+                .quickLookPreview($coverPreview, in: previewItems)
                 .contextMenu {
                     Button("Quick Look") { coverPreview = CoverDrop.file(for: cover, name: coverFileName) }
                         .disabled(cover == nil)

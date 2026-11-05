@@ -335,4 +335,23 @@ struct CoverArtListingTests {
         }
         #expect(files.map(\.lastPathComponent) == ["cover.jpg"])
     }
+
+    /// The Artwork folder's images, in name order, from the first folder that has any: the
+    /// rip's, else the album's.
+    @Test func listsTheArtworkBesideTheCover() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (rip, album) = (root.appending(path: "rip"), root.appending(path: "album"))
+        let artwork = album.appending(path: "Artwork")
+        try FileManager.default.createDirectory(at: rip, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: artwork, withIntermediateDirectories: true)
+        for name in ["booklet-10.jpg", "back.png", "booklet-02.jpg", ".DS_Store", "notes.txt"] {
+            try Data([1]).write(to: artwork.appending(path: name))
+        }
+        #expect(
+            CoverFiles.artwork(in: [rip, album]).map(\.lastPathComponent) == [
+                "back.png", "booklet-02.jpg", "booklet-10.jpg",
+            ])
+        #expect(CoverFiles.artwork(in: [rip]).isEmpty)
+    }
 }

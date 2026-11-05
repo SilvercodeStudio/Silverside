@@ -330,6 +330,8 @@ final class AppModel {
             while library?.isRunning == true { try? await Task.sleep(for: .milliseconds(250)) }
             do {
                 _ = try await CoverArtClient().replaceArtwork(with: images, in: folders)
+                // The views show the Artwork folders' images beside the cover.
+                coverVersion += 1
                 refreshRecentRips()
             } catch {
                 alert = AppAlert(

@@ -34,6 +34,10 @@ struct ResultsView: View {
     @State private var coverTargeted = false
     /// The cover's file while Quick Look shows it.
     @State private var coverPreview: URL?
+    /// The other images in the Artwork folder, which Quick Look shows after the cover.
+    @State private var artwork: [URL] = []
+    /// What Quick Look shows: the cover's file, then the Artwork folder's images.
+    @State private var previewItems: [URL] = []
     @State private var archivePickerShown = false
     /// The other images of a release, offered for the rip's Artwork folder.
     @State private var artworkOffer: ArtworkOffer?
@@ -158,6 +162,8 @@ struct ResultsView: View {
         .task(id: "\(folder.path) \(model.coverVersion)") {
             // The disc's own sleeve, in a box set whose discs have theirs, else the album's cover.
             cover = CoverFiles.embedded(forDisc: report.discPosition, in: folder).flatMap { try? Data(contentsOf: $0) }
+            artwork = CoverFiles.artwork(in: ArtworkOffer.folders(of: [recentRip]))
+            previewItems = (CoverDrop.file(for: cover, name: coverFileName).map { [$0] } ?? []) + artwork
         }
         .onAppear {
             edits = MetadataEdits.read(fromReportAt: recentRip.file) ?? MetadataEdits()
@@ -457,6 +463,9 @@ struct ResultsView: View {
                 .overlay(alignment: .bottomTrailing) {
                     CoverArchiveBadge(release: report.release) { archivePickerShown = true }
                 }
+                .overlay(alignment: .bottomLeading) {
+                    ArtworkBadge(count: artwork.count) { coverPreview = artwork.first }
+                }
                 .overlay {
                     if coverTargeted {
                         RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 3)
@@ -475,7 +484,7 @@ struct ResultsView: View {
                     }
                 }
                 .onDrag { CoverDrop.provider(for: cover, name: coverFileName) ?? NSItemProvider() }
-                .quickLookPreview($coverPreview)
+                .quickLookPreview($coverPreview, in: previewItems)
                 .contextMenu {
                     Button("Quick Look") { coverPreview = CoverDrop.file(for: cover, name: coverFileName) }
                         .disabled(cover == nil)

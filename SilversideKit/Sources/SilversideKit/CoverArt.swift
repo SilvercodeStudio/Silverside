@@ -46,6 +46,21 @@ public enum CoverFiles {
     /// "cover (Disc 2)", with no extension.
     public static func discName(_ position: Int) -> String { "cover (Disc \(position))" }
 
+    /// The other images saved beside the cover in an "Artwork" folder (the back, the booklet,
+    /// and so on, from the Cover Art Archive): those of the first of `folders` that has any,
+    /// in the order of their names ("back", "booklet-01", "booklet-02").
+    public static func artwork(in folders: [URL]) -> [URL] {
+        let images: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "tif", "tiff", "heic", "pdf"]
+        for folder in folders {
+            let artwork = folder.appending(path: "Artwork", directoryHint: .isDirectory)
+            let files = ((try? FileManager.default.contentsOfDirectory(atPath: artwork.path)) ?? [])
+                .filter { !$0.hasPrefix(".") && images.contains(($0 as NSString).pathExtension.lowercased()) }
+                .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+            if !files.isEmpty { return files.map { artwork.appending(path: $0) } }
+        }
+        return []
+    }
+
     /// The album's cover file in `folder`, if it has one.
     public static func album(in folder: URL) -> URL? {
         existing(extensions.map { folder.appending(path: "cover.\($0)") })

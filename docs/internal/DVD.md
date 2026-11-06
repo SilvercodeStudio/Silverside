@@ -84,6 +84,162 @@ The upstream license/agreement changes have been pulled. Research utilities
 remain in `scripts/dvd/`; they are not bundled or invoked by the product helper.
 Further DVD-Audio and DTS-CD titles are incoming and will expand coverage.
 
+### New discs and validation candidates — 2026-11-05
+
+The user reported the following arrivals and expected titles. Formats here are
+packaging observations or questions, not measured stream properties. The later
+2026-11-06 validation below records actual reads of the first two inserted titles.
+
+| Title | Availability reported | Format observations and checks to make |
+| --- | --- | --- |
+| Donald Fagen — The Nightfly | Arrived | Appears to be 48 kHz/24-bit. Confirm each presentation's codec, rate, precision and speaker layout; exercise the 48 kHz extraction path. |
+| Billy Cobham — Spectrum | Arrived | Appears double-sided, surround on one side and stereo on the other. Inventory each side separately. Resolution and MLP versus LPCM remain unknown; do not assume 192 kHz stereo. |
+| Bob Marley — African Herbsman | Arrived | Reported 96 kHz/24-bit (possibly stereo) and 48 kHz Dolby 5.1. Identify the audio and video domains separately; do not treat packaging's 24-bit claim as verified Dolby decoding precision or assume the stereo codec. |
+| Brian Wilson — Live at the Roxy Theatre | Arrived | Reported 96 kHz/24-bit. Confirm channels, codec and channel-group formats; no mixed-rate encoding is established yet. |
+| Warner/JVC DVD-Audio sampler/demo | Arrived | Exact edition, rates, layouts and navigation unknown. Check for multiple title sets, short programs and differing formats. |
+| Fleetwood Mac — Rumours | Expected | Confirm edition and presentations before treating it as another known-layout surround album. |
+| Reprise/Warner sampler | Expected | Exact edition and formats unknown. Inventory independently of the Warner/JVC sampler. |
+| Acura/Warner ELS Surround sampler | Expected; rear-cover photo supplied | Printed track 21 is “5.1 Channel Check”; useful for an end-to-end speaker assignment check. Track 3 is labelled “CD Quality”, which does not establish its stored sample rate. |
+
+Start with `silverside dvd info` on each available disc/side once the user
+identifies the inserted disc and drive. Save the inventory and diagnostics,
+including unsupported programs. Inspection reads navigation and bounded audio
+samples and may authenticate a protected disc; completion time is not guaranteed.
+The initial command inspects AUDIO_TS, not a DVD-Video Dolby presentation.
+Inventory can expose candidate formats and unsupported navigation, but a short
+probe does not prove constant format or successful decoding for a whole program.
+
+After inventory, prioritize the Acura channel-check program when available,
+The Nightfly's reported 48 kHz program, and any verified 44.1/88.2/176.4 kHz
+program. A labelled channel check supplements PCM equality hashes: compare
+speaker announcements with the encoded channel assignments and playback result,
+accounting for the player's routing. The photo establishes the track title,
+not whether the test uses voice announcements or how it is authored.
+
+#### Acura sampler: rear-cover transcription
+
+The supplied cover identifies a 2006 Panasonic/Rhino Special Products release,
+with printed identifiers `OPDA-7826R` and `00X41-STK-V000`. These printed track
+numbers are metadata references, not yet mapped to DVD title sets or programs.
+Artists are omitted where the cover gives none.
+
+| Track | Title | Artist / credit |
+| --- | --- | --- |
+| 1 | ELS Introduction | |
+| 2 | CD Audio Intro | |
+| 3 | China Grove — CD Quality | The Doobie Brothers |
+| 4 | DVD-Audio Intro | |
+| 5 | China Grove — DVD-Audio Quality | The Doobie Brothers |
+| 6 | Earthquake Weather | Beck |
+| 7 | Over and Out | Foo Fighters |
+| 8 | Trans-Island Skyway | Donald Fagen |
+| 9 | Let's Fall in Love | Diana Krall |
+| 10 | Kiss from a Rose | Seal |
+| 11 | What Is Rock | Blue Man Group |
+| 12 | Rocky Mountain Way (live) | Eagles |
+| 13 | Memphis in the Meantime | John Hiatt |
+| 14 | Touch Me | The Doors |
+| 15 | The Great Curve | Talking Heads |
+| 16 | Do You Realize?? | The Flaming Lips |
+| 17 | Welcome to My Life | Simple Plan |
+| 18 | Green Book | Steely Dan |
+| 19 | Sorrow in the Wind | Emmylou Harris (with Sharon White & Cheryl White) |
+| 20 | Symphony No. 4 in F Minor, Op. 36, 4th Movement: Allegro con fuoco | Tchaikovsky; Baltimore Symphony Orchestra; Sergiu Comissiona, conductor |
+| 21 | 5.1 Channel Check | |
+| 22 | Building a Surround Mix | |
+
+### Review follow-ups — 2026-11-05
+
+The user supplied a review of `bab97f4` and `dfa43c8`. Source inspection agrees
+with the following triage; this records work, not completed fixes or new disc
+validation.
+
+| Finding | Assessment and next action |
+| --- | --- |
+| 90 kHz durations versus sample counts | `DVDTrack.frames(at:)` rejects nonintegral conversions. At 44.1/88.2/176.4 kHz, durations must respectively be multiples of 100/50/25 ticks. This is a real coverage restriction, not proof that every disc at those rates fails. Obtain navigation and decoded-frame evidence before changing boundary rules. Rounding each track independently could disagree with cumulative boundaries; decoded total length alone does not establish the right cuts. |
+| Exclusive output rename on NAS | `transcodeLossless` uses `RENAME_EXCL` without a fallback. Failure on the user's filesystem is unproven. Test publication and destination-collision refusal on `/Volumes/storage` before choosing a fallback; preserve exclusive creation and verified-output guarantees. |
+| Encrypted packet scan | Confirmed: `DVDLibrary.copy` checks only the first packet after a pack header, while `DVDDirectory.copy` walks subsequent packets. Share a bounded scanner and add a synthetic system-header-then-encrypted-audio case. |
+| Output permissions | Confirmed: the final output root is created with mode 0700. Use normal umask-governed permissions for published output while explicitly retaining private permissions for `.work`. |
+| Failed/cancelled scratch data | Confirmed: failure leaves `.work`, but the report does not explain its path, size or cleanup. Make retention visible or define an explicit cleanup policy; do not delete existing user outputs. |
+| ISO help | Confirmed: `--source` advertises unprotected ISO input despite the documented library limitation. Explain the mounted, unencrypted AUDIO_TS directory path. |
+| Shared-extent stereo/surround reads | Confirmed: each selected presentation rereads its extent. Reuse only when source fingerprint, title set and complete extent match; presentation decoding and verification remain separate. Performance work, not a demonstrated audio error. |
+| GUI execution and progress | Pending integration work: use the existing blocking-work boundary and typed progress events before wiring synchronous extraction into the app. |
+| Types and function structure | Maintenance work: typed mix selection, clearer local names and extraction-step boundaries. Preserve behavior while refactoring. |
+| Architecture/dependency documentation | Update `CLAUDE.md` for DVD engine files, native PCM, helper, external ffmpeg/ffprobe and runtime-loaded Homebrew libraries. The selected dependency policy is recorded here as clarified 2026-11-01; keep library validation disabled only for the helper. |
+| Research C licensing/packaging | Keep existing notices intact. The research clients are original adapters, not copied library implementation, and are not bundled production helpers. Final packaging remains an owner decision; this review does not authorize relicensing or removal. |
+| Absolute local paths | Replace workstation-specific example paths with portable forms where practical, while retaining useful provenance for local observations. |
+| Changelog placement | After rebase, the DVD entries are under 0.9.3, not unreleased 0.9.5. Move new DVD behavior to the current Added section, including FLAC block compatibility. Describe the ALAC buffer change under Fixed only to the extent it corrects an already-released path. |
+
+#### Cleanup implemented — 2026-11-06
+
+- Physical-disc and directory reads now share `DVDPackets`, which walks every
+  packet after each pack header, bounds packet lengths to the sector, and rejects
+  encrypted audio even after system headers or earlier clear packets.
+- Output roots use mode 0777 limited by the user's umask. The `.work` directory
+  is explicitly private (0700). Failure/cancellation reports and progress text
+  identify retained scratch data, its logical byte count (or unknown if counting
+  failed), and cleanup instructions. Retention remains intentional for diagnosis;
+  this does not add resume support.
+- `DVDMix` supplies typed engine and CLI selection. `--source` help describes
+  mounted unencrypted AUDIO_TS folders instead of promising raw ISO support.
+- Architecture/dependency notes now cover the implemented DVD helper and native
+  PCM components. Example paths use `~` or `$HOME`; existing license notices are
+  unchanged. DVD changelog entries moved to unreleased 0.9.5, with FLAC block
+  compatibility described as part of the new feature; the shared ALAC writer's
+  buffer correction remains a Fixed entry in that version.
+
+Regression coverage includes system-header/clear-packet/encrypted-packet order,
+malformed packet bounds, normal output versus private scratch permissions,
+failure/cancellation reporting, scratch byte counting without following symbolic
+links, and exact versus fractional timestamp conversions. All 550 engine tests,
+five Darwin tests and three helper tests passed; formatting, lint, app build and
+CLI help checks passed. No timestamp-rounding or exclusive-publication behavior
+was changed. NAS filesystem testing, shared-extent read reuse, GUI execution and
+events, and broader extraction-step refactoring remain follow-ups.
+
+#### Physical-disc validation — 2026-11-06
+
+The user authorized reads of African Herbsman in the MATSHITA (`disk14`) and
+The Nightfly in the ASUS (`disk15`). Both discs were left inserted. Device
+identifiers describe this session only; rediscover them before another read.
+
+**The Nightfly:** volume `THE_NIGHTFLY`; separate MLP 48 kHz/24-bit 5.1 (`1:1`)
+and stereo (`1:2`) programs, each with nine navigation tracks and 112,438,400
+frames (2,342.466667 seconds). Track 9 is a one-second navigation entry in each
+presentation and was preserved. Both programs use per-track decoder resets.
+The updated CLI completed `--mix both`: eighteen FLAC files, exact per-track
+sample counts, format checks, source/FLAC PCM equality and joined PCM hashes.
+The report is complete and `.work` was removed after successful verification.
+
+| Presentation | Joined SHA-256, interleaved S24LE PCM |
+| --- | --- |
+| 5.1 | `f133b389f09b58b3bd39e5644730d9efe4cda5df05b7f9d3b91072e34ba0edc6` |
+| Stereo | `9591140e6c2f4512448dc21067b1f68a45f0d81e247aac6df9ccca616a4afefb` |
+
+**African Herbsman:** volume `DVDVOLUME`; one audio title-set presentation with
+26 contiguous track cells, 4,693.115833 seconds total. Navigation has three
+continuous timestamp runs: tracks 1–10 start at PTS 98, tracks 11–18 restart at
+PTS 97, and tracks 19–26 restart at PTS 100. The current inventory correctly
+marks it unsupported for mixed timestamp discontinuities before format probing.
+Do not describe this as a 44.1-family sample-rounding failure.
+
+A bounded physical sample read failed with no MKB and libdvdread's `-1/128`
+read result, matching the known no-MKB library limitation. Its mounted,
+read-only `/Volumes/DVDVOLUME/AUDIO_TS` files worked through `DVDDirectory`.
+512-sector samples at the starts of tracks 1, 11 and 19 all probe as MLP
+96 kHz/24-bit 5.1. Each decoded 0.25 seconds (24,000 frames) to six-channel
+24-bit FLAC without diagnostics. These are short-sample observations, not a
+full-disc verification or proof of a constant format across all tracks. No
+stereo presentation or DVD-Video Dolby stream was verified. Supporting this
+disc needs validated handling of continuous runs separated by decoder resets;
+the existing rejection was retained.
+
+Local artifacts are under `/private/tmp/silverside-dvd-20261105/` (the directory
+was named at session start): both inventory JSON files and logs, the complete
+`nightfly-rip/` with its JSON/text reports, and African Herbsman's bounded
+samples, format probes, preview decodes and `african-herbsman-sample-results.json`.
+These media files are not part of the repository.
+
 ## Intended result
 
 Given a supported disc, image, or extracted directory, enumerate its audio presentations, let the user choose the stereo or surround program and tracks, and write correctly tagged lossless files at the source's resolution and with the source's speaker assignments. Preserve the source and report exactly what was read, decoded, transformed, and verified.
@@ -230,10 +386,10 @@ Read-only inspection on 2026-10-31 established:
 
 Local inputs (not repository fixtures):
 
-- `/Users/planders/Movies/DVD/Glen Phillips raw.iso`
-- `/Users/planders/Movies/DVD/American Beauty DVD-A raw.iso`
-- `/Users/planders/Movies/DVD/Glen Phillips/VIDEO_TS`
-- `/Users/planders/Movies/DVD/American Beauty/VIDEO_TS`
+- `~/Movies/DVD/Glen Phillips raw.iso`
+- `~/Movies/DVD/American Beauty DVD-A raw.iso`
+- `~/Movies/DVD/Glen Phillips/VIDEO_TS`
+- `~/Movies/DVD/American Beauty/VIDEO_TS`
 
 `dvdbackup -M` in these runs backed up the video domain. `hdiutil makehybrid` repackaged the supplied directory; it could not restore omitted audio files. `dd` copied sectors without decrypting CPPM. Retain the raw images unchanged.
 
@@ -543,9 +699,9 @@ clang -Wall -Wextra -Werror -I/opt/homebrew/include \
   -o /private/tmp/silverside-dvd-inventory/inventory
 
 /private/tmp/silverside-dvd-inventory/inventory \
-  '/Users/planders/Movies/DVD/Glen Phillips raw.iso'
+  "$HOME/Movies/DVD/Glen Phillips raw.iso"
 /private/tmp/silverside-dvd-inventory/inventory \
-  '/Users/planders/Movies/DVD/American Beauty DVD-A raw.iso'
+  "$HOME/Movies/DVD/American Beauty DVD-A raw.iso"
 ```
 
 Both C probes compiled with warnings treated as errors and both audio inventory runs returned zero. The independent raw-byte check read each ATS table at its declared sector offset, then compared the program timestamps/durations and cell extents with the C report. This does not establish complete parser correctness, decryption, or decoded-audio integrity.

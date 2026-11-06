@@ -152,16 +152,7 @@ final class DVDLibrary {
                     "Short DVD read at sector \(first + done): \(got)/\(requested). Check drive access and authentication. libdvdread 7.1.1/libdvdcss 1.6.0 also fail on some unprotected sources without an MKB; see docs/internal/DVD.md."
                 )
             }
-            for offset in stride(from: 0, to: got * 2048, by: 2048) {
-                if buffer[offset..<offset + 4].elementsEqual([0, 0, 1, 0xba]) {
-                    let pes = offset + 14 + Int(buffer[offset + 13] & 7)
-                    if buffer[pes..<pes + 4].elementsEqual([0, 0, 1, 0xbd]), buffer[pes + 6] & 0x30 != 0 {
-                        throw DVDError(
-                            "Audio is still encrypted. CPPM authentication needs the original disc and drive access; a raw ISO alone may be insufficient."
-                        )
-                    }
-                }
-            }
+            try DVDPackets.checkAudio(buffer.prefix(got * 2048))
             try destination.write(contentsOf: buffer.prefix(got * 2048))
             done += got
             if Date().timeIntervalSince(progress) >= 2 || done == count {

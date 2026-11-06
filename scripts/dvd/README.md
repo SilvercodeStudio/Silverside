@@ -5,7 +5,7 @@ Development utilities for the exploration in [DVD.md](../../docs/internal/DVD.md
 The selected production dependency policy is user-installed Homebrew libraries,
 with DVD extraction unavailable when they are absent. Silverside will not bundle
 or download libdvdread/libdvdcss. These research clients directly link to the
-local libdvdread; the proposed shipped helper will instead load it at runtime so
+local libdvdread; the production helper instead loads it at runtime so
 it can start and report dependency availability even without the libraries.
 
 - `inventory.c`: read-only DVD-Audio navigation inventory from an image, through stream callbacks (no physical device access).

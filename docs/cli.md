@@ -78,7 +78,11 @@ normalization or ReplayGain is applied. Optional disc text is not parsed yet,
 so track titles are placeholders. Menus and pictures are not exported.
 
 Ctrl-C stops the helper/decoder and retains an incomplete report and diagnostic
-work files. A program's tracks become final only after its checks pass. There
+work files. The report and terminal message name the retained `.work` folder
+and its size in bytes. After investigating the failure, you can delete that
+folder while keeping the reports and any completed programs. Published folders
+use normal permissions governed by your umask; `.work` stays private.
+A program's tracks become final only after its checks pass. There
 is no resume yet; choose a new output folder for another attempt. Temporary
 space can exceed the size of the selected audio while FLAC is being verified.
 

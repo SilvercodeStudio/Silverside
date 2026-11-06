@@ -10,6 +10,8 @@ public struct DVDRipReport: Codable, Sendable {
     public var finished: Date?
     public var status = "incomplete"
     public var error: String?
+    /// Scratch data retained after failure or cancellation, relative to the output root.
+    public var retainedWork: RetainedWork?
     public var inventory: DVDInventory?
     public var ffmpegVersion: String?
     public var selected = [String]()
@@ -38,11 +40,20 @@ public struct DVDRipReport: Codable, Sendable {
         public var pcmSHA256: String
         public var fileSHA256: String
     }
+    public struct RetainedWork: Codable, Sendable {
+        public var directory: String
+        /// Logical file bytes, not allocated disk space. Nil if counting was incomplete.
+        public var bytes: Int64?
+    }
+}
+
+public enum DVDMix: String, CaseIterable, Codable, Sendable {
+    case auto, surround, stereo, both
 }
 
 public enum DVDExtraction {
     /// Never silently choose among several programs of the requested channel count.
-    public static func select(_ inventory: DVDInventory, mix: String = "auto", title: String? = nil) throws
+    public static func select(_ inventory: DVDInventory, mix: DVDMix = .auto, title: String? = nil) throws
         -> [DVDPresentation]
     {
         if let title {
@@ -69,18 +80,17 @@ public enum DVDExtraction {
             return found[0]
         }
         switch mix {
-        case "auto": return [try one(candidates.contains { $0.format?.channels == 6 } ? 6 : 2)]
-        case "surround": return [try one(6)]
-        case "stereo": return [try one(2)]
-        case "both": return [try one(6), try one(2)]
-        default: throw DVDError("Mix must be auto, surround, stereo, or both.")
+        case .auto: return [try one(candidates.contains { $0.format?.channels == 6 } ? 6 : 2)]
+        case .surround: return [try one(6)]
+        case .stereo: return [try one(2)]
+        case .both: return [try one(6), try one(2)]
         }
     }
 
     /// The destination must not exist. All media is staged in this newly claimed directory;
     /// tracks are promoted only after format, duration and PCM checks pass.
     public static func rip(
-        source: String, output: URL, tools: DVDTools, mix: String = "auto", title: String? = nil,
+        source: String, output: URL, tools: DVDTools, mix: DVDMix = .auto, title: String? = nil,
         stop: StopToken = StopToken(), progress: @escaping (String) -> Void = { _ in }
     ) throws -> DVDRipReport {
         let root = output.standardizedFileURL.resolvingSymlinksInPath()
@@ -95,7 +105,7 @@ public enum DVDExtraction {
                 throw DVDError("The output cannot be inside the DVD source directory.")
             }
         }
-        guard mkdir(root.path, 0o700) == 0 else {
+        guard mkdir(root.path, 0o777) == 0 else {
             throw DVDError(
                 "Cannot create a new output directory (the parent must exist, and the output must not): \(root.path). \(String(cString: strerror(errno)))"
             )
@@ -103,7 +113,8 @@ public enum DVDExtraction {
         let work = root.appendingPathComponent(".work", isDirectory: true)
         var report = DVDRipReport()
         do {
-            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: false)
+            try FileManager.default.createDirectory(
+                at: work, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
             try save(report, to: root)
             progress("Inspecting DVD-Audio programs…")
             let inventory = try tools.inventory(source: source, work: work, stop: stop)
@@ -221,9 +232,43 @@ public enum DVDExtraction {
             report.status = error is CancellationError ? "cancelled" : "failed"
             report.error = String(describing: error)
             report.finished = Date()
+            if FileManager.default.fileExists(atPath: work.path) {
+                report.retainedWork = .init(directory: work.lastPathComponent, bytes: retainedBytes(in: work))
+                progress(retainedWorkMessage(report.retainedWork!, root: root))
+            }
             try? save(report, to: root)
             throw error
         }
+    }
+
+    /// Count regular scratch files without following symbolic links or loading media.
+    static func retainedBytes(in directory: URL) -> Int64? {
+        var complete = true
+        guard
+            let entries = FileManager.default.enumerator(
+                at: directory, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey],
+                errorHandler: { _, _ in
+                    complete = false
+                    return true
+                })
+        else { return nil }
+        var total: Int64 = 0
+        for case let file as URL in entries {
+            guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+            else { return nil }
+            if values.isSymbolicLink != true, values.isRegularFile == true {
+                guard let size = values.fileSize else { return nil }
+                total += Int64(size)
+            }
+        }
+        return complete ? total : nil
+    }
+
+    static func retainedWorkMessage(_ work: DVDRipReport.RetainedWork, root: URL) -> String {
+        let size = work.bytes.map { "\($0) bytes" } ?? "size unknown"
+        return "Retained scratch files: \(root.appendingPathComponent(work.directory).path) (\(size)). "
+            + "There is no resume support. After inspecting the failure, you may delete this .work folder; "
+            + "keep the reports and any completed program folders."
     }
 
     static let common = ["-hide_banner", "-v", "warning", "-xerror", "-n", "-nostdin"]
@@ -361,6 +406,7 @@ public enum DVDExtraction {
             "Volume: \(report.inventory?.volume ?? "unknown")",
         ]
         if let error = report.error { lines += ["Error: \(error)"] }
+        if let work = report.retainedWork { lines += [retainedWorkMessage(work, root: root)] }
         for p in report.programs {
             lines += [
                 "", "Program \(p.id): \(p.complete ? "complete" : "incomplete")",

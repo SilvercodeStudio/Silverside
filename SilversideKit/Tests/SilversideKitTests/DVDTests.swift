@@ -69,9 +69,9 @@ struct DVDTests {
             source: "fixture", volume: "fixture", fingerprint: "fixture", libraryPath: "fixture",
             presentations: [surround])
         #expect(try DVDExtraction.select(inventory).map(\.id) == ["1:1"])
-        #expect(throws: DVDError.self) { try DVDExtraction.select(inventory, mix: "stereo") }
+        #expect(throws: DVDError.self) { try DVDExtraction.select(inventory, mix: .stereo) }
         inventory.presentations.append(stereo)
-        #expect(try DVDExtraction.select(inventory, mix: "both").map(\.id) == ["1:1", "1:2"])
+        #expect(try DVDExtraction.select(inventory, mix: .both).map(\.id) == ["1:1", "1:2"])
         var extra = surround
         extra.title = 3
         inventory.presentations.append(extra)
@@ -101,7 +101,20 @@ struct DVDTests {
         let original = try Data(contentsOf: reportURL)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        #expect(try decoder.decode(DVDRipReport.self, from: original).status == "failed")
+        let report = try decoder.decode(DVDRipReport.self, from: original)
+        #expect(report.status == "failed")
+        #expect(report.retainedWork?.directory == ".work")
+        #expect(report.retainedWork?.bytes == 0)
+        let text = try String(contentsOf: output.appendingPathComponent("Rip Report.txt"), encoding: .utf8)
+        #expect(text.contains("Retained scratch files:") && text.contains("no resume support"))
+        let reference = root.appendingPathComponent("normal-directory")
+        try FileManager.default.createDirectory(at: reference, withIntermediateDirectories: false)
+        func permissions(_ folder: URL) throws -> Int {
+            let attributes = try FileManager.default.attributesOfItem(atPath: folder.path)
+            return try #require(attributes[.posixPermissions] as? NSNumber).intValue & 0o777
+        }
+        #expect(try permissions(output) == permissions(reference))
+        #expect(try permissions(output.appendingPathComponent(".work")) & 0o077 == 0)
         #expect(throws: DVDError.self) {
             try DVDExtraction.rip(source: "/missing-source", output: output, tools: tools)
         }
@@ -110,6 +123,29 @@ struct DVDTests {
             try DVDExtraction.rip(source: root.path, output: root.appendingPathComponent("inside"), tools: tools)
         }
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("inside").path))
+    }
+
+    @Test func retainedWorkCountsHiddenFilesWithoutFollowingLinks() throws {
+        let root = try temporary()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let work = root.appendingPathComponent(".work")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: false)
+        try Data(repeating: 0, count: 4096).write(to: work.appendingPathComponent("program.aob"))
+        try Data(repeating: 1, count: 13).write(to: work.appendingPathComponent(".diagnostics"))
+        let outside = root.appendingPathComponent("other-data")
+        try Data(repeating: 2, count: 100).write(to: outside)
+        try FileManager.default.createSymbolicLink(at: work.appendingPathComponent("link"), withDestinationURL: outside)
+        #expect(DVDExtraction.retainedBytes(in: work) == 4109)
+        #expect(try Data(contentsOf: outside).count == 100)
+    }
+
+    @Test func timestampsRequireEvidenceBeforeRounding() throws {
+        for (rate, ticks, frames) in [(44_100, 100, 49), (88_200, 50, 49), (176_400, 25, 49), (48_000, 150, 80)] {
+            var track = DVDTrack(number: 1, startPTS: 0, durationPTS: Int64(ticks), firstSector: 0, lastSector: 1)
+            #expect(try track.frames(at: rate) == Int64(frames))
+            track.durationPTS += 1
+            #expect(throws: DVDError.self) { try track.frames(at: rate) }
+        }
     }
 
     @Test func cancellationTerminatesChildAndRecordsCancellation() throws {
@@ -136,9 +172,10 @@ struct DVDTests {
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        #expect(
-            try decoder.decode(DVDRipReport.self, from: Data(contentsOf: output.appendingPathComponent("dvd-rip.json")))
-                .status == "cancelled")
+        let report = try decoder.decode(
+            DVDRipReport.self, from: Data(contentsOf: output.appendingPathComponent("dvd-rip.json")))
+        #expect(report.status == "cancelled")
+        #expect(report.retainedWork?.directory == ".work" && report.retainedWork?.bytes == 0)
     }
 
     @Test func packetValidationRejectsScramblingAndBadMarkers() throws {

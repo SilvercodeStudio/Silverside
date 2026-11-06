@@ -7,6 +7,13 @@ command-line tool.
 
 ### Added
 
+- `silverside dvd info` lists DVD-Audio programs, and `silverside dvd rip`
+  extracts supported MLP stereo and 5.1 programs into numbered FLAC tracks,
+  with sample-count and PCM checks, playlists, and a rip report. Protected
+  discs use an optional helper and user-installed Homebrew DVD libraries.
+  FLAC files use blocks compatible with Apple's audio decoder. Completed
+  output follows normal folder permissions; failed or cancelled extractions
+  report the location and size of retained scratch files and how to remove them.
 - A disc of a set can have a cover of its own, such as each volume's cover in
   a box set: a cover chosen on one disc asks whether it is for that disc only
   or for every disc. That disc's files embed its own cover in place of the
@@ -20,6 +27,8 @@ command-line tool.
 
 ### Fixed
 
+- Multichannel ALAC encoding handles poorly compressible 24-bit audio
+  without producing an empty or incomplete file.
 - A track whose loud parts were clipped could be taken for a DTS stream after
   its rip (*Remember* on John Lennon's *Anthology*), and then its encoding
   failed. Clipped samples can look like DTS sync words, but too close
@@ -247,10 +256,6 @@ command-line tool.
 
 ### Added
 
-- `silverside dvd info` lists DVD-Audio programs, and `silverside dvd rip`
-  extracts supported MLP stereo and 5.1 programs into numbered FLAC tracks,
-  with sample-count and PCM checks, playlists, and a rip report. Protected
-  discs use an optional helper and user-installed Homebrew DVD libraries.
 - A release with no images in the Cover Art Archive takes another release
   of the album's, as the archive chooses it: the cover and, if you keep
   all artwork, every other image. A chip says "Another release's cover",
@@ -303,11 +308,6 @@ command-line tool.
 
 ### Fixed
 
-- DVD-Audio FLAC output uses blocks that Apple's audio decoder can read,
-  preserving the same samples and track boundaries. Earlier extractions
-  could play in VLC but fail to open through Apple's audio frameworks.
-- Multichannel ALAC encoding handles poorly compressible 24-bit audio
-  without producing an empty or incomplete file.
 - After CTDB's repair data was tried and the errors were too many, the
   advice said that the matching entries had no repair data. It now says
   the errors were too many.

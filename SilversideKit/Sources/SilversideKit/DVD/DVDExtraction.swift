@@ -18,7 +18,7 @@ public struct DVDRipReport: Codable, Sendable {
     public var programs = [Program]()
     public var limitations = [
         "Local decode and PCM equality checks only; no independent database verification or secure reread consensus.",
-        "Only contiguous, one-cell-per-track, constant-format MLP stereo/5.1 programs are supported initially.",
+        "Only contiguous, one-cell-per-track MLP stereo/5.0/5.1 with a constant format within each decoding run is supported.",
         "No resampling, normalization, ReplayGain, or generic stereo downmix. Authored stereo substreams are identified separately.",
         "Optional DVD-Audio text is not parsed; filenames and title tags are numbered placeholders.",
         "Menus, pictures, downmix instructions and other presentation metadata are not preserved in FLAC.",
@@ -40,6 +40,8 @@ public struct DVDRipReport: Codable, Sendable {
         public var lastTrack: Int
         public var frames: Int64
         public var pcmSHA256: String
+        public var format: DVDAudioFormat?
+        public var roundedDuration: Bool?
     }
     public struct Track: Codable, Sendable {
         public var number: Int
@@ -47,6 +49,7 @@ public struct DVDRipReport: Codable, Sendable {
         public var frames: Int64
         public var pcmSHA256: String
         public var fileSHA256: String
+        public var format: DVDAudioFormat?
     }
     public struct RetainedWork: Codable, Sendable {
         public var directory: String
@@ -68,30 +71,30 @@ public enum DVDExtraction {
             guard let p = inventory.presentations.first(where: { $0.id == title }) else {
                 throw DVDError("No DVD program \(title). Run dvd info to list programs.")
             }
-            guard p.unsupportedReason == nil, p.format != nil else {
+            guard p.unsupportedReason == nil, p.extractionMix != nil else {
                 throw DVDError(p.unsupportedReason ?? "Unknown audio format.")
             }
             return [p]
         }
         let candidates = inventory.presentations.filter {
-            $0.unsupportedReason == nil && $0.format != nil && !$0.shortProgram
+            $0.unsupportedReason == nil && $0.extractionMix != nil && !$0.shortProgram
         }
-        func one(_ channels: Int) throws -> DVDPresentation {
-            let found = candidates.filter { $0.format?.channels == channels }
+        func one(_ mix: String) throws -> DVDPresentation {
+            let found = candidates.filter { $0.extractionMix == mix }
             guard found.count == 1 else {
                 throw DVDError(
                     found.isEmpty
-                        ? "No supported \(channels)-channel program. Run dvd info to inspect the disc."
-                        : "Several \(channels)-channel programs (\(found.map(\.id).joined(separator: ", "))). Select one with --title SET:TITLE."
+                        ? "No supported \(mix.lowercased()) program. Run dvd info to inspect the disc."
+                        : "Several \(mix.lowercased()) programs (\(found.map(\.id).joined(separator: ", "))). Select one with --title SET:TITLE."
                 )
             }
             return found[0]
         }
         switch mix {
-        case .auto: return [try one(candidates.contains { $0.format?.channels == 6 } ? 6 : 2)]
-        case .surround: return [try one(6)]
-        case .stereo: return [try one(2)]
-        case .both: return [try one(6), try one(2)]
+        case .auto: return [try one(candidates.contains { $0.extractionMix == "Surround" } ? "Surround" : "Stereo")]
+        case .surround: return [try one("Surround")]
+        case .stereo: return [try one("Stereo")]
+        case .both: return [try one("Surround"), try one("Stereo")]
         }
     }
 
@@ -136,9 +139,8 @@ public enum DVDExtraction {
             try save(report, to: root)
             for presentation in programs {
                 try stop.check()
-                let format = presentation.format!
                 let folder =
-                    "Program \(presentation.titleSet)-\(presentation.title) - \(format.channels == 2 ? "Stereo" : "Surround")"
+                    "Program \(presentation.titleSet)-\(presentation.title) - \(presentation.extractionMix ?? "Mixed")"
                 let destination = root.appendingPathComponent(folder, isDirectory: true)
                 try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
                 let sourceFile = try readProgram(
@@ -164,8 +166,13 @@ public enum DVDExtraction {
                     staged += decoded.files
                     try save(report, to: root)
                 }
-                report.programs[programIndex].pcmSHA256 = try joinedHash(
-                    staged, bits: format.bits, tools: tools, work: programWork, stop: stop)
+                // Concat demuxing can silently convert changing rates/layouts. A mixed
+                // program has verified native PCM hashes per run, no joined PCM hash.
+                let formats = try presentation.extractionFormats()
+                if let format = formats.first, formats.allSatisfy({ $0 == format }) {
+                    report.programs[programIndex].pcmSHA256 = try joinedHash(
+                        staged, bits: format.bits, tools: tools, work: programWork, stop: stop)
+                }
                 try stop.check()
                 try publish(staged, tracks: report.programs[programIndex].tracks, to: destination)
                 report.programs[programIndex].complete = true
@@ -302,14 +309,17 @@ public enum DVDExtraction {
         return try hashValue(result.output)
     }
     static func split(
-        _ full: URL, p: DVDPresentation, tracks selected: [DVDTrack]? = nil,
+        _ full: URL, p: DVDPresentation, tracks selected: [DVDTrack]? = nil, frameCounts supplied: [Int64]? = nil,
         tools: DVDTools, work: URL, stop: StopToken
     ) throws {
         let tracks = selected ?? p.tracks
+        let counts = try supplied ?? tracks.map { try $0.frames(at: p.format!.sampleRate) }
+        guard counts.count == tracks.count else { throw DVDError("Incomplete run sample counts.") }
         var filters = ["[0:a]asplit=\(tracks.count)" + tracks.indices.map { "[s\($0)]" }.joined()]
         var offset: Int64 = 0
-        for (i, track) in tracks.enumerated() {
-            let end = try offset + track.frames(at: p.format!.sampleRate)
+        for (i, count) in counts.enumerated() {
+            let (end, overflow) = offset.addingReportingOverflow(count)
+            guard count > 0, !overflow else { throw DVDError("Invalid track sample count.") }
             filters.append("[s\(i)]atrim=start_sample=\(offset):end_sample=\(end),asetpts=N/SR/TB[t\(i)]")
             offset = end
         }
@@ -368,7 +378,14 @@ public enum DVDExtraction {
                 "Source sectors SHA-256: \(p.sourceSHA256)",
             ]
             if let hash = p.pcmSHA256 { lines += ["Joined PCM SHA-256: \(hash)"] }
+            if p.pcmSHA256 == nil, p.complete {
+                lines += ["Native formats differ: PCM verified separately for each run; no joined PCM hash."]
+            }
             for run in p.runs ?? [] {
+                if let format = run.format { lines += ["  Run format: \(format)"] }
+                if run.roundedDuration == true {
+                    lines += ["  44.1 kHz duration rounded to nearest sample, confirmed by full decode."]
+                }
                 lines += [
                     "  Continuous run, tracks \(run.firstTrack)–\(run.lastTrack): \(run.frames) frames; PCM SHA-256 \(run.pcmSHA256)"
                 ]

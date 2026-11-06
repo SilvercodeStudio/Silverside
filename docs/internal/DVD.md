@@ -12,12 +12,17 @@ playlists, `dvd-rip.json` and `Rip Report.txt`. The separate Swift helper loads
 Homebrew libraries at runtime through opaque public APIs, with no linked DVD
 libraries or Homebrew build dependencies. The GUI has not changed.
 
-Supported initially: contiguous one-cell-per-track layouts, constant-format
-16/24-bit MLP stereo/5.1, exact 90 kHz timestamp-to-sample conversion, separate
+Supported initially: contiguous one-cell-per-track layouts, 16/24-bit MLP
+stereo/5.0/5.1 with a constant format within each decoding run, separate
 stereo programs and a decoded stereo substream exposed by shared-extent title
 references. Unsupported navigation/codecs produce explicit errors. `auto`
 prefers surround; `stereo`, `surround`, `both`, or `--title SET:TITLE` select.
 Ambiguity requires explicit selection. Short standalone programs require a title.
+Formats may change at timestamp restarts; a program containing both stereo and
+surround requires an explicit title. 5.0 and 5.1 both count as surround.
+Fractional durations are accepted only for independent single-track 44.1 kHz
+runs, rounded to the nearest sample and confirmed by a complete decode. All
+internal cuts and other rates still require exact timestamp-to-sample conversion.
 
 The helper rechecks the navigation fingerprint before a bounded read. The
 engine compares packet timestamps with navigation and groups tracks into
@@ -27,6 +32,9 @@ tracks within each run share decoder state before sample-based cuts. A clock
 restart is only a candidate boundary: every run must decode without diagnostics
 and pass the format, exact sample-count and source/FLAC/joined-track PCM checks.
 It verifies output rate, bit depth, channel layout, sample count and PCM hashes.
+Reports record formats per run and track, and whether a duration was rounded.
+Mixed-format programs have no whole-program PCM hash; per-run hashes avoid
+passing heterogeneous audio through a concat demuxer that could convert it.
 Decoder warnings fail the operation. Programs are promoted from private staging
 only after checks pass. Reports distinguish completion, failure and cancellation;
 no overwriting or resume. Source read and local decode checks are not independent
@@ -36,6 +44,49 @@ Optional DVD-Audio Audio Text can contain album/group/track names, but is not
 required. It is not parsed by this milestone; files and tags use numbered
 placeholders. See the Audio Text section of the [Sonic authoring manual](https://www.quadraphonic.info/DVD-Audio-SACD-Blu-Ray/manuals/Sonic-DAC_Guide-draft2.pdf).
 Metadata lookup, artwork and GUI selection follow later.
+
+### Offline native-format validation — 2026-11-06
+
+With the drives reserved for GUI use, the cached JVC sampler's programs 1:1 and
+1:2 passed full extraction through the normal filesystem helper and CLI. The
+fixture's IFO tables were reconstructed from the saved navigation JSON; they
+are **not original IFO files or a complete preserved disc image**. AOB files
+are unchanged hard links to earlier decrypted reads. No drive discovery,
+reads, mounting or ejecting occurred during this work.
+
+| Program | Verified output | Timing and layout evidence |
+| --- | --- | --- |
+| 1:1 | 11 FLAC tracks, 96 kHz/24-bit | Track 3 retains 5.0, all others 5.1; each independent run passed source/FLAC/joined-track PCM equality and exact sample count |
+| 1:2 | 8 FLAC tracks, 24-bit/5.1 | Tracks 1–7 retain 44.1 kHz; track 8 retains 96 kHz; six fractional durations round to the full decoded count |
+
+Program 1:2's decoded frame counts are `2838080, 2817600, 2836600, 2795400,
+2840320, 2849880, 2836040, 116720`. No tolerance is applied to the final
+count: a generated fixture with navigation wrong by one sample is rejected
+before any track is published. Rounding is restricted to independent,
+single-track 44.1 kHz runs. Fractional internal cuts, 88.2/176.4 kHz rounded
+navigation and changes within continuous runs still need further evidence.
+This does not support differing simultaneous channel-group sample rates in MLP.
+
+Each run and track records its source format; older reports remain readable
+because the new fields are optional. Both sampler programs omit a whole-program
+PCM hash, since their formats differ. Every run still has a source-to-FLAC and
+joined-track PCM hash. Track 3's 5.0 PCM SHA-256 is
+`559219858b9b4457faed1001ec8927df261e784d9b4c18f88815ee9908371ccc`.
+The input AOB hashes are
+`fb4c12b52d4259fbeee6d0d4b58e88cdbdf8e91cf41f06bf05f51d99b733546c` (1:1) and
+`ca23b0625ebbf47fcb35b0b0fe22f7b57e77ff5516c9f61e371dd5b4ac2b2e6a` (1:2).
+
+Artifacts are under `/private/tmp/silverside-dvd-20261106/`:
+`jvc-offline-fixture/AUDIO_TS`, `jvc-offline-inventory.json`,
+`jvc-offline-main-rip/` and `jvc-offline-extra-rip/`. Both outputs contain
+playlists and JSON/text reports; successful staging folders were removed.
+
+Generated MLP tests independently decode reference streams and compare hashes
+across 44.1 kHz/24-bit stereo, 48 kHz/16-bit 5.0 and 96 kHz/24-bit 5.1 runs.
+Distinct signals in each channel check permutations and unintended channel
+insertion. Native PCM tests also compare 5.0 FLAC and ALAC against an independent
+ffmpeg decode. Full validation passed: 558 engine, 5 Darwin and 5 helper tests
+(hardware tests disabled), formatting, lint, and the app build without launching it.
 
 ### CLI validation and remaining dependency work
 

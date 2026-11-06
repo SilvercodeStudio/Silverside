@@ -227,6 +227,31 @@ struct CDGraphicsTests {
         #expect(runs.map(\.packs) == [[0, 3, 4], [40, 41], [200]])
     }
 
+    /// A silent track left out keeps its graphics by the name its file would have; when the
+    /// template gives that name to another track too, the encoding stops before it writes,
+    /// and does not replace that track's graphics.
+    @Test func refusesGraphicsOfTwoTracksWithOneName() throws {
+        let (folder, library) = try EncodingTests().makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        try WAVFile.write(
+            [UInt32](repeating: 0, count: 75 * CDDA.samplesPerSector), to: folder.appending(path: "Track 01.wav"))
+        try Data(CDGraphicsVideoTests.pack(1, [1, 0])).write(to: folder.appending(path: "Track 01.cdg"))
+        try Data(CDGraphicsVideoTests.pack(1, [2, 0])).write(to: folder.appending(path: "Track 02.cdg"))
+        try RipReport.update(reportAt: folder.appending(path: "disc.json")) {
+            $0.tracks[0].graphics = .init(file: "Track 01.cdg")
+            $0.tracks[1].graphics = .init(file: "Track 02.cdg")
+            $0.tracks[0].crc32SkipZero = "00000000"
+        }
+        var encoder = DiscEncoder(format: .flac)
+        encoder.leavesOutSilentTracks = true
+        encoder.trackTemplate = NameTemplate("Song")
+        let disc = try RippedDisc(folder: folder)
+        #expect(throws: EncodingError.self) { try encoder.plannedFiles(disc, into: library) }
+        #expect(throws: EncodingError.self) { try encoder.encodeWithRecord(disc, into: library) }
+        let written = FileManager.default.enumerator(atPath: library.path)?.allObjects as? [String] ?? []
+        #expect(!written.contains { $0.hasSuffix(".cdg") || $0.hasSuffix(".flac") })
+    }
+
     /// Each track's graphics go into the album folder beside its file, by its name, as karaoke
     /// programs pair them; a rename in the library takes them along, and an album encoded again
     /// from its own files keeps them.

@@ -404,7 +404,7 @@ public struct DiscEncoder: Sendable {
         let (release, medium, jobs, leftOut) = try plan(disc, into: library)
         let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
         let data = jobs.first.map { dataTrackCopies(of: disc, into: $0.folder, discPart: discPart) } ?? []
-        let graphics = graphicsCopies(of: disc, files: (jobs + leftOut).map { ($0.ripped.number, $0.file) })
+        let graphics = try graphicsCopies(of: disc, files: (jobs + leftOut).map { ($0.ripped.number, $0.file) })
         // A data track's image, and the folder its files go into; a track's CD+G graphics.
         return jobs.map(\.file)
             + data.filter { !Self.sameFile($0.source, $0.target) }.flatMap {
@@ -416,13 +416,15 @@ public struct DiscEncoder: Sendable {
     /// The tracks' CD+G graphics to copy into the album folder, each beside its track's file
     /// and named as it is ("01 Song.cdg" beside "01 Song.mp3"), as karaoke programs pair them:
     /// from the rip's `Track NN.cdg`, or, when an album is the source, from its own. A decoded
-    /// copy beside the album gets none, as it gets no data tracks.
+    /// copy beside the album gets none, as it gets no data tracks. Throws if two would have
+    /// one name: a silent track left out keeps its graphics by the name its file would have,
+    /// which no other check sees, and a copy would replace the other track's.
     func graphicsCopies(
         of disc: RippedDisc, files: [(track: Int, file: URL)]
-    ) -> [(track: Int, source: URL, target: URL)] {
+    ) throws -> [(track: Int, source: URL, target: URL)] {
         guard albumSuffix == nil, let report = disc.report else { return [] }
         let albumFiles = disc.isAlbum ? report.encoding?.graphicsFiles ?? [] : []
-        return files.compactMap { track, file in
+        let copies: [(track: Int, source: URL, target: URL)] = files.compactMap { track, file in
             guard let graphics = report.tracks.first(where: { $0.number == track })?.graphics else { return nil }
             let source =
                 disc.isAlbum
@@ -430,6 +432,8 @@ public struct DiscEncoder: Sendable {
                 : disc.folder.appending(path: graphics.file)
             return source.map { (track, $0, Self.graphicsFile(of: file)) }
         }
+        try Self.checkUniqueDestinations(copies.map(\.target))
+        return copies
     }
 
     /// The `.cdg` file beside a track's file, by its name.
@@ -858,7 +862,7 @@ public struct DiscEncoder: Sendable {
         // a track's CD+G graphics.
         // A track of silence left out of the album keeps its graphics, by the name its file
         // would have: a CD+G track can draw over silence.
-        let graphicsCopies = graphicsCopies(
+        let graphicsCopies = try graphicsCopies(
             of: disc, files: (jobs + planned.leftOut).map { ($0.ripped.number, $0.file) })
         if !overwrites,
             let existing =

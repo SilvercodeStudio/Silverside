@@ -11,7 +11,10 @@ struct DVDCommand: AsyncParsableCommand {
 
 struct DVDSource: ParsableArguments {
     @OptionGroup var device: DeviceOptions
-    @Option(help: "An unprotected DVD-Audio ISO or DVD directory, instead of a drive.") var source: String?
+    @Option(
+        help:
+            "An unencrypted AUDIO_TS folder or its parent, instead of a drive. For an unprotected ISO, mount it read-only and pass its AUDIO_TS folder."
+    ) var source: String?
 
     func path() throws -> String {
         if let source {
@@ -87,15 +90,12 @@ struct DVDRip: AsyncParsableCommand {
         commandName: "rip", abstract: "Extract DVD-Audio to per-track FLAC files and a rip report.")
     @OptionGroup var source: DVDSource
     @Option(name: .shortAndLong, help: "A new output folder; its parent must already exist.") var output: String
-    @Option(help: "auto (prefer surround), surround, stereo, or both. Ambiguous programs require --title.") var mix =
-        "auto"
+    @Option(help: "auto (prefer surround), surround, stereo, or both. Ambiguous programs require --title.") var mix:
+        DVDMix = .auto
     @Option(help: "One explicit program from dvd info, such as 1:2. Cannot combine with --mix.") var title: String?
 
     func validate() throws {
-        guard ["auto", "surround", "stereo", "both"].contains(mix) else {
-            throw ValidationError("--mix must be auto, surround, stereo, or both.")
-        }
-        guard title == nil || mix == "auto" else { throw ValidationError("Use --title or --mix, not both.") }
+        guard title == nil || mix == .auto else { throw ValidationError("Use --title or --mix, not both.") }
     }
     func run() async throws {
         try Disclaimer.require()
@@ -113,3 +113,5 @@ struct DVDRip: AsyncParsableCommand {
         } catch is CancellationError { throw ExitCode(130) }
     }
 }
+
+extension DVDMix: ExpressibleByArgument {}

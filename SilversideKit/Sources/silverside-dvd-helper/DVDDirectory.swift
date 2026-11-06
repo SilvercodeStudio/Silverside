@@ -84,21 +84,7 @@ struct DVDDirectory {
                     throw DVDError("Short AOB file read.")
                 }
                 let bytes = [UInt8](data)
-                for base in stride(from: 0, to: data.count, by: 2048) {
-                    if bytes[base..<base + 4].elementsEqual([0, 0, 1, 0xba]) {
-                        var pos = base + 14 + Int(bytes[base + 13] & 7)
-                        while pos + 9 <= base + 2048, bytes[pos..<pos + 3].elementsEqual([0, 0, 1]) {
-                            if bytes[pos + 3] == 0xbd, bytes[pos + 6] & 0x30 != 0 {
-                                throw DVDError(
-                                    "AUDIO_TS still contains encrypted audio. Use --device with the original disc for CPPM authentication."
-                                )
-                            }
-                            let end = pos + 6 + Int(bytes[pos + 4]) * 256 + Int(bytes[pos + 5])
-                            guard end > pos, end <= base + 2048 else { break }
-                            pos = end
-                        }
-                    }
-                }
+                try DVDPackets.checkAudio(bytes[...])
                 try out.write(contentsOf: data)
                 available -= blocks
                 remaining -= blocks

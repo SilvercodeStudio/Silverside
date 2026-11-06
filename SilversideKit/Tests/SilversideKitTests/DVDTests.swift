@@ -4,7 +4,9 @@ import Testing
 @testable import SilversideKit
 
 struct DVDTests {
-    func navigation(reset: Bool = false) -> Data {
+    func navigation(reset: Bool = false, starts: [Int]? = nil, durations: [Int]? = nil) -> Data {
+        let count = starts?.count ?? 2
+        let lengths = durations ?? (1...count).map { $0 * 90_000 }
         var data = Data(repeating: 0, count: 4096)
         data.replaceSubrange(0..<12, with: "DVDAUDIO-ATS".utf8)
         func put(_ at: Int, _ value: Int, _ length: Int) {
@@ -12,21 +14,21 @@ struct DVDTests {
         }
         put(204, 1, 4)
         put(2048, 1, 2)
-        put(2052, 95, 4)
+        put(2052, 31 + count * 32, 4)
         put(2056, 0x80, 1)
         put(2060, 16, 4)
         let row = 2064
-        put(row + 2, 2, 1)
-        put(row + 3, 2, 1)
-        put(row + 4, 270_000, 4)
+        put(row + 2, count, 1)
+        put(row + 3, count, 1)
+        put(row + 4, lengths.reduce(0, +), 4)
         put(row + 10, 16, 2)
-        put(row + 12, 56, 2)
-        for i in 0..<2 {
+        put(row + 12, 16 + count * 20, 2)
+        for i in 0..<count {
             put(row + 16 + i * 20 + 4, i + 1, 1)
-            put(row + 16 + i * 20 + 6, i == 0 || reset ? 660 : 90_660, 4)
-            put(row + 16 + i * 20 + 10, (i + 1) * 90_000, 4)
-            put(row + 56 + i * 12 + 4, i * 100, 4)
-            put(row + 56 + i * 12 + 8, i * 100 + 99, 4)
+            put(row + 16 + i * 20 + 6, starts?[i] ?? (i == 0 || reset ? 660 : 90_660), 4)
+            put(row + 16 + i * 20 + 10, lengths[i], 4)
+            put(row + 16 + count * 20 + i * 12 + 4, i * 100, 4)
+            put(row + 16 + count * 20 + i * 12 + 8, i * 100 + 99, 4)
         }
         return data
     }
@@ -79,6 +81,25 @@ struct DVDTests {
         #expect(try DVDExtraction.select(inventory, title: "1:3").count == 1)
         inventory.presentations[2].unsupportedReason = "unsupported fixture"
         #expect(throws: DVDError.self) { try DVDExtraction.select(inventory, title: "1:3") }
+    }
+
+    @Test func groupsContinuousTracksAcrossClockRestarts() throws {
+        let starts = [98, 90_098, 97, 90_097, 100, 90_100]
+        let data = navigation(starts: starts, durations: Array(repeating: 90_000, count: starts.count))
+        let presentation = try #require(DVDNavigation.presentations(ifo: data, titleSet: 1, audioSectors: 600).first)
+        #expect(presentation.unsupportedReason == nil)
+        #expect(try presentation.decodingRuns().map { $0.tracks.map(\.number) } == [[1, 2], [3, 4], [5, 6]])
+        #expect(!presentation.resetsDecoder)
+        let continuous = try DVDNavigation.presentations(ifo: navigation(), titleSet: 1, audioSectors: 200)[0]
+        #expect(try continuous.decodingRuns().map { $0.tracks.map(\.number) } == [[1, 2]])
+        let separate = try DVDNavigation.presentations(ifo: navigation(reset: true), titleSet: 1, audioSectors: 200)[0]
+        #expect(try separate.decodingRuns().map { $0.tracks.map(\.number) } == [[1], [2]])
+        for unexpected in [90_097, 90_099] {
+            let broken = navigation(starts: [98, unexpected], durations: [90_000, 90_000])
+            #expect(
+                try DVDNavigation.presentations(ifo: broken, titleSet: 1, audioSectors: 200)[0].unsupportedReason != nil
+            )
+        }
     }
 
     func temporary() throws -> URL {

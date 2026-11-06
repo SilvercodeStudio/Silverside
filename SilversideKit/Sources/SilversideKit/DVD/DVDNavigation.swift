@@ -7,12 +7,14 @@ public struct DVDError: Error, CustomStringConvertible, Sendable {
 
 /// Versioned helper protocol. DVD timestamps are 90 kHz ticks, not CD sectors.
 public struct DVDInventory: Codable, Sendable {
-    public var protocolVersion = 1
+    public var protocolVersion = 2
     public var source: String
     public var volume: String
     public var fingerprint: String
     public var libraryPath: String
     public var presentations: [DVDPresentation]
+    /// Title sets that could not be inspected; never silently omitted.
+    public var titleSetIssues: [DVDTitleSetIssue]?
 
     public init(
         source: String, volume: String, fingerprint: String, libraryPath: String,
@@ -24,6 +26,31 @@ public struct DVDInventory: Codable, Sendable {
         self.libraryPath = libraryPath
         self.presentations = presentations
     }
+}
+
+public struct DVDTitleSetIssue: Codable, Sendable {
+    public var titleSet: Int
+    public var reason: String
+    public init(titleSet: Int, reason: String) {
+        self.titleSet = titleSet
+        self.reason = reason
+    }
+}
+
+public struct DVDTrackFormat: Codable, Sendable {
+    public var number: Int
+    public var format: DVDAudioFormat?
+    public var unsupportedReason: String?
+    public init(number: Int, format: DVDAudioFormat? = nil, unsupportedReason: String? = nil) {
+        self.number = number
+        self.format = format
+        self.unsupportedReason = unsupportedReason
+    }
+}
+
+public struct DVDVideoReference: Codable, Sendable, Equatable {
+    public var titleSet: Int
+    public var title: Int
 }
 
 public struct DVDTrack: Codable, Sendable, Equatable {
@@ -43,6 +70,13 @@ public struct DVDTrack: Codable, Sendable, Equatable {
     }
 }
 
+/// Tracks whose timestamps advance continuously. A new run is a candidate for
+/// a fresh decoder, not proof that decoding there is independent: extraction
+/// must still check packet timestamps, decoder diagnostics, lengths and PCM.
+public struct DVDDecodeRun: Sendable, Equatable {
+    public var tracks: [DVDTrack]
+}
+
 public struct DVDPresentation: Codable, Sendable {
     public var titleSet: Int
     public var title: Int
@@ -52,22 +86,51 @@ public struct DVDPresentation: Codable, Sendable {
     /// The first implementation accepts only this bounded, one-cell-per-track layout.
     public var unsupportedReason: String?
     public var format: DVDAudioFormat?
+    /// Bounded header/preview observations, not a complete decode of each track.
+    public var trackFormats: [DVDTrackFormat]?
+    public var videoReference: DVDVideoReference?
     public var authoredStereo = false
     public var id: String { "\(titleSet):\(title)" }
     public var shortProgram: Bool { tracks.count == 1 && durationPTS <= 90_000 }
-    public var sampleFile: String { "ats\(titleSet)-title\(title).aob" }
+    public func sampleFile(track: Int) -> String { "ats\(titleSet)-title\(title)-track\(track).aob" }
 
     public var resetsDecoder: Bool {
-        tracks.count > 1 && tracks.allSatisfy { $0.startPTS == tracks[0].startPTS }
+        guard let runs = try? decodingRuns() else { return false }
+        return runs.count > 1 && runs.allSatisfy { $0.tracks.count == 1 }
+    }
+
+    /// Keep continuous tracks together; a repeated or backward track-start
+    /// clock starts a new run. Forward gaps and partial overlaps remain unknown,
+    /// rather than silently inserting silence or treating damaged timing as a reset.
+    public func decodingRuns() throws -> [DVDDecodeRun] {
+        guard !tracks.isEmpty else { throw DVDError("DVD program has no tracks.") }
+        var runs = [DVDDecodeRun]()
+        for track in tracks {
+            guard track.startPTS >= 0, track.durationPTS > 0 else { throw DVDError("Invalid track timestamp.") }
+            if let previous = runs.last?.tracks.last {
+                let (expected, overflow) = previous.startPTS.addingReportingOverflow(previous.durationPTS)
+                guard !overflow else { throw DVDError("Track timestamp overflow.") }
+                if track.startPTS == expected {
+                    runs[runs.count - 1].tracks.append(track)
+                    continue
+                }
+                guard track.startPTS <= previous.startPTS else {
+                    throw DVDError("Forward timestamp gaps or partial overlaps are not supported yet.")
+                }
+            }
+            runs.append(DVDDecodeRun(tracks: [track]))
+        }
+        return runs
     }
 }
 
-public struct DVDAudioFormat: Codable, Sendable, Equatable {
+public struct DVDAudioFormat: Codable, Sendable, Equatable, CustomStringConvertible {
     public var codec: String
     public var sampleRate: Int
     public var bits: Int
     public var channels: Int
     public var layout: String
+    public var description: String { "\(codec.uppercased()), \(sampleRate) Hz, \(bits)-bit, \(layout)" }
 }
 
 /// An original, bounds-checked reader of the common on-disc ATS tables. It uses no
@@ -81,9 +144,13 @@ public enum DVDNavigation {
         return count
     }
 
-    public static func presentations(ifo: Data, titleSet: Int, audioSectors: Int) throws -> [DVDPresentation] {
+    public static func presentations(
+        ifo: Data, titleSet: Int, audioSectors: Int, videoReferences: [Int: DVDVideoReference] = [:]
+    ) throws -> [DVDPresentation] {
         let b = Bytes(ifo)
-        guard try b.signature() == "DVDAUDIO-ATS", audioSectors > 0 else { throw DVDError("Invalid audio title set.") }
+        guard try b.signature() == "DVDAUDIO-ATS", audioSectors > 0 || !videoReferences.isEmpty else {
+            throw DVDError("Invalid audio title set.")
+        }
         let table = try b.number(204, 4) * 2048
         guard table >= 2048 else { throw DVDError("Invalid ATS table offset.") }
         let count = try b.number(table, 2)
@@ -108,6 +175,13 @@ public enum DVDNavigation {
             var presentation = DVDPresentation(
                 titleSet: titleSet, title: index + 1,
                 indexByte: try b.number(entry, 1), durationPTS: Int64(duration), tracks: [])
+            presentation.videoReference = videoReferences[index + 1]
+            if let video = presentation.videoReference {
+                presentation.unsupportedReason =
+                    "References DVD-Video title \(video.titleSet):\(video.title); DVD-Video extraction is not supported yet."
+            } else if audioSectors <= 0 {
+                throw DVDError("Missing audio files for title set \(titleSet).")
+            }
             guard trackCount > 0, trackCount == cellCount, trackOffset == 16,
                 cellOffset == 16 + trackCount * 20
             else {
@@ -128,7 +202,7 @@ public enum DVDNavigation {
                 }
                 let first = try b.number(c + 4, 4)
                 let last = try b.number(c + 8, 4)
-                guard first <= last, last < audioSectors, last < Int32.max else {
+                guard first <= last, presentation.videoReference != nil || last < audioSectors, last < Int32.max else {
                     throw DVDError("ATS cell lies outside the audio files.")
                 }
                 let track = DVDTrack(
@@ -145,13 +219,10 @@ public enum DVDNavigation {
                 guard total == Int64(duration) else {
                     throw DVDError("ATS track durations do not sum to the program length.")
                 }
-                var next = presentation.tracks[0].startPTS
-                let continuous = presentation.tracks.allSatisfy { track in
-                    defer { next += track.durationPTS }
-                    return track.startPTS == next
-                }
-                if !continuous && !presentation.resetsDecoder {
-                    presentation.unsupportedReason = "Mixed timestamp discontinuities are not supported yet."
+                do {
+                    _ = try presentation.decodingRuns()
+                } catch {
+                    presentation.unsupportedReason = String(describing: error)
                 }
             }
             results.append(presentation)

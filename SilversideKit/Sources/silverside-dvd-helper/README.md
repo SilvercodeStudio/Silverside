@@ -10,14 +10,20 @@ build dependency. Plain AUDIO_TS directories use ordinary filesystem reads.
 `SILVERSIDE_DVDREAD` overrides the absolute library path (`none` disables it).
 The helper never installs dependencies or escalates privileges.
 
-Internal protocol v1:
+Internal protocol v2 (rebuild/install the CLI and helper together):
 
 - `capabilities`: library availability and supported operations as JSON.
-- `inventory SOURCE WORKDIR`: navigation JSON and bounded program samples in
+- `inventory SOURCE WORKDIR`: navigation JSON and bounded per-track samples in
   an existing private work directory. JSON goes to stdout; diagnostics to stderr.
-- `read SOURCE SET FIRST COUNT OUTPUT FINGERPRINT protocol-1`: an exclusive new
+  Samples are `atsN-titleN-trackN.aob`, up to 512 sectors each, capped at 512
+  unique reads. Shared extents are copied locally after one read. Per-track
+  failures are explicit observations; partial/encrypted samples are not probed.
+  `titleSetIssues` retains unavailable/malformed sets, and `videoReference`
+  identifies corroborated AMG links to unsupported DVD-Video titles.
+- `read SOURCE SET FIRST COUNT OUTPUT FINGERPRINT protocol-2`: an exclusive new
   AOB file, addressed in 2048-byte sectors within the title set. Rechecks the
-  navigation fingerprint before reading and returns a JSON completion marker.
+  navigation fingerprint and title-set availability before reading and returns
+  a JSON completion marker. DVD-Video references cannot be read as AOBs.
 
 The CLI owns cancellation, the work directory, and the report. Reads are bounded
 and the helper has a 120-second watchdog around physical library operations.

@@ -72,14 +72,24 @@ struct DVDInfo: AsyncParsableCommand {
             return
         }
         print("\(inventory.volume.isEmpty ? "DVD-Audio" : inventory.volume) — \(input)")
+        for issue in inventory.titleSetIssues ?? [] {
+            print("  Title set \(issue.titleSet): unavailable — \(issue.reason)")
+        }
         for p in inventory.presentations {
             let format =
-                p.format.map { "\($0.codec.uppercased()), \($0.sampleRate) Hz, \($0.bits)-bit, \($0.layout)" }
-                ?? "format unknown"
+                p.format?.description
+                ?? (p.trackFormats?.contains(where: { $0.format != nil }) == true
+                    ? "mixed or incomplete track formats" : "format unknown")
             print(
                 "  \(p.id): \(p.tracks.count) tracks, \(String(format: "%.1f", Double(p.durationPTS) / 90000)) seconds; \(format)\(p.authoredStereo ? "; authored stereo substream" : "")\(p.shortProgram ? "; short program (explicit --title required)" : "")"
             )
             if let reason = p.unsupportedReason { print("    Unsupported: \(reason)") }
+            if p.format == nil {
+                for track in p.trackFormats ?? [] {
+                    print("    Track \(track.number): \(track.format?.description ?? "format unknown")")
+                    if let reason = track.unsupportedReason { print("      \(reason)") }
+                }
+            }
         }
         print("Use dvd rip --mix surround|stereo|both, or --title SET:TITLE. Optional disc text is not yet parsed.")
     }

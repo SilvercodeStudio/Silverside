@@ -109,23 +109,35 @@ final class DVDLibrary {
         var hash = SHA256()
         hash.update(data: manager)
         var presentations = [DVDPresentation]()
+        var issues = [DVDTitleSetIssue]()
         for title in 1...count {
-            let data = try information(disc, titleSet: title)
-            hash.update(data: data)
-            guard let file = openFile(disc, Int32(title), 3) else {
-                throw DVDError("Missing audio files for title set \(title).")
+            do {
+                let data = try information(disc, titleSet: title)
+                hash.update(data: data)
+                let references = try DVDNavigation.videoReferences(manager: manager, ifo: data, titleSet: title)
+                var sectors = 0
+                if references.isEmpty {
+                    guard let file = openFile(disc, Int32(title), 3) else {
+                        throw DVDError("Missing audio files for title set \(title).")
+                    }
+                    sectors = size(file)
+                    closeFile(file)
+                }
+                presentations += try DVDNavigation.presentations(
+                    ifo: data, titleSet: title, audioSectors: sectors, videoReferences: references)
+            } catch {
+                issues.append(.init(titleSet: title, reason: String(describing: error)))
             }
-            let sectors = size(file)
-            closeFile(file)
-            presentations += try DVDNavigation.presentations(ifo: data, titleSet: title, audioSectors: sectors)
         }
         var name = [CChar](repeating: 0, count: 256)
         _ = volume(disc, &name, UInt32(name.count), nil, 0)
         let label = name.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
-        return DVDInventory(
+        var inventory = DVDInventory(
             source: source, volume: String(bytes: label, encoding: .isoLatin1) ?? "DVD-Audio",
             fingerprint: hash.finalize().map { String(format: "%02x", $0) }.joined(), libraryPath: path,
             presentations: presentations)
+        inventory.titleSetIssues = issues
+        return inventory
     }
 
     func copy(_ disc: OpaquePointer, titleSet: Int, first: Int, count: Int, output: String) throws {

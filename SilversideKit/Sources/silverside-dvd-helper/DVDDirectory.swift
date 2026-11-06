@@ -46,16 +46,25 @@ struct DVDDirectory {
         var hash = SHA256()
         hash.update(data: manager)
         var presentations = [DVDPresentation]()
+        var issues = [DVDTitleSetIssue]()
         for title in 1...count {
-            let data = try information(title)
-            hash.update(data: data)
-            presentations += try DVDNavigation.presentations(
-                ifo: data, titleSet: title, audioSectors: files(title).reduce(0) { $0 + $1.1 })
+            do {
+                let data = try information(title)
+                hash.update(data: data)
+                let references = try DVDNavigation.videoReferences(manager: manager, ifo: data, titleSet: title)
+                let sectors = references.isEmpty ? try files(title).reduce(0) { $0 + $1.1 } : 0
+                presentations += try DVDNavigation.presentations(
+                    ifo: data, titleSet: title, audioSectors: sectors, videoReferences: references)
+            } catch {
+                issues.append(.init(titleSet: title, reason: String(describing: error)))
+            }
         }
-        return DVDInventory(
+        var inventory = DVDInventory(
             source: source, volume: root.deletingLastPathComponent().lastPathComponent,
             fingerprint: hash.finalize().map { String(format: "%02x", $0) }.joined(),
             libraryPath: "Plain AUDIO_TS filesystem reader (no decryption)", presentations: presentations)
+        inventory.titleSetIssues = issues
+        return inventory
     }
     func copy(title: Int, first: Int, count: Int, output: String) throws {
         let parts = try files(title)

@@ -2,12 +2,12 @@
 
 Status: initial CLI implementation, following exploration started 2026-10-31. The primary product goal is a CD-like GUI workflow for tagged, lossless DVD-Audio extraction to multichannel/stereo FLAC or ALAC. Audio extraction from DVD-Video is a secondary goal. Optional movie export is planned for 2.0; the audio workflow has no new release commitment here.
 
-### Current checkpoint — 2026-11-01
+### Current checkpoint — 2026-11-06
 
 The extraction feasibility milestone is complete for the tested MLP titles: unprotected Glen Phillips and CPPM-protected American Beauty/Fragile have full verified stereo and surround FLAC outputs. Presentation-specific track maps and decoder-reset behavior have been exercised. The user's initial listening checks are positive; comparisons between commercial editions do not isolate sample-rate effects.
 
 The initial implementation now lives in the engine and CLI. `dvd info` exposes
-program navigation and decoded format; `dvd rip` writes per-track FLAC,
+program navigation and per-track format observations; `dvd rip` writes per-track FLAC,
 playlists, `dvd-rip.json` and `Rip Report.txt`. The separate Swift helper loads
 Homebrew libraries at runtime through opaque public APIs, with no linked DVD
 libraries or Homebrew build dependencies. The GUI has not changed.
@@ -20,8 +20,12 @@ prefers surround; `stereo`, `surround`, `both`, or `--title SET:TITLE` select.
 Ambiguity requires explicit selection. Short standalone programs require a title.
 
 The helper rechecks the navigation fingerprint before a bounded read. The
-engine compares packet timestamps with navigation, decodes self-contained reset
-cells independently, and decodes continuous programs before sample-based cuts.
+engine compares packet timestamps with navigation and groups tracks into
+continuous runs. Repeated or backward track-start timestamps begin a fresh
+decoder; forward gaps and partial overlaps remain unsupported. Continuous
+tracks within each run share decoder state before sample-based cuts. A clock
+restart is only a candidate boundary: every run must decode without diagnostics
+and pass the format, exact sample-count and source/FLAC/joined-track PCM checks.
 It verifies output rate, bit depth, channel layout, sample count and PCM hashes.
 Decoder warnings fail the operation. Programs are promoted from private staging
 only after checks pass. Reports distinguish completion, failure and cancellation;
@@ -93,9 +97,9 @@ packaging observations or questions, not measured stream properties. The later
 | Title | Availability reported | Format observations and checks to make |
 | --- | --- | --- |
 | Donald Fagen — The Nightfly | Arrived | Appears to be 48 kHz/24-bit. Confirm each presentation's codec, rate, precision and speaker layout; exercise the 48 kHz extraction path. |
-| Billy Cobham — Spectrum | Arrived | Appears double-sided, surround on one side and stereo on the other. Inventory each side separately. Resolution and MLP versus LPCM remain unknown; do not assume 192 kHz stereo. |
+| Billy Cobham — Spectrum | Arrived | Both sides checked 2026-11-06: sampled audio is MLP 96 kHz/24-bit, 5.1 on surround and two-channel on stereo. Stereo exposes an inventory failure on ATS 2, which has an IFO but no AOB files; its ATS 1 audio samples decode cleanly. |
 | Bob Marley — African Herbsman | Arrived | Reported 96 kHz/24-bit (possibly stereo) and 48 kHz Dolby 5.1. Identify the audio and video domains separately; do not treat packaging's 24-bit claim as verified Dolby decoding precision or assume the stereo codec. |
-| Brian Wilson — Live at the Roxy Theatre | Arrived | Reported 96 kHz/24-bit. Confirm channels, codec and channel-group formats; no mixed-rate encoding is established yet. |
+| Brian Wilson — Live at the Roxy Theatre | Arrived | Inventoried 2026-11-06: separate 30-track MLP 96 kHz/24-bit stereo and 5.1 programs, each with three timestamp runs and different track timings. An extra stereo program ends with a 48 kHz entry. Full-album verification remains pending. |
 | Warner/JVC DVD-Audio sampler/demo | Arrived | Exact edition, rates, layouts and navigation unknown. Check for multiple title sets, short programs and differing formats. |
 | Fleetwood Mac — Rumours | Expected | Confirm edition and presentations before treating it as another known-layout surround album. |
 | Reprise/Warner sampler | Expected | Exact edition and formats unknown. Inventory independently of the Warner/JVC sampler. |
@@ -219,7 +223,7 @@ The report is complete and `.work` was removed after successful verification.
 **African Herbsman:** volume `DVDVOLUME`; one audio title-set presentation with
 26 contiguous track cells, 4,693.115833 seconds total. Navigation has three
 continuous timestamp runs: tracks 1–10 start at PTS 98, tracks 11–18 restart at
-PTS 97, and tracks 19–26 restart at PTS 100. The current inventory correctly
+PTS 97, and tracks 19–26 restart at PTS 100. The inventory at that checkpoint correctly
 marks it unsupported for mixed timestamp discontinuities before format probing.
 Do not describe this as a 44.1-family sample-rounding failure.
 
@@ -231,14 +235,266 @@ read-only `/Volumes/DVDVOLUME/AUDIO_TS` files worked through `DVDDirectory`.
 24-bit FLAC without diagnostics. These are short-sample observations, not a
 full-disc verification or proof of a constant format across all tracks. No
 stereo presentation or DVD-Video Dolby stream was verified. Supporting this
-disc needs validated handling of continuous runs separated by decoder resets;
-the existing rejection was retained.
+disc needed validated handling of continuous runs separated by decoder resets;
+the rejection was retained in that cleanup commit. See the follow-up below.
 
 Local artifacts are under `/private/tmp/silverside-dvd-20261105/` (the directory
 was named at session start): both inventory JSON files and logs, the complete
 `nightfly-rip/` with its JSON/text reports, and African Herbsman's bounded
 samples, format probes, preview decodes and `african-herbsman-sample-results.json`.
 These media files are not part of the repository.
+
+### Continuous runs and JVC sampler — 2026-11-06
+
+The user left African Herbsman in the MATSHITA and replaced The Nightfly with
+the Warner/JVC sampler in the ASUS. `DVDProgramDecoding` now handles reading,
+run decoding and publication separately. `DVDRipReport.Program.runs` records
+each verified run's first/last track, frames and PCM SHA-256; the optional field
+keeps earlier reports readable. The older `decoderResetPerTrack` field remains
+true only when every track is its own run. All tracks in a program remain
+staged until every run has passed. No timestamp rounding or warning suppression
+was introduced.
+
+A generated MLP fixture exercises a continuous two-track run followed by a
+one-track restart. Its reference hashes come from independent decodes of the
+elementary streams, without the fixture's PES timestamps. It checks exact cuts,
+global track numbering, joined PCM and rejection of an incorrect duration or
+format. All 552 engine, five Darwin and three helper tests pass; formatting,
+strict lint and the app build pass too.
+
+**African Herbsman completed:** the mounted directory reader copied all
+1,711,703 sectors (3,505,567,744 bytes) into a local source cache. The new CLI
+ripped that cache to `herbsman-rip-runs/`: 26 FLAC files, 96 kHz/24-bit 5.1,
+450,539,120 frames. Every cell's first PES timestamp matched navigation. All
+three runs passed source-to-FLAC and joined-track PCM equality, exact lengths
+and format checks without decoder diagnostics. The report is complete and
+the rip's `.work` was removed. The source cache is retained separately for
+development. Joined interleaved S24LE PCM SHA-256:
+`ef9e215157d6c7e159d208153297aa83710fa2004539485bb648366ed01c20f5`.
+
+| Run | Frames | Interleaved S24LE PCM SHA-256 |
+| --- | --- | --- |
+| Tracks 1–10 | 187,264,160 | `108987d1effb77046a0b1fc37b393b9a2509acf96c57f1ff1ce6dbbbf7826f60` |
+| Tracks 11–18 | 123,314,720 | `b198e356daf8dfa57b41db06f5a118e07dec528d3b1786661b28d44817f2112a` |
+| Tracks 19–26 | 139,960,240 | `c31ec6440246c894ef44990661d6e537b921e39e5190c0aa12498a1f449dea86` |
+
+These checks verify each run and its partitioning using the same decoder, not
+an independent reference decode or a listening check of the musical boundaries.
+
+**Warner/JVC sampler:** volume `JVC_SAMPLER`, inventory fingerprint
+`41ac378788b532df244dd119e57c8e43c988d9dcbe32c4c10b7c949b036539d5`.
+The supplied back-cover photo says “This is your introduction to DVD-Audio,”
+with a 2001 Warner Elektra Atlantic promotional notice. The main program `1:1`
+has eleven tracks, each starting at PTS 660; its first sample is 96 kHz/24-bit
+MLP 5.1. Program `1:2` has eight tracks; its first sample is **44.1 kHz/24-bit
+MLP 5.1**, and track 2 fails exact timestamp-to-sample conversion. This provides
+a physical 44.1 kHz case for the review finding; a safe rounding and boundary
+policy remains separate work. Program `1:3` has two cells with a backward
+sector reference and remains unsupported. A first-sample probe does not prove
+constant format across an entire program.
+
+The full physical read of `1:1` completed (1,452,659 sectors). Tracks 1 and 2
+passed all run checks, but extraction stopped before publishing any tracks:
+track 3, Beethoven's Symphony No. 9, is **5.0** rather than the first track's
+5.1. Bounded 512-sector probes from every track's cached extent show MLP
+96 kHz/24-bit throughout, with 5.0 for track 3 and 5.1 for the other ten.
+The rejected attempt is `jvc-rip-runs/`, with its failed report and retained
+`.work` (3,568,252,415 bytes). This is evidence that the new run-format guard
+stops differing layouts; the main program has not completed verification.
+Inventory at that checkpoint probed only a program's first sample and did not
+show these per-track differences; the protocol-v2 update below addresses this. Five-channel output and programs containing
+different formats need explicit support, not conversion to the first format.
+
+The small `1:2` program was also preserved separately as
+`jvc-program-1-2.aob` (32,308 sectors). Research decodes of each complete cell
+produced no diagnostics. Tracks 1–7 are MLP 44.1 kHz/24-bit 5.1; their decoded
+sample counts equal the navigation durations rounded to the nearest sample.
+Track 8 is MLP **96 kHz**/24-bit 5.1, with 116,720 frames. Thus this program
+needs both rounded timestamp handling and per-track format discovery. These
+research FLACs are measurements, not a completed verified rip. Results are in
+`jvc-extra-track-formats-and-lengths.json`; the production exact-duration rule
+remains unchanged.
+
+| Track in `1:2` | Navigation frames at 44.1 kHz | Decoded frames |
+| --- | --- | --- |
+| 1 | 2,838,080.00 | 2,838,080 |
+| 2 | 2,817,599.96 | 2,817,600 |
+| 3 | 2,836,599.71 | 2,836,600 |
+| 4 | 2,795,399.53 | 2,795,400 |
+| 5 | 2,840,319.79 | 2,840,320 |
+| 6 | 2,849,879.69 | 2,849,880 |
+| 7 | 2,836,039.64 | 2,836,040 |
+
+Back-cover track information, transcribed as printed (orchestras are not named):
+
+| Track | Title | Artist / conductor | Source album |
+| --- | --- | --- | --- |
+| 1 | Pinch Me | Barenaked Ladies | Maroon |
+| 2 | Heart of Gold | Neil Young | Harvest |
+| 3 | Beethoven’s Symphony No. 9 (Mvt. 2) | Daniel Barenboim, conductor | Beethoven: Symphony No. 9 |
+| 4 | Lucky Man | ELP | Brain Salad Surgery |
+| 5 | Moonjogger | Fourplay | Fourplay |
+| 6 | Love Her Madly | The Doors | L.A. Woman |
+| 7 | Dvorak’s Symphony No. 9 (Mvt. 4) | Nikolaus Harnoncourt, conductor | Dvorak Symphony No. 9 |
+| 8 | Sugar Magnolia | Grateful Dead | American Beauty |
+| 9 | Feels Like the First Time | Foreigner | Foreigner |
+| 10 | Breathless | The Corrs | In Blue |
+| 11 | Plush | Stone Temple Pilots | Core |
+
+Local inventories, source data and extraction reports for this follow-up are
+under `/private/tmp/silverside-dvd-20261106/`; media are not repository fixtures.
+
+### Brian Wilson and Spectrum boundary checks — 2026-11-06
+
+The user replaced African Herbsman with Brian Wilson in the MATSHITA and the
+JVC sampler with Billy Cobham in the ASUS, authorizing additional reads.
+Drive discovery identified `disk14` and `disk15` for this session. The initial
+inventory succeeded through the physical reader for both discs.
+
+**Brian Wilson — Live at the Roxy Theatre:** volume `LIVE_AT_THE_ROXY`,
+fingerprint `017ce6c00bd0033de1845fa717ebed5d5e76a4fd64772b9d7aea0152a6b6d8f2`.
+
+| Program | Navigation | Sampled format | Navigation duration |
+| --- | --- | --- | --- |
+| `1:1` | 30 tracks; continuous runs 1–15, 16–27, 28–30 | MLP 96 kHz/24-bit 5.1 | 6,077.866667 seconds |
+| `1:2` | 30 tracks; continuous runs 1–15, 16–27, 28–30 | MLP 96 kHz/24-bit stereo | 6,061.9 seconds |
+| `1:3` | Two independently starting cells | First: MLP 96 kHz/24-bit stereo; last: MLP 48 kHz/24-bit stereo | 262.6325 seconds, including a one-second last entry |
+
+The main stereo program has its own sector extents and track timing; it is
+15.966667 seconds shorter overall than surround. Both restart at PTS 660 at
+tracks 16 and 28. Samples from tracks 1, 16 and 28 of both main programs
+decoded 24,000 frames at 96 kHz without diagnostics, retaining their respective
+stereo/5.1 layouts. The first cell of `1:3` passed the same bounded decode; its
+entire one-second final cell decoded cleanly to 48,000 frames at 48 kHz. This
+is another actual rate change between tracks. Inventory at that checkpoint probed only
+the first sample of a program and did not expose that final-cell change;
+the extraction run-format guard would reject it. No mixed rates within one MLP
+stream were demonstrated by these checks.
+
+**Billy Cobham — Spectrum:** volume `SPECTRUM_SURROUND`, confirming the loaded
+side, fingerprint
+`55229ffd060e935bcb2b1bc986262c942dcca895c144feabcccb735947f450e0`.
+Program `1:1` has six continuous tracks starting at PTS 660 and a one-second
+seventh entry restarting at PTS 660. Navigation totals 2,263.9325 seconds.
+The first-track sample and entire seventh cell are MLP 96 kHz/24-bit 5.1;
+they decoded without diagnostics to 24,000 and 96,000 frames respectively.
+The opposite side was checked after the user flipped the disc; see below.
+
+These are inventories and bounded decode checks, not full-program PCM/hash
+verification or gapless listening evidence. Brian Wilson supplies a live
+concert for checking continuity within runs and the separate stereo track map;
+Spectrum supplies a continuous album followed by a short reset. The extra
+Brian Wilson program reinforces the need for per-run format discovery before
+expanding extraction support.
+
+Inventories, fingerprint-checked sample reads, previews and measurements are
+under `/private/tmp/silverside-dvd-20261106/`, including
+`brian-wilson-inventory.json`, `spectrum-inventory.json` and
+`wilson-spectrum-boundary-checks.json`. Only documentation changed for these
+checks; no drive was ejected, reset or written.
+
+### Spectrum stereo and next decode milestone — 2026-11-06
+
+After the user flipped Spectrum, the mounted volume became `SPECTRUM_STEREO`.
+The physical CLI inventory failed with `Missing audio files for title set 2`.
+The filesystem confirms `ATS_02_0.IFO` and its backup exist but no
+`ATS_02_*.AOB` files. ATS 1 has an 820,107,264-byte AOB. Its seven-track
+navigation has exactly the surround program's timestamps and durations, with
+different sector extents: six continuous tracks plus a one-second reset cell.
+
+The existing research reader read 512 sectors at ATS 1's start and all ten
+sectors of its last cell. Both probe as **MLP 96 kHz/24-bit stereo**. A
+24,000-frame first-track preview and the complete 96,000-frame terminal cell
+decoded without diagnostics. This confirms usable stereo audio despite the
+inventory failure, not a full-album verification. The missing-AOB title set's
+cell extents cover 659,390 sectors, exactly the size of `VTS_02_1.VOB` plus
+`VTS_02_2.VOB`; a DVD-Video reference is a plausible explanation, to be checked
+against the navigation structures before changing the reader. Missing audio
+must not simply be ignored as though every incomplete source were valid.
+
+Saved evidence under `/private/tmp/silverside-dvd-20261106/` includes the failed
+`spectrum-opposite-inventory.log`, copied IFOs, parsed research navigation,
+bounded audio reads and `spectrum-stereo-sample-checks.json`. The research
+reader was compiled from the existing `scripts/dvd/read_blocks.c`; production
+code and the staged changes were not changed by these checks.
+
+The next recommended implementation milestone is broader verified extraction,
+before the saved-rip metadata/GUI work:
+
+1. **Inventory every presentation without hiding usable audio (implemented below).** Resolve or
+   explicitly classify title sets without AOBs, distinguish references from
+   missing data, and discover formats at track/run boundaries. Surface mixed
+   rates/layouts in `dvd info` instead of describing the whole program from its
+   first sample.
+2. **Preserve each supported run's native format.** Add explicit 5.0 layout
+   support and per-run rate/precision/layout records. Update verification and
+   reports for mixed-format programs; a whole-program concat must not silently
+   normalize differing formats. Keep rejecting unproven decoder boundaries or
+   format changes within a continuous run.
+3. **Handle rounded navigation timing with measured bounds.** Use the cached
+   JVC 44.1 kHz cells to test nearest-sample timing against decoded counts.
+   Validate cumulative cuts for continuous tracks to avoid accumulated rounding
+   error; do not assume this one disc proves a rule for all 44.1-family rates.
+4. **Run complete regression extractions.** JVC exercises 5.0 and rate changes;
+   Brian Wilson exercises live continuity and distinct stereo/surround track
+   maps; both Spectrum sides exercise the inventory fix and a short terminal
+   reset. Preserve source/run/track PCM checks and add listening checks at live
+   transitions. Then continue with tagged FLAC/ALAC and the audio-only GUI.
+
+### Inventory phase completed — 2026-11-06
+
+Helper protocol v2 collects a bounded sample from each track start, reusing
+shared sector extents. The limit is 512 unique reads of up to 512 sectors each.
+Sample failures remain explicit per-track records, and the engine never probes
+a failed/possibly encrypted partial file. Every known format is retained even
+when extraction cannot support it. A program-wide `format` is present only
+when all track formats are known and equal. Mixed-format programs, 5.0 output
+and fractional navigation sample counts are still rejected by extraction.
+The CLI and helper must be rebuilt/installed together; protocol v1 inventories
+are not accepted for new work. Existing saved reports remain decodable.
+
+`titleSetIssues` records unavailable or malformed title sets without discarding
+the other presentations. The reader distinguishes Spectrum's video link by
+cross-checking paired AMG title tables, the ATS link address and title counts/
+durations. The [DVD-Audio Tools manager-field notes](https://dvd-audio.sourceforge.io/spec/audio_ts.shtml)
+describe the audio/video manager records; the implementation is original and
+bounded to the corroborated mapping. A missing AOB alone is not classified as
+a video link. Other missing, truncated or unrecognized sets remain explicit
+issues; the read operation rejects those sets and DVD-Video references.
+
+Validation:
+
+- Physical Spectrum stereo inventory now returns all seven ATS 1 track formats
+  as MLP 96 kHz/24-bit stereo, and marks ATS `2:1` as a reference to DVD-Video
+  `2:1`. It no longer aborts at the absent AOB files.
+- A full physical Spectrum stereo extraction through protocol v2 completed:
+  seven 96 kHz/24-bit stereo FLACs, 217,337,520 frames. The continuous first six
+  tracks and the one-second terminal run passed exact lengths, formats and
+  source/FLAC/joined PCM checks without diagnostics. The completed report and
+  files are in `spectrum-stereo-rip-v2/`; `.work` was removed. Joined S24LE PCM
+  SHA-256: `58144572cc2f77624ae7ec3a991caef567061a19b5f410486741c2f6a22ab1ea`.
+- Physical Brian Wilson inventory records 30 uniform 96/24 5.1 observations
+  and 30 uniform 96/24 stereo observations for its main programs. The extra
+  program is explicitly mixed, retaining 96 kHz for track 1 and 48 kHz for track 2.
+- The saved Glen Phillips raw ISO, mounted read-only for the check, still
+  inventories both 11-track 96/24 presentations. All shared-extent stereo
+  previews expose two channels without diagnostics; `authoredStereo` remains
+  true only for that presentation. The temporary image mount was removed.
+- A development helper supplied the previously saved JVC samples for programs
+  `1:1` and `1:2` to the same inspection path. It reports the 5.0 track, every
+  44.1 kHz timing rejection, and the final 96 kHz track. Program `1:3` was not
+  included in that cached fixture; the earlier physical inventory remains its
+  evidence. This check used no new optical reads.
+- All 555 engine, five Darwin and five helper tests pass. The new tests cover
+  malformed or mismatched video links, unavailable/truncated audio sets,
+  shared sample reuse and explicit read failures, later-track inspection after
+  an unsupported 44.1 kHz duration, mixed layouts and old report decoding.
+  Formatting, strict lint and the app build pass.
+
+Artifacts are under `/private/tmp/silverside-dvd-20261106/`, including
+`spectrum-inventory-v2.json`, `brian-wilson-inventory-v2.json`,
+`jvc-cached-inventory-v2.json` and the cached inspector's human-readable output.
+Next: native per-run format handling and 5.0, then bounded timestamp rounding.
 
 ## Intended result
 

@@ -412,8 +412,10 @@ a filesystem reader. No Homebrew headers/libraries are needed to build.
 
 The workflow checks navigation bounds, source fingerprints, packet timestamps,
 exact sample counts, output formats, per-track PCM and joined-program hashes.
-It handles American Beauty's fresh-decoder-per-track layout and Fragile's
-continuous timeline separately. Output must be new; failures/cancellation leave
+It groups tracks into continuous decoding runs, covering American Beauty's
+fresh-decoder-per-track layout, Fragile's continuous timeline and African
+Herbsman's three runs (all 26 tracks verified at 96 kHz/24-bit 5.1 on
+2026-11-06). Output must be new; failures/cancellation leave
 an incomplete report. The existing personal-use agreement also covers DVD rips.
 See [DVD.md](DVD.md) for evidence, command examples and remaining limitations.
 
@@ -421,13 +423,23 @@ Native-rate engine groundwork (2026-11-03): explicit rate/precision/speakers,
 bounded FLAC/ALAC conversion with PCM verification, and Apple-compatible FLAC
 blocks. Synthetic high-resolution tests and full saved American Beauty stereo
 and surround tracks pass without drive access; details and hashes in DVD.md.
-The existing DVD CLI still writes FLAC; format selection and tagging are next.
+The existing DVD CLI still writes FLAC.
 
-Next: saved-rip metadata using a pasted MusicBrainz release URL/ID or manual
+Inventory groundwork completed 2026-11-06: protocol v2 supplies bounded samples
+from every track, records per-track formats and failures, and recognizes the
+corroborated AMG-to-DVD-Video link on Spectrum stereo. Unavailable title sets
+remain explicit issues without hiding usable programs. Physical Spectrum/Brian
+Wilson and cached JVC checks pass; mixed-format extraction is still rejected.
+
+Next: preserve 5.0 and changing native formats, and validate rounded 44.1 kHz
+navigation against decoded samples (JVC). Complete full-disc checks including
+Brian Wilson's live transitions and distinct stereo/surround maps. See DVD.md
+for the evidence and verification requirements.
+
+Then: saved-rip metadata using a pasted MusicBrainz release URL/ID or manual
 entry, reviewed presentation-specific track mapping, artwork and tagged
-FLAC/ALAC output; then reuse it for the audio-only GUI workflow. Also broaden
-title/layout coverage with incoming discs, finish Developer ID/notarization
-and clean-machine testing, and parse optional Audio Text. DVD-Video
+FLAC/ALAC output; reuse it for the audio-only GUI workflow. Finish Developer ID/
+notarization and clean-machine testing, and parse optional Audio Text. DVD-Video
 LPCM/chapter extraction and decrypted disc images remain separate follow-ups.
 Blu-ray audio (including the user's BD-R copy of The Dark Side of the Moon)
 remains exploratory. More DTS-CD titles are also on the way for CD-path testing.

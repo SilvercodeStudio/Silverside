@@ -63,11 +63,26 @@ If several programs fit, use `--title SET:TITLE` from `dvd info`, for example
 `--title 1:2`. One-track programs of at most one second require explicit title
 selection. `dvd info --json` emits the versioned inventory.
 
+Inventory samples each track's start and reports changes in rate, precision or
+speaker layout. These bounded observations do not verify a complete track.
+Programs with changing formats remain unsupported for extraction. A linked
+DVD-Video title is listed separately as unsupported; unavailable or malformed
+title sets are reported without hiding other usable audio. A program-wide
+format is shown only when every track's format is known and agrees. The CLI and
+helper must both use protocol v2; rebuild/install them together after upgrading.
+
 This first version supports constant-format, 16/24-bit MLP stereo or 5.1 with
 contiguous, one-cell-per-track navigation. It preserves the decoded sample rate,
 precision and speaker layout. An identified authored stereo substream can be
 selected; Silverside does not synthesize a stereo mix. Other layouts/codecs,
 DVD-Video extraction, metadata lookup and GUI integration are follow-up work.
+
+Continuous tracks are decoded together before cutting at sample boundaries.
+A repeated or backward track-start timestamp begins a new decoding run, whose
+format, packet timestamps, sample count and PCM must pass the same checks.
+Forward timestamp gaps and partial overlaps remain unsupported. Durations must
+still convert exactly to whole samples; some 44.1 kHz programs fail this check.
+The report records each verified run's track range, sample count and PCM hash.
 
 The output folder must be new, and its parent must exist. Each program gets a
 folder of numbered FLAC tracks and `Tracks.m3u8`. `dvd-rip.json` and

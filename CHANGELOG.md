@@ -14,6 +14,11 @@ command-line tool.
   FLAC files use blocks compatible with Apple's audio decoder. Completed
   output follows normal folder permissions; failed or cancelled extractions
   report the location and size of retained scratch files and how to remove them.
+  Programs can contain several continuous groups of tracks with restarting
+  timestamps; each group is decoded and verified before the tracks are published.
+  Inventory checks every track's format, reports rate and channel-layout changes,
+  and lists unsupported DVD-Video links or unavailable title sets without hiding
+  usable audio programs.
 - A disc of a set can have a cover of its own, such as each volume's cover in
   a box set: a cover chosen on one disc asks whether it is for that disc only
   or for every disc. That disc's files embed its own cover in place of the

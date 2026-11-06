@@ -18,34 +18,27 @@ struct DVDHelper {
             if operation == "capabilities", args.count == 1 {
                 let library = try DVDLibrary()
                 struct Capabilities: Encodable {
-                    var protocolVersion = 1
+                    var protocolVersion = 2
                     var libraryPath: String
                     var operations = ["inventory", "read"]
                     var cppmAPI = true
                 }
                 protocolOutput.write(try encoder.encode(Capabilities(libraryPath: library.path)))
             } else if operation == "inventory", args.count == 3 {
-                let inventory: DVDInventory
+                var inventory: DVDInventory
                 if let directory = DVDDirectory(args[1]) {
                     inventory = try directory.inventory(source: args[1])
-                    for p in inventory.presentations where p.unsupportedReason == nil {
-                        guard let first = p.tracks.first else { continue }
-                        try directory.copy(
-                            title: p.titleSet, first: first.firstSector,
-                            count: min(512, first.lastSector - first.firstSector + 1),
-                            output: URL(fileURLWithPath: args[2]).appendingPathComponent(p.sampleFile).path)
+                    DVDSamples.collect(&inventory, work: URL(fileURLWithPath: args[2])) { title, first, count, output in
+                        try directory.copy(title: title, first: first, count: count, output: output)
                     }
                 } else {
                     let library = try DVDLibrary()
                     inventory = try library.withDisc(args[1]) { disc in
-                        let result = try library.inventory(disc, source: args[1])
-                        for presentation in result.presentations where presentation.unsupportedReason == nil {
-                            guard let first = presentation.tracks.first else { continue }
+                        var result = try library.inventory(disc, source: args[1])
+                        DVDSamples.collect(&result, work: URL(fileURLWithPath: args[2])) {
+                            title, first, count, output in
                             try library.copy(
-                                disc, titleSet: presentation.titleSet, first: first.firstSector,
-                                count: min(512, first.lastSector - first.firstSector + 1),
-                                output: URL(fileURLWithPath: args[2]).appendingPathComponent(presentation.sampleFile)
-                                    .path)
+                                disc, titleSet: title, first: first, count: count, output: output)
                         }
                         return result
                     }
@@ -57,21 +50,23 @@ struct DVDHelper {
                 guard (1...99).contains(title) else { throw DVDError("Invalid title set.") }
                 if let directory = DVDDirectory(args[1]) {
                     let inventory = try directory.inventory(source: args[1])
-                    guard inventory.fingerprint == args[6], args[7] == "protocol-1" else {
+                    guard inventory.fingerprint == args[6], args[7] == "protocol-2" else {
                         throw DVDError("The source navigation changed since inventory.")
                     }
+                    try DVDSamples.requireAudio(inventory, titleSet: title)
                     try directory.copy(title: title, first: first, count: count, output: args[5])
                 } else {
                     let library = try DVDLibrary()
                     try library.withDisc(args[1]) { disc in
                         let inventory = try library.inventory(disc, source: args[1])
-                        guard inventory.fingerprint == args[6], args[7] == "protocol-1" else {
+                        guard inventory.fingerprint == args[6], args[7] == "protocol-2" else {
                             throw DVDError("The source navigation changed since inventory.")
                         }
+                        try DVDSamples.requireAudio(inventory, titleSet: title)
                         try library.copy(disc, titleSet: title, first: first, count: count, output: args[5])
                     }
                 }
-                protocolOutput.write(Data("{\"protocolVersion\":1,\"complete\":true}\n".utf8))
+                protocolOutput.write(Data("{\"protocolVersion\":2,\"complete\":true}\n".utf8))
             } else {
                 throw DVDError("Invalid helper arguments.")
             }

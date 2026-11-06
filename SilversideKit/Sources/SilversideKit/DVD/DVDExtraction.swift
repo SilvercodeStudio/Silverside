@@ -29,9 +29,17 @@ public struct DVDRipReport: Codable, Sendable {
         public var directory: String
         public var sourceSHA256: String
         public var decoderResetPerTrack: Bool
+        /// Verified continuous runs; absent in reports written before run-based extraction.
+        public var runs: [Run]?
         public var pcmSHA256: String?
         public var complete = false
         public var tracks = [Track]()
+    }
+    public struct Run: Codable, Sendable {
+        public var firstTrack: Int
+        public var lastTrack: Int
+        public var frames: Int64
+        public var pcmSHA256: String
     }
     public struct Track: Codable, Sendable {
         public var number: Int
@@ -126,97 +134,40 @@ public enum DVDExtraction {
             let programs = try select(inventory, mix: mix, title: title)
             report.selected = programs.map(\.id)
             try save(report, to: root)
-            for p in programs {
+            for presentation in programs {
                 try stop.check()
-                let format = p.format!
-                let folder = "Program \(p.titleSet)-\(p.title) - \(format.channels == 2 ? "Stereo" : "Surround")"
+                let format = presentation.format!
+                let folder =
+                    "Program \(presentation.titleSet)-\(presentation.title) - \(format.channels == 2 ? "Stereo" : "Surround")"
                 let destination = root.appendingPathComponent(folder, isDirectory: true)
                 try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
-                let sourceFile = work.appendingPathComponent("program-\(p.titleSet)-\(p.title).aob")
-                let first = p.tracks[0].firstSector
-                let count = p.tracks.last!.lastSector - first + 1
-                progress("Reading program \(p.id): \(count) sectors, \(p.tracks.count) tracks…")
-                _ = try DVDProcess.run(
-                    tools.helper,
-                    [
-                        "read", source, String(p.titleSet), String(first), String(count), sourceFile.path,
-                        inventory.fingerprint, "protocol-1",
-                    ], in: work, stop: stop,
-                    progress: {
-                        if let bytes = (try? FileManager.default.attributesOfItem(atPath: sourceFile.path)[.size])
-                            as? NSNumber
-                        {
-                            progress("Program \(p.id): read \(bytes.int64Value / 2048)/\(count) sectors")
-                        }
-                    })
-                guard
-                    (try FileManager.default.attributesOfItem(atPath: sourceFile.path)[.size] as? NSNumber)?.int64Value
-                        == Int64(count) * 2048
-                else { throw DVDError("Incomplete audio read.") }
-                try validatePackets(sourceFile, presentation: p)
+                let sourceFile = try readProgram(
+                    presentation, source: source, fingerprint: inventory.fingerprint,
+                    tools: tools, work: work, stop: stop, progress: progress)
+                try validatePackets(sourceFile, presentation: presentation)
                 report.programs.append(
                     .init(
-                        id: p.id, directory: folder, sourceSHA256: try fileHash(sourceFile, stop: stop),
-                        decoderResetPerTrack: p.resetsDecoder))
+                        id: presentation.id, directory: folder, sourceSHA256: try fileHash(sourceFile, stop: stop),
+                        decoderResetPerTrack: presentation.resetsDecoder, runs: []))
                 let programIndex = report.programs.count - 1
                 try save(report, to: root)
-                let programWork = work.appendingPathComponent("program-\(p.titleSet)-\(p.title)", isDirectory: true)
+                let programWork = work.appendingPathComponent(
+                    "program-\(presentation.titleSet)-\(presentation.title)", isDirectory: true)
                 try FileManager.default.createDirectory(at: programWork, withIntermediateDirectories: false)
-                var sourcePCM: String?
-                if !p.resetsDecoder {
-                    progress("Decoding program \(p.id) continuously before cutting tracks…")
-                    let continuous = programWork.appendingPathComponent("continuous.flac")
-                    sourcePCM = try encode(
-                        sourceFile, to: continuous, p: p, tools: tools, work: programWork, stop: stop)
-                    let frames = try p.tracks.reduce(Int64(0)) { try $0 + $1.frames(at: format.sampleRate) }
-                    try verifyFormat(
-                        continuous, frames: frames, format: format, tools: tools, work: programWork, stop: stop)
-                    guard
-                        try pcmHash(continuous, bits: format.bits, tools: tools, work: programWork, stop: stop)
-                            == sourcePCM
-                    else { throw DVDError("Continuous FLAC differs from source PCM.") }
-                    try split(continuous, p: p, tools: tools, work: programWork, stop: stop)
-                }
                 var staged = [URL]()
-                for track in p.tracks {
-                    try stop.check()
-                    progress("Program \(p.id): checking track \(track.number)/\(p.tracks.count)…")
-                    let file = programWork.appendingPathComponent(String(format: "%02d.flac", track.number))
-                    var originalHash: String?
-                    if p.resetsDecoder {
-                        let cell = programWork.appendingPathComponent("cell.aob")
-                        try copyRange(
-                            sourceFile, to: cell, offset: (track.firstSector - first) * 2048,
-                            count: (track.lastSector - track.firstSector + 1) * 2048, stop: stop)
-                        originalHash = try encode(
-                            cell, to: file, p: p, track: track.number, tools: tools, work: programWork, stop: stop)
-                        try FileManager.default.removeItem(at: cell)
-                    }
-                    let frames = try track.frames(at: format.sampleRate)
-                    try verifyFormat(file, frames: frames, format: format, tools: tools, work: programWork, stop: stop)
-                    let hash = try pcmHash(file, bits: format.bits, tools: tools, work: programWork, stop: stop)
-                    if let originalHash, hash != originalHash {
-                        throw DVDError("Track \(track.number) FLAC differs from source PCM.")
-                    }
-                    let name = String(format: "%02d - Track %02d.flac", track.number, track.number)
-                    report.programs[programIndex].tracks.append(
-                        .init(
-                            number: track.number, file: name, frames: frames, pcmSHA256: hash,
-                            fileSHA256: try fileHash(file, stop: stop)))
-                    staged.append(file)
+                for run in try presentation.decodingRuns() {
+                    let decoded = try decodeRun(
+                        run, of: presentation, source: sourceFile, tools: tools,
+                        work: programWork, stop: stop, progress: progress)
+                    report.programs[programIndex].runs?.append(decoded.run)
+                    report.programs[programIndex].tracks += decoded.tracks
+                    staged += decoded.files
+                    try save(report, to: root)
                 }
-                let joined = try joinedHash(staged, bits: format.bits, tools: tools, work: programWork, stop: stop)
-                if let sourcePCM, sourcePCM != joined {
-                    throw DVDError("Joined tracks differ from the complete source PCM.")
-                }
-                report.programs[programIndex].pcmSHA256 = joined
-                for (file, track) in zip(staged, report.programs[programIndex].tracks) {
-                    try FileManager.default.moveItem(at: file, to: destination.appendingPathComponent(track.file))
-                }
-                let playlist =
-                    "#EXTM3U\n" + report.programs[programIndex].tracks.map(\.file).joined(separator: "\n") + "\n"
-                try playlist.write(
-                    to: destination.appendingPathComponent("Tracks.m3u8"), atomically: true, encoding: .utf8)
+                report.programs[programIndex].pcmSHA256 = try joinedHash(
+                    staged, bits: format.bits, tools: tools, work: programWork, stop: stop)
+                try stop.check()
+                try publish(staged, tracks: report.programs[programIndex].tracks, to: destination)
                 report.programs[programIndex].complete = true
                 try save(report, to: root)
                 try FileManager.default.removeItem(at: sourceFile)
@@ -350,16 +301,20 @@ public enum DVDExtraction {
         try clean(result)
         return try hashValue(result.output)
     }
-    static func split(_ full: URL, p: DVDPresentation, tools: DVDTools, work: URL, stop: StopToken) throws {
-        var filters = ["[0:a]asplit=\(p.tracks.count)" + p.tracks.indices.map { "[s\($0)]" }.joined()]
+    static func split(
+        _ full: URL, p: DVDPresentation, tracks selected: [DVDTrack]? = nil,
+        tools: DVDTools, work: URL, stop: StopToken
+    ) throws {
+        let tracks = selected ?? p.tracks
+        var filters = ["[0:a]asplit=\(tracks.count)" + tracks.indices.map { "[s\($0)]" }.joined()]
         var offset: Int64 = 0
-        for (i, track) in p.tracks.enumerated() {
+        for (i, track) in tracks.enumerated() {
             let end = try offset + track.frames(at: p.format!.sampleRate)
             filters.append("[s\(i)]atrim=start_sample=\(offset):end_sample=\(end),asetpts=N/SR/TB[t\(i)]")
             offset = end
         }
         var args = common + ["-i", full.path, "-filter_complex", filters.joined(separator: ";")]
-        for (i, track) in p.tracks.enumerated() {
+        for (i, track) in tracks.enumerated() {
             args +=
                 ["-map", "[t\(i)]"] + flacArguments(p, track: track.number) + [
                     work.appendingPathComponent(String(format: "%02d.flac", track.number)).path
@@ -413,6 +368,11 @@ public enum DVDExtraction {
                 "Source sectors SHA-256: \(p.sourceSHA256)",
             ]
             if let hash = p.pcmSHA256 { lines += ["Joined PCM SHA-256: \(hash)"] }
+            for run in p.runs ?? [] {
+                lines += [
+                    "  Continuous run, tracks \(run.firstTrack)–\(run.lastTrack): \(run.frames) frames; PCM SHA-256 \(run.pcmSHA256)"
+                ]
+            }
             for t in p.tracks { lines += ["  \(t.file): \(t.frames) frames; PCM SHA-256 \(t.pcmSHA256)"] }
         }
         lines += ["", "Limitations:"] + report.limitations.map { "- " + $0 }

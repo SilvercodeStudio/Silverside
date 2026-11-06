@@ -148,53 +148,10 @@ public struct DVDTools: Sendable {
     public func inventory(source: String, work: URL, stop: StopToken = StopToken()) throws -> DVDInventory {
         let result = try DVDProcess.run(helper, ["inventory", source, work.path], in: work, stop: stop, timeout: 300)
         var inventory = try JSONDecoder().decode(DVDInventory.self, from: result.output)
-        guard inventory.protocolVersion == 1 else { throw DVDError("Unsupported DVD helper protocol version.") }
-        for index in inventory.presentations.indices {
-            let p = inventory.presentations[index]
-            guard p.unsupportedReason == nil else { continue }
-            do {
-                let sample = work.appendingPathComponent(p.sampleFile)
-                var (format, _) = try inspect(sample, work: work, stop: stop)
-                // A repeated reference to the same extents may expose an authored MLP
-                // stereo substream. Probe it explicitly; never use an output -ac 2 downmix.
-                let shared = inventory.presentations[..<index].contains {
-                    $0.titleSet == p.titleSet && $0.tracks == p.tracks
-                }
-                if shared && format.codec == "mlp" && format.channels > 2 {
-                    // ffprobe's stream header may still describe the full stream even
-                    // when the decoder selects two channels. Inspect actual decoded output.
-                    let preview = work.appendingPathComponent("stereo-\(p.titleSet)-\(p.title).flac")
-                    try DVDExtraction.clean(
-                        DVDProcess.run(
-                            ffmpeg,
-                            DVDExtraction.common + [
-                                "-downmix", "stereo", "-f", "mpeg", "-i", sample.path, "-t", "0.05", "-map", "0:a:0",
-                                "-af", "asetpts=N/SR/TB", "-c:a", "flac", preview.path,
-                            ], in: work, stop: stop, timeout: 60))
-                    (format, _) = try inspect(preview, work: work, stop: stop)
-                    guard format.channels == 2 else {
-                        throw DVDError("No authored stereo substream was exposed by the decoder.")
-                    }
-                    format.codec = "mlp"
-                    inventory.presentations[index].authoredStereo = true
-                } else if shared {
-                    throw DVDError("Duplicate reference to an earlier program; select the earlier program instead.")
-                }
-                inventory.presentations[index].format = format
-                guard format.codec == "mlp",
-                    [44_100, 48_000, 88_200, 96_000, 176_400, 192_000].contains(format.sampleRate),
-                    [16, 24].contains(format.bits),
-                    (format.channels == 2 && format.layout == "stereo")
-                        || (format.channels == 6 && format.layout == "5.1")
-                else {
-                    throw DVDError(
-                        "This initial DVD command supports equal-rate 16/24-bit MLP in stereo or 5.1; found \(format).")
-                }
-                for track in p.tracks { _ = try track.frames(at: format.sampleRate) }
-            } catch is CancellationError { throw CancellationError() } catch {
-                inventory.presentations[index].unsupportedReason = String(describing: error)
-            }
+        guard inventory.protocolVersion == 2 else {
+            throw DVDError("DVD inspection needs helper protocol 2. Rebuild/install the CLI and helper together.")
         }
+        try inspectFormats(&inventory, work: work, stop: stop)
         return inventory
     }
 }

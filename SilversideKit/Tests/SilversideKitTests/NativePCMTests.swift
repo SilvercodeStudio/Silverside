@@ -18,7 +18,7 @@ struct NativePCMTests {
             Int32(bitPattern: UInt32(truncatingIfNeeded: generator.next()) & (UInt32.max << (32 - bits)))
         }
         return SurroundPCM(
-            values: values, channels: channels, channelMask: channels == 2 ? 3 : 0x3F,
+            values: values, channels: channels, channelMask: channels == 2 ? 3 : channels == 5 ? 0x37 : 0x3F,
             bits: bits, sampleRate: rate)
     }
 
@@ -52,7 +52,7 @@ struct NativePCMTests {
         let dir = try folder()
         defer { try? FileManager.default.removeItem(at: dir) }
         let ffmpeg = try #require(FFmpeg.program())
-        for (rate, channels) in [(96_000.0, 6), (192_000.0, 2)] {
+        for (rate, channels) in [(96_000.0, 5), (96_000.0, 6), (192_000.0, 2)] {
             let source = audio(rate: rate, channels: channels)
             let url = dir.appendingPathComponent("track.\(format.fileExtension)")
             try AudioEncoder.encode(source, format: format, to: url)

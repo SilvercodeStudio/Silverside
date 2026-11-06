@@ -65,7 +65,7 @@ struct DVDInventoryTests {
         #expect(program.format == nil)
         #expect(program.trackFormats?[1].format == five)
         #expect(program.unsupportedReason?.contains("Formats change") == true)
-        #expect(program.trackFormats?[1].unsupportedReason != nil)
+        #expect(program.trackFormats?[1].unsupportedReason == nil)
 
         program.unsupportedReason = nil
         program.trackFormats = [.init(number: 1, format: surround), .init(number: 2, unsupportedReason: "Read failed")]
@@ -97,8 +97,8 @@ struct DVDInventoryTests {
             ffprobe: ffmpeg.deletingLastPathComponent().appendingPathComponent("ffprobe"))
         var program = try DVDNavigation.presentations(
             ifo: DVDTests().navigation(reset: true), titleSet: 1, audioSectors: 200)[0]
-        program.tracks[0].durationPTS = 101  // deliberately nonintegral at 44.1 kHz
-        for (track, rate) in zip(program.tracks, [44100, 96000]) {
+        program.tracks[0].durationPTS = 101  // fractional 88.2 kHz timing remains unproven
+        for (track, rate) in zip(program.tracks, [88200, 96000]) {
             let file = root.appendingPathComponent(program.sampleFile(track: track.number))
             let elementary = file.appendingPathExtension("mlp")
             try DVDExtraction.clean(
@@ -116,8 +116,8 @@ struct DVDInventoryTests {
             presentations: [program])
         try tools.inspectFormats(&inventory, work: root, stop: StopToken())
         let result = inventory.presentations[0]
-        #expect(result.trackFormats?.map { $0.format?.sampleRate } == [44100, 96000])
-        #expect(result.trackFormats?[0].unsupportedReason?.contains("whole samples") == true)
+        #expect(result.trackFormats?.map { $0.format?.sampleRate } == [88200, 96000])
+        #expect(result.unsupportedReason?.contains("whole samples") == true)
         #expect(result.format == nil && result.unsupportedReason != nil)
         #expect(throws: DVDError.self) { try DVDExtraction.select(inventory, title: "1:1") }
     }

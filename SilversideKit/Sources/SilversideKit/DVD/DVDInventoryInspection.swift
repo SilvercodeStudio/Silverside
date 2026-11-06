@@ -60,7 +60,7 @@ extension DVDTools {
 
 extension DVDPresentation {
     /// Retain every observation, including unsupported formats. Only a complete,
-    /// uniform set supplies the program-wide format used by the current ripper.
+    /// uniform set supplies a program-wide format; mixed programs use run formats.
     mutating func classifyFormats() {
         format = nil
         guard var observations = trackFormats, !tracks.isEmpty,
@@ -72,12 +72,7 @@ extension DVDPresentation {
         for index in observations.indices where observations[index].unsupportedReason == nil {
             do {
                 guard let found = observations[index].format else { throw DVDError("Audio format is unknown.") }
-                guard found.codec == "mlp",
-                    [44_100, 48_000, 88_200, 96_000, 176_400, 192_000].contains(found.sampleRate),
-                    [16, 24].contains(found.bits),
-                    (found.channels == 2 && found.layout == "stereo") || (found.channels == 6 && found.layout == "5.1")
-                else { throw DVDError("Extraction currently supports 16/24-bit MLP stereo or 5.1; found \(found).") }
-                _ = try tracks[index].frames(at: found.sampleRate)
+                try found.validateExtraction()
             } catch {
                 observations[index].unsupportedReason = String(describing: error)
             }
@@ -86,12 +81,12 @@ extension DVDPresentation {
         let known = observations.compactMap(\.format)
         if let first = known.first, known.count == tracks.count, known.allSatisfy({ $0 == first }) {
             format = first
-        } else if let first = known.first, known.contains(where: { $0 != first }) {
-            unsupportedReason =
-                unsupportedReason ?? "Formats change between tracks; extraction currently requires one constant format."
         }
         if let failed = observations.first(where: { $0.unsupportedReason != nil }) {
             unsupportedReason = unsupportedReason ?? "Track \(failed.number): \(failed.unsupportedReason!)"
+        }
+        if unsupportedReason == nil {
+            do { _ = try extractionFormats() } catch { unsupportedReason = String(describing: error) }
         }
     }
 }

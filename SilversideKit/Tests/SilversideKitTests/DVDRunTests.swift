@@ -5,9 +5,9 @@ import Testing
 
 struct DVDRunTests {
     /// Minimal MPEG private-stream sectors around generated MLP access units.
-    /// One 40-sample, 48 kHz access unit per sector makes the fixture's track
-    /// extents independent of file sizes or compression ratios. Not a disc authorer.
-    func packets(_ stream: Data, startPTS: Int) throws -> Data {
+    /// One access unit per sector makes track extents independent of compression
+    /// ratios. Timestamps use the rate's frame size; this is not a disc authorer.
+    func packets(_ stream: Data, startPTS: Int, rate: Int = 48000) throws -> Data {
         let bytes = Array(stream)
         var result = Data()
         var position = 0
@@ -16,7 +16,8 @@ struct DVDRunTests {
             guard position + 4 <= bytes.count else { throw DVDError("Truncated fixture MLP frame.") }
             let size = (Int(bytes[position] & 15) * 256 + Int(bytes[position + 1])) * 2
             guard size >= 4, position + size <= bytes.count else { throw DVDError("Invalid fixture MLP frame.") }
-            let pts = startPTS + frame * 75
+            let samples = rate >= 176400 ? 160 : rate >= 88200 ? 80 : 40
+            let pts = startPTS + frame * samples * 90000 / rate
             let timestamp: [UInt8] = [
                 UInt8(0x21 | ((pts >> 29) & 14)), UInt8((pts >> 22) & 255),
                 UInt8(((pts >> 14) & 254) | 1), UInt8((pts >> 7) & 255), UInt8(((pts << 1) & 254) | 1),

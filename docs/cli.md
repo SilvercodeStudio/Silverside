@@ -65,13 +65,13 @@ selection. `dvd info --json` emits the versioned inventory.
 
 Inventory samples each track's start and reports changes in rate, precision or
 speaker layout. These bounded observations do not verify a complete track.
-Programs with changing formats remain unsupported for extraction. A linked
+Formats may change between independent decoding runs; changes within a continuous run remain unsupported. A linked
 DVD-Video title is listed separately as unsupported; unavailable or malformed
 title sets are reported without hiding other usable audio. A program-wide
 format is shown only when every track's format is known and agrees. The CLI and
 helper must both use protocol v2; rebuild/install them together after upgrading.
 
-This first version supports constant-format, 16/24-bit MLP stereo or 5.1 with
+This first version supports 16/24-bit MLP stereo, 5.0 or 5.1 with
 contiguous, one-cell-per-track navigation. It preserves the decoded sample rate,
 precision and speaker layout. An identified authored stereo substream can be
 selected; Silverside does not synthesize a stereo mix. Other layouts/codecs,
@@ -80,9 +80,15 @@ DVD-Video extraction, metadata lookup and GUI integration are follow-up work.
 Continuous tracks are decoded together before cutting at sample boundaries.
 A repeated or backward track-start timestamp begins a new decoding run, whose
 format, packet timestamps, sample count and PCM must pass the same checks.
-Forward timestamp gaps and partial overlaps remain unsupported. Durations must
-still convert exactly to whole samples; some 44.1 kHz programs fail this check.
-The report records each verified run's track range, sample count and PCM hash.
+Forward timestamp gaps and partial overlaps remain unsupported. For an independent,
+single-track 44.1 kHz run, a fractional duration is rounded to the nearest sample
+and must equal the full decoded sample count. Fractional internal cuts and fractional
+durations at other rates remain unsupported; no samples are padded or discarded to
+make a duration match. The report records each verified run's native format, track
+range, sample count, rounding decision and PCM hash. Mixed-format programs have no
+whole-program PCM hash, since concatenating them could resample or change channels.
+Programs containing both stereo and surround tracks require explicit `--title` selection;
+5.0 and 5.1 are both surround.
 
 The output folder must be new, and its parent must exist. Each program gets a
 folder of numbered FLAC tracks and `Tracks.m3u8`. `dvd-rip.json` and

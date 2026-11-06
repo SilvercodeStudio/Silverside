@@ -35,9 +35,14 @@ extension DVDExtraction {
         tools: DVDTools, work: URL, stop: StopToken, progress: (String) -> Void
     ) throws -> (run: DVDRipReport.Run, tracks: [DVDRipReport.Track], files: [URL]) {
         try stop.check()
-        guard let first = run.tracks.first, let last = run.tracks.last, let format = presentation.format else {
+        guard let first = run.tracks.first, let last = run.tracks.last else {
             throw DVDError("Cannot decode an empty run or unknown format.")
         }
+        let format = try run.format(in: presentation)
+        let frameCounts = try run.frameCounts(at: format.sampleRate)
+        // Encoding options are local to this run. Keep global track numbering.
+        var runPresentation = presentation
+        runPresentation.format = format
         let runWork = work.appendingPathComponent("run-\(first.number)", isDirectory: true)
         try FileManager.default.createDirectory(at: runWork, withIntermediateDirectories: false)
         let input: URL
@@ -49,39 +54,44 @@ extension DVDExtraction {
                 source, to: input, offset: (first.firstSector - presentation.tracks[0].firstSector) * 2048,
                 count: (last.lastSector - first.firstSector + 1) * 2048, stop: stop)
         }
-        // A new run may begin with a different format. Refuse it before a decoder
-        // could convert it to the first run's precision or speaker layout.
+        // Recheck against this run's inventory before a decoder could convert
+        // its native precision or speaker layout.
         var (sourceFormat, _) = try tools.inspect(input, work: runWork, stop: stop)
-        if presentation.authoredStereo, sourceFormat.channels == 6, sourceFormat.layout == "5.1" {
+        if presentation.authoredStereo, sourceFormat.channels > 2 {
             sourceFormat.channels = 2
             sourceFormat.layout = "stereo"
         }
         guard sourceFormat == format else {
-            throw DVDError("Track \(first.number): run format differs from the selected program (\(sourceFormat)).")
+            throw DVDError("Track \(first.number): run format differs from its inventory (\(sourceFormat)).")
         }
         progress("Program \(presentation.id): decoding continuous run, tracks \(first.number)–\(last.number)…")
         let continuous = runWork.appendingPathComponent("continuous.flac")
-        let sourceHash = try encode(input, to: continuous, p: presentation, tools: tools, work: runWork, stop: stop)
-        let frames = try run.tracks.reduce(Int64(0)) { try $0 + $1.frames(at: format.sampleRate) }
+        let sourceHash = try encode(input, to: continuous, p: runPresentation, tools: tools, work: runWork, stop: stop)
+        let frames = try frameCounts.reduce(Int64(0)) { total, count in
+            let (sum, overflow) = total.addingReportingOverflow(count)
+            guard !overflow else { throw DVDError("Run sample count overflow.") }
+            return sum
+        }
         try verifyFormat(continuous, frames: frames, format: format, tools: tools, work: runWork, stop: stop)
         guard try pcmHash(continuous, bits: format.bits, tools: tools, work: runWork, stop: stop) == sourceHash else {
             throw DVDError("Run starting at track \(first.number): FLAC differs from source PCM.")
         }
-        try split(continuous, p: presentation, tracks: run.tracks, tools: tools, work: work, stop: stop)
+        try split(
+            continuous, p: runPresentation, tracks: run.tracks, frameCounts: frameCounts, tools: tools, work: work,
+            stop: stop)
         var tracks = [DVDRipReport.Track]()
         var files = [URL]()
-        for track in run.tracks {
+        for (track, frames) in zip(run.tracks, frameCounts) {
             try stop.check()
             progress("Program \(presentation.id): checking track \(track.number)/\(presentation.tracks.count)…")
             let file = work.appendingPathComponent(String(format: "%02d.flac", track.number))
-            let frames = try track.frames(at: format.sampleRate)
             try verifyFormat(file, frames: frames, format: format, tools: tools, work: work, stop: stop)
             tracks.append(
                 .init(
                     number: track.number, file: String(format: "%02d - Track %02d.flac", track.number, track.number),
                     frames: frames,
                     pcmSHA256: try pcmHash(file, bits: format.bits, tools: tools, work: work, stop: stop),
-                    fileSHA256: try fileHash(file, stop: stop)))
+                    fileSHA256: try fileHash(file, stop: stop), format: format))
             files.append(file)
         }
         let joined = try joinedHash(files, bits: format.bits, tools: tools, work: work, stop: stop)
@@ -90,7 +100,10 @@ extension DVDExtraction {
         }
         try FileManager.default.removeItem(at: runWork)
         return (
-            .init(firstTrack: first.number, lastTrack: last.number, frames: frames, pcmSHA256: joined), tracks, files
+            .init(
+                firstTrack: first.number, lastTrack: last.number, frames: frames, pcmSHA256: joined,
+                format: format, roundedDuration: run.tracks.contains { (try? $0.frames(at: format.sampleRate)) == nil }),
+            tracks, files
         )
     }
 

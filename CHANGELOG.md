@@ -8,7 +8,7 @@ command-line tool.
 ### Added
 
 - `silverside dvd info` lists DVD-Audio programs, and `silverside dvd rip`
-  extracts supported MLP stereo and 5.1 programs into numbered FLAC tracks,
+  extracts supported MLP stereo, 5.0 and 5.1 programs into numbered FLAC tracks,
   with sample-count and PCM checks, playlists, and a rip report. Protected
   discs use an optional helper and user-installed Homebrew DVD libraries.
   FLAC files use blocks compatible with Apple's audio decoder. Completed
@@ -18,7 +18,9 @@ command-line tool.
   timestamps; each group is decoded and verified before the tracks are published.
   Inventory checks every track's format, reports rate and channel-layout changes,
   and lists unsupported DVD-Video links or unavailable title sets without hiding
-  usable audio programs.
+  usable audio programs. Native rates, precision and speaker layouts can change
+  between independently decoded groups. Rounded durations on independent 44.1 kHz
+  tracks are accepted only when the full decoded sample count confirms them.
 - A disc of a set can have a cover of its own, such as each volume's cover in
   a box set: a cover chosen on one disc asks whether it is for that disc only
   or for every disc. That disc's files embed its own cover in place of the

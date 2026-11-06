@@ -28,11 +28,14 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var file: String
         /// True if the track has CD+EG packs too; the file keeps them. Nil if it has not.
         public var extended: Bool?
-        /// Packs with one or two wrong symbols, which their parity put right.
+        /// Packs with one or two wrong symbols, which their parity put right; a correction of
+        /// two counts once a read again gives the same pack.
         public var correctedPacks: Int
-        /// Packs damaged past correction in the first read, and right in a read again. Nil if none.
+        /// Packs that the first read did not give right, and a read again did: damaged past
+        /// correction, or corrected in two symbols to another pack. Nil if none.
         public var rereadPacks: Int?
-        /// Packs damaged past correction in every read: the file has zeros there.
+        /// Packs left out, as zeros in the file: damaged past correction in every read, or
+        /// corrected in two symbols with no two reads that agree.
         public var uncorrectablePacks: Int
         /// Sectors whose subchannel the drive did not give, counted from the track's start;
         /// their packs are zeros. Nil if every sector was read.

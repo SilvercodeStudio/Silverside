@@ -83,8 +83,12 @@ extension CDGraphics {
     public enum PackCheck: Equatable, Sendable {
         /// The parity holds: the pack is as written.
         case valid
-        /// One or two symbols were wrong, and the parity put them right.
+        /// One symbol was wrong, and the parity put it right.
         case corrected
+        /// Two symbols were wrong, and the parity put them right, or so it seems: a pack with
+        /// three or more wrong symbols comes out this way too, as another valid pack, about 1
+        /// time in 20. Take it when a read again gives the same pack.
+        case correctedTwoSymbols
         /// More symbols were wrong than the parity can correct.
         case uncorrectable
     }
@@ -155,11 +159,13 @@ extension CDGraphics {
 
     /// Checks a pack by its P parity (the Red Book's Reed–Solomon (24, 20) code, symbols 20 to
     /// 23), and corrects one or two wrong symbols. A correction must also leave the Q parity
-    /// of the command and instruction (symbols 2 and 3) holding, which turns away most
-    /// miscorrections of a pack with three or more wrong symbols. A drive gives the
-    /// subchannel without the error correction of the audio, so single wrong symbols are
-    /// common: 456 of the 64,212 packs of a CD+EG CD-R's track 1 in the ASUS (2026-11-02),
-    /// each with one or two.
+    /// of the command and instruction (symbols 2 and 3) holding, which turns away the
+    /// miscorrections that change those. A drive gives the subchannel without the error
+    /// correction of the audio, so single wrong symbols are common: 456 of the 64,212 packs
+    /// of a CD+EG CD-R's track 1 in the ASUS (2026-11-02), each with one or two. A correction
+    /// of two can be wrong (`correctedTwoSymbols`): in a CD-RW of *Amadeus* (VINY-2) read in
+    /// the MATSHITA (2026-11-05), 4 of about 115 packs with more wrong symbols came out as
+    /// other valid packs, 3 of them tiles drawn wrong.
     public static func check(_ pack: inout [UInt8]) -> PackCheck {
         let s = syndromes(pack[...], count: 4)
         guard s.contains(where: { $0 != 0 }) else { return .valid }
@@ -193,7 +199,7 @@ extension CDGraphics {
                 let e1 = s[0] ^ e2
                 guard e1 != 0, e2 != 0 else { continue }
                 let errors = [(degree: d1, value: e1), (degree: d2, value: e2)]
-                if fits(errors) { return apply(errors) ? .corrected : .uncorrectable }
+                if fits(errors) { return apply(errors) ? .correctedTwoSymbols : .uncorrectable }
             }
         }
         return .uncorrectable
@@ -209,7 +215,9 @@ extension CDGraphics {
         public var uncorrectable = 0
     }
 
-    /// The packs of raw P–W subchannel (`packs(_:)`), checked and corrected (`check(_:)`).
+    /// The packs of raw P–W subchannel (`packs(_:)`), checked and corrected (`check(_:)`). One
+    /// read has nothing to compare, so a correction of two symbols is taken as it is;
+    /// `CDGraphicsReader` reads such a pack again.
     public static func checkedPacks(_ pw: [UInt8]) -> CheckedPacks { checked(packs(pw)) }
 
     /// `packs`, checked and corrected (`check(_:)`).
@@ -218,7 +226,7 @@ extension CDGraphics {
         for i in result.packs.indices {
             switch check(&result.packs[i]) {
             case .valid: break
-            case .corrected: result.corrected += 1
+            case .corrected, .correctedTwoSymbols: result.corrected += 1
             case .uncorrectable:
                 result.uncorrectable += 1
                 result.packs[i] = [UInt8](repeating: 0, count: 24)

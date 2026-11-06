@@ -75,7 +75,8 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
   pictures), in a drive that gives the subchannel: each track's graphics, 300
   packs a second from its index 01, the file that karaoke players and VLC
   read. Each pack is checked by its own parity, and one or two wrong symbols
-  are put right; a pack damaged past that is read again, then left out. The
+  are put right; a pack damaged past that is read again, then left out, and
+  a correction of two is kept only when a second read gives the same pack. The
   file keeps a CD+EG disc's extended graphics too. The encoding copies each
   beside its track's file in the album folder, by the same name
   (`01 Song.cdg` beside `01 Song.flac`), as karaoke programs pair them

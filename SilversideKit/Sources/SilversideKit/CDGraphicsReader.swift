@@ -82,42 +82,50 @@ public enum CDGraphicsReader {
             packs += Array(repeating: [UInt8](repeating: 0, count: 24), count: range.count * 4 - packs.count)
         }
         var corrected = 0
-        var damaged = [Int]()
+        // Packs to read again: damaged past correction, or corrected in two symbols, with the
+        // packs that corrections of two gave for them.
+        var pending = [Int: [[UInt8]]]()
         for i in packs.indices {
-            switch CDGraphics.check(&packs[i]) {
+            var pack = packs[i]
+            switch CDGraphics.check(&pack) {
             case .valid: break
-            case .corrected: corrected += 1
-            case .uncorrectable: damaged.append(i)
+            case .corrected:
+                packs[i] = pack
+                corrected += 1
+            case .correctedTwoSymbols: pending[i] = [pack]
+            case .uncorrectable: pending[i] = []
             }
         }
-        // A damaged pack is read again, up to 3 times: the subchannel has no error correction
-        // but the packs' own, so a read again can give it right. Its symbols are in the
-        // sector it starts in and the next 2.
+        // A pending pack is read again, up to 3 times: the subchannel has no error correction
+        // but the packs' own, so a read again can give it right. It is taken when a read gives
+        // it valid or with one wrong symbol, or when two reads correct it in two symbols to the
+        // same pack.
         var reread = 0
-        for _ in 0..<3 where !damaged.isEmpty {
+        for _ in 0..<3 where !pending.isEmpty {
             try stop?.check()
             _ = try? drive.readSubchannelPW(at: away(from: range.lowerBound, in: toc), count: 1)
-            var still = [Int]()
-            for i in damaged {
-                let first = range.lowerBound + i / 4
-                guard first + 3 <= end, let read = try? drive.readSubchannelPW(at: first, count: 3),
-                    read.count == 3 * 96, qFrames(read, from: first).misplaced.isEmpty
-                else {
-                    still.append(i)
-                    continue
-                }
-                var pack = CDGraphics.packs(read)[i % 4]
-                if CDGraphics.check(&pack) == .uncorrectable {
-                    still.append(i)
-                } else {
+            for run in rereadRuns(pending.keys.sorted(), from: range.lowerBound, end: end) {
+                guard let read = try? drive.readSubchannelPW(at: run.first, count: run.count),
+                    read.count == run.count * 96, qFrames(read, from: run.first).misplaced.isEmpty
+                else { continue }
+                let readPacks = CDGraphics.packs(read)
+                for i in run.packs {
+                    var pack = readPacks[i - (run.first - range.lowerBound) * 4]
+                    let check = CDGraphics.check(&pack)
+                    guard check != .uncorrectable, let candidates = pending[i] else { continue }
+                    if check == .correctedTwoSymbols && !candidates.contains(pack) {
+                        pending[i] = candidates + [pack]
+                        continue
+                    }
+                    // The first read's correction, now confirmed, or a pack only a read again gave.
+                    if candidates.first == pack { corrected += 1 } else { reread += 1 }
                     packs[i] = pack
-                    reread += 1
+                    pending[i] = nil
                 }
             }
-            damaged = still
         }
-        // A pack still damaged is left out (zeros), so that no player draws it.
-        for i in damaged { packs[i] = [UInt8](repeating: 0, count: 24) }
+        // A pack still pending is left out (zeros), so that no player draws it.
+        for i in pending.keys { packs[i] = [UInt8](repeating: 0, count: 24) }
 
         // By the rule of the look before the rip, so that a damaged pack is not taken for graphics.
         let graphics = CDGraphics.holds(packs, command: 9, instructions: CDGraphics.instructions)
@@ -130,7 +138,7 @@ public enum CDGraphicsReader {
         try Data(packs.joined()).write(to: url, options: .atomic)
         return RipReport.Graphics(
             file: url.lastPathComponent, extended: extended ? true : nil,
-            correctedPacks: corrected, rereadPacks: reread > 0 ? reread : nil, uncorrectablePacks: damaged.count,
+            correctedPacks: corrected, rereadPacks: reread > 0 ? reread : nil, uncorrectablePacks: pending.count,
             unreadableSectors: unreadable.isEmpty ? nil : unreadable,
             misplacedReads: misplacedReads > 0 ? misplacedReads : nil)
     }
@@ -150,6 +158,25 @@ public enum CDGraphicsReader {
             if let position = frame.position, position.lba != first + sector { misplaced.append(first + sector) }
         }
         return (valid, misplaced)
+    }
+
+    /// The reads that give `packs` (indexes from the track's start at `first`) again: a pack's
+    /// symbols are in the sector it starts in and the next 2, so a read takes the sectors of
+    /// nearby packs together, up to `chunk` sectors and the 2 after them, and none past `end`.
+    /// A pack too near `end` for its 3 sectors gets no read.
+    static func rereadRuns(_ packs: [Int], from first: Int, end: Int) -> [(first: Int, count: Int, packs: [Int])] {
+        var runs = [(first: Int, count: Int, packs: [Int])]()
+        for pack in packs {
+            let sector = first + pack / 4
+            guard sector + 3 <= end else { continue }
+            if let last = runs.last, sector - last.first < chunk, sector + 3 - last.first - last.count <= 8 {
+                runs[runs.count - 1].count = max(last.count, sector + 3 - last.first)
+                runs[runs.count - 1].packs.append(pack)
+            } else {
+                runs.append((sector, 3, [pack]))
+            }
+        }
+        return runs
     }
 
     /// A sector far from `lba` in the disc's audio, for a read that moves the drive away.

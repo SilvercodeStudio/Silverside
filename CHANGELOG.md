@@ -11,7 +11,8 @@ command-line tool.
   `Track 01.cdg` and so on, the file that karaoke players and VLC read, in a
   drive that gives the subchannel (not the HL-DT-ST BU50N). Each pack of the
   graphics carries its own error correction, which the rip applies, and a
-  pack damaged past it is read again. The report has a table of the graphics,
+  pack damaged past it, or with a correction that a second read must
+  confirm, is read again. The report has a table of the graphics,
   and `silverside rip` now looks for them too.
 - `silverside video` makes a video of a CD+G disc's rip: the graphics as a
   CD+G player draws them, over the audio exactly as ripped (Apple Lossless),

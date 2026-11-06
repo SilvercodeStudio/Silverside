@@ -254,8 +254,9 @@ extension RipReport {
             lines.append("")
             lines.append(
                 "Each track's graphics from its subchannel, 300 packs a second, checked by their parity. A corrected"
-                    + " pack is as the disc has it. A pack damaged past correction is read again, up to 3 times;"
-                    + " one still damaged is left out of the file.")
+                    + " pack is as the disc has it. A pack damaged past correction, or corrected in two symbols,"
+                    + " is read again, up to 3 times: a correction of two can give a wrong pack, so it is kept only"
+                    + " when a read again gives the same pack. A pack still in doubt is left out of the file.")
             lines.append("")
         }
 

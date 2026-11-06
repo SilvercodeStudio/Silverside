@@ -55,7 +55,7 @@ struct CDGraphicsTests {
                 var damaged = pack
                 damaged[first] ^= UInt8.random(in: 1...63, using: &random)
                 damaged[second] ^= UInt8.random(in: 1...63, using: &random)
-                #expect(CDGraphics.check(&damaged) == .corrected)
+                #expect(CDGraphics.check(&damaged) == .correctedTwoSymbols)
                 #expect(damaged == pack)
             }
         }
@@ -153,6 +153,78 @@ struct CDGraphicsTests {
         #expect(throws: DriveError.self) {
             try CDGraphicsReader.read(toc.audioTracks[0], in: toc, drive: drive, to: third)
         }
+    }
+
+    /// A correction of two symbols can give another valid pack, so it is kept only when a read
+    /// again gives the same pack; a read that gives the pack valid, or with one wrong symbol,
+    /// is taken at once. A pack in doubt after every read is left out.
+    @Test func readsAgainACorrectionOfTwoSymbols() throws {
+        let toc = try TOC(audioTrackStarts: [0], leadOutLBA: 300)
+        let drive = SimulatedDrive(toc: toc, samples: [UInt32](repeating: 0, count: 300 * CDDA.samplesPerSector))
+        let pack = Self.realPacks[2]
+        let packs = Array(repeating: pack, count: 300 * 4)
+        let pw = Self.subchannel(packs)
+        for sector in 0..<(pw.count / 96) {
+            drive.subchannelPW?[sector] = Array(pw[(sector * 96)..<(sector * 96 + 96)])
+        }
+        // Another tile block, and reads of pack 40 that a correction of two makes into it.
+        let other = CDGraphics.pack(command: 9, instruction: 6, data: [5, 7, 1, 48] + [UInt8](repeating: 0, count: 12))
+        func wrong(_ base: [UInt8], at positions: [Int]) -> [UInt8] {
+            var symbols = base
+            for position in positions { symbols[position] ^= 0x2A }
+            return symbols
+        }
+        var check = wrong(other, at: [8, 13])
+        #expect(CDGraphics.check(&check) == .correctedTwoSymbols && check == other)
+        // The subchannel of pack `index`'s 3 sectors when it reads as `symbols`.
+        func reads(of index: Int, as symbols: [UInt8]) -> [Int: [UInt8]] {
+            var changed = packs
+            changed[index] = symbols
+            let raw = Self.subchannel(changed)
+            return Dictionary(
+                uniqueKeysWithValues: (index / 4...index / 4 + 2).map { ($0, Array(raw[($0 * 96)..<($0 * 96 + 96)])) })
+        }
+        let folder = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appending(path: "Track 01.cdg")
+        func rip(_ sequence: [[UInt8]]) throws -> (RipReport.Graphics?, [UInt8]) {
+            drive.subchannelReads = [:]
+            for symbols in sequence {
+                for (sector, bytes) in reads(of: 40, as: symbols) {
+                    drive.subchannelReads[sector, default: []].append(bytes)
+                }
+            }
+            let graphics = try CDGraphicsReader.read(toc.audioTracks[0], in: toc, drive: drive, to: url)
+            let saved = [UInt8](try Data(contentsOf: url))
+            return (graphics, Array(saved[(40 * 24)..<(41 * 24)]))
+        }
+
+        // Read wrong once, then right: the pack as the disc has it, from the read again.
+        var (graphics, saved) = try rip([wrong(other, at: [8, 13])])
+        #expect(graphics == RipReport.Graphics(file: "Track 01.cdg", rereadPacks: 1))
+        #expect(saved == pack)
+        // Two wrong symbols, then a read with one: the first correction, confirmed.
+        (graphics, saved) = try rip([wrong(pack, at: [5, 17]), wrong(pack, at: [9])])
+        #expect(graphics == RipReport.Graphics(file: "Track 01.cdg", correctedPacks: 1))
+        #expect(saved == pack)
+        // Two reads corrected in two symbols to the same pack agree, as a disc written wrong.
+        (graphics, saved) = try rip([wrong(other, at: [8, 13]), wrong(other, at: [4, 19])])
+        #expect(graphics == RipReport.Graphics(file: "Track 01.cdg", correctedPacks: 1))
+        #expect(saved == other)
+        // Corrections of two that never agree, then damage past correction: left out.
+        let damaged = wrong(pack, at: [6, 7, 8])
+        (graphics, saved) = try rip([wrong(other, at: [8, 13]), wrong(pack, at: [5, 17]), damaged, damaged])
+        #expect(graphics == RipReport.Graphics(file: "Track 01.cdg", uncorrectablePacks: 1))
+        #expect(saved.allSatisfy { $0 == 0 })
+    }
+
+    /// The reads again take nearby packs together, and leave out a pack too near the end.
+    @Test func groupsTheReadsAgain() {
+        let runs = CDGraphicsReader.rereadRuns([0, 3, 4, 40, 41, 200, 396], from: 100, end: 200)
+        #expect(runs.map(\.first) == [100, 110, 150])
+        #expect(runs.map(\.count) == [4, 3, 3])
+        #expect(runs.map(\.packs) == [[0, 3, 4], [40, 41], [200]])
     }
 
     /// Each track's graphics go into the album folder beside its file, by its name, as karaoke

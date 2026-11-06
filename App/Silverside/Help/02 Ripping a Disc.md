@@ -203,7 +203,7 @@ On such a disc, a drive that can read past the end of the music reads the last t
 
 Karaoke CDs, and a few others, carry pictures or lyrics beside the music, in a part of the disc that CD players skip (the subchannel). A CD+G player, or a karaoke machine, shows them on a TV. The disc's logo beside the Rip button shows such a disc as CD+G, or CD+EG.
 
-In a drive that gives the subchannel (most do; the HL-DT-ST BU50N does not), the rip saves each track's graphics before its music, as `Track 01.cdg` and so on. The graphics carry their own error correction, which the rip applies, and a part damaged past it is read again. The report has a table of what was saved.
+In a drive that gives the subchannel (most do; the HL-DT-ST BU50N does not), the rip saves each track's graphics before its music, as `Track 01.cdg` and so on. The graphics carry their own error correction, which the rip applies, and a part damaged past it, or with a correction a second read must confirm, is read again. The report has a table of what was saved.
 
 The encoding puts each track's `.cdg` file beside its music file in the album's folder, with the same name, such as `01 What's on Your Mind.cdg` beside `01 What's on Your Mind.flac`. Karaoke programs and VLC pair the two by their names. An update of the library renames them together.
 

@@ -86,6 +86,9 @@ public final class SimulatedDrive: CDDrive {
     /// first pack, past what its parity corrects. The subchannel has no other error correction,
     /// so a read again can give it right.
     public var flakySubchannel: [Int: Int] = [:]
+    /// The next reads of a sector's subchannel, in order, each 96 bytes of R–W; the reads
+    /// after them give `subchannelPW`'s. For packs that read wrong in a given way.
+    public var subchannelReads: [Int: [[UInt8]]] = [:]
     /// The sectors in the buffer from the latest audio read, for `losesSubchannelAfterAudio`.
     private var buffered = Set<Int>()
 
@@ -96,6 +99,10 @@ public final class SimulatedDrive: CDDrive {
         return (lba..<(lba + count)).flatMap { sector in
             guard !buffered.contains(sector) else { return [UInt8](repeating: 0, count: 96) }
             var bytes = (subchannelPW[sector] ?? [UInt8](repeating: 0, count: 96)).map { $0 & 0x3F }
+            if let reads = subchannelReads[sector], let next = reads.first {
+                subchannelReads[sector] = Array(reads.dropFirst())
+                bytes = next.map { $0 & 0x3F }
+            }
             if let reads = flakySubchannel[sector], reads > 0 {
                 flakySubchannel[sector] = reads - 1
                 for i in [0, 8, 16] { bytes[i] ^= 0x15 }

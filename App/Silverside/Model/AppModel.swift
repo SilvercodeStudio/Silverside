@@ -123,6 +123,8 @@ final class AppModel {
 
     init() {
         settings = (try? Settings.load()) ?? Settings()
+        // A table's dragged widths last while it shows; a quit leaves them saved.
+        TrackColumns.forgetWidths()
         #if DEBUG
             // `-demo` adds a simulated drive with a disc, offline; `-demoRip` starts its rip.
             if UserDefaults.standard.bool(forKey: "demo"), let demo = DemoDisc.slot() {

@@ -37,6 +37,11 @@ command-line tool.
 
 ### Changed
 
+- The track tables give the Status, AccurateRip, CTDB, and Encoding columns
+  more room in a wide window, and the title the rest. Before, these columns
+  could come back squeezed to their smallest widths each time the disc's
+  view showed again. A column dragged wider keeps its width while the view
+  shows.
 - About › Acknowledgments names Exact Audio Copy, XLD, and cyanrip, the
   rippers that inspired Silverside, in one line at the end, after the
   services and programs that Silverside uses. It also thanks Adélaïde Casa

@@ -795,7 +795,7 @@ struct ResultsView: View {
                         showsRereads: columns[visibility: TrackColumns.rereads] != .visible)
                 }
             }
-            .width(min: 100, ideal: 150, max: 240)
+            .width(min: 100, ideal: 150, max: 265)
             .customizationID("status").disabledCustomizationBehavior(.visibility)
             TableColumn("Re-reads") { track in RereadsCell(track: track, ctdb: report.ctdb) }
                 .width(min: 60, ideal: 75, max: 120)
@@ -803,7 +803,7 @@ struct ResultsView: View {
             TableColumn("AccurateRip") { track in
                 if track.number == 0 { HiddenTrackStatus.notCovered } else { AccurateRipCell(state: .finished(track)) }
             }
-            .width(min: 70, ideal: 110, max: 140)
+            .width(min: 70, ideal: 110, max: 165)
             .customizationID("accurateRip")
             TableColumn("CTDB") { track in
                 if track.number == 0 {
@@ -812,7 +812,7 @@ struct ResultsView: View {
                     CTDBResultCell(track: track, ctdb: report.ctdb)
                 }
             }
-            .width(min: 60, ideal: 90, max: 130)
+            .width(min: 60, ideal: 90, max: 160)
             .customizationID("ctdb")
             if let encoding = report.encoding {
                 TableColumn("Encoding") { track in
@@ -825,11 +825,12 @@ struct ResultsView: View {
                         Text("Not encoded").foregroundStyle(.secondary)
                     }
                 }
-                .width(min: 60, ideal: 75, max: 120)
+                .width(min: 60, ideal: 75, max: 145)
                 .customizationID("encoding")
             }
         }
         .alternatingRowBackgrounds(.disabled)
         .onChange(of: columns) { TrackColumns.copyVisibility(from: columns, to: &driveColumns) }
+        .onDisappear(perform: TrackColumns.forgetWidths)
     }
 }

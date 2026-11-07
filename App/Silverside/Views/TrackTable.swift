@@ -34,7 +34,7 @@ struct TrackTable: View {
                             showsRereads: columns[visibility: TrackColumns.rereads] != .visible)
                     }
                 }
-                .width(min: 100, ideal: 180, max: 240)
+                .width(min: 100, ideal: 180, max: 265)
                 .customizationID("status")
                 .disabledCustomizationBehavior(.visibility)
                 TableColumn("Re-reads") { track in
@@ -54,7 +54,7 @@ struct TrackTable: View {
                         AccurateRipCell(state: rip.trackStates[track.number])
                     }
                 }
-                .width(min: 70, ideal: 110, max: 140)
+                .width(min: 70, ideal: 110, max: 165)
                 .customizationID("accurateRip")
                 TableColumn("CTDB") { track in
                     if track.number == 0 {
@@ -63,18 +63,19 @@ struct TrackTable: View {
                         CTDBCell(run: rip, number: track.number)
                     }
                 }
-                .width(min: 60, ideal: 100, max: 130)
+                .width(min: 60, ideal: 100, max: 160)
                 .customizationID("ctdb")
                 if rip.encodes {
                     TableColumn("Encoding") { track in
                         EncodeCell(state: rip.encodeStates[track.number], format: rip.encodingFormat)
                     }
-                    .width(min: 60, ideal: 90, max: 120)
+                    .width(min: 60, ideal: 90, max: 145)
                     .customizationID("encoding")
                 }
             }
             .alternatingRowBackgrounds(.disabled)
             .onChange(of: columns) { TrackColumns.copyVisibility(from: columns, to: &ripColumns) }
+            .onDisappear(perform: TrackColumns.forgetWidths)
         } else {
             Table(rows, selection: $tableSelection) {
                 discColumns
@@ -241,9 +242,42 @@ struct TrackTable: View {
 
 /// The track tables' columns that can be shown and hidden from the header's menu. A choice in
 /// a drive's table holds in an earlier rip's table too, and the other way round.
+///
+/// The widths a user drags hold while the table shows, but not after: SwiftUI's `Table` does
+/// not bring them back reliably (macOS 26). With a column's maximum set, a column dragged wider
+/// came back at its first width; and widths saved while the window was narrow came back with
+/// the result columns at their minimums and the title holding the rest, every time. So a new
+/// table starts from the column sizes, which give the result columns the room they need.
 enum TrackColumns {
     static let rereads = "rereads"
     static let optional = [rereads, "accurateRip", "ctdb", "encoding"]
+    /// The `@AppStorage` keys of the drive's table and of an earlier rip's table.
+    static let storageKeys = ["driveTrackColumns", "ripTrackColumns"]
+
+    /// Takes the saved widths out of both tables' customizations, and keeps what columns show
+    /// and their order. A customization in a form not known here stays as it is.
+    static func forgetWidths() {
+        let defaults = UserDefaults.standard
+        for key in storageKeys {
+            let saved = defaults.data(forKey: key) ?? defaults.string(forKey: key).map { Data($0.utf8) }
+            guard let saved, var object = (try? JSONSerialization.jsonObject(with: saved)) as? [String: Any],
+                let states = object["perColumnState"] as? [Any]
+            else { continue }
+            var changed = false
+            object["perColumnState"] = states.map { state -> Any in
+                guard var state = state as? [String: Any], state["currentWidth"] != nil else { return state }
+                state["currentWidth"] = nil
+                changed = true
+                return state
+            }
+            guard changed, let data = try? JSONSerialization.data(withJSONObject: object) else { continue }
+            if defaults.data(forKey: key) != nil {
+                defaults.set(data, forKey: key)
+            } else {
+                defaults.set(String(decoding: data, as: UTF8.self), forKey: key)
+            }
+        }
+    }
 
     static func copyVisibility<Source, Target>(
         from source: TableColumnCustomization<Source>, to target: inout TableColumnCustomization<Target>

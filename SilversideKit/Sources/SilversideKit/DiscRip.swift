@@ -573,8 +573,14 @@ public struct DiscRip {
                 }
                 if let graphics { written.insert(graphics.file) }
             }
+            // A track whose suspects CTDB's repair can correct needs no more re-reads.
+            var secure = secure
+            if checksCTDB && options.repairs {
+                secure.repairCanTakeOver = Self.repairCanTakeOver(
+                    trackAt: trackAudio.count, toc: toc, entries: entries, done: trackAudio)
+            }
             // The track's rip, with the pooling and the files, on the reading thread.
-            let (audio, ripped, ripSummary, copyPadding) = try await blocking { [self] in
+            let (audio, ripped, ripSummary, copyPadding) = try await blocking { [self, secure] in
                 let kept = keptTrack(
                     track, toc: toc, folders: [folder] + options.pool, records: records,
                     padding: Self.paddedEdges(
@@ -996,12 +1002,65 @@ public struct DiscRip {
         return result
     }
 
+    /// The test that stops a track's re-reads (`SecureRipper.repairCanTakeOver`): true when
+    /// the CTDB repair after the rip can correct every suspect sample so far, the tracks done
+    /// and this one's, as erasures. Each sample position of a CTDB row is a pair of columns,
+    /// and a column of 16 syndromes takes 14 erasures (two check the result); this asks for no
+    /// more than half of that, 7 (3 of 8), so that the tracks still to come, and errors that
+    /// no read showed, have room. Nil, so the re-reads go on, unless an entry with repair data
+    /// has the track CRC of a track already ripped without suspects: an entry for another
+    /// pressing cannot repair this one, and the track before it is the proof.
+    /// (*Live at Red Rocks 8.15.95* disc 2 spent 16 rounds on each of its two damaged tracks.)
+    static func repairCanTakeOver(trackAt index: Int, toc: TOC, entries: [CTDBEntry], done: [TrackAudio]) -> (
+        ([Int]) -> Bool
+    )? {
+        let tracks = toc.audioTracks
+        guard index < tracks.count, done.count == index, let first = tracks.first?.startLBA,
+            (toc.audioLeadOutLBA - first) * CDDA.samplesPerSector >= 3 * CTDBLayout.strideSamples
+        else { return nil }
+        let layout = CTDBLayout(toc: toc)
+        let ranges = CTDB.trackRanges(toc: toc, layout: layout, count: layout.sampleCount)
+        func start(_ track: Int) -> Int { (tracks[track].startLBA - first) * CDDA.samplesPerSector }
+        // The track CRCs, at shift 0, of the tracks done without suspects.
+        var crcs = [Int: UInt32]()
+        for (track, audio) in done.enumerated() where audio.alternatives.isEmpty {
+            let range = ranges[track].lowerBound - start(track)..<ranges[track].upperBound - start(track)
+            guard !range.isEmpty, audio.samples.indices.contains(range.lowerBound),
+                range.upperBound <= audio.samples.count
+            else { continue }
+            crcs[track] = CRC32.checksum(of: audio.samples[range])
+        }
+        let syndromes =
+            entries.filter { entry in
+                entry.hasParity && (1...DiscRepairer.maximumSyndromes).contains(entry.syndromeCount)
+                    && entry.trackCRCs.count == tracks.count
+                    && crcs.contains { entry.trackCRCs[$0.key] == $0.value }
+            }.map(\.syndromeCount).max()
+        guard let syndromes else { return nil }
+        let limit = (syndromes - 2) / 2
+        var counts = [Int](repeating: 0, count: CTDBLayout.strideSamples)
+        for (track, audio) in done.enumerated() {
+            for sample in audio.alternatives.keys { counts[(start(track) + sample) % CTDBLayout.strideSamples] += 1 }
+        }
+        let offset = start(index)
+        return { [counts] suspects in
+            var counts = counts
+            for sample in suspects {
+                let position = (offset + sample) % CTDBLayout.strideSamples
+                counts[position] += 1
+                if counts[position] > limit { return false }
+            }
+            return counts.max() ?? 0 <= limit
+        }
+    }
+
     /// The sectors, counted from the first audio track's start, that the secure ripper re-read:
-    /// the CTDB repair's re-reads leave them out (`DiscRepairer.sectorsReadAlready`).
+    /// the CTDB repair's re-reads leave them out (`DiscRepairer.sectorsReadAlready`). A track
+    /// whose re-reads stopped early for the repair keeps its sectors in the repair's re-reads.
     static func sectorsReadAlready(in reports: [RipReport.Track], toc: TOC) -> Set<Int> {
         guard let first = toc.audioTracks.first?.startLBA else { return [] }
         var sectors = Set<Int>()
-        for report in reports where report.rereadRounds > 0 {
+        for report in reports where report.rereadRounds > 0 && report.rereadsLeftToRepair != true {
             guard let track = toc.audioTracks.first(where: { $0.number == report.number }) else { continue }
             sectors.formUnion(report.suspectSectors.map { track.startLBA - first + $0 })
         }
@@ -1130,6 +1189,7 @@ public struct DiscRip {
         let rip = try secure.rip(track)
         report.matchingOffsets = rip.matchingOffsets
         report.cacheFlushIncomplete = rip.cacheFlushIncomplete ? true : nil
+        report.rereadsLeftToRepair = rip.rereadsLeftToRepair ? true : nil
         report.fullReads = rip.fullReads
         report.rereadRounds = rip.rounds
         report.suspectSectors = rip.suspectSectors

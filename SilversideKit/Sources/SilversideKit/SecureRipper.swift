@@ -57,6 +57,9 @@ public struct SecureTrackRip: Sendable {
     public var qReadInFull = false
     /// A requested cache flush could not read enough independent sectors.
     public var cacheFlushIncomplete = false
+    /// True if the re-reads stopped because a CTDB repair after the rip can correct the
+    /// track's suspect samples (`SecureRipper.repairCanTakeOver`).
+    public var rereadsLeftToRepair = false
 
     /// The sectors, counted from the track's start, that the first read could not read. A
     /// later read may have read some of them; `versionCounts` is 0 for one that none could.
@@ -121,6 +124,13 @@ public struct SecureRipper {
     /// A track with C2 flags in at least this share of its sectors has flags that say nothing
     /// (see `c2FlagsMeanNothing`).
     public var meaninglessC2Share = 0.9
+
+    /// Asked before each round of re-reads, with the track's suspect samples (indexes in the
+    /// track: where its versions differ, with C2 errors, or unreadable). True stops the
+    /// re-reads, because the CTDB repair after the rip can correct all of them
+    /// (`DiscRip.repairCanTakeOver`): more reads only add versions of the same samples. Nil
+    /// re-reads as before.
+    public var repairCanTakeOver: (([Int]) -> Bool)?
 
     /// True if C2 flags in `flagged` of a track's `sectors` say nothing about where errors are.
     /// A scratch flags a few hundred sectors, not a whole track. Flags on every sector come
@@ -324,6 +334,18 @@ public struct SecureRipper {
         }
 
         var samples = base
+        // The samples a CTDB repair takes as erasures, as `TrackAudio(_:)` finds them.
+        func suspectSamples() -> [Int] {
+            var found = Set(result.usableC2Samples + result.unreadableSamples)
+            for (index, sectorVersions) in versions {
+                let ranked = sectorVersions.ranked
+                guard let chosen = ranked.first, ranked.count > 1 else { continue }
+                for offset in 0..<size where ranked.dropFirst().contains(where: { $0[offset] != chosen[offset] }) {
+                    found.insert(index * size + offset)
+                }
+            }
+            return Array(found)
+        }
         var quietRounds = 0
         while true {
             try reader.stop?.check()
@@ -339,7 +361,10 @@ public struct SecureRipper {
                 break
             }
             let decided = known.isEmpty && versions.values.allSatisfy { $0.isDecided(by: agreement) }
-            var stop = decided || result.rounds == maximumRounds
+            if !decided, let repairCanTakeOver, repairCanTakeOver(suspectSamples()) {
+                result.rereadsLeftToRepair = true
+            }
+            var stop = decided || result.rounds == maximumRounds || result.rereadsLeftToRepair
             if !stop && quietRounds == roundsWithoutNewVersions {
                 // Re-reads give nothing new. Another full read may show suspect sectors not yet known.
                 stop = try known.isEmpty || fullReads == maximumFullReads || !readWholeTrack()

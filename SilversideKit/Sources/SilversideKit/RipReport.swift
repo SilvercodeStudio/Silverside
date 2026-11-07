@@ -186,6 +186,10 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var testReadMatches: Bool?
         /// The reading could not establish independence from the drive's cache.
         public var cacheFlushIncomplete: Bool?
+        /// True if the secure rip stopped its re-reads because CTDB's repair data could correct
+        /// the track's suspect samples (`SecureTrackRip.rereadsLeftToRepair`). Nil otherwise,
+        /// and in reports from before 0.9.5.
+        public var rereadsLeftToRepair: Bool?
 
         /// Records the checksums of the track's audio: its CRC-32s, and its AccurateRip checksums.
         public mutating func recordChecksums(of samples: [UInt32], isFirstTrack: Bool, isLastTrack: Bool) {

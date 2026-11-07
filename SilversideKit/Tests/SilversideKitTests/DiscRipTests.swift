@@ -510,6 +510,65 @@ struct DiscRipTests {
         #expect(result.report.files?.contains("Track 02.suspects") == false)
     }
 
+    /// A damaged sector that AccurateRip cannot settle, in a track after one that CTDB's entry
+    /// matches: the re-reads stop before their first round, as the repair can correct the
+    /// sector's samples, and it does. Without the repair, or with the damage in the first track
+    /// (no track before it proves the entry), the re-reads go on.
+    @Test func leavesRereadsToTheRepairWhenItCanCorrectThem() async throws {
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900])
+        // CTDB only: AccurateRip does not know the disc, so no checksum settles the sector.
+        let ctdb = Self.ctdbAnswer(toc: toc, samples: samples)
+        func web() -> FakeWeb {
+            FakeWeb([("http://db.cuetools.net/lookup2.php", ctdb.lookup), ("http://p.cuetools.net/1", ctdb.repairData)])
+        }
+        let (result, _, _, root) = try await rip(web: web()) { $0.unstableSectors = [1000] }
+        defer { try? FileManager.default.removeItem(at: root) }
+        let track = result.report.tracks[1]
+        #expect(track.rereadsLeftToRepair == true && track.rereadRounds == 0 && track.suspectSectors.count == 1)
+        #expect(result.report.ctdb.status == .repaired)
+        let written = try WAVFile.read(result.folder.appending(path: "Track 02.wav"))
+        #expect(written.dropLast(6) == samples[(800 * 588)...].dropLast(6))
+        #expect(result.report.markdown.contains("Re-reads of track 2 stopped early"))
+
+        let (notRepairing, _, _, root2) = try await rip(web: web()) {
+            $0.unstableSectors = [1000]
+        } configure: {
+            $0.repairs = false
+        }
+        defer { try? FileManager.default.removeItem(at: root2) }
+        #expect(notRepairing.report.tracks[1].rereadsLeftToRepair == nil)
+        #expect(notRepairing.report.tracks[1].rereadRounds > 0)
+
+        let (firstTrack, _, _, root3) = try await rip(web: web()) { $0.unstableSectors = [300] }
+        defer { try? FileManager.default.removeItem(at: root3) }
+        #expect(firstTrack.report.tracks[0].rereadsLeftToRepair == nil)
+        #expect(firstTrack.report.tracks[0].rereadRounds > 0)
+        #expect([.verified, .repaired].contains(firstTrack.report.ctdb.status))
+    }
+
+    /// The test counts suspect samples by their place in a CTDB row, those of the tracks done
+    /// too, up to half of a column's erasures; and it needs an entry that a clean track proves.
+    @Test func repairTakesOverOnlyWithinHalfOfEachColumn() throws {
+        // Tracks of whole rows (10 sectors each): each starts at place 0 of a row.
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900, 700])
+        let entries = try CTDBEntry.entries(fromXML: Self.ctdbAnswer(toc: toc, samples: samples).lookup)
+        let track1 = TrackAudio(samples: Array(samples[0..<(800 * 588)]))
+        var track2 = TrackAudio(samples: Array(samples[(800 * 588)..<(1700 * 588)]))
+        track2.alternatives = [5: [], 5880 + 5: []]
+        let test = try #require(
+            DiscRip.repairCanTakeOver(trackAt: 2, toc: toc, entries: entries, done: [track1, track2]))
+        // 8 syndromes: at most 3 suspect samples at one place, track 2's 2 included.
+        #expect(test(Array(6..<5880)))
+        #expect(test([5]))
+        #expect(!test([5, 2 * 5880 + 5]))
+        // A track with suspects proves nothing, nor one that differs from the entry.
+        #expect(DiscRip.repairCanTakeOver(trackAt: 1, toc: toc, entries: entries, done: [track2]) == nil)
+        var wrong = track1
+        wrong.samples[100_000] ^= 1
+        #expect(DiscRip.repairCanTakeOver(trackAt: 1, toc: toc, entries: entries, done: [wrong]) == nil)
+        #expect(DiscRip.repairCanTakeOver(trackAt: 0, toc: toc, entries: entries, done: []) == nil)
+    }
+
     /// With no network, every lookup fails, and the rip goes on as not checked.
     @Test func goesOnWhenTheLookupsFail() async throws {
         let (result, events, _, root) = try await rip(web: FakeWeb(failsEverything: true))

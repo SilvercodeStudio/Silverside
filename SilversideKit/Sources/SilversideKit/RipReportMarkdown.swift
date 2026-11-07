@@ -56,6 +56,14 @@ extension RipReport {
                     + "away from them. Reads that agree there prove less.",
             ]
         }
+        let leftToRepair = tracks.filter { $0.rereadsLeftToRepair == true }.map(\.number)
+        if !leftToRepair.isEmpty {
+            lines += [
+                "",
+                "Re-reads of \(leftToRepair.count == 1 ? "track" : "tracks") \(RipSet.list(leftToRepair)) stopped "
+                    + "early: CTDB's repair data could correct every suspect sample, so more reads were not needed.",
+            ]
+        }
         if let hiddenTrack {
             let agreement = hiddenTrack.readsAgree ? "two reads agree." : "NOT verified: no two reads agree."
             lines += ["", "Hidden track before track 1: " + agreement]

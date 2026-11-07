@@ -37,6 +37,11 @@ command-line tool.
 
 ### Changed
 
+- A secure rip stops re-reading a damaged track's suspect sectors when the
+  CTDB repair after the rip can correct all of them, instead of reading
+  them for up to 16 rounds. It does this only when an earlier track of the
+  disc matches a CTDB entry with repair data. If the repair still cannot
+  correct them, it reads those sectors again itself.
 - The track tables give the Status, AccurateRip, CTDB, and Encoding columns
   more room in a wide window, and the title the rest. Before, these columns
   could come back squeezed to their smallest widths each time the disc's

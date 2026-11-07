@@ -40,7 +40,7 @@ extension SecureTrackRip {
                 // With no rounds, the later reads of the whole track settled the sectors.
                 rereads +=
                     rounds == 0
-                    ? ", which settled \(suspectSectors.count) suspect sectors"
+                    ? (rereadsLeftToRepair ? "" : ", which settled \(suspectSectors.count) suspect sectors")
                     : " and \(rounds) rounds of re-reads of \(suspectSectors.count) sectors"
             }
         }
@@ -73,6 +73,7 @@ extension SecureTrackRip {
                 ? "not confirmed: no cache flush could be made, so the re-reads may have come from the cache" + rereads
                 : "NOT accurate: \(unresolvedSectors.count) of \(suspectSectors.count) suspect sectors unresolved"
                     + rereads + "; up to \(most) versions of a sector"
+                    + (rereadsLeftToRepair ? "; no more re-reads: the CTDB repair can correct them" : "")
         }
         return text + shifted + (cacheFlushIncomplete ? "; some re-reads may have come from the cache" : "")
     }

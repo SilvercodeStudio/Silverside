@@ -246,10 +246,41 @@ extension RipReport {
         case .partlyRepaired: text = "CTDB repaired some tracks, not the whole disc. "
         default: break
         }
+        if readsAgreeWithoutDamage {
+            text +=
+                "Every read of the tracks that fail agrees, with no C2 errors, so the errors are not in the reading: "
+            if let media, media != .pressed {
+                text +=
+                    "this \(media) holds them, burned from a copy that already had them, or from another master. "
+                    + "Another rip, in any drive, reads the same audio; a rip of a pressed copy can verify."
+            } else {
+                text +=
+                    "the disc itself seems to hold this audio, perhaps from a master that the databases do not know. "
+                    + "Another rip, in any drive, reads the same audio."
+            }
+            return text
+        }
         text +=
             "Another rip of the disc gives more versions of the damaged sectors, and Repair pools the rips. A rip in another drive helps most, because each drive reads damage differently."
         if unresolved.count >= 3 { text += " The errors are in many places, so clean the disc first." }
         return text
+    }
+
+    /// True if every track that is not verified was read in full at least twice, every read
+    /// agreeing, with C2 read and no sector flagged, unreadable, or left to the cache: the
+    /// audio is what the disc holds, so another rip would read it again (a CD-R of *Wish You
+    /// Were Here*, 2026-11-07: tracks 1-3 and 5 read 4 times alike, none accurate).
+    var readsAgreeWithoutDamage: Bool {
+        let wholeDisc = ctdb.status == .verified || ctdb.status == .repaired
+        let failed = tracks.filter {
+            !wholeDisc && $0.accurateRip != .accurate && $0.accurateRip != .otherPressings
+                && ($0.ctdbConfidence ?? 0) == 0
+        }
+        return !failed.isEmpty
+            && failed.allSatisfy {
+                $0.fullReads >= 2 && $0.suspectSectors.isEmpty && $0.c2Sectors == [] && $0.c2Ignored != true
+                    && ($0.unreadableSectors ?? []).isEmpty && $0.cacheFlushIncomplete != true
+            }
     }
 }
 

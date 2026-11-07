@@ -77,6 +77,44 @@ struct RipReportTests {
         #expect(report.advice?.hasPrefix("The entries in CTDB that match this pressing have no repair data.") == true)
         report.ctdb.repairTried = true
         #expect(report.advice?.hasPrefix("CTDB has repair data for this pressing, but the errors are too many") == true)
+        #expect(report.advice?.contains("each drive reads damage differently") == true)
+    }
+
+    /// A CD-R whose failed tracks read the same every time, with no C2 errors, holds its errors:
+    /// another drive would not help (*Wish You Were Here*, 2026-11-07).
+    @Test func saysWhenTheErrorsAreOnTheDisc() throws {
+        let toc = try TOC(audioTrackStarts: [0, 20867], leadOutLBA: 56350)
+        let drive = RipReport.Drive(
+            vendor: "SIM", product: "DRIVE", revision: "1.0", readOffset: 6, offsetSource: "--offset")
+        var failed = RipReport.Track(
+            number: 2, file: "Track 02.wav", startLBA: 20867, sectors: 35483, preEmphasis: false,
+            accurateRip: .notAccurate, fullReads: 4)
+        failed.c2Sectors = []
+        let tracks = [
+            RipReport.Track(
+                number: 1, file: "Track 01.wav", startLBA: 0, sectors: 20867, preEmphasis: false,
+                accurateRip: .otherPressings),
+            failed,
+        ]
+        var report = RipReport(
+            drive: drive, secure: true, toc: toc, tracks: tracks, ctdb: .init(status: .notVerified))
+        report.ctdb.repairTried = true
+        report.media = .recordable
+        let advice = try #require(report.advice)
+        #expect(advice.hasPrefix("CTDB has repair data for this pressing, but the errors are too many"))
+        #expect(advice.contains("this CD-R holds them") && advice.contains("a rip of a pressed copy can verify"))
+        #expect(!advice.contains("another drive helps"))
+        report.media = .pressed
+        #expect(report.advice?.contains("the disc itself seems to hold this audio") == true)
+        // Any sign of damage, or reads that may have come from the cache, keeps the usual advice.
+        for change in [
+            { (t: inout RipReport.Track) in t.c2Sectors = [5] }, { $0.c2Sectors = nil }, { $0.suspectSectors = [7] },
+            { $0.fullReads = 1 }, { $0.unreadableSectors = [9] }, { $0.cacheFlushIncomplete = true },
+        ] {
+            var changed = report
+            change(&changed.tracks[1])
+            #expect(changed.advice?.contains("each drive reads damage differently") == true)
+        }
     }
 
     /// The archive keeps a rip's report inside its manifest, under "ripReport", with the release beside it.

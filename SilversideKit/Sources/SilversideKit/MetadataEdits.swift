@@ -175,12 +175,15 @@ public struct MetadataEdits: Equatable, Sendable {
 
     /// The names a rip has now: its own edits, with the album edits kept for its release on
     /// top, as the library update writes them. A disc Silverside named has only its own; a
-    /// custom set has the set's too.
+    /// custom set has the set's too. Edits that came from another rip of the same disc do not
+    /// count (`ReleaseEditsStore.edits(forReleaseID:rip:)`).
     public static func current(
         forReportAt url: URL, release: MusicBrainzRelease, store: ReleaseEditsStore = ReleaseEditsStore()
     ) -> MetadataEdits {
         let own = read(fromReportAt: url) ?? MetadataEdits()
-        guard release.sharesAlbumEdits, let kept = store.edits(forReleaseID: release.id) else { return own }
+        guard release.sharesAlbumEdits,
+            let kept = store.edits(forReleaseID: release.id, rip: RipIdentity(reportAt: url))
+        else { return own }
         return own.merged(with: kept)
     }
 
@@ -231,9 +234,43 @@ extension MetadataEdits: Codable {
     }
 }
 
+/// A rip, by its disc's TOC (CTDB's string) and the time it was ripped, as its report has them.
+public struct RipIdentity: Codable, Equatable, Sendable {
+    public var toc: String
+    /// The rip's time as its report writes it: ISO 8601, in whole seconds.
+    public var ripped: String
+
+    public init(toc: String, date: Date) {
+        self.toc = toc
+        ripped = ISO8601DateFormatter().string(from: date)
+    }
+
+    public init(report: RipReport) {
+        self.init(toc: report.toc, date: report.date)
+    }
+
+    /// The rip of the report in this file: a rip's disc.json, the album folder's report, or
+    /// the archive's manifest, which keeps the report under "ripReport". Nil if the file has neither.
+    public init?(reportAt url: URL) {
+        guard let data = try? Data(contentsOf: url),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        let report = object["ripReport"] as? [String: Any] ?? object
+        guard let toc = report["toc"] as? String ?? object["toc"] as? String, let ripped = report["date"] as? String
+        else { return nil }
+        self.toc = toc
+        self.ripped = ripped
+    }
+}
+
 /// The album-level edits for each release, by MusicBrainz release ID, in a JSON file next
 /// to the drive profiles. An edit made on one disc of a set applies to the others when
 /// they are ripped. Rips in several drives can save at once, so a save locks the file.
+///
+/// An edit made from a rip records that rip ("from"). It then applies to that rip and to the
+/// rips of the release's other discs, but not to the other rips of the same disc: a second
+/// rip of a disc, renamed to keep it apart (an album "[PRE]" beside a de-emphasized one,
+/// 2026-11-07), must not rename the first. An edit from the set as a whole applies to every rip.
 public struct ReleaseEditsStore: Sendable {
     public let url: URL
 
@@ -241,12 +278,22 @@ public struct ReleaseEditsStore: Sendable {
         self.url = url
     }
 
+    /// The edits kept for the release, whichever rip they came from: the names a new rip starts with.
     public func edits(forReleaseID releaseID: String) -> MetadataEdits? {
-        load()[releaseID]
+        load()[releaseID]?.edits
     }
 
-    /// Keeps the album-level part of `edits` for the release; none removes the entry.
-    public func remember(_ edits: MetadataEdits, forReleaseID releaseID: String) throws {
+    /// The edits kept for the release that apply to `rip`: nil when they came from another rip
+    /// of the same disc, which keeps its own names.
+    public func edits(forReleaseID releaseID: String, rip: RipIdentity?) -> MetadataEdits? {
+        guard let entry = load()[releaseID] else { return nil }
+        if let from = entry.from, let rip, from.toc == rip.toc, from.ripped != rip.ripped { return nil }
+        return entry.edits
+    }
+
+    /// Keeps the album-level part of `edits` for the release; none removes the entry. `rip` is
+    /// the rip the edit was made from; nil for an edit of the whole set.
+    public func remember(_ edits: MetadataEdits, forReleaseID releaseID: String, from rip: RipIdentity? = nil) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let lock = open(url.path + ".lock", O_RDWR | O_CREAT, 0o644)
         guard lock >= 0 else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: url.path]) }
@@ -256,14 +303,39 @@ public struct ReleaseEditsStore: Sendable {
 
         var all = load()
         let album = edits.albumLevel
-        all[releaseID] = album.isEmpty ? nil : album
+        all[releaseID] = album.isEmpty ? nil : Entry(edits: album, from: rip)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(all).write(to: url, options: .atomic)
     }
 
-    private func load() -> [String: MetadataEdits] {
-        (try? JSONDecoder().decode([String: MetadataEdits].self, from: Data(contentsOf: url))) ?? [:]
+    /// An entry of the file: the edits' own keys, and "from" beside them, so that an older
+    /// version still reads the edits.
+    private struct Entry: Codable {
+        var edits: MetadataEdits
+        var from: RipIdentity?
+
+        private enum CodingKeys: String, CodingKey { case from }
+
+        init(edits: MetadataEdits, from: RipIdentity?) {
+            self.edits = edits
+            self.from = from
+        }
+
+        init(from decoder: any Decoder) throws {
+            edits = try MetadataEdits(from: decoder)
+            from = try decoder.container(keyedBy: CodingKeys.self).decodeIfPresent(RipIdentity.self, forKey: .from)
+        }
+
+        func encode(to encoder: any Encoder) throws {
+            try edits.encode(to: encoder)
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(from, forKey: .from)
+        }
+    }
+
+    private func load() -> [String: Entry] {
+        (try? JSONDecoder().decode([String: Entry].self, from: Data(contentsOf: url))) ?? [:]
     }
 }
 

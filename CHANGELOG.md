@@ -43,9 +43,18 @@ command-line tool.
   and Adam Gashlin, whose pages made CD+EG's graphics public.
 - A set's discs that MusicBrainz gives no title show their track count in
   grey italics, so it does not read as a name.
+- When every read of the tracks that do not verify agrees, with no errors
+  from the drive, the advice no longer asks for a rip in another drive: the
+  disc itself holds that audio. For a CD-R, a rip of a pressed copy is the
+  way to verified audio.
 
 ### Fixed
 
+- A second rip of a disc given another album name (to keep a version with
+  pre-emphasis beside a de-emphasized one, say) gave the first rip that name
+  too, and a later change to the first rip would have renamed its files. A
+  name changed on one rip now reaches the rips of the release's other discs,
+  but not the other rips of the same disc.
 - Notes on an older rip whose folder a later rip of the disc took went into
   the later rip's report. They now stay with the older rip, in Rip History.
 - A release found by Search MusicBrainz… whose lengths MusicBrainz lacks in

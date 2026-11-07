@@ -101,6 +101,49 @@ struct MetadataEditsTests {
         #expect(store.edits(forReleaseID: "rel") == nil)
     }
 
+    /// An album name kept from one rip of a disc reaches the rips of the release's other discs,
+    /// but not another rip of the same disc, which keeps its own names (two rips of *Bob Dylan's
+    /// Greatest Hits*, one renamed "[PRE]", 2026-11-07).
+    @Test func keptNamesSkipTheOtherRipsOfTheSameDisc() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let release = NameTemplateTests().makeRelease(discs: 2)
+        func rip(_ name: String, toc: String, date: String, own: MetadataEdits? = nil) throws -> URL {
+            let file = folder.appending(path: "\(name).json")
+            var object: [String: Any] = ["toc": toc, "date": date]
+            if let own { object["edits"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(own)) }
+            try JSONSerialization.data(withJSONObject: object).write(to: file)
+            return file
+        }
+        let first = try rip("first", toc: "1:0:75:150", date: "2026-11-07T18:50:16Z")
+        let second = try rip(
+            "second", toc: "1:0:75:150", date: "2026-11-07T19:04:06Z", own: MetadataEdits(album: "Hits [PRE]"))
+        let otherDisc = try rip("other", toc: "1:0:80:160", date: "2026-11-07T20:00:00Z")
+        let store = ReleaseEditsStore(url: folder.appending(path: "ReleaseEdits.json"))
+        try store.remember(
+            MetadataEdits(album: "Hits [PRE]"), forReleaseID: release.id, from: RipIdentity(reportAt: second))
+        #expect(RipIdentity(reportAt: second)?.ripped == "2026-11-07T19:04:06Z")
+        func album(_ file: URL) -> String? {
+            MetadataEdits.current(forReportAt: file, release: release, store: store).album
+        }
+        #expect(album(first) == nil)
+        #expect(album(second) == "Hits [PRE]" && album(otherDisc) == "Hits [PRE]")
+        // A new rip starts with the kept names, and an older version still reads them.
+        #expect(store.edits(forReleaseID: release.id)?.album == "Hits [PRE]")
+        let old = try JSONDecoder().decode([String: MetadataEdits].self, from: Data(contentsOf: store.url))
+        #expect(old[release.id]?.album == "Hits [PRE]")
+        // A rip's identity matches the date as its report writes it.
+        let date = Date(timeIntervalSince1970: 1_800_000_000.6)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let written = try JSONDecoder().decode([String].self, from: encoder.encode([date]))[0]
+        #expect(RipIdentity(toc: "1:0:75:150", date: date).ripped == written)
+        // An edit of the whole set reaches every rip.
+        try store.remember(MetadataEdits(album: "Greatest Hits"), forReleaseID: release.id)
+        #expect(album(first) == "Greatest Hits" && album(second) == "Greatest Hits")
+    }
+
     @Test func makesAManualReleaseFromCDTextWithoutMusicBrainzIDs() throws {
         let toc = try TOC(audioTrackStarts: [0, 75], leadOutLBA: 150)
         var cdText = CDText()

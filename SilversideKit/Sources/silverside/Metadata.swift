@@ -117,9 +117,10 @@ struct Metadata: AsyncParsableCommand {
         }
         // The edits: the rip's, else the ones kept for the release; then this command's changes.
         let store = ReleaseEditsStore()
+        let rip = folder.flatMap { RipIdentity(reportAt: $0.appending(path: "disc.json")) }
         var edits =
             folder.flatMap(MetadataEdits.read(fromDiscJSONOf:))
-            ?? (chosen.sharesAlbumEdits ? store.edits(forReleaseID: chosen.id) : nil) ?? MetadataEdits()
+            ?? (chosen.sharesAlbumEdits ? store.edits(forReleaseID: chosen.id, rip: rip) : nil) ?? MetadataEdits()
         if clearEdits { edits = MetadataEdits() }
         for assignment in sets { try Self.apply(assignment, to: &edits) }
         let changed = clearEdits || !sets.isEmpty
@@ -139,7 +140,7 @@ struct Metadata: AsyncParsableCommand {
         }
         try chosen.save(inDiscJSONOf: folder)
         try edits.save(inDiscJSONOf: folder)
-        if changed, chosen.sharesAlbumEdits { try store.remember(edits, forReleaseID: chosen.id) }
+        if changed, chosen.sharesAlbumEdits { try store.remember(edits, forReleaseID: chosen.id, from: rip) }
         print()
         print(
             "Saved the release" + (edits.isEmpty ? "" : " and the edits")

@@ -169,7 +169,9 @@ struct ResultsView: View {
             edits = MetadataEdits.read(fromReportAt: recentRip.file) ?? MetadataEdits()
             savedEdits = edits
             if let release = report.release, release.sharesAlbumEdits {
-                keptEdits = ReleaseEditsStore().edits(forReleaseID: release.id) ?? MetadataEdits()
+                keptEdits =
+                    ReleaseEditsStore().edits(forReleaseID: release.id, rip: RipIdentity(report: report))
+                    ?? MetadataEdits()
                 savedKeptEdits = keptEdits
             }
             loadAlbumFields()
@@ -350,7 +352,8 @@ struct ResultsView: View {
         guard edits != savedEdits || keptEdits != savedKeptEdits else { return }
         if keptEdits != savedKeptEdits, let release = report.release, release.sharesAlbumEdits {
             do {
-                try ReleaseEditsStore().remember(keptEdits, forReleaseID: release.id)
+                try ReleaseEditsStore().remember(
+                    keptEdits, forReleaseID: release.id, from: RipIdentity(report: report))
             } catch {
                 model.alert = AppAlert(title: "The names could not be saved", message: "\(error)")
                 return
@@ -387,8 +390,9 @@ struct ResultsView: View {
                 edits[keyPath: field] = value
             } else {
                 keptEdits[keyPath: field] = value
-                // The kept value is the only one, so clearing it shows MusicBrainz's again.
-                edits[keyPath: field] = nil
+                // The rip keeps the value too, for when a later rip of the same disc keeps
+                // other names for the release; clearing both shows MusicBrainz's again.
+                edits[keyPath: field] = value
             }
         }
         keep(albumText, \.album, original: release.title)

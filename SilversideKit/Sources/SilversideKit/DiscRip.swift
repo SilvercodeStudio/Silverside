@@ -787,7 +787,7 @@ public struct DiscRip {
         // stop answering, and the rip is then usable all the same.
         try writeReport()
         if !edits.isEmpty, let chosen, chosen.sharesAlbumEdits, options.edits != nil {
-            try ReleaseEditsStore().remember(edits, forReleaseID: chosen.id)
+            try ReleaseEditsStore().remember(edits, forReleaseID: chosen.id, from: RipIdentity(report: report))
         }
         if stoppedInCTDB { throw CancellationError() }
 
@@ -892,7 +892,7 @@ public struct DiscRip {
                             let store = ReleaseEditsStore()
                             var kept = store.edits(forReleaseID: release.id) ?? MetadataEdits()
                             kept.album = name
-                            try store.remember(kept, forReleaseID: release.id)
+                            try store.remember(kept, forReleaseID: release.id, from: RipIdentity(report: report))
                         }
                         events(.albumRenamed(name))
                         disc = try RippedDisc(folder: folder)

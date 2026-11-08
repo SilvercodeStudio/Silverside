@@ -144,6 +144,30 @@ struct MetadataEditsTests {
         #expect(album(first) == "Greatest Hits" && album(second) == "Greatest Hits")
     }
 
+    /// A name kept before edits recorded their rip (before 0.9.5) was every rip's, and the
+    /// first rip has no copy of its own: renaming a second rip of the disc leaves it the first
+    /// rip's still. A second edit from the second rip replaces only its own.
+    @Test func keptNamesFromBeforeStayWithTheOtherRips() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let first = folder.appending(path: "first.json")
+        try Data(#"{"toc":"1:0:100","date":"2026-11-05T12:00:00Z"}"#.utf8).write(to: first)
+        let release = release()
+        let store = ReleaseEditsStore(url: folder.appending(path: "ReleaseEdits.json"))
+        try store.remember(MetadataEdits(album: "Original custom name"), forReleaseID: release.id)
+        let second = RipIdentity(toc: "1:0:100", date: Date(timeIntervalSince1970: 1_800_000_000))
+        try store.remember(MetadataEdits(album: "Second rip [PRE]"), forReleaseID: release.id, from: second)
+        try store.remember(MetadataEdits(album: "Second rip [PRE] 2"), forReleaseID: release.id, from: second)
+        #expect(
+            MetadataEdits.current(forReportAt: first, release: release, store: store).album == "Original custom name")
+        #expect(store.edits(forReleaseID: release.id, rip: second)?.album == "Second rip [PRE] 2")
+        #expect(store.edits(forReleaseID: release.id)?.album == "Second rip [PRE] 2")
+        // Removing the second rip's name leaves the one from before.
+        try store.remember(MetadataEdits(), forReleaseID: release.id, from: second)
+        #expect(store.edits(forReleaseID: release.id, rip: second)?.album == "Original custom name")
+    }
+
     @Test func makesAManualReleaseFromCDTextWithoutMusicBrainzIDs() throws {
         let toc = try TOC(audioTrackStarts: [0, 75], leadOutLBA: 150)
         var cdText = CDText()

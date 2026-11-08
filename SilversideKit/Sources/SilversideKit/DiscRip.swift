@@ -1262,7 +1262,7 @@ public struct DiscRip {
         guard !options.pool.isEmpty, report.accurateRip != .accurate, report.accurateRip != .otherPressings else {
             return
         }
-        let pooled = RipPool.versions(of: track, toc: toc, in: options.pool)
+        let pooled = RipPool.versions(of: track, toc: toc, in: options.pool, records: records)
         for file in pooled.skipped { events(.poolFileSkipped(file)) }
         for version in pooled.versions {
             if case .accurate(let v1, let v2) = RipPool.verification(
@@ -1278,10 +1278,19 @@ public struct DiscRip {
         }
         guard !pooled.versions.isEmpty else { return }
         let own = audio
-        audio = TrackAudio(versions: [samples] + pooled.versions)
-        audio.add(own.alternatives)
+        // This read joins the earlier ones only if none lost its place against the others: on
+        // a tie, this read stands, and the earlier rips that disagree are left out.
+        let all = [samples] + pooled.versions
+        let kept = RipPool.consistent(all)
+        audio = TrackAudio(versions: kept.map { all[$0] })
+        if kept.contains(0) { audio.add(own.alternatives) }
         for alternatives in pooled.alternatives { audio.add(alternatives) }
-        summary += "; pooled with \(pooled.versions.count) earlier versions"
+        summary +=
+            !kept.contains(0)
+            ? "; this read lost its place against \(kept.count) earlier versions, which are used"
+            : kept.count < all.count
+                ? "; pooled with \(kept.count - 1) earlier versions (\(all.count - kept.count) lost their place)"
+                : "; pooled with \(pooled.versions.count) earlier versions"
         // The majority of the versions is what CTDB checks, so it is what the WAV file keeps:
         // a repair that changes nothing writes nothing.
         guard audio.samples != samples else { return }

@@ -73,6 +73,72 @@ struct RipRepairTests {
         #expect(pooled.versions.count == 2 && pooled.skipped.map(\.url) == [kept[0]])
     }
 
+    /// A rip whose own copy of a track lost its place: the repair's reads of the disc agree
+    /// with each other, outvote it, and the repair fixes the track from them.
+    @Test func outvotesARipThatLostItsPlace() async throws {
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900])
+        let (result, _, _, root) = try await DiscRipTests().rip { $0.corruptSectors = [1000] }
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = result.folder.appending(path: "Track 02.wav")
+        var ripped = try WAVFile.read(file)
+        ripped.replaceSubrange((300 * 588)..<(800 * 588), with: ripped[(340 * 588)..<(840 * 588)])
+        try WAVFile.write(ripped, to: file)
+        let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: 6)
+        drive.corruptSectors = [1000]
+        var repair = RipRepair(toc: toc, folders: [result.folder])
+        repair.reader = AudioReader(drive: drive, toc: toc, readOffset: 6, canOverread: false)
+        repair.cacheFlushSectors = 64
+        repair.webClient = await DiscRipTests.web(toc: toc, samples: samples).client(in: root.appending(path: "cache"))
+        let events = RipRepairEvents()
+        repair.events = { events.append($0) }
+        let outcome = try await repair.run()
+        guard case .repaired = outcome.outcome else {
+            Issue.record("Expected a repair, got \(outcome.outcome)")
+            return
+        }
+        #expect(
+            events.list.contains {
+                if case .repairLog(let line) = $0 { line.contains("an earlier version lost its place") } else { false }
+            })
+        #expect(outcome.samples(ofTrack: 1).dropLast(6) == samples[(800 * 588)...].dropLast(6))
+    }
+
+    /// The pool decides which reads lost their place by agreement, or by AccurateRip, not by
+    /// which comes first: a first version that lost its place loses to two that agree, and to
+    /// one that AccurateRip proves. The suspects beside a read left out are left out too, and
+    /// so is a suspects file that marks most of the track.
+    @Test func poolsTheReadsThatAgreeWhicheverComesFirst() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900])
+        let track = toc.audioTracks[1]
+        let good = Array(samples[(800 * 588)..<(1700 * 588)])
+        var lost = good
+        lost.replaceSubrange((100 * 588)..<(800 * 588), with: good[(150 * 588)..<(850 * 588)])
+        let folders = ["lost", "good", "good again"].map { root.appending(path: $0, directoryHint: .isDirectory) }
+        for (folder, audio) in zip(folders, [lost, good, good]) {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try WAVFile.write(audio, to: folder.appending(path: "Track 02.wav"))
+        }
+        // The lost read's suspects: nearly the whole track, as a repair once saved them.
+        try TrackAudio(versions: [lost, good]).writeAlternatives(to: folders[0].appending(path: "Track 02.suspects"))
+        let agreeing = RipPool.versions(of: track, toc: toc, in: folders)
+        #expect(agreeing.versions == [good, good])
+        #expect(agreeing.alternatives.isEmpty)
+        #expect(Set(agreeing.skipped.map(\.url.lastPathComponent)) == ["Track 02.wav", "Track 02.suspects"])
+        // One good read, after the lost one: AccurateRip decides.
+        let records = try AccurateRipRecord.records(
+            from: [UInt8](DiscRipTests.accurateRipFile(toc: toc, samples: samples)))
+        let proved = RipPool.versions(of: track, toc: toc, in: Array(folders.prefix(2)), records: records)
+        #expect(proved.versions == [good])
+        // Without AccurateRip, the first of two that disagree stands, as before.
+        #expect(RipPool.versions(of: track, toc: toc, in: Array(folders.prefix(2))).versions == [lost])
+        // A suspects file beside a good read that marks most of the track is left out.
+        try TrackAudio(versions: [lost, good]).writeAlternatives(to: folders[1].appending(path: "Track 02.suspects"))
+        let marked = RipPool.versions(of: track, toc: toc, in: Array(folders.suffix(2)))
+        #expect(marked.versions.count == 2 && marked.alternatives.isEmpty && marked.skipped.count == 1)
+    }
+
     /// A rip that CTDB verifies as it is: nothing is written next to it, and its own report
     /// says it is verified from now on.
     @Test func updatesTheReportOfAVerifiedRip() async throws {

@@ -283,16 +283,22 @@ public struct ReleaseEditsStore: Sendable {
         load()[releaseID]?.edits
     }
 
-    /// The edits kept for the release that apply to `rip`: nil when they came from another rip
-    /// of the same disc, which keeps its own names.
+    /// The edits kept for the release that apply to `rip`: the newest that did not come from
+    /// another rip of the same disc, which keeps its own names. An edit kept before, for every
+    /// rip (from before 0.9.5), or from this rip, still applies to it after another rip of the
+    /// disc is renamed.
     public func edits(forReleaseID releaseID: String, rip: RipIdentity?) -> MetadataEdits? {
         guard let entry = load()[releaseID] else { return nil }
-        if let from = entry.from, let rip, from.toc == rip.toc, from.ripped != rip.ripped { return nil }
-        return entry.edits
+        return entry.all.first { kept in
+            guard let from = kept.from, let rip else { return true }
+            return from.toc != rip.toc || from.ripped == rip.ripped
+        }?.edits
     }
 
-    /// Keeps the album-level part of `edits` for the release; none removes the entry. `rip` is
-    /// the rip the edit was made from; nil for an edit of the whole set.
+    /// Keeps the album-level part of `edits` for the release; none removes the rip's entry.
+    /// `rip` is the rip the edit was made from; nil for an edit of the whole set, which
+    /// replaces every edit kept before. An edit from a rip replaces only that rip's, and the
+    /// others stay behind it, for the other rips of the same disc (at most `keptEntries`).
     public func remember(_ edits: MetadataEdits, forReleaseID releaseID: String, from rip: RipIdentity? = nil) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let lock = open(url.path + ".lock", O_RDWR | O_CREAT, 0o644)
@@ -303,34 +309,50 @@ public struct ReleaseEditsStore: Sendable {
 
         var all = load()
         let album = edits.albumLevel
-        all[releaseID] = album.isEmpty ? nil : Entry(edits: album, from: rip)
+        var entries = rip == nil ? [] : (all[releaseID]?.all ?? []).filter { $0.from != rip }
+        if !album.isEmpty { entries.insert(Entry(edits: album, from: rip), at: 0) }
+        entries = Array(entries.prefix(Self.keptEntries))
+        all[releaseID] = entries.first.map {
+            Entry(edits: $0.edits, from: $0.from, earlier: Array(entries.dropFirst()))
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(all).write(to: url, options: .atomic)
     }
 
-    /// An entry of the file: the edits' own keys, and "from" beside them, so that an older
-    /// version still reads the edits.
+    /// The most edits kept for one release, the newest first.
+    static let keptEntries = 8
+
+    /// An entry of the file: the newest edits' own keys, so that an older version still reads
+    /// them, and beside them "from", and the earlier edits that other rips of the disc keep.
     private struct Entry: Codable {
         var edits: MetadataEdits
         var from: RipIdentity?
+        var earlier: [Entry] = []
 
-        private enum CodingKeys: String, CodingKey { case from }
+        /// This entry's edits, then the earlier ones, newest first.
+        var all: [Entry] { [Entry(edits: edits, from: from)] + earlier }
 
-        init(edits: MetadataEdits, from: RipIdentity?) {
+        private enum CodingKeys: String, CodingKey { case from, earlier }
+
+        init(edits: MetadataEdits, from: RipIdentity?, earlier: [Entry] = []) {
             self.edits = edits
             self.from = from
+            self.earlier = earlier
         }
 
         init(from decoder: any Decoder) throws {
             edits = try MetadataEdits(from: decoder)
-            from = try decoder.container(keyedBy: CodingKeys.self).decodeIfPresent(RipIdentity.self, forKey: .from)
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            from = try container.decodeIfPresent(RipIdentity.self, forKey: .from)
+            earlier = try container.decodeIfPresent([Entry].self, forKey: .earlier) ?? []
         }
 
         func encode(to encoder: any Encoder) throws {
             try edits.encode(to: encoder)
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encodeIfPresent(from, forKey: .from)
+            if !earlier.isEmpty { try container.encode(earlier, forKey: .earlier) }
         }
     }
 

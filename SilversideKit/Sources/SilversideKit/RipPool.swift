@@ -11,38 +11,91 @@ public enum RipPool {
     }
 
     /// The versions of a track in `folders` ("Track NN.wav" with the track's length), the
-    /// alternatives that each folder kept for it ("Track NN.suspects"), and the track files
-    /// that are there but could not be used: not CD audio, not the track's length, or a read
-    /// that lost its place against the first version (`lostItsPlace`).
+    /// alternatives that each folder kept for it ("Track NN.suspects"), and the files that are
+    /// there but could not be used: not CD audio, not the track's length, a read that lost its
+    /// place against the others (`consistent`), or the suspects beside such a read. A version
+    /// that AccurateRip says is accurate, among `records`, decides which reads lost their place.
+    /// A suspects file that marks more than half of the track is left out too: no repair can use
+    /// that many erasures, and it came from a read that lost its place.
     public static func versions(
-        of track: TOC.Track, toc: TOC, in folders: [URL]
+        of track: TOC.Track, toc: TOC, in folders: [URL], records: [AccurateRipRecord] = []
     ) -> (versions: [[UInt32]], alternatives: [[Int: [UInt32]]], skipped: [SkippedFile]) {
         let length = toc.sectorRange(of: track).count * CDDA.samplesPerSector
         let name = String(format: "Track %02d.wav", track.number)
-        var versions = [[UInt32]]()
+        var found = [(folder: URL, samples: [UInt32])]()
         var skipped = [SkippedFile]()
         for folder in folders {
             let url = folder.appending(path: name)
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             do {
                 let samples = try WAVFile.read(url)
-                if samples.count != length {
-                    skipped.append(.init(url: url, reason: "it has \(samples.count) samples, and the track \(length)"))
-                } else if let first = versions.first, lostItsPlace(samples, against: first) {
-                    skipped.append(
-                        .init(url: url, reason: "it lost its place on the disc: a long run of it is other audio"))
+                if samples.count == length {
+                    found.append((folder, samples))
                 } else {
-                    versions.append(samples)
+                    skipped.append(.init(url: url, reason: "it has \(samples.count) samples, and the track \(length)"))
                 }
             } catch {
                 skipped.append(.init(url: url, reason: String(describing: error)))
             }
         }
-        let alternatives = folders.compactMap {
-            try? TrackAudio.readAlternatives(
-                from: $0.appending(path: TrackAudio.alternativesFileName(track: track.number)))
+        let kept = Set(
+            consistent(found.map(\.samples)) {
+                if case .accurate = verification(of: $0, track: track, toc: toc, records: records) { return true }
+                return false
+            })
+        var lost = Set<URL>()
+        for (index, version) in found.enumerated() where !kept.contains(index) {
+            lost.insert(version.folder)
+            skipped.append(
+                .init(
+                    url: version.folder.appending(path: name),
+                    reason: "it lost its place on the disc: a long run of it is other audio"))
         }
-        return (versions, alternatives, skipped)
+        var alternatives = [[Int: [UInt32]]]()
+        for folder in folders {
+            let url = folder.appending(path: TrackAudio.alternativesFileName(track: track.number))
+            guard let saved = try? TrackAudio.readAlternatives(from: url) else { continue }
+            if lost.contains(folder) {
+                skipped.append(.init(url: url, reason: "it is the suspects of a read that lost its place"))
+            } else if 2 * saved.count > length {
+                skipped.append(
+                    .init(
+                        url: url,
+                        reason:
+                            "it marks \(saved.count) of the track's \(length) samples as suspect, more than a repair can use"
+                    ))
+            } else {
+                alternatives.append(saved)
+            }
+        }
+        return (found.indices.filter(kept.contains).map { found[$0].samples }, alternatives, skipped)
+    }
+
+    /// The versions of a track, by index, that did not lose their place (`lostItsPlace`):
+    /// those that agree with the version that `isVerified` (AccurateRip) proves, else with the
+    /// version that most others agree with, the earliest on a tie. A read that lost its place
+    /// cannot outvote the right ones, and the right ones survive a first read that lost its
+    /// place when a check or a majority shows it. `skipping` gives each version's sectors that
+    /// could not be read, which prove nothing.
+    public static func consistent(
+        _ versions: [[UInt32]], skipping: [Set<Int>] = [], isVerified: ([UInt32]) -> Bool = { _ in false }
+    ) -> [Int] {
+        guard versions.count > 1 else { return Array(versions.indices) }
+        func skipped(_ index: Int) -> Set<Int> { index < skipping.count ? skipping[index] : [] }
+        var agrees = versions.indices.map { [$0] }
+        for i in versions.indices {
+            for j in versions.indices where j > i {
+                guard !lostItsPlace(versions[j], against: versions[i], skipping: skipped(i).union(skipped(j)))
+                else { continue }
+                agrees[i].append(j)
+                agrees[j].append(i)
+            }
+        }
+        if let verified = versions.indices.first(where: { isVerified(versions[$0]) }) {
+            return agrees[verified].sorted()
+        }
+        let best = versions.indices.max { (agrees[$0].count, -$0) < (agrees[$1].count, -$1) }!
+        return agrees[best].sorted()
     }
 
     /// The report of a rip that was stopped, in its folder: the tracks it finished, written

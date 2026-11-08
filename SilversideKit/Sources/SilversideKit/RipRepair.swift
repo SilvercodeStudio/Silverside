@@ -100,7 +100,7 @@ public struct RipRepair {
             var versions = [[[UInt32]]]()
             var saved = [[[Int: [UInt32]]]]()
             for track in audioTracks {
-                let pooled = RipPool.versions(of: track, toc: toc, in: folders)
+                let pooled = RipPool.versions(of: track, toc: toc, in: folders, records: records)
                 for file in pooled.skipped { events(.poolFileSkipped(file)) }
                 guard !pooled.versions.isEmpty else { throw RipRepairError.missingTrack(track.number) }
                 versions.append(pooled.versions)
@@ -144,12 +144,24 @@ public struct RipRepair {
             // the reads can disagree where the disc is damaged.
             try stop.check()
             let (reads, cacheFlushSectors, toc) = (self.reads, self.cacheFlushSectors, self.toc)
+            let isAccurate: @Sendable ([UInt32]) -> Bool = { samples in
+                if case .accurate = RipPool.verification(of: samples, track: track, toc: toc, records: records) {
+                    return true
+                }
+                return false
+            }
             let (audio, versionCount) = try await blocking { [trackVersions = versions[index], saved = saved[index]] in
                 var trackVersions = trackVersions
                 if let reader, trackVersions.count < reads {
-                    // A read that lost its place is left out and not kept, and read again, twice at most.
-                    var lostReads = 0
-                    while trackVersions.count < reads && lostReads <= 2 {
+                    // Each read joins the versions. Those that lost their place against the others
+                    // (`RipPool.consistent`) are left out and not kept, and the track is read up to
+                    // twice more for them: two reads that agree outvote a first version that lost its place.
+                    let first = trackVersions.count
+                    var skipping = [Set<Int>](repeating: [], count: first)
+                    var kept = Array(trackVersions.indices)
+                    var attempts = 0
+                    while kept.count < reads && attempts < reads - first + 2 {
+                        attempts += 1
                         try reader.flushCache(awayFrom: toc.sectorRange(of: track), count: cacheFlushSectors)
                         let sectors = toc.sectorRange(of: track)
                         let whole = try reader.read(
@@ -160,19 +172,29 @@ public struct RipRepair {
                         // there is no read, and two such reads would outvote it.
                         var read = whole.samples
                         for run in whole.padded { read.replaceSubrange(run, with: trackVersions[0][run]) }
-                        let unreadable = Set(whole.unreadable.map { $0 / CDDA.samplesPerSector })
-                        if RipPool.lostItsPlace(read, against: trackVersions[0], skipping: unreadable) {
-                            lostReads += 1
-                            events(.rereadLostItsPlace(number: track.number))
-                            continue
-                        }
                         trackVersions.append(read)
-                        // Keep the read, so that a later run can use it.
+                        skipping.append(Set(whole.unreadable.map { $0 / CDDA.samplesPerSector }))
+                        kept = RipPool.consistent(trackVersions, skipping: skipping, isVerified: isAccurate)
+                    }
+                    for index in trackVersions.indices where !kept.contains(index) {
+                        events(
+                            index < first
+                                ? .repairLog(
+                                    String(
+                                        format: "Track %02d: an earlier version lost its place on the disc, ",
+                                        track.number)
+                                        + "against the reads that agree, and is left out.")
+                                : .rereadLostItsPlace(number: track.number))
+                    }
+                    // Keep the reads that hold, so that a later run can use them.
+                    for index in kept where index >= first {
                         let folder = Self.nextReadFolder(after: firstFolder, track: track)
                         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                         try WAVFile.write(
-                            read, to: folder.appending(path: String(format: "Track %02d.wav", track.number)))
+                            trackVersions[index],
+                            to: folder.appending(path: String(format: "Track %02d.wav", track.number)))
                     }
+                    trackVersions = kept.map { trackVersions[$0] }
                 }
                 var audio = TrackAudio(versions: trackVersions)
                 // Other values that earlier rips and repairs kept for suspect samples.

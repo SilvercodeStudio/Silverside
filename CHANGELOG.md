@@ -70,13 +70,15 @@ command-line tool.
   took it as a real version, so nearly every sample became suspect, no
   repair of the disc could succeed, and the suspects file grew to hundreds
   of megabytes. Such a read is now left out and read again, and one kept
-  from before is left out of the pool.
-
+  from before is left out of the pool, with its suspects. Which reads lost
+  their place is decided by AccurateRip, or else by the reads that agree,
+  so good reads win over a rip's own copy that lost its place.
 - A second rip of a disc given another album name (to keep a version with
   pre-emphasis beside a de-emphasized one, say) gave the first rip that name
   too, and a later change to the first rip would have renamed its files. A
   name changed on one rip now reaches the rips of the release's other discs,
-  but not the other rips of the same disc.
+  but not the other rips of the same disc, and a rip named before keeps
+  its name.
 - Notes on an older rip whose folder a later rip of the disc took went into
   the later rip's report. They now stay with the older rip, in Rip History.
 - A release found by Search MusicBrainz… whose lengths MusicBrainz lacks in

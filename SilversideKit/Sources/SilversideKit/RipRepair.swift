@@ -98,7 +98,7 @@ public struct RipRepair {
         try RipPool.check(folders, toc: toc)
         let (versions, saved) = try await blocking { [folders, toc, events] in
             var versions = [[[UInt32]]]()
-            var saved = [[[Int: [UInt32]]]]()
+            var saved = [[RipPool.Suspects]]()
             for track in audioTracks {
                 let pooled = RipPool.versions(of: track, toc: toc, in: folders, records: records)
                 for file in pooled.skipped { events(.poolFileSkipped(file)) }
@@ -152,6 +152,7 @@ public struct RipRepair {
             }
             let (audio, versionCount) = try await blocking { [trackVersions = versions[index], saved = saved[index]] in
                 var trackVersions = trackVersions
+                var saved = saved
                 if let reader, trackVersions.count < reads {
                     // Each read joins the versions. Those that lost their place against the others
                     // (`RipPool.consistent`) are left out and not kept, and the track is read up to
@@ -195,10 +196,16 @@ public struct RipRepair {
                             to: folder.appending(path: String(format: "Track %02d.wav", track.number)))
                     }
                     trackVersions = kept.map { trackVersions[$0] }
+                    // The suspects of a pooled version that the reads left out go with it.
+                    saved = saved.compactMap { suspects in
+                        guard let version = suspects.version else { return suspects }
+                        guard let index = kept.firstIndex(of: version) else { return nil }
+                        return RipPool.Suspects(version: index, values: suspects.values)
+                    }
                 }
                 var audio = TrackAudio(versions: trackVersions)
                 // Other values that earlier rips and repairs kept for suspect samples.
-                for alternatives in saved { audio.add(alternatives) }
+                for suspects in saved { audio.add(suspects.values) }
                 return (audio, trackVersions.count)
             }
             tracks.append(audio)

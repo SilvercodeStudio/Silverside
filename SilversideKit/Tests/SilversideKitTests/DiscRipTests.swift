@@ -569,6 +569,34 @@ struct DiscRipTests {
         #expect(DiscRip.repairCanTakeOver(trackAt: 0, toc: toc, entries: entries, done: []) == nil)
     }
 
+    /// An earlier rip whose track lost its place is left out of this rip's pool, and the
+    /// suspects beside it with it: this read stands on the tie.
+    @Test func leavesOutAPooledTrackThatLostItsPlaceWithItsSuspects() async throws {
+        let pool = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: pool) }
+        try FileManager.default.createDirectory(at: pool, withIntermediateDirectories: true)
+        let (_, samples) = try makeDisc(trackSectors: [800, 900])
+        let good = Array(samples[..<(800 * 588)])
+        var lost = good
+        lost.replaceSubrange((100 * 588)..<(200 * 588), with: good[(120 * 588)..<(220 * 588)])
+        try WAVFile.write(lost, to: pool.appending(path: "Track 01.wav"))
+        var suspect = TrackAudio(samples: lost)
+        for i in 0..<(100 * 588) { suspect.alternatives[100 * 588 + i] = [good[140 * 588 + i]] }
+        try suspect.writeAlternatives(to: pool.appending(path: "Track 01.suspects"))
+        let (result, events, _, root) = try await rip(configure: { $0.pool = [pool] })
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(
+            events.contains {
+                if case .trackFinished(let track, let summary, _) = $0 {
+                    track.number == 1 && summary.contains("lost their place")
+                } else {
+                    false
+                }
+            })
+        #expect(try WAVFile.read(result.folder.appending(path: "Track 01.wav")) == good)
+        #expect(!FileManager.default.fileExists(atPath: result.folder.appending(path: "Track 01.suspects").path))
+    }
+
     /// With no network, every lookup fails, and the rip goes on as not checked.
     @Test func goesOnWhenTheLookupsFail() async throws {
         let (result, events, _, root) = try await rip(web: FakeWeb(failsEverything: true))

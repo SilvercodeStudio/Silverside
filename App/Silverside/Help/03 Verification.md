@@ -47,7 +47,11 @@ The result banner says what is most likely to help next. In short:
 
 ## Repair
 
-Repair, in the toolbar of an earlier rip and in the Disc menu, checks the rip against CTDB again and repairs it with CTDB's data, as `silverside repair` does. Every other rip of the same disc in the rips folder joins the pool. When the disc is in a drive that is free, the sectors where the repair still fails are read again, which gives it more versions to try. To work on a few bad tracks, put the disc in a free drive (another drive often reads them better) and use Repair, not a rip of those tracks: a rip of some tracks writes into the earlier rip's folder with a report of those tracks only, and CTDB cannot check it.
+Repair, in the toolbar of an earlier rip and in the Disc menu, checks the rip against CTDB again and repairs it with CTDB's data, as `silverside repair` does. Every other rip of the same disc in the rips folder joins the pool. When the disc is in a drive that is free (not ripping), each track that AccurateRip does not match is read again until it has three versions, and the sectors where the repair still fails are read again too, which gives it more versions to try. The first lines of the repair's log say which: "Re-reads in" and the drive's name, or that the disc is not in a drive, so the repair uses the rips' files only.
+
+Repair needs CTDB to know the disc. For a disc that CTDB does not know, or that Repair cannot fix, rip it again, best in another drive: a rip reads each sector that disagrees again and again, and checks the tracks against AccurateRip, which Repair does not. A new rip of the disc keeps, without reading them, only the tracks that AccurateRip says an earlier rip got accurate; it reads every other track, also one that only CTDB verified. Stopping it part way is safe: the earlier rip stays as it was until the new one has read every track.
+
+To work on a few bad tracks, put the disc in a free drive (another drive often reads them better) and use Repair, not a rip of those tracks: a rip of some tracks writes into the earlier rip's folder with a report of those tracks only, and CTDB cannot check it.
 
 A rip that CTDB verifies as it is gets its report brought up to date: a rip made offline becomes a verified rip. A rip that the repair changes stays as it was, and the repaired rip goes in a folder of its own next to it ("… repaired"), with its own report, so it can be encoded like any rip.
 

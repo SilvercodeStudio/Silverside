@@ -3,7 +3,7 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
-## 0.9.5 (not released yet)
+## 0.9.5 (2026-11-07)
 
 ### Added
 
@@ -30,7 +30,6 @@ command-line tool.
 - The encoding puts each track's CD+G graphics beside its file in the album's
   folder, with the same name (`01 Song.cdg` beside `01 Song.flac`), as
   karaoke programs and VLC pair them.
-
 - An earlier rip or a set shows its other artwork (the back, the booklet,
   and so on, in the Artwork folder) after the cover in Quick Look, and how
   many images there are in the cover's corner, such as "+6".

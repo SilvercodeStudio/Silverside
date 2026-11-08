@@ -163,9 +163,21 @@ struct MetadataEditsTests {
             MetadataEdits.current(forReportAt: first, release: release, store: store).album == "Original custom name")
         #expect(store.edits(forReleaseID: release.id, rip: second)?.album == "Second rip [PRE] 2")
         #expect(store.edits(forReleaseID: release.id)?.album == "Second rip [PRE] 2")
-        // Removing the second rip's name leaves the one from before.
+        // Many later rips' names do not push out the name kept for every rip.
+        for day in 1...(ReleaseEditsStore.keptEntries + 2) {
+            let rip = RipIdentity(
+                toc: "1:0:100", date: Date(timeIntervalSince1970: 1_800_000_000 + Double(day) * 86400))
+            try store.remember(MetadataEdits(album: "Rip \(day)"), forReleaseID: release.id, from: rip)
+        }
+        #expect(
+            MetadataEdits.current(forReportAt: first, release: release, store: store).album == "Original custom name")
+        // Clearing the second rip's name (or typing MusicBrainz's) takes it back to
+        // MusicBrainz's, not to the name from before; the first rip keeps its own.
         try store.remember(MetadataEdits(), forReleaseID: release.id, from: second)
-        #expect(store.edits(forReleaseID: release.id, rip: second)?.album == "Original custom name")
+        #expect(store.edits(forReleaseID: release.id, rip: second) == nil)
+        #expect(store.edits(forReleaseID: release.id) == nil)
+        #expect(
+            MetadataEdits.current(forReportAt: first, release: release, store: store).album == "Original custom name")
     }
 
     @Test func makesAManualReleaseFromCDTextWithoutMusicBrainzIDs() throws {

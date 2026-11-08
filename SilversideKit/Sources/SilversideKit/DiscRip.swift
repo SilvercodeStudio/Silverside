@@ -1284,7 +1284,10 @@ public struct DiscRip {
         let kept = RipPool.consistent(all)
         audio = TrackAudio(versions: kept.map { all[$0] })
         if kept.contains(0) { audio.add(own.alternatives) }
-        for alternatives in pooled.alternatives { audio.add(alternatives) }
+        // An earlier version's suspects go with it: `all` has this read first.
+        for suspects in pooled.alternatives where suspects.version.map({ kept.contains($0 + 1) }) ?? true {
+            audio.add(suspects.values)
+        }
         summary +=
             !kept.contains(0)
             ? "; this read lost its place against \(kept.count) earlier versions, which are used"

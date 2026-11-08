@@ -83,6 +83,10 @@ struct RipRepairTests {
         var ripped = try WAVFile.read(file)
         ripped.replaceSubrange((300 * 588)..<(800 * 588), with: ripped[(340 * 588)..<(840 * 588)])
         try WAVFile.write(ripped, to: file)
+        // Its suspects go with it.
+        var suspects = TrackAudio(samples: ripped)
+        for sample in (300 * 588)..<(350 * 588) { suspects.alternatives[sample] = [0] }
+        try suspects.writeAlternatives(to: result.folder.appending(path: "Track 02.suspects"))
         let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: 6)
         drive.corruptSectors = [1000]
         var repair = RipRepair(toc: toc, folders: [result.folder])
@@ -101,6 +105,10 @@ struct RipRepairTests {
                 if case .repairLog(let line) = $0 { line.contains("an earlier version lost its place") } else { false }
             })
         #expect(outcome.samples(ofTrack: 1).dropLast(6) == samples[(800 * 588)...].dropLast(6))
+        #expect(
+            events.list.contains {
+                if case .trackPooled(2, _, let suspectSamples) = $0 { suspectSamples == 0 } else { false }
+            })
     }
 
     /// The pool decides which reads lost their place by agreement, or by AccurateRip, not by

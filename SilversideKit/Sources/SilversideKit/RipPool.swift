@@ -19,7 +19,7 @@ public enum RipPool {
     /// that many erasures, and it came from a read that lost its place.
     public static func versions(
         of track: TOC.Track, toc: TOC, in folders: [URL], records: [AccurateRipRecord] = []
-    ) -> (versions: [[UInt32]], alternatives: [[Int: [UInt32]]], skipped: [SkippedFile]) {
+    ) -> (versions: [[UInt32]], alternatives: [Suspects], skipped: [SkippedFile]) {
         let length = toc.sectorRange(of: track).count * CDDA.samplesPerSector
         let name = String(format: "Track %02d.wav", track.number)
         var found = [(folder: URL, samples: [UInt32])]()
@@ -51,7 +51,9 @@ public enum RipPool {
                     url: version.folder.appending(path: name),
                     reason: "it lost its place on the disc: a long run of it is other audio"))
         }
-        var alternatives = [[Int: [UInt32]]]()
+        // Each version's index among those returned, by its folder.
+        let keptFolders = found.indices.filter(kept.contains).map { found[$0].folder }
+        var alternatives = [Suspects]()
         for folder in folders {
             let url = folder.appending(path: TrackAudio.alternativesFileName(track: track.number))
             guard let saved = try? TrackAudio.readAlternatives(from: url) else { continue }
@@ -65,10 +67,18 @@ public enum RipPool {
                             "it marks \(saved.count) of the track's \(length) samples as suspect, more than a repair can use"
                     ))
             } else {
-                alternatives.append(saved)
+                alternatives.append(Suspects(version: keptFolders.firstIndex(of: folder), values: saved))
             }
         }
         return (found.indices.filter(kept.contains).map { found[$0].samples }, alternatives, skipped)
+    }
+
+    /// The other values that a folder kept for a track's suspect samples, and which version
+    /// they belong to: the index, among the versions pooled, of the same folder's track file;
+    /// nil if the folder has none. When that version is left out later, they go with it.
+    public struct Suspects: Sendable {
+        public var version: Int?
+        public var values: [Int: [UInt32]]
     }
 
     /// The versions of a track, by index, that did not lose their place (`lostItsPlace`):

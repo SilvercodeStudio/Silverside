@@ -280,25 +280,29 @@ public struct ReleaseEditsStore: Sendable {
 
     /// The edits kept for the release, whichever rip they came from: the names a new rip starts with.
     public func edits(forReleaseID releaseID: String) -> MetadataEdits? {
-        load()[releaseID]?.edits
+        load()[releaseID].flatMap { $0.edits.isEmpty ? nil : $0.edits }
     }
 
     /// The edits kept for the release that apply to `rip`: the newest that did not come from
     /// another rip of the same disc, which keeps its own names. An edit kept before, for every
     /// rip (from before 0.9.5), or from this rip, still applies to it after another rip of the
-    /// disc is renamed.
+    /// disc is renamed. Nil when the newest that applies took the names back to MusicBrainz's.
     public func edits(forReleaseID releaseID: String, rip: RipIdentity?) -> MetadataEdits? {
         guard let entry = load()[releaseID] else { return nil }
-        return entry.all.first { kept in
+        let edits = entry.all.first { kept in
             guard let from = kept.from, let rip else { return true }
             return from.toc != rip.toc || from.ripped == rip.ripped
         }?.edits
+        return edits?.isEmpty == false ? edits : nil
     }
 
-    /// Keeps the album-level part of `edits` for the release; none removes the rip's entry.
-    /// `rip` is the rip the edit was made from; nil for an edit of the whole set, which
-    /// replaces every edit kept before. An edit from a rip replaces only that rip's, and the
-    /// others stay behind it, for the other rips of the same disc (at most `keptEntries`).
+    /// Keeps the album-level part of `edits` for the release. `rip` is the rip the edit was
+    /// made from; nil for an edit of the whole set, which replaces every edit kept before (and
+    /// none removes them all). An edit from a rip replaces only that rip's, and the others stay
+    /// behind it, for the other rips of the same disc: at most `keptEntries` of them, and the
+    /// one kept for every rip before 0.9.5 besides, which older rips have no copy of. An edit
+    /// from a rip with no album-level names is kept too: it takes them back to MusicBrainz's,
+    /// and an older name behind it must not come back.
     public func remember(_ edits: MetadataEdits, forReleaseID releaseID: String, from rip: RipIdentity? = nil) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let lock = open(url.path + ".lock", O_RDWR | O_CREAT, 0o644)
@@ -310,8 +314,9 @@ public struct ReleaseEditsStore: Sendable {
         var all = load()
         let album = edits.albumLevel
         var entries = rip == nil ? [] : (all[releaseID]?.all ?? []).filter { $0.from != rip }
-        if !album.isEmpty { entries.insert(Entry(edits: album, from: rip), at: 0) }
-        entries = Array(entries.prefix(Self.keptEntries))
+        if rip != nil || !album.isEmpty { entries.insert(Entry(edits: album, from: rip), at: 0) }
+        let everyRips = entries.last { $0.from == nil }
+        entries = Array(entries.filter { $0.from != nil }.prefix(Self.keptEntries)) + (everyRips.map { [$0] } ?? [])
         all[releaseID] = entries.first.map {
             Entry(edits: $0.edits, from: $0.from, earlier: Array(entries.dropFirst()))
         }
@@ -320,7 +325,7 @@ public struct ReleaseEditsStore: Sendable {
         try encoder.encode(all).write(to: url, options: .atomic)
     }
 
-    /// The most edits kept for one release, the newest first.
+    /// The most edits from rips kept for one release, the newest first.
     static let keptEntries = 8
 
     /// An entry of the file: the newest edits' own keys, so that an older version still reads

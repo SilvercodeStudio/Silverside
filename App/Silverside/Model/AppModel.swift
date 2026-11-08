@@ -292,8 +292,21 @@ final class AppModel {
         }
     }
 
-    /// A cover for every disc of a set. Nil takes the Cover Art Archive's front cover.
-    func changeCover(ofSet set: RipSet, rips: [RecentRip], to image: CoverImage?) {
+    /// The earlier rips of a set's discs, in the order of the discs.
+    func rips(of set: RipSet) -> [RecentRip] {
+        set.positions.compactMap { set.discs[$0] }.compactMap { disc in recentRips.first { $0.file == disc.file } }
+    }
+
+    /// The positions of a set's discs that have covers of their own (`CoverFiles.disc`).
+    func discsWithOwnCovers(_ rips: [RecentRip]) -> [Int] {
+        rips.compactMap { rip in
+            rip.report.discPosition.flatMap { CoverFiles.disc($0, in: rip.folder) != nil ? $0 : nil }
+        }.sorted()
+    }
+
+    /// A cover for every disc of a set. Nil takes the Cover Art Archive's front cover. The
+    /// discs' own covers go, unless `keepingDiscCovers`: then those discs keep embedding theirs.
+    func changeCover(ofSet set: RipSet, rips: [RecentRip], to image: CoverImage?, keepingDiscCovers: Bool = false) {
         Task { @MainActor in
             var cover = image
             if cover == nil {
@@ -315,7 +328,7 @@ final class AppModel {
             }
             startLibraryRun(
                 title: set.title, encode: [], update: rips, cover: cover,
-                discCovers: Dictionary(uniqueKeysWithValues: rips.map { ($0.file, .remove) }))
+                discCovers: keepingDiscCovers ? [:] : Dictionary(uniqueKeysWithValues: rips.map { ($0.file, .remove) }))
         }
     }
 
@@ -953,6 +966,26 @@ final class AppModel {
                 refreshRecentRips()
             } catch {
                 alert = AppAlert(title: "The cover could not be changed", message: "\(error)")
+            }
+        }
+    }
+
+    /// Gives one disc of a set a cover of its own, which its files embed in place of the set's
+    /// (each volume of a box, say: *Anthology* 1 for discs 1 and 2); nil takes it away, so the
+    /// disc embeds the set's cover again. The set's cover and the other discs stay as they are.
+    func changeDiscCover(of rip: RecentRip, to image: CoverImage?) {
+        let settings = settings
+        coverChange = Task { @MainActor in
+            do {
+                let (file, change): (URL, DiscCoverChange) = (rip.file, image.map { .set($0) } ?? .remove)
+                _ = try await Task.detached {
+                    try DiscEncoder(settings: settings).retag(
+                        reportAt: file, remember: false, discCover: change, library: settings.libraryURL)
+                }.value
+                coverVersion += 1
+                refreshRecentRips()
+            } catch {
+                alert = AppAlert(title: "The disc's cover could not be changed", message: "\(error)")
             }
         }
     }

@@ -17,6 +17,8 @@ struct SetView: View {
     /// What Quick Look shows: the cover's file, then the Artwork folder's images.
     @State private var previewItems: [URL] = []
     @State private var archivePickerShown = false
+    /// A cover for the set, while the question asks whether the discs with their own keep them.
+    @State private var pendingCover: PendingCover?
     /// The other images of a release, offered for the discs' Artwork folders.
     @State private var artworkOffer: ArtworkOffer?
     @State private var album = ""
@@ -205,6 +207,23 @@ struct SetView: View {
                             }
                         }
                     }
+                }
+                .confirmationDialog(
+                    "Keep the covers that discs have of their own?",
+                    isPresented: Binding(get: { pendingCover != nil }, set: { if !$0 { pendingCover = nil } }),
+                    presenting: pendingCover
+                ) { pending in
+                    Button("Keep Them") {
+                        model.changeCover(ofSet: ripSet, rips: setRips, to: pending.image, keepingDiscCovers: true)
+                    }
+                    Button("Replace Them") { model.changeCover(ofSet: ripSet, rips: setRips, to: pending.image) }
+                    Button("Cancel", role: .cancel) {}
+                } message: { pending in
+                    Text(
+                        "\(pending.discs.count == 1 ? "Disc" : "Discs") \(RipSet.list(pending.discs)) "
+                            + "\(pending.discs.count == 1 ? "has a cover" : "have covers") of their own, which "
+                            + "\(pending.discs.count == 1 ? "its" : "their") files embed in place of the set's."
+                    )
                 }
                 .alert(
                     artworkOffer?.title ?? "",
@@ -445,7 +464,20 @@ struct SetView: View {
     /// The set's rips, one for each disc ripped.
     private var setRips: [RecentRip] { ripSet.positions.compactMap(rip(at:)) }
 
+    /// The set's new cover; nil is the Cover Art Archive's.
+    private struct PendingCover {
+        var image: CoverImage?
+        var discs: [Int]
+    }
+
+    /// A new cover for the set: when some discs have covers of their own, after asking whether
+    /// they keep them.
     private func changeCover(to image: CoverImage?) {
-        model.changeCover(ofSet: ripSet, rips: setRips, to: image)
+        let discs = model.discsWithOwnCovers(setRips)
+        if discs.isEmpty {
+            model.changeCover(ofSet: ripSet, rips: setRips, to: image)
+        } else {
+            pendingCover = PendingCover(image: image, discs: discs)
+        }
     }
 }

@@ -164,7 +164,7 @@ struct MetadataEditsTests {
         #expect(store.edits(forReleaseID: release.id, rip: second)?.album == "Second rip [PRE] 2")
         #expect(store.edits(forReleaseID: release.id)?.album == "Second rip [PRE] 2")
         // Many later rips' names do not push out the name kept for every rip.
-        for day in 1...(ReleaseEditsStore.keptEntries + 2) {
+        for day in 1...10 {
             let rip = RipIdentity(
                 toc: "1:0:100", date: Date(timeIntervalSince1970: 1_800_000_000 + Double(day) * 86400))
             try store.remember(MetadataEdits(album: "Rip \(day)"), forReleaseID: release.id, from: rip)
@@ -178,6 +178,23 @@ struct MetadataEditsTests {
         #expect(store.edits(forReleaseID: release.id) == nil)
         #expect(
             MetadataEdits.current(forReportAt: first, release: release, store: store).album == "Original custom name")
+        // Later rips of the disc, however many, do not bring the cleared name back.
+        for day in 11...30 {
+            let rip = RipIdentity(
+                toc: "1:0:100", date: Date(timeIntervalSince1970: 1_800_000_000 + Double(day) * 86400))
+            try store.remember(MetadataEdits(album: "Rip \(day)"), forReleaseID: release.id, from: rip)
+        }
+        #expect(store.edits(forReleaseID: release.id, rip: second) == nil)
+        #expect(
+            MetadataEdits.current(forReportAt: first, release: release, store: store).album == "Original custom name")
+        // A name from a rip of another disc reaches every rip of this one. From then on, the
+        // edits behind it and the newest of this disc's are reached by no rip, and go.
+        let otherDisc = RipIdentity(toc: "1:0:200", date: Date(timeIntervalSince1970: 1_900_000_000))
+        try store.remember(MetadataEdits(album: "Set name"), forReleaseID: release.id, from: otherDisc)
+        #expect(store.edits(forReleaseID: release.id, rip: second)?.album == "Set name")
+        #expect(MetadataEdits.current(forReportAt: first, release: release, store: store).album == "Set name")
+        let file = try JSONSerialization.jsonObject(with: Data(contentsOf: store.url)) as? [String: [String: Any]]
+        #expect((file?[release.id]?["earlier"] as? [Any])?.count == 1)
     }
 
     @Test func makesAManualReleaseFromCDTextWithoutMusicBrainzIDs() throws {

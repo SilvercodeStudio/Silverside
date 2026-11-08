@@ -299,10 +299,11 @@ public struct ReleaseEditsStore: Sendable {
     /// Keeps the album-level part of `edits` for the release. `rip` is the rip the edit was
     /// made from; nil for an edit of the whole set, which replaces every edit kept before (and
     /// none removes them all). An edit from a rip replaces only that rip's, and the others stay
-    /// behind it, for the other rips of the same disc: at most `keptEntries` of them, and the
-    /// one kept for every rip before 0.9.5 besides, which older rips have no copy of. An edit
-    /// from a rip with no album-level names is kept too: it takes them back to MusicBrainz's,
-    /// and an older name behind it must not come back.
+    /// behind it, for the other rips of the same disc, as long as some rip can still get them
+    /// (`needed`): a name kept for every rip before 0.9.5, which older rips have no copy of,
+    /// stays as long as only rips of one disc have newer names. An edit from a rip with no
+    /// album-level names is kept too: it takes them back to MusicBrainz's, and an older name
+    /// behind it must not come back.
     public func remember(_ edits: MetadataEdits, forReleaseID releaseID: String, from rip: RipIdentity? = nil) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let lock = open(url.path + ".lock", O_RDWR | O_CREAT, 0o644)
@@ -315,8 +316,7 @@ public struct ReleaseEditsStore: Sendable {
         let album = edits.albumLevel
         var entries = rip == nil ? [] : (all[releaseID]?.all ?? []).filter { $0.from != rip }
         if rip != nil || !album.isEmpty { entries.insert(Entry(edits: album, from: rip), at: 0) }
-        let everyRips = entries.last { $0.from == nil }
-        entries = Array(entries.filter { $0.from != nil }.prefix(Self.keptEntries)) + (everyRips.map { [$0] } ?? [])
+        entries = Self.needed(entries)
         all[releaseID] = entries.first.map {
             Entry(edits: $0.edits, from: $0.from, earlier: Array(entries.dropFirst()))
         }
@@ -325,8 +325,23 @@ public struct ReleaseEditsStore: Sendable {
         try encoder.encode(all).write(to: url, options: .atomic)
     }
 
-    /// The most edits from rips kept for one release, the newest first.
-    static let keptEntries = 8
+    /// The edits, newest first, that some rip can still get from `edits(forReleaseID:rip:)`,
+    /// which gives a rip the first edit from itself, from a rip of another disc, or for every
+    /// rip. Once the newer edits come from rips of two discs, or one is for every rip, each rip
+    /// finds one of them first, so no older edit is ever reached: those go, and no others. A
+    /// count limit would drop edits still in use (a name taken back to MusicBrainz's came back
+    /// after 8 later rips of the disc were named).
+    private static func needed(_ entries: [Entry]) -> [Entry] {
+        var kept = [Entry]()
+        var discs = Set<String>()
+        for entry in entries {
+            kept.append(entry)
+            guard let from = entry.from else { break }
+            discs.insert(from.toc)
+            if discs.count > 1 { break }
+        }
+        return kept
+    }
 
     /// An entry of the file: the newest edits' own keys, so that an older version still reads
     /// them, and beside them "from", and the earlier edits that other rips of the disc keep.

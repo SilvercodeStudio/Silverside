@@ -39,6 +39,10 @@ struct ResultsView: View {
     /// What Quick Look shows: the cover's file, then the Artwork folder's images.
     @State private var previewItems: [URL] = []
     @State private var archivePickerShown = false
+    /// A cover chosen for a disc of a set, while the question asks for which discs.
+    @State private var setDiscCover: CoverImage?
+    /// True if this disc of a set has a cover of its own (`CoverFiles.disc`).
+    @State private var hasOwnCover = false
     /// The other images of a release, offered for the rip's Artwork folder.
     @State private var artworkOffer: ArtworkOffer?
     /// The rip's own edits (track titles and artists), as typed; saved on Return, or when the
@@ -159,9 +163,27 @@ struct ResultsView: View {
             .opacity(reportShown ? 1 : 0)
             .frame(width: reportShown ? nil : 0)
         }
+        .confirmationDialog(
+            "Use this cover for disc \(report.discPosition ?? 0) only, or for every disc of the set?",
+            isPresented: Binding(get: { setDiscCover != nil }, set: { if !$0 { setDiscCover = nil } }),
+            presenting: setDiscCover
+        ) { image in
+            Button("Disc \(report.discPosition ?? 0) Only") { model.changeDiscCover(of: recentRip, to: image) }
+            Button("Every Disc") {
+                if let set = setOfDisc {
+                    model.changeCover(ofSet: set, rips: model.rips(of: set), to: image)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text(
+                "A disc's own cover goes into its files in place of the set's, as for each volume of a box set. Every Disc gives all of them this cover, and takes away the discs' own."
+            )
+        }
         .task(id: "\(folder.path) \(model.coverVersion)") {
             // The disc's own sleeve, in a box set whose discs have theirs, else the album's cover.
             cover = CoverFiles.embedded(forDisc: report.discPosition, in: folder).flatMap { try? Data(contentsOf: $0) }
+            hasOwnCover = CoverFiles.disc(report.discPosition, in: folder) != nil
             artwork = CoverFiles.artwork(in: ArtworkOffer.folders(of: [recentRip]))
             previewItems = (CoverDrop.file(for: cover, name: coverFileName).map { [$0] } ?? []) + artwork
         }
@@ -477,7 +499,7 @@ struct ResultsView: View {
                 }
                 .onDrop(of: [.fileURL, .image], isTargeted: $coverTargeted) { providers in
                     guard let provider = providers.first else { return false }
-                    CoverDrop.load(provider) { model.changeCover(of: recentRip, to: CoverImage(data: $0)) }
+                    CoverDrop.load(provider) { useCover(CoverImage(data: $0)) }
                     return true
                 }
                 .onTapGesture {
@@ -489,35 +511,18 @@ struct ResultsView: View {
                 }
                 .onDrag { CoverDrop.provider(for: cover, name: coverFileName) ?? NSItemProvider() }
                 .quickLookPreview($coverPreview, in: previewItems)
-                .contextMenu {
-                    Button("Quick Look") { coverPreview = CoverDrop.file(for: cover, name: coverFileName) }
-                        .disabled(cover == nil)
-                    Button("Choose Cover…") { chooseCover() }
-                    if let release = report.release, !release.isManual {
-                        Button(release.hasArtwork ? "Cover Art Archive…" : "Other Releases' Cover Art…") {
-                            archivePickerShown = true
-                        }
-                    }
-                    if let release = report.release, !release.isManual {
-                        Button("Use the Cover Art Archive's") { model.changeCover(of: recentRip, to: nil) }
-                        Button("Download Artwork…") {
-                            Task { artworkOffer = await model.artworkOffer(for: release, rips: [recentRip]) }
-                        }
-                        .disabled(recentRip.isMissing)
-                    }
-                    Divider()
-                    Button("Export Cover…") { CoverDrop.export(cover, name: coverFileName) }.disabled(cover == nil)
-                }
+                .contextMenu { coverMenu }
                 .help(
-                    "Click to see the cover at full size. Drop an image here, or choose one from the menu (your own, or another of the Cover Art Archive's), to change the cover: in the rip, in the album folder, and in the encoded files' tags. Drag the cover out to save a copy."
+                    "Click to see the cover at full size. Drop an image here, or choose one from the menu (your own, or another of the Cover Art Archive's), to change the cover: in the rip, in the album folder, and in the encoded files' tags. On a disc of a set, it asks whether the cover is for this disc only (as for each volume of a box set) or for every disc. Drag the cover out to save a copy."
                 )
                 .sheet(isPresented: $archivePickerShown) {
                     if let release = report.release {
                         CoverArtPickerSheet(release: release, disc: report.discPosition) { choice in
                             switch choice {
-                            case .image(let image): model.changeCover(of: recentRip, to: image)
+                            case .image(let image?): useCover(image)
+                            case .image(nil): useWholeSetCover(nil)
                             case .release(let other, let front):
-                                model.changeCover(of: recentRip, to: front)
+                                useWholeSetCover(front)
                                 Task {
                                     let images = (try? await CoverArtClient().images(releaseID: other)) ?? []
                                     artworkOffer = ArtworkOffer(images: images, rips: [recentRip], afterCover: true)
@@ -635,10 +640,57 @@ struct ResultsView: View {
             [report.release?.artist, report.release?.title].compactMap { $0 }.joined(separator: " - ") + " cover")
     }
 
+    /// The cover's menu.
+    @ViewBuilder private var coverMenu: some View {
+        Button("Quick Look") { coverPreview = CoverDrop.file(for: cover, name: coverFileName) }
+            .disabled(cover == nil)
+        Button("Choose Cover…") { chooseCover() }
+        if let release = report.release, !release.isManual {
+            Button(release.hasArtwork ? "Cover Art Archive…" : "Other Releases' Cover Art…") {
+                archivePickerShown = true
+            }
+        }
+        if setOfDisc != nil, hasOwnCover {
+            Button("Use the Set's Cover") { model.changeDiscCover(of: recentRip, to: nil) }
+        }
+        if let release = report.release, !release.isManual {
+            Button("Use the Cover Art Archive's") { useWholeSetCover(nil) }
+            Button("Download Artwork…") {
+                Task { artworkOffer = await model.artworkOffer(for: release, rips: [recentRip]) }
+            }
+            .disabled(recentRip.isMissing)
+        }
+        Divider()
+        Button("Export Cover…") { CoverDrop.export(cover, name: coverFileName) }.disabled(cover == nil)
+
+    }
+
     private func chooseCover() {
         let message = "Choose an image for the cover. JPEG and PNG are kept as they are; other formats become JPEG."
-        if let data = CoverDrop.choose(message: message) {
-            model.changeCover(of: recentRip, to: CoverImage(data: data))
+        if let data = CoverDrop.choose(message: message) { useCover(CoverImage(data: data)) }
+    }
+
+    /// The set this rip is a disc of, if any: its cover changes ask which discs they are for.
+    private var setOfDisc: RipSet? {
+        report.discPosition == nil ? nil : model.set(for: report.release)
+    }
+
+    /// A new cover: for a disc of a set, after asking whether for this disc only or every disc.
+    private func useCover(_ image: CoverImage) {
+        if setOfDisc != nil {
+            setDiscCover = image
+        } else {
+            model.changeCover(of: recentRip, to: image)
+        }
+    }
+
+    /// A cover for the whole album: for a disc of a set, every disc, and the discs that have
+    /// covers of their own keep them. Nil takes the Cover Art Archive's front cover.
+    private func useWholeSetCover(_ image: CoverImage?) {
+        if let set = setOfDisc {
+            model.changeCover(ofSet: set, rips: model.rips(of: set), to: image, keepingDiscCovers: true)
+        } else {
+            model.changeCover(of: recentRip, to: image)
         }
     }
 

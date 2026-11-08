@@ -3,6 +3,22 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.9.6 (not released yet)
+
+### Added
+
+- A disc of a set can have a cover of its own, such as each volume's cover in
+  a box set: a cover chosen on one disc asks whether it is for that disc only
+  or for every disc. That disc's files embed its own cover in place of the
+  set's, and Use the Set's Cover takes it away. A new cover for the whole set
+  asks whether the discs with their own keep them.
+
+### Fixed
+
+- An album name taken back to MusicBrainz's on one rip of a disc could
+  come back as the name kept before it, once 8 later rips of the same disc
+  were given names.
+
 ## 0.9.5 (2026-11-07)
 
 ### Added

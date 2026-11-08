@@ -51,6 +51,9 @@ public struct RippedDisc: Sendable {
                 folder.appending(path: $0)
             }
         }
+        // A later rip of the disc that was stopped before it replaced this one: the files it
+        // left are for this rip's disc, which is now in the library.
+        files += [RipPool.newRipFolder, RipPool.progressFile].map { folder.appending(path: $0) }
         // The active claim stays locked until DiscRip releases it.
         // The disc's own cover, which a later change of covers can write after the report.
         if let position = report?.discPosition {

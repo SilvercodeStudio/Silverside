@@ -437,6 +437,16 @@ public struct DiscRip {
         defer { RipFolder.release(folder) }
         events(.folder(folder, insteadOf: folder == wanted ? nil : wanted))
         try stop.check()
+        // A folder that holds a finished rip of the disc keeps it whole until this rip has read
+        // every track: the tracks go in a folder inside it (`RipPool.newRipFolder`), and replace
+        // the earlier rip's only then. A rip stopped before that leaves the earlier rip as it
+        // was, to encode or repair, and its own tracks inside, for the next rip to keep.
+        let replacesEarlierRip = FileManager.default.fileExists(atPath: folder.appending(path: "disc.json").path)
+        let tracksFolder =
+            replacesEarlierRip ? folder.appending(path: RipPool.newRipFolder, directoryHint: .isDirectory) : folder
+        if replacesEarlierRip {
+            try FileManager.default.createDirectory(at: tracksFolder, withIntermediateDirectories: true)
+        }
 
         // The artwork downloads while the disc is read: the network is idle then, and every
         // image of a release can be a hundred megabytes of scans. The rip waits for it at the end.
@@ -513,7 +523,7 @@ public struct DiscRip {
             hiddenAreaUnreadable = sectors
             events(.hiddenAreaUnreadable(sectors: sectors, of: toc.audioTracks[0].startLBA))
         } else if let hidden {
-            try WAVFile.write(hidden.samples, to: folder.appending(path: "Track 00.wav"))
+            try WAVFile.write(hidden.samples, to: tracksFolder.appending(path: "Track 00.wav"))
             written.insert("Track 00.wav")
             hiddenTrack = .init(
                 file: "Track 00.wav", sectors: toc.audioTracks[0].startLBA, peak: hidden.peak,
@@ -543,7 +553,7 @@ public struct DiscRip {
             vendor: identity.vendor, product: identity.product, revision: identity.revision, readOffset: readOffset,
             offsetSource: source)
         // The tracks finished so far, for a later rip if this one stops (`RipPool.progressFile`).
-        let progressFile = folder.appending(path: RipPool.progressFile)
+        var progressFile = tracksFolder.appending(path: RipPool.progressFile)
         // An earlier stopped rip's progress: its tracks that this rip has not done yet stay in
         // it, with their padding, so that a rip after this one can still keep them.
         let earlierProgress = try? RipReport.read(from: progressFile)
@@ -561,7 +571,8 @@ public struct DiscRip {
                     graphics = try await blocking { [stop] in
                         try CDGraphicsReader.read(
                             track, in: toc, drive: drive,
-                            to: folder.appending(path: RipReport.Graphics.fileName(track: track.number)), stop: stop
+                            to: tracksFolder.appending(path: RipReport.Graphics.fileName(track: track.number)),
+                            stop: stop
                         ) { events(.readingGraphics(track: track.number, fraction: $0)) }
                     }
                 } catch is CancellationError {
@@ -582,7 +593,7 @@ public struct DiscRip {
             // The track's rip, with the pooling and the files, on the reading thread.
             let (audio, ripped, ripSummary, copyPadding) = try await blocking { [self, secure] in
                 let kept = keptTrack(
-                    track, toc: toc, folders: [folder] + options.pool, records: records,
+                    track, toc: toc, folders: RipPool.unique([tracksFolder, folder] + options.pool), records: records,
                     padding: Self.paddedEdges(
                         of: toc, readOffset: readOffset, tracks: [track.number],
                         readableLeadOut: reader.readableLeadOut))
@@ -609,9 +620,9 @@ public struct DiscRip {
                 // Keep the other versions of suspect samples, so that a later repair can use them.
                 if !audio.alternatives.isEmpty {
                     try audio.writeAlternatives(
-                        to: folder.appending(path: TrackAudio.alternativesFileName(track: track.number)))
+                        to: tracksFolder.appending(path: TrackAudio.alternativesFileName(track: track.number)))
                 }
-                try WAVFile.write(samples, to: folder.appending(path: report.file))
+                try WAVFile.write(samples, to: tracksFolder.appending(path: report.file))
                 return (audio, report, summary, kept?.padded)
             }
             var summary = ripSummary
@@ -666,6 +677,11 @@ public struct DiscRip {
         }
 
         if let controlBits = RipReport.controlBitsSummary(of: reports) { events(.controlBits(controlBits)) }
+        if replacesEarlierRip {
+            try stop.check()
+            try RipPool.replaceEarlierRip(in: folder, with: tracksFolder, tracks: reports.map(\.number))
+            progressFile = folder.appending(path: RipPool.progressFile)
+        }
 
         var ctdb = RipReport.CTDBResult(status: entries.isEmpty && checkedCTDB ? .notInDatabase : .notChecked)
         var ctdbSeconds: Int?
@@ -1132,7 +1148,11 @@ public struct DiscRip {
             accurateRipConfidence: copy.confidence, fullReads: 0)
         report.tocFlags = RipReport.ControlFlags(track)
         report.accurateRipTop = .top(trackAt: toc.audioTracks.firstIndex(of: track) ?? 0, records: records)
-        report.keptFrom = copy.folder.lastPathComponent
+        // A stopped rip's tracks inside an earlier rip's folder are that folder's.
+        let source =
+            copy.folder.lastPathComponent == RipPool.newRipFolder
+            ? copy.folder.deletingLastPathComponent().lastPathComponent : copy.folder.lastPathComponent
+        report.keptFrom = source
         report.isrc = copy.track.isrc
         report.pregapSectors = copy.track.pregapSectors
         report.pregapUnknown = copy.track.pregapUnknown
@@ -1145,7 +1165,7 @@ public struct DiscRip {
         }
         let summary =
             "accurate (v1 \(copy.confidence[0]), v2 \(copy.confidence[1]) submissions) in the earlier rip in "
-            + "\"\(copy.folder.lastPathComponent)\", which is kept: the track was not read again"
+            + "\"\(source)\", which is kept: the track was not read again"
         return ((copy.samples, summary, TrackAudio(samples: copy.samples), report), copy.paddedEdges)
     }
 

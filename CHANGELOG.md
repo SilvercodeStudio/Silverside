@@ -60,6 +60,18 @@ command-line tool.
 
 ### Fixed
 
+- A rip stopped part way, in a folder that held a finished rip of the
+  disc, replaced some of that rip's tracks but left its report, so an
+  encoding of it stopped with "no longer decodes to the audio that was
+  ripped and verified". Now the earlier rip stays as it was until the new
+  rip has read every track.
+- A track that Repair read again with the disc in a drive could lose its
+  place on the disc and give other audio for most of its length. The repair
+  took it as a real version, so nearly every sample became suspect, no
+  repair of the disc could succeed, and the suspects file grew to hundreds
+  of megabytes. Such a read is now left out and read again, and one kept
+  from before is left out of the pool.
+
 - A second rip of a disc given another album name (to keep a version with
   pre-emphasis beside a de-emphasized one, say) gave the first rip that name
   too, and a later change to the first rip would have renamed its files. A

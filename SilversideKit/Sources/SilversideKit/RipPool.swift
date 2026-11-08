@@ -12,7 +12,8 @@ public enum RipPool {
 
     /// The versions of a track in `folders` ("Track NN.wav" with the track's length), the
     /// alternatives that each folder kept for it ("Track NN.suspects"), and the track files
-    /// that are there but could not be used: not CD audio, or not the track's length.
+    /// that are there but could not be used: not CD audio, not the track's length, or a read
+    /// that lost its place against the first version (`lostItsPlace`).
     public static func versions(
         of track: TOC.Track, toc: TOC, in folders: [URL]
     ) -> (versions: [[UInt32]], alternatives: [[Int: [UInt32]]], skipped: [SkippedFile]) {
@@ -25,10 +26,13 @@ public enum RipPool {
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             do {
                 let samples = try WAVFile.read(url)
-                if samples.count == length {
-                    versions.append(samples)
-                } else {
+                if samples.count != length {
                     skipped.append(.init(url: url, reason: "it has \(samples.count) samples, and the track \(length)"))
+                } else if let first = versions.first, lostItsPlace(samples, against: first) {
+                    skipped.append(
+                        .init(url: url, reason: "it lost its place on the disc: a long run of it is other audio"))
+                } else {
+                    versions.append(samples)
                 }
             } catch {
                 skipped.append(.init(url: url, reason: String(describing: error)))
@@ -45,6 +49,64 @@ public enum RipPool {
     /// after each one, so that a later rip can keep them (`accurateCopy`). The finished rip's
     /// disc.json takes its place.
     public static let progressFile = ".silverside-progress.json"
+
+    /// The folder, inside a finished rip's folder, where a new rip of the disc writes its tracks
+    /// until it has read them all (`replaceEarlierRip`). A stopped rip leaves its tracks and
+    /// its progress there, and the earlier rip whole.
+    public static let newRipFolder = ".silverside-new-rip"
+
+    /// Moves a new rip's files from `staging` into `folder`, over the earlier rip's, and
+    /// takes away the earlier rip's report and its suspects for `tracks`, which the new rip
+    /// replaces. The report goes first: a stop or a crash during the moves leaves a stopped
+    /// rip, never a report of audio that is no longer there. (The rip history keeps the
+    /// earlier report.)
+    public static func replaceEarlierRip(in folder: URL, with staging: URL, tracks: [Int]) throws {
+        let manager = FileManager.default
+        let earlier =
+            ["disc.json", "Rip Report.md", "Rip Report.log", progressFile]
+            + tracks.map { TrackAudio.alternativesFileName(track: $0) }
+        for name in earlier where manager.fileExists(atPath: folder.appending(path: name).path) {
+            try manager.removeItem(at: folder.appending(path: name))
+        }
+        for name in try manager.contentsOfDirectory(atPath: staging.path) {
+            let target = folder.appending(path: name)
+            if manager.fileExists(atPath: target.path) { try manager.removeItem(at: target) }
+            try manager.moveItem(at: staging.appending(path: name), to: target)
+        }
+        try manager.removeItem(at: staging)
+    }
+
+    /// The most sectors in a row that may differ in nearly every sample before a read counts
+    /// as one that lost its place, as `SecureRipper.shiftCheckSectors`.
+    static let lostPlaceSectors = 32
+
+    /// True if `read`, a read of a whole track, lost its place against `base`: in a run of at
+    /// least `lostPlaceSectors` sectors, none of them in `skipping`, nearly every sample (9 in
+    /// 10) differs. Damage changes some samples of a sector, not all of them for a run this
+    /// long; a read that lost its place gives other audio. A re-read of track 10 of *Led
+    /// Zeppelin* disc 3 (2026-11-07) held, from its sector 4,458 on, the audio 622 sectors
+    /// further on at sector 20,000 and 912 at 40,000, and made 89% of the track suspect.
+    public static func lostItsPlace(_ read: [UInt32], against base: [UInt32], skipping: Set<Int> = []) -> Bool {
+        let size = CDDA.samplesPerSector
+        guard read.count == base.count else { return false }
+        var run = 0
+        for sector in 0..<(read.count / size) {
+            let start = sector * size
+            var differing = 0
+            if !skipping.contains(sector) {
+                for sample in start..<(start + size) where read[sample] != base[sample] { differing += 1 }
+            }
+            run = 10 * differing >= 9 * size ? run + 1 : 0
+            if run >= lostPlaceSectors { return true }
+        }
+        return false
+    }
+
+    /// The folders in order, each once.
+    static func unique(_ folders: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return folders.filter { seen.insert($0.standardizedFileURL.path).inserted }
+    }
 
     /// A copy of a track from an earlier rip that AccurateRip says is accurate.
     public struct AccurateCopy: Sendable {

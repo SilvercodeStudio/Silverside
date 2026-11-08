@@ -114,6 +114,43 @@ struct KeptTracksTests {
         #expect(markdown.contains("| kept |") && markdown.contains("Track 1 was not read again"))
     }
 
+    /// A rip into a folder that holds a finished rip leaves that rip whole until it has read
+    /// every track. Stopped, it leaves its tracks and progress in `RipPool.newRipFolder`, and
+    /// the earlier rip's report still describes its files. The next rip keeps the stopped
+    /// rip's accurate tracks from there, and when done, its files replace the earlier rip's.
+    @Test func leavesAFinishedRipWholeUntilTheNewOneIsDone() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (_, folder) = try #require(await rip(root: root))
+        let first = try RipReport.read(from: folder.appending(path: "disc.json"))
+        // Read every track again, with a damaged sector in track 1, and stop after track 2.
+        #expect(try await rip(root: root, keeps: false, stopsAfter: 2) { $0.corruptSectors = [100] } == nil)
+        let earlier = try RipReport.read(from: folder.appending(path: "disc.json"))
+        #expect(earlier == first)
+        for track in earlier.tracks {
+            let samples = try WAVFile.read(folder.appending(path: track.file))
+            #expect(CRC32.hex(CRC32.checksum(of: samples[...])) == track.crc32)
+        }
+        let staging = folder.appending(path: RipPool.newRipFolder)
+        let progress = try RipReport.read(from: staging.appending(path: RipPool.progressFile))
+        #expect(progress.tracks.map(\.number) == [1, 2])
+        #expect(
+            try WAVFile.read(staging.appending(path: "Track 01.wav"))
+                != WAVFile.read(folder.appending(path: "Track 01.wav")))
+
+        _ = try #require(await rip(root: root))
+        let report = try RipReport.read(from: folder.appending(path: "disc.json"))
+        // Track 2, accurate in the stopped rip, is kept from it, under the folder's name.
+        #expect(report.tracks[1].keptFrom == folder.lastPathComponent)
+        #expect(report.tracks.allSatisfy { $0.accurateRip == .accurate } && report.date != first.date)
+        #expect(!FileManager.default.fileExists(atPath: staging.path))
+        #expect(!FileManager.default.fileExists(atPath: folder.appending(path: RipPool.progressFile).path))
+        for track in report.tracks {
+            let samples = try WAVFile.read(folder.appending(path: track.file))
+            #expect(CRC32.hex(CRC32.checksum(of: samples[...])) == track.crc32)
+        }
+    }
+
     /// A rip that keeps a stopped rip's tracks, and is stopped too, leaves the tracks that it
     /// did not get to in the progress: a third rip still keeps both.
     @Test func keepsTracksAcrossTwoStoppedRips() async throws {

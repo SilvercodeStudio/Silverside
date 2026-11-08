@@ -6,6 +6,8 @@ public enum RipRepairEvent: Sendable {
     case trackAccurate(number: Int)
     /// The track is free of errors: it matches another pressing, `shift` samples away.
     case trackMatchesOtherPressing(number: Int, shift: Int)
+    /// A read of the track lost its place on the disc, and was left out.
+    case rereadLostItsPlace(number: Int)
     /// The track joins the repair with its versions, which disagree in `suspectSamples` samples.
     case trackPooled(number: Int, versions: Int, suspectSamples: Int)
     /// A track file in a pooled folder could not be used.
@@ -145,7 +147,9 @@ public struct RipRepair {
             let (audio, versionCount) = try await blocking { [trackVersions = versions[index], saved = saved[index]] in
                 var trackVersions = trackVersions
                 if let reader, trackVersions.count < reads {
-                    for _ in trackVersions.count..<reads {
+                    // A read that lost its place is left out and not kept, and read again, twice at most.
+                    var lostReads = 0
+                    while trackVersions.count < reads && lostReads <= 2 {
                         try reader.flushCache(awayFrom: toc.sectorRange(of: track), count: cacheFlushSectors)
                         let sectors = toc.sectorRange(of: track)
                         let whole = try reader.read(
@@ -156,6 +160,12 @@ public struct RipRepair {
                         // there is no read, and two such reads would outvote it.
                         var read = whole.samples
                         for run in whole.padded { read.replaceSubrange(run, with: trackVersions[0][run]) }
+                        let unreadable = Set(whole.unreadable.map { $0 / CDDA.samplesPerSector })
+                        if RipPool.lostItsPlace(read, against: trackVersions[0], skipping: unreadable) {
+                            lostReads += 1
+                            events(.rereadLostItsPlace(number: track.number))
+                            continue
+                        }
                         trackVersions.append(read)
                         // Keep the read, so that a later run can use it.
                         let folder = Self.nextReadFolder(after: firstFolder, track: track)

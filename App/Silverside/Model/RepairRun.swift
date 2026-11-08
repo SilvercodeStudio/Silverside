@@ -147,6 +147,8 @@ final class RepairRun: Identifiable {
             add(
                 String(format: "Track %2d  free of errors: matches another pressing at ", number)
                     + shift.signedDescription)
+        case .rereadLostItsPlace(let number):
+            add(String(format: "Track %2d  a read lost its place on the disc, and was left out", number))
         case .trackPooled(let number, let versions, let suspectSamples):
             add(
                 String(format: "Track %2d  ", number)

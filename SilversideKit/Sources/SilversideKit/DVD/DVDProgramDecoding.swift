@@ -32,7 +32,7 @@ extension DVDExtraction {
     /// published until every run in the program has passed verification.
     static func decodeRun(
         _ run: DVDDecodeRun, of presentation: DVDPresentation, source: URL,
-        tools: DVDTools, work: URL, stop: StopToken, progress: (String) -> Void
+        tools: DVDTools, work: URL, stop: StopToken, progress: (String) -> Void, metadata: DVDMetadata? = nil
     ) throws -> (run: DVDRipReport.Run, tracks: [DVDRipReport.Track], files: [URL]) {
         try stop.check()
         guard let first = run.tracks.first, let last = run.tracks.last else {
@@ -78,7 +78,7 @@ extension DVDExtraction {
         }
         try split(
             continuous, p: runPresentation, tracks: run.tracks, frameCounts: frameCounts, tools: tools, work: work,
-            stop: stop)
+            stop: stop, metadata: metadata)
         var tracks = [DVDRipReport.Track]()
         var files = [URL]()
         for (track, frames) in zip(run.tracks, frameCounts) {
@@ -88,7 +88,9 @@ extension DVDExtraction {
             try verifyFormat(file, frames: frames, format: format, tools: tools, work: work, stop: stop)
             tracks.append(
                 .init(
-                    number: track.number, file: String(format: "%02d - Track %02d.flac", track.number, track.number),
+                    number: track.number,
+                    file: try metadata?.filename(program: presentation.id, track: track.number)
+                        ?? String(format: "%02d - Track %02d.flac", track.number, track.number),
                     frames: frames,
                     pcmSHA256: try pcmHash(file, bits: format.bits, tools: tools, work: work, stop: stop),
                     fileSHA256: try fileHash(file, stop: stop), format: format))

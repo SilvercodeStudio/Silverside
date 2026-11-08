@@ -6,7 +6,7 @@ import SilversideKit
 struct DVDCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "dvd", abstract: "Inspect DVD-Audio and extract MLP stereo or surround to verified FLAC tracks.",
-        subcommands: [DVDInfo.self, DVDRip.self])
+        subcommands: [DVDInfo.self, DVDRip.self, DVDMetadataCommand.self])
 }
 
 struct DVDSource: ParsableArguments {
@@ -103,6 +103,8 @@ struct DVDRip: AsyncParsableCommand {
     @Option(help: "auto (prefer surround), surround, stereo, or both. Ambiguous programs require --title.") var mix:
         DVDMix = .auto
     @Option(help: "One explicit program from dvd info, such as 1:2. Cannot combine with --mix.") var title: String?
+    @Option(help: "A saved dvd metadata JSON file. Every selected source track must have a title and artist.")
+    var metadata: String?
 
     func validate() throws {
         guard title == nil || mix == .auto else { throw ValidationError("Use --title or --mix, not both.") }
@@ -111,13 +113,14 @@ struct DVDRip: AsyncParsableCommand {
         try Disclaimer.require()
         let input = try source.path()
         let tools = try DVDTools()
+        let names = try metadata.map { try DVDMetadata.read(from: URL(fileURLWithPath: $0)) }
         let destination = URL(fileURLWithPath: (output as NSString).expandingTildeInPath)
         let stop = StopToken()
         let interrupt = Interrupt(stop: stop, message: "Stopping DVD extraction; retaining the incomplete report…")
         defer { withExtendedLifetime(interrupt) {} }
         do {
             let report = try DVDExtraction.rip(
-                source: input, output: destination, tools: tools, mix: mix, title: title, stop: stop
+                source: input, output: destination, tools: tools, mix: mix, title: title, metadata: names, stop: stop
             ) { print($0) }
             print("Extracted \(report.programs.reduce(0) { $0 + $1.tracks.count }) tracks to \(destination.path)")
         } catch is CancellationError { throw ExitCode(130) }

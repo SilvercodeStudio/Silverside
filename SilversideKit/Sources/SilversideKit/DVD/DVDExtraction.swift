@@ -13,6 +13,7 @@ public struct DVDRipReport: Codable, Sendable {
     /// Scratch data retained after failure or cancellation, relative to the output root.
     public var retainedWork: RetainedWork?
     public var inventory: DVDInventory?
+    public var metadata: DVDMetadata?
     public var ffmpegVersion: String?
     public var selected = [String]()
     public var programs = [Program]()
@@ -20,7 +21,7 @@ public struct DVDRipReport: Codable, Sendable {
         "Local decode and PCM equality checks only; no independent database verification or secure reread consensus.",
         "Only contiguous, one-cell-per-track MLP stereo/5.0/5.1 with a constant format within each decoding run is supported.",
         "No resampling, normalization, ReplayGain, or generic stereo downmix. Authored stereo substreams are identified separately.",
-        "Optional DVD-Audio text is not parsed; filenames and title tags are numbered placeholders.",
+        "Optional DVD-Audio text is not parsed; names use supplied metadata or numbered placeholders.",
         "Menus, pictures, downmix instructions and other presentation metadata are not preserved in FLAC.",
     ]
 
@@ -102,7 +103,7 @@ public enum DVDExtraction {
     /// tracks are promoted only after format, duration and PCM checks pass.
     public static func rip(
         source: String, output: URL, tools: DVDTools, mix: DVDMix = .auto, title: String? = nil,
-        stop: StopToken = StopToken(), progress: @escaping (String) -> Void = { _ in }
+        metadata: DVDMetadata? = nil, stop: StopToken = StopToken(), progress: @escaping (String) -> Void = { _ in }
     ) throws -> DVDRipReport {
         let root = output.standardizedFileURL.resolvingSymlinksInPath()
         let input = URL(fileURLWithPath: source).standardizedFileURL.resolvingSymlinksInPath()
@@ -135,6 +136,8 @@ public enum DVDExtraction {
                     decoding: try DVDProcess.run(tools.ffmpeg, ["-version"], in: work, stop: stop).output, as: UTF8.self
                 ).components(separatedBy: "\n").first
             let programs = try select(inventory, mix: mix, title: title)
+            try metadata?.validate(inventory: inventory, selected: programs.map(\.id))
+            report.metadata = metadata
             report.selected = programs.map(\.id)
             try save(report, to: root)
             for presentation in programs {
@@ -160,7 +163,7 @@ public enum DVDExtraction {
                 for run in try presentation.decodingRuns() {
                     let decoded = try decodeRun(
                         run, of: presentation, source: sourceFile, tools: tools,
-                        work: programWork, stop: stop, progress: progress)
+                        work: programWork, stop: stop, progress: progress, metadata: metadata)
                     report.programs[programIndex].runs?.append(decoded.run)
                     report.programs[programIndex].tracks += decoded.tracks
                     staged += decoded.files
@@ -310,7 +313,7 @@ public enum DVDExtraction {
     }
     static func split(
         _ full: URL, p: DVDPresentation, tracks selected: [DVDTrack]? = nil, frameCounts supplied: [Int64]? = nil,
-        tools: DVDTools, work: URL, stop: StopToken
+        tools: DVDTools, work: URL, stop: StopToken, metadata: DVDMetadata? = nil
     ) throws {
         let tracks = selected ?? p.tracks
         let counts = try supplied ?? tracks.map { try $0.frames(at: p.format!.sampleRate) }
@@ -325,8 +328,10 @@ public enum DVDExtraction {
         }
         var args = common + ["-i", full.path, "-filter_complex", filters.joined(separator: ";")]
         for (i, track) in tracks.enumerated() {
+            let tags = try metadata?.comments(program: p.id, track: track.number) ?? []
             args +=
-                ["-map", "[t\(i)]"] + flacArguments(p, track: track.number) + [
+                ["-map", "[t\(i)]"] + flacArguments(p, track: metadata == nil ? track.number : nil)
+                + tags.flatMap { ["-metadata", "\($0.key)=\($0.value)"] } + [
                     work.appendingPathComponent(String(format: "%02d.flac", track.number)).path
                 ]
         }

@@ -84,9 +84,17 @@ struct DVDRunTests {
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: false)
         var staged = [URL]()
         var records = [DVDRipReport.Track]()
+        var metadata = DVDMetadata(
+            inventory: .init(
+                source: "fixture", volume: "fixture", fingerprint: "fixture", libraryPath: "",
+                presentations: [presentation]))
+        try metadata.set("album=Fixture")
+        try metadata.set("albumArtist=Test Artist")
+        try metadata.importTitles("First\nSecond\n../日本語: Third\n", program: presentation.id)
         for (index, run) in try presentation.decodingRuns().enumerated() {
             let decoded = try DVDExtraction.decodeRun(
-                run, of: presentation, source: file, tools: tools, work: work, stop: stop, progress: { _ in })
+                run, of: presentation, source: file, tools: tools, work: work, stop: stop, progress: { _ in },
+                metadata: metadata)
             #expect(decoded.run.pcmSHA256 == expected[index])
             #expect(decoded.run.frames == 12000)
             records += decoded.tracks
@@ -96,7 +104,13 @@ struct DVDRunTests {
         // Each run's track numbering is still global; tags retain the whole-program count.
         let comments = Dictionary(
             try FLACTags.read(staged[2]).map { ($0.key.uppercased(), $0.value) }, uniquingKeysWith: { a, _ in a })
-        #expect(comments["TRACKNUMBER"] == "3/3")
+        #expect(comments["TRACKNUMBER"] == "3")
+        #expect(comments["TRACKTOTAL"] == "3")
+        #expect(comments["TITLE"] == "../日本語: Third")
+        #expect(try records[2].file == metadata.filename(program: presentation.id, track: 3))
+        for (record, file) in zip(records, staged) {
+            #expect(try record.fileSHA256 == DVDExtraction.fileHash(file, stop: stop))
+        }
         let destination = root.appendingPathComponent("published")
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
         try DVDExtraction.publish(staged, tracks: records, to: destination)

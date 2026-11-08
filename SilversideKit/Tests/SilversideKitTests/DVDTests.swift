@@ -233,8 +233,18 @@ struct DVDTests {
                 ], in: root, stop: stop))
         var p = try DVDNavigation.presentations(ifo: navigation(), titleSet: 1, audioSectors: 200)[0]
         p.format = DVDAudioFormat(codec: "mlp", sampleRate: 96000, bits: 24, channels: 6, layout: "5.1")
-        try DVDExtraction.split(source, p: p, tools: tools, work: root, stop: stop)
+        var metadata = DVDMetadata(
+            inventory: .init(
+                source: "fixture", volume: "fixture", fingerprint: "fixture", libraryPath: "", presentations: [p]))
+        try metadata.set("album=Fixture")
+        try metadata.set("albumArtist=Test Artist")
+        try metadata.importTitles("日本語の曲\nSecond song\n", program: p.id)
+        try metadata.validate(selected: [p.id])
+        try DVDExtraction.split(source, p: p, tools: tools, work: root, stop: stop, metadata: metadata)
         let tracks = [root.appendingPathComponent("01.flac"), root.appendingPathComponent("02.flac")]
+        let tags = try FLACTags.read(tracks[0])
+        #expect(tags.contains { $0.key.uppercased() == "TITLE" && $0.value == "日本語の曲" })
+        #expect(tags.contains { $0.key.uppercased() == "DVD_PROGRAM" && $0.value == p.id })
         for (track, file) in zip(p.tracks, tracks) {
             try DVDExtraction.verifyFormat(
                 file, frames: track.frames(at: 96000), format: p.format!, tools: tools, work: root, stop: stop)

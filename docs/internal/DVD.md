@@ -43,7 +43,173 @@ database verification or secure reread consensus. No ReplayGain is applied.
 Optional DVD-Audio Audio Text can contain album/group/track names, but is not
 required. It is not parsed by this milestone; files and tags use numbered
 placeholders. See the Audio Text section of the [Sonic authoring manual](https://www.quadraphonic.info/DVD-Audio-SACD-Blu-Ray/manuals/Sonic-DAC_Guide-draft2.pdf).
-Metadata lookup, artwork and GUI selection follow later.
+Explicit metadata selection and editing are available in the CLI as described
+below; artwork and GUI selection follow later.
+
+### Saved metadata and Rumours inventory — 2026-11-08
+
+`DVDMetadata` keeps an unchanged MusicBrainz release snapshot alongside manual
+overrides and explicit source-program/track-to-medium/position mappings. Its
+versioned JSON is tied to the disc fingerprint and exact `DVDTrack` boundaries.
+`dvd metadata` creates it from a saved inventory, fetches one selected release
+through the shared client, displays mappings and duration differences, and accepts
+field edits or a UTF-8 title/TAB/artist list. Names are not automatically assigned
+by track count or duration. Repeated target positions allow an explicit mapping
+of several source chapters to one database recording, without joining audio.
+`dvd rip --metadata` requires complete names for selected programs and writes
+tags during the existing verified FLAC split, before file hashes and publication.
+Omitting the metadata file preserves the previous numbered-output behavior. Cover art,
+GUI editing and retagging existing DVD rips remain later work.
+
+The user supplied DVD-Audio release candidates for
+[The Nightfly](https://musicbrainz.org/release/01824c97-a7cf-4817-8bda-760b70d5d7e9),
+[American Beauty](https://musicbrainz.org/release/cf06a267-acd5-4745-99d8-07842afab847),
+and [Rumours](https://musicbrainz.org/release/b66fba4a-655f-4b56-8431-d9c0eddc829b).
+The Rumours release was fetched with the shared MusicBrainz client: medium 1
+lists 12 stereo songs, 12 5.1 songs, then one interview entry. These are metadata
+candidates, not an automatically proven match to the physical pressing.
+
+With permission to access both drives, MATSHITA/disk9 was confirmed as `RUMOURS`.
+An authenticated inventory reported no title-set issues:
+
+| Program | Source tracks | Observed format | Duration |
+| --- | ---: | --- | ---: |
+| 1:1 | 13 | MLP 96 kHz/24-bit 5.1 | 2667.377 s |
+| 1:2 | 13 | MLP 96 kHz/24-bit stereo | 2643.535 s |
+| 1:3 | 12 | MLP 48 kHz/24-bit 5.1 | 2404.867 s |
+| 1:4 | 1 | MLP 96 kHz/24-bit stereo | 1.053 s |
+
+Programs 1:1 and 1:2 have 12 song-length tracks followed by short segments of
+1.216 and 1.053 seconds respectively. Their content has not been established as
+silence. Program 1:3's duration fits the database interview entry, but its chapter
+content has not been checked by listening. Title sets 2–5 reference unsupported
+DVD-Video material. These are navigation/header probes, not full-rip validation.
+
+A bounded Audio Text survey saved the Audio Manager and navigation files from
+Rumours, Acura, Glen Phillips and American Beauty. None of the four managers
+contained recognizable album/track strings; all had zero words at 0xD0–0xDC.
+This is exploratory evidence, not a validated Audio Text parser or proof that
+every possible text encoding is absent. A populated real-disc example is still
+needed. Inventory, IFO copies and survey results are in
+`/private/tmp/silverside-dvd-text/`, with a verified persistent copy in
+`~/Movies/DVD-Audio Metadata - 2026-11-08/`. The Rumours metadata draft explicitly
+maps program 1:1 tracks 1–12 to medium 1 positions 13–24, and program 1:2 tracks
+1–12 to positions 1–12; every duration differs by at most 0.5 seconds from the
+database's rounded value. Both trailing tracks and the interview remain unmapped.
+
+Validation: 578 engine, five Darwin and five helper tests pass, along with strict
+format lint and the app build. New cases cover explicit mappings, source identity
+and boundary mismatches, preserved release snapshots, manual overrides, Unicode
+and safe filenames, atomic edit failures, and persistence. Generated multichannel
+FLAC and independent MLP-run tests verify that named/tagged output retains the
+same PCM, boundaries and final file hashes. One existing DTS decode test failed
+on the initial full run and passed on the full rerun; no DTS code was changed.
+
+### Acura sampler and sample-rate listening experiment — 2026-11-08
+
+The user authorized the Acura sampler in the ASUS only; MATSHITA was reserved
+for other use. Registry metadata and `diskutil info` identified ASUS BW-16D1HT
+as `disk8`, volume `ACURARDX_2007`. No MATSHITA disc commands were issued.
+Device numbers are session-specific. The rebased CLI/helper used protocol v2.
+
+The physical inventory succeeds without title-set issues and finds four
+programs in ATS 1:
+
+| Program | Inventory observations |
+| --- | --- |
+| 1:1 | Two MLP 48 kHz/24-bit 5.1 tracks, each starting at PTS 660 |
+| 1:2 | One unrecognized program; saved packet headers identify DVD-Audio LPCM 44.1 kHz/16-bit stereo |
+| 1:3 | Nineteen MLP 24-bit 5.1 tracks; eight at 48 kHz and eleven at 96 kHz, all starting at PTS 660 |
+| 1:4 | One unrecognized 1.2-second program with the same LPCM format headers as 1:2 |
+
+Program 1:3's track 1 is consistent with the printed DVD-Audio introduction;
+its tracks 2–19 correspond provisionally to printed tracks 5–22. This makes
+its track 18 the channel-check candidate. Printed labels are not parsed disc
+text, and acoustic speaker routing still requires a listening check.
+
+All 512 inspected private-stream packets of 1:2, and all 106 packets of 1:4,
+use substream `0xa0` and format bytes `0f 8f 00 01`: 16-bit group 1, 44.1 kHz,
+no group 2, stereo assignment. See the [DVD-Audio Tools AOB header notes](https://dvd-audio.sourceforge.io/spec/aob.shtml).
+The installed FFmpeg 9.0.2 build exposes `pcm_dvd`, but no `pcm_dvda` decoder;
+its MPEG demuxer reports these samples as MLP with zero channels/rate.
+Consequently the current CLI leaves them explicitly unsupported. This is a
+concrete DVD-Audio LPCM test case, not a failure of the MLP 44.1 kHz path.
+A research-only payload concatenation of 1:4 yields exactly 52,920 stereo
+frames of digital silence at 44.1 kHz, agreeing with its 108,000-tick duration.
+The bounded sample alone did not establish a complete-track decode; the
+later research check of the complete program is recorded below.
+
+**Listening experiment:** the earlier Spectrum extraction had been stored in
+`/private/tmp/silverside-dvd-20261106/`, which was no longer present. The saved
+Glen Phillips raw ISO was instead mounted read-only and its authored stereo
+program 1:2 re-extracted. All eleven tracks passed the CLI's format, frame-count
+and source/FLAC/joined PCM checks: 236,670,960 frames, 96 kHz/24-bit stereo,
+PCM SHA-256 `2cdfba4d33f7d5b81598b2d90947400264a3711d908d57f90314730a3d7ef6de`,
+identical to the earlier authored-stereo experiment. The temporary image was
+unmounted after verification; neither optical drive supplied this audio.
+
+Complete-album listening files are saved permanently in
+`~/Movies/Glen Phillips - Abulum - Sample Rate Comparison/`, with a playlist
+of the same musical minute (album time 01:00–02:00) at each rate. The native
+96 kHz reference retains identical PCM. Separate 44.1 and 22.05 kHz conversions
+use the same authored mix, 24-bit FLAC, no gain adjustment, and no normalization
+or surround downmix. Their lengths are 108,720,722 and 54,360,362 frames,
+respectively, within one output sample of the source duration. Floating-point
+peak checks before integer conversion found -4.683050, -4.817356 and -4.631637
+dBFS for 96/44.1/22.05 kHz, so no clipping headroom adjustment was needed.
+
+The one-off FFmpeg SW Resampler settings are a 128-tap Kaiser filter, beta 12,
+cutoff 0.97, exact rational phases and double-precision processing, with
+triangular dither at 24-bit output for the downsampled versions. This does not
+add a resampling option to production DVD extraction. Commands, source report,
+PCM/file hashes and format checks accompany the files under `Evidence/`;
+all six listening files were hash-checked after copying to Movies. See the
+[FFmpeg resampler documentation](https://ffmpeg.org/ffmpeg-resampler.html).
+
+**Acura full-program results:** program 1:3 completed through the normal
+physical-drive CLI, preserving all 19 independent runs and their native formats.
+Its 4,665.185833 seconds of audio passed every run/track format, exact sample
+count and source/FLAC/joined-run PCM check without decoder diagnostics. A
+whole-program PCM hash is intentionally absent for this mixed-rate program.
+The 3,674,880,000-byte decrypted program source SHA-256 is
+`a12575a0265e451f28f13adb4fc7a5f54e1bb135d38fe422c1466810f35497ac`.
+Track 18, the channel-check candidate, is 96 kHz/24-bit 5.1, 16,096,000 frames;
+PCM SHA-256 `c1cff753a9295ff61992a7511c6704cf791f1b40727efa830cb7078d321881d6`.
+It is also exported as six separate mono files, with no normalization, for
+listening on stereo equipment. No audible speaker-announcement or physical
+routing claim is made by the automated checks.
+
+The remaining prefix was read from the same ASUS disc, with the navigation
+fingerprint rechecked, and joined with the main program and complete saved
+terminal sample. The resulting audio-only offline source has original
+`AUDIO_TS.IFO` and `ATS_01_0.IFO` plus one combined `ATS_01_1.AOB`, preserving
+all original audio-sector offsets. Its 3,741,562,880-byte AOB SHA-256 is
+`e32612691733898f21b2ec87a0a674984a5bc689eb29e2733f53d8d09d4522dd`.
+The filesystem CLI inventory exactly matches the physical presentations and
+navigation fingerprint. Program 1:1's two 48 kHz/24-bit 5.1 introduction tracks
+then passed full extraction and verification from that offline source. This
+preserves the audio title set for future work; it is not a complete DVD image
+and does not include DVD-Video or menu assets.
+
+A narrow, original research parser also unpacked the **complete** 1:2 LPCM
+program: 17,388 audio packets, 8,693,640 stereo frames, 197.134694 seconds at
+44.1 kHz/16-bit. Every packet retains the same format, a continuous counter,
+and a first-frame pointer on the 40-sample grid. Each packet PTS agrees with
+its cumulative sample position within one 90 kHz tick (observed deviations
+0 to 0.979592 ticks); the total agrees with the nearest-sample navigation
+length. A FLAC round trip reproduces its unpacked big-endian PCM hash,
+`3ba8bdc479f6f9a15431f6abebd034e7d21e67f2f01f02002edc14fe1c70fc9f`.
+The terminal LPCM program likewise passes and is entirely silent. These are
+research checks of this 16-bit stereo layout, not general LPCM support or
+comparison against an independent DVD-Audio LPCM decoder.
+
+Permanent outputs, offline source, inventories, bounded samples, checksums,
+logs and the research parser are under
+`~/Movies/Acura DVD-Audio Tests - 2026-11-08/`. Working artifacts are under
+`/private/tmp/silverside-dvd-20261108/`. Next: use the preserved LPCM cases to
+add explicit inventory recognition and a bounded, tested native LPCM path;
+listen to the channel-check announcements before claiming speaker assignment
+validation. Production Swift code was not changed by these experiments.
 
 ### Offline native-format validation — 2026-11-06
 
@@ -572,13 +738,14 @@ Reuse the CD workflow's metadata editing, artwork, naming and library convention
 where appropriate, while keeping DVD navigation and verification separate from
 CD-specific assumptions. AAC could be an additional convenience output later,
 but is not a priority or a prerequisite for this high-resolution lossless goal.
-The initial CLI currently produces FLAC with numbered placeholders; the GUI,
-metadata integration and DVD ALAC output remain implementation work.
+The CLI produces named and tagged FLAC with an explicit metadata document, or
+numbered placeholders without one; the GUI, artwork and DVD ALAC output remain
+implementation work.
 
 The user supplied a MusicBrainz screenshot identifying an American Beauty
 [DVD-Audio release](https://musicbrainz.org/release/cf06a267-acd5-4745-99d8-07842afab847)
-on 2026-11-03. This establishes a useful metadata candidate, not an automatic
-disc match; other DVD-Audio releases have not yet been checked. The user checked
+on 2026-11-03, followed by The Nightfly and Rumours on 2026-11-08. These establish
+useful metadata candidates, not automatic disc matches. The user checked
 that this entry has no Disc ID. MusicBrainz's [libdiscid](https://github.com/metabrainz/libdiscid)
 derives Disc IDs from audio-CD tables of contents; the existing CD lookup is not
 a DVD-Audio identification mechanism. The first metadata workflow should accept

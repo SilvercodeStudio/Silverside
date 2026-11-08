@@ -69,6 +69,13 @@ struct DTSTests {
         // A few sync words by chance, at no steady spacing.
         for place in [1000, 50_000, 51_234, 120_000] { noise[place] = 0xE800_1FFF }
         #expect(!DTSStream.isStream(noise))
+        // Music clipped at 0x7FFE on the left and -0x7FFF on the right: a 16-bit sync word in
+        // every sample, too close together to be frames (*Remember*, John Lennon's *Anthology*).
+        var clipped = PreEmphasisTests.sine(440, frames: 200_000)
+        for run in [30_000, 90_000, 150_000] {
+            for place in run..<(run + 60) { clipped[place] = 0x8001_7FFE }
+        }
+        #expect(!DTSStream.isStream(clipped) && !DTSStream.isStream(clipped, minimumFrames: 4))
     }
 
     /// A sync word that music makes by chance inside a frame is not a frame; a frame that a new

@@ -18,7 +18,18 @@ public enum DTSStream {
         /// 16 bits a word.
         case words16LE
         case words16BE
+
+        /// The bytes in the audio of a frame of `bytes` bytes: more in the 14-bit packing.
+        func packedBytes(_ bytes: Int) -> Int {
+            switch self {
+            case .words14LE, .words14BE: (bytes * 8 + 13) / 14 * 2
+            case .words16LE, .words16BE: bytes
+            }
+        }
     }
+
+    /// A core frame's size in bytes, as its header's FSIZE can give it: 96 to 16,384.
+    static let frameBytes = 96...16_384
 
     /// The frames of a stream in some audio: the byte where each starts, at a steady spacing.
     public struct Frames: Equatable, Sendable {
@@ -50,6 +61,12 @@ public enum DTSStream {
         var gaps = [Int: Int]()
         for (first, second) in zip(syncs, syncs.dropFirst()) { gaps[second - first, default: 0] += 1 }
         guard let spacing = gaps.max(by: { $0.value < $1.value || ($0.value == $1.value && $0.key > $1.key) })?.key
+        else { return nil }
+        // No frame is shorter or longer. Music clipped at the same values in both channels
+        // can look like a sync word in every sample: *Remember* on John Lennon's *Anthology*,
+        // 0x7FFE and -0x7FFF in a row, sync words 4 bytes apart.
+        guard
+            (packing.packedBytes(frameBytes.lowerBound)...packing.packedBytes(frameBytes.upperBound)).contains(spacing)
         else { return nil }
         // Runs of sync words at the spacing. A run of one is a chance match in the frame data.
         let all = Set(syncs)

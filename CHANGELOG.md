@@ -20,6 +20,10 @@ command-line tool.
 
 ### Fixed
 
+- A track whose loud parts were clipped could be taken for a DTS stream after
+  its rip (*Remember* on John Lennon's *Anthology*), and then its encoding
+  failed. Clipped samples can look like DTS sync words, but too close
+  together to be DTS frames, which are now required.
 - An album name taken back to MusicBrainz's on one rip of a disc could
   come back as the name kept before it, once 8 later rips of the same disc
   were given names.

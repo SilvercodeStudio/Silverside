@@ -20,7 +20,8 @@ public struct DVDMetadata: Codable, Sendable {
         }
     }
 
-    public struct Track: Codable, Sendable {
+    public struct Track: Codable, Sendable, Identifiable {
+        public var id: Int { source.number }
         public var source: DVDTrack
         public var title: String?
         public var artist: String?

@@ -91,16 +91,25 @@ struct DVDRunTests {
         try metadata.set("album=Fixture")
         try metadata.set("albumArtist=Test Artist")
         try metadata.importTitles("First\nSecond\n../日本語: Third\n", program: presentation.id)
+        let progress = DVDProgressLog()
         for (index, run) in try presentation.decodingRuns().enumerated() {
             let decoded = try DVDExtraction.decodeRun(
                 run, of: presentation, source: file, tools: tools, work: work, stop: stop, progress: { _ in },
-                metadata: metadata)
+                metadata: metadata, events: { progress.append($0) })
             #expect(decoded.run.pcmSHA256 == expected[index])
             #expect(decoded.run.frames == 12000)
             records += decoded.tracks
             staged += decoded.files
         }
         #expect(records.map(\.frames) == [4000, 8000, 12000])
+        #expect(
+            progress.events == [
+                .decoding(program: "1:1", firstTrack: 1, lastTrack: 2),
+                .checking(program: "1:1", track: 1, total: 3),
+                .checking(program: "1:1", track: 2, total: 3),
+                .decoding(program: "1:1", firstTrack: 3, lastTrack: 3),
+                .checking(program: "1:1", track: 3, total: 3),
+            ])
         // Each run's track numbering is still global; tags retain the whole-program count.
         let comments = Dictionary(
             try FLACTags.read(staged[2]).map { ($0.key.uppercased(), $0.value) }, uniquingKeysWith: { a, _ in a })

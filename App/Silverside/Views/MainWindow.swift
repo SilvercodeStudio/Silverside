@@ -374,6 +374,7 @@ struct SidebarView: View {
     }
 
     private func subtitle(of slot: DriveSlot) -> String {
+        if let dvd = slot.dvd { return dvd.isAccessingDrive ? dvd.status : "DVD-Audio · \(dvd.title)" }
         if let rip = slot.rip, rip.isRunning {
             // The percent counts each track's first read, so it stands still while a track is read again.
             let status: String
@@ -412,6 +413,7 @@ struct SidebarView: View {
     /// True while the drive reads the disc: a rip's reads, a repair's re-reads, a drive test, or
     /// a track that plays from the disc. Not while a rip checks CTDB or encodes.
     private func isReading(_ slot: DriveSlot) -> Bool {
+        if slot.dvd?.isAccessingDrive == true { return true }
         if slot.isBusy { return true }
         if let rip = slot.rip, rip.isRunning, rip.phase == .starting || rip.phase == .ripping { return true }
         if case .disc(let id, _) = model.player.item?.source, id == slot.id { return model.player.isPlaying }

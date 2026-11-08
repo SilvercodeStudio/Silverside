@@ -3,12 +3,14 @@ import Foundation
 extension DVDExtraction {
     static func readProgram(
         _ presentation: DVDPresentation, source: String, fingerprint: String,
-        tools: DVDTools, work: URL, stop: StopToken, progress: @escaping (String) -> Void
+        tools: DVDTools, work: URL, stop: StopToken, progress: @escaping (String) -> Void,
+        events: @escaping @Sendable (DVDProgress) -> Void = { _ in }
     ) throws -> URL {
         let file = work.appendingPathComponent("program-\(presentation.titleSet)-\(presentation.title).aob")
         let first = presentation.tracks[0].firstSector
         let count = presentation.tracks.last!.lastSector - first + 1
         progress("Reading program \(presentation.id): \(count) sectors, \(presentation.tracks.count) tracks…")
+        events(.reading(program: presentation.id, sectors: 0, total: Int64(count)))
         _ = try DVDProcess.run(
             tools.helper,
             [
@@ -18,6 +20,7 @@ extension DVDExtraction {
             progress: {
                 if let bytes = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size]) as? NSNumber {
                     progress("Program \(presentation.id): read \(bytes.int64Value / 2048)/\(count) sectors")
+                    events(.reading(program: presentation.id, sectors: bytes.int64Value / 2048, total: Int64(count)))
                 }
             })
         guard
@@ -32,7 +35,8 @@ extension DVDExtraction {
     /// published until every run in the program has passed verification.
     static func decodeRun(
         _ run: DVDDecodeRun, of presentation: DVDPresentation, source: URL,
-        tools: DVDTools, work: URL, stop: StopToken, progress: (String) -> Void, metadata: DVDMetadata? = nil
+        tools: DVDTools, work: URL, stop: StopToken, progress: (String) -> Void, metadata: DVDMetadata? = nil,
+        events: @Sendable (DVDProgress) -> Void = { _ in }
     ) throws -> (run: DVDRipReport.Run, tracks: [DVDRipReport.Track], files: [URL]) {
         try stop.check()
         guard let first = run.tracks.first, let last = run.tracks.last else {
@@ -65,6 +69,7 @@ extension DVDExtraction {
             throw DVDError("Track \(first.number): run format differs from its inventory (\(sourceFormat)).")
         }
         progress("Program \(presentation.id): decoding continuous run, tracks \(first.number)–\(last.number)…")
+        events(.decoding(program: presentation.id, firstTrack: first.number, lastTrack: last.number))
         let continuous = runWork.appendingPathComponent("continuous.flac")
         let sourceHash = try encode(input, to: continuous, p: runPresentation, tools: tools, work: runWork, stop: stop)
         let frames = try frameCounts.reduce(Int64(0)) { total, count in
@@ -84,6 +89,7 @@ extension DVDExtraction {
         for (track, frames) in zip(run.tracks, frameCounts) {
             try stop.check()
             progress("Program \(presentation.id): checking track \(track.number)/\(presentation.tracks.count)…")
+            events(.checking(program: presentation.id, track: track.number, total: presentation.tracks.count))
             let file = work.appendingPathComponent(String(format: "%02d.flac", track.number))
             try verifyFormat(file, frames: frames, format: format, tools: tools, work: work, stop: stop)
             tracks.append(

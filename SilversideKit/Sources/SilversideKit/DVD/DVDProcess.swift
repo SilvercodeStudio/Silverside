@@ -92,11 +92,13 @@ public struct DVDTools: Sendable {
         let environment = ProcessInfo.processInfo.environment
         let helperURL =
             environment["SILVERSIDE_DVD_HELPER"].map { URL(fileURLWithPath: $0) }
+            ?? (Bundle.main.bundleURL.pathExtension == "app"
+                ? Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/silverside-dvd-helper") : nil)
             ?? (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath()
             .deletingLastPathComponent().appendingPathComponent("silverside-dvd-helper")
         guard FileManager.default.isExecutableFile(atPath: helperURL.path) else {
             throw DVDError(
-                "DVD support needs silverside-dvd-helper beside the CLI. Build/install both with make cli or make install."
+                "DVD support needs silverside-dvd-helper. Rebuild/reinstall the app, or install both CLI executables."
             )
         }
         guard let ffmpeg = FFmpeg.program() else {

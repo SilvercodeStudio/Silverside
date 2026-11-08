@@ -81,6 +81,7 @@
 				000000000000000150000000 /* Record the Git commit */,
 				000000000000000170000000 /* Put the command line tool in the app */,
 				000000000000000160000000 /* Remove Sparkle's XPC services */,
+				000000000000000180000000 /* Build and embed DVD helper */,
 			);
 			buildRules = (
 			);
@@ -145,6 +146,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		000000000000000180000000 /* Build and embed DVD helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			name = "Build and embed DVD helper";
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"$SRCROOT/../scripts/build-dvd-helper.sh\"";
+		};
 		000000000000000150000000 /* Record the Git commit */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;

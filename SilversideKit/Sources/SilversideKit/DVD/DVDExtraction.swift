@@ -103,7 +103,8 @@ public enum DVDExtraction {
     /// tracks are promoted only after format, duration and PCM checks pass.
     public static func rip(
         source: String, output: URL, tools: DVDTools, mix: DVDMix = .auto, title: String? = nil,
-        metadata: DVDMetadata? = nil, stop: StopToken = StopToken(), progress: @escaping (String) -> Void = { _ in }
+        metadata: DVDMetadata? = nil, stop: StopToken = StopToken(),
+        events: @escaping @Sendable (DVDProgress) -> Void = { _ in }, progress: @escaping (String) -> Void = { _ in }
     ) throws -> DVDRipReport {
         let root = output.standardizedFileURL.resolvingSymlinksInPath()
         let input = URL(fileURLWithPath: source).standardizedFileURL.resolvingSymlinksInPath()
@@ -129,6 +130,7 @@ public enum DVDExtraction {
                 at: work, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
             try save(report, to: root)
             progress("Inspecting DVD-Audio programs…")
+            events(.inspecting)
             let inventory = try tools.inventory(source: source, work: work, stop: stop)
             report.inventory = inventory
             report.ffmpegVersion =
@@ -148,7 +150,7 @@ public enum DVDExtraction {
                 try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
                 let sourceFile = try readProgram(
                     presentation, source: source, fingerprint: inventory.fingerprint,
-                    tools: tools, work: work, stop: stop, progress: progress)
+                    tools: tools, work: work, stop: stop, progress: progress, events: events)
                 try validatePackets(sourceFile, presentation: presentation)
                 report.programs.append(
                     .init(
@@ -163,7 +165,7 @@ public enum DVDExtraction {
                 for run in try presentation.decodingRuns() {
                     let decoded = try decodeRun(
                         run, of: presentation, source: sourceFile, tools: tools,
-                        work: programWork, stop: stop, progress: progress, metadata: metadata)
+                        work: programWork, stop: stop, progress: progress, metadata: metadata, events: events)
                     report.programs[programIndex].runs?.append(decoded.run)
                     report.programs[programIndex].tracks += decoded.tracks
                     staged += decoded.files
@@ -180,6 +182,7 @@ public enum DVDExtraction {
                 try publish(staged, tracks: report.programs[programIndex].tracks, to: destination)
                 report.programs[programIndex].complete = true
                 try save(report, to: root)
+                events(.published(program: presentation.id))
                 try FileManager.default.removeItem(at: sourceFile)
                 try FileManager.default.removeItem(at: programWork)
             }
@@ -188,6 +191,7 @@ public enum DVDExtraction {
             report.finished = Date()
             try save(report, to: root)
             try FileManager.default.removeItem(at: work)
+            events(.finished)
             return report
         } catch {
             report.status = error is CancellationError ? "cancelled" : "failed"

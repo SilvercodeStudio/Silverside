@@ -59,7 +59,8 @@ struct AppCommands: Commands {
                 .disabled(!canRip)
             Button("Stop Rip") { if let slot = model.selectedDrive { model.stopRip(slot) } }
                 .keyboardShortcut(".", modifiers: .command)
-                .disabled(model.selectedDrive?.rip?.isRunning != true)
+                .disabled(
+                    model.selectedDrive?.rip?.isRunning != true && model.selectedDrive?.dvd?.isAccessingDrive != true)
             Divider()
             Button("Look Up Metadata") {
                 if let slot = model.selectedDrive {
@@ -108,7 +109,7 @@ struct AppCommands: Commands {
             Divider()
             Button("Eject") { if let slot = model.selectedDrive { model.eject(slot) } }
                 .keyboardShortcut("e", modifiers: .command)
-                .disabled(model.selectedDrive?.device.discBSDName == nil)
+                .disabled(!canEject)
             Button("Refresh Drives") { model.refreshDrives() }
         }
     }
@@ -120,7 +121,13 @@ struct AppCommands: Commands {
         return !release.isManual && !release.lacksDiscID(of: disc.toc)
     }
 
+    private var canEject: Bool {
+        guard let slot = model.selectedDrive, !slot.isDriveBusy else { return false }
+        return slot.device.discBSDName != nil || slot.device.otherDiscBSDName != nil
+    }
+
     private var canRip: Bool {
+        if let slot = model.selectedDrive, let dvd = slot.dvd { return !slot.isDriveBusy && dvd.cannotRip == nil }
         guard let slot = model.selectedDrive, slot.disc != nil else { return false }
         return slot.rip?.isRunning != true && !slot.isBusy && !slot.tracksToRip.isEmpty
     }

@@ -555,6 +555,7 @@ final class AppModel {
             }
         }
         // Drives with a disc first, then the empty ones, each in the registry's order.
+        for removed in drives where !slots.contains(where: { $0.id == removed.id }) { removed.dvd?.disconnect() }
         let hasDisc = { (slot: DriveSlot) in slot.isDemo || hasMedium(slot.device) }
         drives = slots.enumerated()
             .sorted { hasDisc($0.element) != hasDisc($1.element) ? hasDisc($0.element) : $0.offset < $1.offset }
@@ -641,6 +642,7 @@ final class AppModel {
     }
 
     func eject(_ slot: DriveSlot) {
+        guard !slot.isDriveBusy else { return }
         guard let bsdName = slot.device.discBSDName ?? slot.device.otherDiscBSDName else { return }
         player.stop(drive: slot.id)
         Task { @MainActor in
@@ -656,6 +658,11 @@ final class AppModel {
     // MARK: Rips
 
     func startRip(_ slot: DriveSlot) {
+        if let dvd = slot.dvd {
+            guard !slot.isDriveBusy else { return }
+            dvd.chooseDestination(agreed: settings.agreedToPersonalUse)
+            return
+        }
         // A name still being typed (with ⌘R, say) goes into the rip.
         slot.pendingNames.acceptAll()
         guard slot.rip?.isRunning != true, !slot.isBusy, let disc = slot.disc else { return }
@@ -738,6 +745,7 @@ final class AppModel {
     }
 
     func stopRip(_ slot: DriveSlot) {
+        slot.dvd?.cancel()
         slot.rip?.stop()
     }
 
@@ -756,7 +764,7 @@ final class AppModel {
     /// drive's test or data track, a repair, library work, the counted work above, new names in
     /// an earlier rip's files, Check Again, a video, or the command line tool's install.
     var hasWorkUnderWay: Bool {
-        drives.contains { $0.rip?.isRunning == true || $0.isBusy } || repair?.isRunning == true
+        drives.contains { $0.isDriveBusy } || repair?.isRunning == true
             || library?.isRunning == true || workCount > 0 || !updatingNames.isEmpty || !checking.isEmpty
             || !makingVideo.isEmpty || commandLineTool.isWorking
     }

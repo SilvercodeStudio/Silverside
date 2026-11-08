@@ -14,10 +14,12 @@ public struct OpticalDrive: Equatable, Sendable {
     public var location: String
     /// The BSD name of the CD in the drive, such as "disk14". Nil if there is no CD.
     public var discBSDName: String?
-    /// A disc in the drive that is not a CD (a DVD, DVD-Audio, or Blu-ray disc), which
-    /// Silverside does not rip, and its BSD name, for Eject.
+    /// A disc in the drive that is not a CD (a DVD, DVD-Audio, or Blu-ray disc).
+    /// DVD-Audio has a separate extraction workflow; the others can be ejected.
     public var otherDisc: DiscLogo?
     public var otherDiscBSDName: String?
+    /// Changes with the inserted medium even when macOS reuses its BSD name.
+    public var otherDiscRegistryID: UInt64?
     /// What the registry says of the drive, as text: its device and protocol characteristics
     /// (such as "CD Features" and "Retry Count"), and the USB bridge's names, IDs, and speed.
     /// Serial numbers are left out.
@@ -64,6 +66,7 @@ public struct OpticalDrive: Equatable, Sendable {
             drives[drives.count - 1].registryPath = path(of: service)
             if drives[drives.count - 1].discBSDName == nil, let other = otherMedia(below: service) {
                 drives[drives.count - 1].otherDiscBSDName = other.bsdName
+                drives[drives.count - 1].otherDiscRegistryID = other.registryID
                 drives[drives.count - 1].otherDisc = DiscLogo.otherDisc(
                     isBluRay: other.isBluRay, volume: mountPoint(of: other.bsdName))
             }
@@ -72,7 +75,9 @@ public struct OpticalDrive: Equatable, Sendable {
     }
 
     /// The DVD or Blu-ray medium below a drive, if one is in it.
-    private static func otherMedia(below service: io_service_t) -> (bsdName: String, isBluRay: Bool)? {
+    private static func otherMedia(below service: io_service_t) -> (
+        bsdName: String, isBluRay: Bool, registryID: UInt64
+    )? {
         var iterator: io_iterator_t = 0
         guard
             IORegistryEntryCreateIterator(
@@ -85,7 +90,9 @@ public struct OpticalDrive: Equatable, Sendable {
             if isBluRay || IOObjectConformsTo(entry, "IODVDMedia") != 0,
                 let name = property(entry, kIOBSDNameKey) as? String
             {
-                return (name, isBluRay)
+                var id: UInt64 = 0
+                IORegistryEntryGetRegistryEntryID(entry, &id)
+                return (name, isBluRay, id)
             }
         }
         return nil

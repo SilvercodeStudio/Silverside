@@ -1,6 +1,39 @@
 # DVD audio extraction
 
-Status: initial CLI implementation, following exploration started 2026-10-31. The primary product goal is a CD-like GUI workflow for tagged, lossless DVD-Audio extraction to multichannel/stereo FLAC or ALAC. Audio extraction from DVD-Video is a secondary goal. Optional movie export is planned for 2.0; the audio workflow has no new release commitment here.
+Status: CLI extraction and metadata implemented; first GUI FLAC workflow ready for user testing, following exploration started 2026-10-31. The primary product goal is a CD-like GUI workflow for tagged, lossless DVD-Audio extraction to multichannel/stereo FLAC or ALAC. Audio extraction from DVD-Video is a secondary goal. Optional movie export is planned for 2.0; the audio workflow has no new release commitment here.
+
+### First DVD-Audio GUI workflow
+
+The app now provides a separate DVD drive page backed by `DVDSession` and
+`DVDWorkflow`. Selecting a DVD-Audio drive starts inspection; it does not start
+a rip. Choose a program, import the saved `dvd metadata` JSON or edit album,
+artist and track names, then choose a new destination folder. This first GUI
+workflow extracts one complete program to native-format FLAC. All source tracks
+remain present, including short terminal segments. Metadata is saved by disc
+fingerprint beside the settings in `DVD Metadata/`; the original MusicBrainz
+snapshot remains separate from overrides. Direct release lookup/mapping in the
+GUI, artwork, ALAC and integration with CD rip history are still follow-up work.
+
+`DVDWorkflow` runs blocking work on the engine's dedicated queue and connects
+task cancellation to the stop token. Structured progress reports inspection,
+source read sectors, decoding runs, track verification and publication. The GUI
+shows a measured percentage only during source reading. Failure and cancellation
+retain the existing partial-output/report behavior. Eject is disabled while the
+drive is in use; disc replacement invalidates the session using the media's I/O
+Registry ID as well as its BSD name. An old destination dialog cannot start a
+rip after its disc has been removed.
+
+An Xcode build phase builds the helper for the app's requested architectures,
+embeds it in `Contents/Helpers`, and signs it with its library-validation
+exception. The main app retains library validation. CLI sibling-helper lookup
+and the explicit environment override remain supported. Release notarization
+and clean-machine testing remain outstanding.
+
+The user will perform GUI/hardware testing. Suggested first case: Rumours in
+MATSHITA, program 1:2 (96/24 stereo), loading the saved Rumours metadata draft
+and naming track 13 “Unidentified trailing segment”. This is not a claim that
+the segment is silence. Verify the final 13 FLAC files, playlist and report;
+also exercise Stop and confirm that an existing output cannot be overwritten.
 
 ### Current checkpoint — 2026-11-06
 
@@ -10,7 +43,7 @@ The initial implementation now lives in the engine and CLI. `dvd info` exposes
 program navigation and per-track format observations; `dvd rip` writes per-track FLAC,
 playlists, `dvd-rip.json` and `Rip Report.txt`. The separate Swift helper loads
 Homebrew libraries at runtime through opaque public APIs, with no linked DVD
-libraries or Homebrew build dependencies. The GUI has not changed.
+libraries or Homebrew build dependencies. The first GUI workflow is described above.
 
 Supported initially: contiguous one-cell-per-track layouts, 16/24-bit MLP
 stereo/5.0/5.1 with a constant format within each decoding run, separate
@@ -44,7 +77,7 @@ Optional DVD-Audio Audio Text can contain album/group/track names, but is not
 required. It is not parsed by this milestone; files and tags use numbered
 placeholders. See the Audio Text section of the [Sonic authoring manual](https://www.quadraphonic.info/DVD-Audio-SACD-Blu-Ray/manuals/Sonic-DAC_Guide-draft2.pdf).
 Explicit metadata selection and editing are available in the CLI as described
-below; artwork and GUI selection follow later.
+below; the GUI imports those mappings and edits names. Artwork and direct GUI release mapping follow later.
 
 ### Saved metadata and Rumours inventory — 2026-11-08
 
@@ -59,7 +92,7 @@ of several source chapters to one database recording, without joining audio.
 `dvd rip --metadata` requires complete names for selected programs and writes
 tags during the existing verified FLAC split, before file hashes and publication.
 Omitting the metadata file preserves the previous numbered-output behavior. Cover art,
-GUI editing and retagging existing DVD rips remain later work.
+direct GUI release mapping and retagging existing DVD rips remain later work.
 
 The user supplied DVD-Audio release candidates for
 [The Nightfly](https://musicbrainz.org/release/01824c97-a7cf-4817-8bda-760b70d5d7e9),
@@ -384,7 +417,7 @@ validation.
 | Failed/cancelled scratch data | Confirmed: failure leaves `.work`, but the report does not explain its path, size or cleanup. Make retention visible or define an explicit cleanup policy; do not delete existing user outputs. |
 | ISO help | Confirmed: `--source` advertises unprotected ISO input despite the documented library limitation. Explain the mounted, unencrypted AUDIO_TS directory path. |
 | Shared-extent stereo/surround reads | Confirmed: each selected presentation rereads its extent. Reuse only when source fingerprint, title set and complete extent match; presentation decoding and verification remain separate. Performance work, not a demonstrated audio error. |
-| GUI execution and progress | Pending integration work: use the existing blocking-work boundary and typed progress events before wiring synchronous extraction into the app. |
+| GUI execution and progress | Implemented through `DVDWorkflow`, `blocking(_:)`, cancellation and typed progress events; user GUI/hardware testing pending. |
 | Types and function structure | Maintenance work: typed mix selection, clearer local names and extraction-step boundaries. Preserve behavior while refactoring. |
 | Architecture/dependency documentation | Update `CLAUDE.md` for DVD engine files, native PCM, helper, external ffmpeg/ffprobe and runtime-loaded Homebrew libraries. The selected dependency policy is recorded here as clarified 2026-11-01; keep library validation disabled only for the helper. |
 | Research C licensing/packaging | Keep existing notices intact. The research clients are original adapters, not copied library implementation, and are not bundled production helpers. Final packaging remains an owner decision; this review does not authorize relicensing or removal. |

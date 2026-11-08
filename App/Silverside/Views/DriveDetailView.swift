@@ -13,40 +13,57 @@ struct DriveDetailView: View {
 
     var body: some View {
         Group {
-            switch slot.discState {
-            case .empty:
-                NoDiscView(driveName: slot.name, otherDisc: slot.device.otherDisc)
-            case .reading:
-                ProgressView("Reading the disc…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .failed(let message):
-                ContentUnavailableView {
-                    Label("The disc could not be read", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(message)
-                } actions: {
-                    Button("Try Again") { slot.readDisc(settings: model.settings) }
-                }
-            case .blank(let media):
-                BlankDiscView(media: media)
-            case .ready:
-                if let disc = slot.disc, disc.toc.audioTracks.isEmpty {
-                    // A CD-ROM, such as a game or a program: nothing for a music ripper.
+            if let dvd = slot.dvd {
+                DVDView(slot: slot, dvd: dvd)
+            } else {
+                switch slot.discState {
+                case .empty:
+                    NoDiscView(driveName: slot.name, otherDisc: slot.device.otherDisc)
+                case .reading:
+                    ProgressView("Reading the disc…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .failed(let message):
                     ContentUnavailableView {
-                        Label("A data disc", systemImage: "externaldrive")
+                        Label("The disc could not be read", systemImage: "exclamationmark.triangle")
                     } description: {
-                        Text(
-                            "This disc holds only data, such as a computer program, and no audio tracks. Silverside rips audio CDs."
-                        )
+                        Text(message)
+                    } actions: {
+                        Button("Try Again") { slot.readDisc(settings: model.settings) }
                     }
-                } else if slot.disc != nil {
-                    DiscView(slot: slot, releasePickerShown: $releasePickerShown)
+                case .blank(let media):
+                    BlankDiscView(media: media)
+                case .ready:
+                    if let disc = slot.disc, disc.toc.audioTracks.isEmpty {
+                        // A CD-ROM, such as a game or a program: nothing for a music ripper.
+                        ContentUnavailableView {
+                            Label("A data disc", systemImage: "externaldrive")
+                        } description: {
+                            Text(
+                                "This disc holds only data, such as a computer program, and no audio tracks. Silverside rips audio CDs."
+                            )
+                        }
+                    } else if slot.disc != nil {
+                        DiscView(slot: slot, releasePickerShown: $releasePickerShown)
+                    }
                 }
             }
         }
-        .navigationTitle(slot.disc?.title ?? slot.name)
+        .navigationTitle(slot.dvd?.title ?? slot.disc?.title ?? slot.name)
         .navigationSubtitle(subtitle)
-        .toolbar { toolbar }
+        .toolbar {
+            if slot.dvd == nil {
+                toolbar
+            } else {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        model.eject(slot)
+                    } label: {
+                        Label("Eject", systemImage: "eject")
+                    }
+                    .disabled(slot.isDriveBusy)
+                }
+            }
+        }
         .sheet(isPresented: $releasePickerShown) {
             if let disc = slot.disc {
                 ReleasePickerSheet(disc: disc, useFound: { slot.useFound($0) }, noRelease: { slot.useNoRelease() }) {

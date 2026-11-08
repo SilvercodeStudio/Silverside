@@ -74,6 +74,14 @@ final class DriveSlot: Identifiable {
     /// Which names the header and the table show.
     var namesSource = DiscInfo.Source.musicBrainz
     var rip: RipRun?
+    var dvd: DVDSession?
+    private var retiringDVD: DVDSession?
+    var isDriveBusy: Bool {
+        isBusy || rip?.isRunning == true || dvd?.isAccessingDrive == true || retiringDVD?.isAccessingDrive == true
+    }
+    var canInspectDVD: Bool {
+        !isBusy && rip?.isRunning != true && retiringDVD?.isAccessingDrive != true && dvd?.isAccessingDrive != true
+    }
     /// With "rip it at once" on, for a disc that just went in: the rip starts at this time
     /// unless the user cancels it (`AppModel.considerRipOnInsert`).
     var ripOnInsertDate: Date?
@@ -96,6 +104,9 @@ final class DriveSlot: Identifiable {
         self.device = device
         isDemo = false
         customDrive = nil
+        if device.otherDisc == .dvdAudio, let name = device.otherDiscBSDName {
+            dvd = DVDSession(bsdName: name)
+        }
     }
 
     /// A slot with a drive of its own, such as the demo's simulated drive.
@@ -132,7 +143,18 @@ final class DriveSlot: Identifiable {
     }
 
     func update(_ device: OpticalDrive) {
+        if device.otherDiscBSDName != self.device.otherDiscBSDName
+            || device.otherDiscRegistryID != self.device.otherDiscRegistryID || device.otherDisc != .dvdAudio
+        {
+            dvd?.disconnect()
+            if dvd?.isAccessingDrive == true { retiringDVD = dvd }
+            dvd = nil
+        }
         self.device = device
+        if retiringDVD?.isAccessingDrive != true { retiringDVD = nil }
+        if dvd == nil, device.otherDisc == .dvdAudio, let name = device.otherDiscBSDName {
+            dvd = DVDSession(bsdName: name)
+        }
         if device.discBSDName == nil, !isDemo {
             disc = nil
             discState = .empty

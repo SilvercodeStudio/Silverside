@@ -353,13 +353,31 @@ extension RipReport {
                         ": the album is \(album.loudnessText), so its gain is \(album.gainText), peak \(album.peakText)"
                 }
                 lines.append(summary + ".")
+                if let dynamics = encoding.dynamics {
+                    lines.append("")
+                    lines.append(Self.dynamicsSummary(dynamics))
+                }
                 lines.append("")
-                lines.append("| Track | Loudness | Gain | Peak |")
-                lines.append("|---:|---:|---:|---:|")
-                for track in gain.tracks {
-                    lines.append(
-                        "| \(track.track) | \(track.values.loudnessText) | \(track.values.gainText) | \(track.values.peakText) |"
-                    )
+                if let dynamics = encoding.dynamics {
+                    lines.append("| Track | Loudness | Gain | Peak | DR | Loudness range |")
+                    lines.append("|---:|---:|---:|---:|---:|---:|")
+                    let numbers = Set(gain.tracks.map(\.track)).union(dynamics.tracks.map(\.track)).sorted()
+                    for number in numbers {
+                        let values = gain.tracks.first { $0.track == number }?.values
+                        let track = dynamics.tracks.first { $0.track == number }
+                        lines.append(
+                            "| \(number) | \(values?.loudnessText ?? "") | \(values?.gainText ?? "") | \(values?.peakText ?? "")"
+                                + " | \(track?.dynamicRange.map { DynamicRange.text(DynamicRange.official($0)) } ?? "")"
+                                + " | \(track?.loudnessRange.map(LoudnessRange.text) ?? "") |")
+                    }
+                } else {
+                    lines.append("| Track | Loudness | Gain | Peak |")
+                    lines.append("|---:|---:|---:|---:|")
+                    for track in gain.tracks {
+                        lines.append(
+                            "| \(track.track) | \(track.values.loudnessText) | \(track.values.gainText) | \(track.values.peakText) |"
+                        )
+                    }
                 }
                 lines.append("")
             }
@@ -467,6 +485,26 @@ extension RipReport {
             + (kept.count == 1 ? " has a copy" : " have copies") + " that AccurateRip says"
             + (kept.count == 1 ? " is" : " are") + " accurate, and this rip kept"
             + (kept.count == 1 ? " it." : " them.")
+    }
+
+    /// The disc's dynamics, and the whole release's: "Dynamic range: DR12 as the DR meter …".
+    static func dynamicsSummary(_ dynamics: RipReport.Encoding.DynamicsRecord) -> String {
+        func values(_ dr: Int?, _ lra: Double?) -> String {
+            [dr.map(DynamicRange.text), lra.map { "loudness range " + LoudnessRange.text($0) }].compactMap { $0 }
+                .joined(separator: ", ")
+        }
+        var summary =
+            "Dynamic range, as the DR meter measures it (peaks over the loudest parts), and loudness range, as"
+            + " EBU Tech 3342 measures it (the swing between quiet and loud parts)"
+        let disc = values(dynamics.dynamicRange, dynamics.loudnessRange)
+        if let whole = dynamics.release {
+            summary +=
+                ": the album, \(RipSet.all(whole.discs, "discs")), has \(values(whole.dynamicRange, whole.loudnessRange))"
+            if !disc.isEmpty { summary += "; this disc alone has \(disc)" }
+        } else if !disc.isEmpty {
+            summary += ": the album has \(disc)"
+        }
+        return summary + "."
     }
 
     /// Text that cannot break a Markdown table.

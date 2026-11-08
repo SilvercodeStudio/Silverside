@@ -12,6 +12,11 @@ command-line tool.
   or for every disc. That disc's files embed its own cover in place of the
   set's, and Use the Set's Cover takes it away. A new cover for the whole set
   asks whether the discs with their own keep them.
+- Dynamic range, measured with ReplayGain: each track's and each disc's DR, as
+  the DR meter and the Dynamic Range Database have it, and their loudness range
+  (LRA, EBU Tech 3342). The rip report lists them, with the whole set's for a
+  set, and the files get them as tags: DYNAMIC RANGE and ALBUM DYNAMIC RANGE
+  (the disc's), and REPLAYGAIN_TRACK_RANGE and REPLAYGAIN_ALBUM_RANGE.
 
 ### Fixed
 

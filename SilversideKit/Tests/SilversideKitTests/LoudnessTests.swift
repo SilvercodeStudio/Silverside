@@ -99,3 +99,79 @@ struct LoudnessTests {
         #expect(decoded == histogram && histogram.counts.count < 400)
     }
 }
+
+struct DynamicRangeTests {
+    let block = DynamicRange.blockFrames(sampleRate: 44100)
+
+    /// A stereo 997 Hz sine at `level` dBFS for `frames`.
+    func sine(level: Double, frames: Int) -> [UInt32] {
+        let amplitude = pow(10, level / 20) * 32767
+        return (0..<frames).map { i in
+            let value = Int16((amplitude * sin(2 * .pi * 997 * Double(i) / 44100)).rounded())
+            return UInt32(UInt16(bitPattern: value)) | UInt32(UInt16(bitPattern: value)) << 16
+        }
+    }
+
+    /// A full-scale sample in both channels.
+    let spike = UInt32(0x7FFF) | UInt32(0x7FFF) << 16
+
+    /// The DR is the second-highest block peak over the RMS of the loudest 20% of blocks: of
+    /// 15 blocks, 12 at -20 dBFS and 3 at -10, the 3 decide the RMS (a sine's RMS counts
+    /// √2 higher, so it equals its peak). One full-scale spike is not enough: the second
+    /// peak is the loud blocks', so the DR is 0. A spike in two blocks gives 10.
+    @Test func takesTheSecondPeakOverTheLoudestBlocks() throws {
+        var audio = (0..<15).flatMap { sine(level: $0 < 3 ? -10 : -20, frames: block) }
+        audio[5 * block + 100] = spike
+        let one = try #require(ReplayGain.analyze(audio).dynamicRange)
+        #expect(abs(one - 0) < 0.05)
+        audio[9 * block + 100] = spike
+        let two = try #require(ReplayGain.analyze(audio).dynamicRange)
+        #expect(abs(two - 10) < 0.05 && DynamicRange.official(two) == 10)
+        #expect(ReplayGain.analyze([UInt32](repeating: 0, count: 44100)).dynamicRange == nil)
+    }
+
+    /// An album's DR is the mean of its tracks' whole numbers, rounded.
+    @Test func roundsTheTracksBeforeTheAlbum() {
+        #expect(DynamicRange.album(of: [10.4, 11.6]) == 11)
+        #expect(DynamicRange.album(of: [10.4, 10.4, 12.5]) == 11)
+        #expect(DynamicRange.album(of: []) == nil)
+        #expect(DynamicRange.text(12) == "DR12")
+    }
+
+    /// EBU Tech 3342's first three test signals: a 1 kHz sine at one level for 20 s, then at
+    /// another for 20 s, has the range between them, within 1 LU; a disc's histogram gives the
+    /// same within 0.1.
+    @Test func measuresTheLoudnessRangeAsTheStandardSays() throws {
+        func twoParts(_ first: Double, _ second: Double) -> [UInt32] {
+            LoudnessTests().sine(level: first, seconds: 20, frequency: 1000)
+                + LoudnessTests().sine(level: second, seconds: 20, frequency: 1000)
+        }
+        for (first, second, expected) in [(-20.0, -30.0, 10.0), (-20, -15, 5), (-40, -20, 20)] {
+            let analysis = ReplayGain.analyze(twoParts(first, second))
+            let range = try #require(analysis.loudnessRange)
+            #expect(abs(range - expected) < 1)
+            let fromHistogram = try #require(
+                LoudnessRange.Histogram.range(of: [LoudnessRange.Histogram(analysis.shortTermPowers)]))
+            #expect(abs(fromHistogram - range) <= 0.1)
+        }
+        #expect(ReplayGain.analyze(LoudnessTests().sine(level: -20, seconds: 2)).loudnessRange == nil)
+    }
+
+    /// A disc's record: each track's values, the disc's, and the tags, the ranges only beside ReplayGain.
+    @Test func recordsAndTagsTheDisc() throws {
+        let loud = ReplayGain.analyze(LoudnessTests().sine(level: -10, seconds: 5))
+        let quiet = ReplayGain.analyze(LoudnessTests().sine(level: -30, seconds: 5))
+        let record = RipReport.Encoding.DynamicsRecord([(1, loud), (2, quiet)])
+        #expect(record.tracks.map(\.track) == [1, 2] && record.dynamicRange == 0)
+        #expect(abs((record.loudnessRange ?? 0) - 20) < 1)
+        #expect(
+            record.tags(forTrack: 1, ranges: true).map(\.key) == [
+                "DYNAMIC RANGE", "ALBUM DYNAMIC RANGE", "REPLAYGAIN_TRACK_RANGE", "REPLAYGAIN_ALBUM_RANGE",
+            ])
+        #expect(record.tags(forTrack: 1, ranges: false).map(\.value) == ["0", "0"])
+        var whole = record
+        whole.release = .init(dynamicRange: 8, loudnessRange: 12.345, discs: 2)
+        #expect(whole.tags(forTrack: 2, ranges: true).last?.value == "12.35 dB")
+        #expect(whole.tags(forTrack: 2, ranges: true)[1].value == "0")
+    }
+}

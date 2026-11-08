@@ -9,13 +9,20 @@ public enum ReplayGain {
 
     /// What a track's analysis keeps for the album's gating: the K-weighted mean square of
     /// each 400 ms block (one every 100 ms), and the track's sample peak as a fraction of
-    /// full scale.
+    /// full scale. The same pass measures its dynamics: the mean square of each 3-second
+    /// window (one every 100 ms) for the loudness range, and its DR.
     public struct Analysis: Equatable, Sendable {
         public var blockPowers: [Double]
         public var peak: Double
+        public var shortTermPowers: [Double] = []
+        /// The DR meter's value before rounding (`DynamicRange`); nil for silence.
+        public var dynamicRange: Double?
 
         /// The track's integrated loudness in LUFS, or nil for a track below the gate (silence).
         public var loudness: Double? { ReplayGain.integratedLoudness(of: blockPowers) }
+
+        /// The track's loudness range in LU (`LoudnessRange`), or nil for silence or a track under 3 seconds.
+        public var loudnessRange: Double? { LoudnessRange.range(of: shortTermPowers) }
     }
 
     /// A track's or an album's gain in dB, its peak as a fraction of full scale, and its loudness in LUFS.
@@ -83,6 +90,9 @@ public enum ReplayGain {
         while weights.count < channels { weights.append(1) }
         let step = Int((sampleRate / 10).rounded())
         var filters = (0..<channels).map { _ in KWeighting(sampleRate: sampleRate) }
+        // DR, as the meter measures stereo, over the channels that count for loudness.
+        let measured = (0..<channels).filter { weights[$0] > 0 }
+        var dynamics = DynamicRange.Meter(sampleRate: sampleRate, channels: measured.count)
         var stepPowers = [Double]()
         stepPowers.reserveCapacity(audio.frameCount / step + 1)
         var peak = 0.0
@@ -97,6 +107,10 @@ public enum ReplayGain {
                     let z = filters[channel].filter(x)
                     sum += weights[channel] * z * z
                 }
+                for (index, channel) in measured.enumerated() {
+                    dynamics.channels[index].add(Double(values[frame * channels + channel]) / 2_147_483_648)
+                }
+                dynamics.endFrame()
                 inStep += 1
                 if inStep == step {
                     stepPowers.append(sum)
@@ -105,7 +119,10 @@ public enum ReplayGain {
                 }
             }
         }
-        return Analysis(blockPowers: blocks(of: stepPowers, step: step), peak: peak)
+        return Analysis(
+            blockPowers: blocks(of: stepPowers, step: step), peak: peak,
+            shortTermPowers: LoudnessRange.shortTermPowers(of: stepPowers, step: step),
+            dynamicRange: dynamics.finish())
     }
 
     /// The 400 ms blocks of the 100 ms steps: four steps each, as the mean square over them.
@@ -123,6 +140,7 @@ public enum ReplayGain {
         var peak = 0.0
         var left: KWeighting
         var right: KWeighting
+        var dynamics: DynamicRange.Meter
         var sum = 0.0
         var inStep = 0
 
@@ -131,11 +149,15 @@ public enum ReplayGain {
             stepPowers.reserveCapacity(frames / step + 1)
             left = KWeighting(sampleRate: sampleRate)
             right = KWeighting(sampleRate: sampleRate)
+            dynamics = DynamicRange.Meter(sampleRate: sampleRate, channels: 2)
         }
 
         /// One frame, each channel as a fraction of full scale.
         @inline(__always) mutating func add(_ l: Double, _ r: Double) {
             peak = max(peak, abs(l), abs(r))
+            dynamics.channels[0].add(l)
+            dynamics.channels[1].add(r)
+            dynamics.endFrame()
             let zl = left.filter(l)
             let zr = right.filter(r)
             sum += zl * zl + zr * zr
@@ -148,7 +170,12 @@ public enum ReplayGain {
         }
 
         var analysis: Analysis {
-            Analysis(blockPowers: ReplayGain.blocks(of: stepPowers, step: step), peak: peak)
+            mutating get {
+                Analysis(
+                    blockPowers: ReplayGain.blocks(of: stepPowers, step: step), peak: peak,
+                    shortTermPowers: LoudnessRange.shortTermPowers(of: stepPowers, step: step),
+                    dynamicRange: dynamics.finish())
+            }
         }
     }
 

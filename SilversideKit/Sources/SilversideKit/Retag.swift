@@ -258,6 +258,10 @@ extension DiscEncoder {
             gain.releaseDiscs = whole?.discs
             encoding.replayGain = gain
         }
+        if var dynamics = encoding.dynamics {
+            dynamics.release = Self.releaseDynamics(of: release, in: album, disc: (medium.position, dynamics))
+            encoding.dynamics = dynamics
+        }
 
         // Each file: its name as the template has it now, then its tags.
         let audioTracks = toc.audioTracks
@@ -312,6 +316,7 @@ extension DiscEncoder {
                 + (reported?.dts == true ? DTSStream.tags(decoded: encoding.dtsDecoded != nil) : [])
                 + ReplayGain.tags(
                     track: gain?.tracks.first { $0.track == entry.track }?.values, album: gain?.albumInTags)
+                + (encoding.dynamics?.tags(forTrack: entry.track, ranges: gain != nil) ?? [])
             // A file whose tags are already these is left alone (a library on a network
             // volume is slow to write), unless the cover changes.
             let coverChanges: Bool
@@ -768,6 +773,32 @@ extension DiscEncoder {
         return (values, positions.count)
     }
 
+    /// The dynamics over every CD of a multi-disc release, from the discs' reports in `album`,
+    /// as `releaseGain` finds its gain: nil before every CD is encoded there with its dynamics
+    /// measured, and for a release of one CD. The DR is the mean of every track's, as for one
+    /// disc; the loudness range is over every disc's windows.
+    static func releaseDynamics(
+        of release: MusicBrainzRelease, in album: URL,
+        disc: (position: Int, dynamics: RipReport.Encoding.DynamicsRecord)?
+    ) -> RipReport.Encoding.DynamicsRecord.Release? {
+        let positions = release.cdPositions
+        guard positions.count > 1 else { return nil }
+        var discs = [Int: RipReport.Encoding.DynamicsRecord]()
+        if let disc { discs[disc.position] = disc.dynamics }
+        for (_, report) in albumReports(of: release, in: album) {
+            guard let position = report.discPosition, discs[position] == nil, positions.contains(position),
+                let encoding = report.encoding
+            else { continue }
+            guard let dynamics = encoding.dynamics else { return nil }
+            discs[position] = dynamics
+        }
+        let all = positions.compactMap { discs[$0] }
+        guard all.count == positions.count else { return nil }
+        return .init(
+            dynamicRange: DynamicRange.album(of: all.flatMap { $0.tracks.compactMap(\.dynamicRange) }),
+            loudnessRange: LoudnessRange.Histogram.range(of: all.map(\.histogram)), discs: positions.count)
+    }
+
     /// The reports of the release's discs in an album folder.
     static func albumReports(of release: MusicBrainzRelease, in album: URL) -> [(file: URL, report: RipReport)] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: album.path)) ?? []
@@ -796,20 +827,25 @@ extension DiscEncoder {
     }
 
     /// After a disc's encoding: the other discs of its release in the album folder take the
-    /// whole release's album gain, if it changed (`updateLibrary` writes it). Each disc that
-    /// cannot be updated is logged, and the encoding stands.
+    /// whole release's album gain and dynamics, if they changed (`updateLibrary` writes them).
+    /// Each disc that cannot be updated is logged, and the encoding stands.
     func updateReleaseGain(
-        _ values: ReplayGain.Values, of release: MusicBrainzRelease, in album: URL, except position: Int, library: URL
+        _ values: ReplayGain.Values?, dynamics: RipReport.Encoding.DynamicsRecord.Release?,
+        of release: MusicBrainzRelease, in album: URL, except position: Int, library: URL
     ) {
         for (file, report) in Self.albumReports(of: release, in: album) {
-            guard let other = report.discPosition, other != position, report.encoding?.replayGain != nil,
-                report.encoding?.replayGain?.release != values
-            else { continue }
+            guard let other = report.discPosition, other != position, let encoding = report.encoding else { continue }
+            let gainChanged = values != nil && encoding.replayGain != nil && encoding.replayGain?.release != values
+            let dynamicsChanged =
+                dynamics != nil && encoding.dynamics != nil && encoding.dynamics?.release != dynamics
+            guard gainChanged || dynamicsChanged else { continue }
             do {
                 _ = try updateLibrary(reportAt: file, library: library)
+                let whole = RipSet.all(release.cdPositions.count, "discs")
                 log(
-                    "Disc \(other): album gain \(values.gainText), over \(RipSet.all(release.cdPositions.count, "discs"))"
-                )
+                    "Disc \(other): "
+                        + (values.map { "album gain \($0.gainText), over \(whole)" }
+                            ?? "the album's dynamics, over \(whole)"))
             } catch {
                 log("Disc \(other): the album gain could not be written: \(error)")
             }

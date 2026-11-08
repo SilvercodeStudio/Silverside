@@ -51,6 +51,8 @@ What the tags do depends on the player:
 - The Music app and iTunes ignore them. They have their own leveling, Sound Check, which they measure themselves.
 - Most other players read them (foobar2000, VLC, mpv, Plexamp, the Navidrome and Jellyfin apps, most Android players), but most keep the leveling off until you turn it on in their settings. Then they offer two modes: **album** gain keeps an album's own dynamics, so a quiet intro stays quiet next to the loud song after it, and only levels one album against another; **track** gain levels every track, which suits shuffle. Silverside writes both, so the choice is the player's.
 
+The same measurement gives each track's and each disc's dynamic range, which shows how hard the mastering limited the loud parts. **DR** is the DR meter's number, as the Dynamic Range Database lists albums: the loudest peaks over the loudest parts, in dB, so a hard-limited master has a low DR (DR5) and an open one a high DR (DR14). An album's DR is the mean of its tracks'. **Loudness range** (LRA, EBU Tech 3342) is the swing between the quiet and the loud parts, in LU. The rip report lists both, and for a set, both over the whole set; the files get the tags `DYNAMIC RANGE` and `ALBUM DYNAMIC RANGE` (the disc's, as foobar2000's DR meter writes them), and `REPLAYGAIN_TRACK_RANGE` and `REPLAYGAIN_ALBUM_RANGE`. Players ignore these tags; tag editors and library tools show them.
+
 The setting is on by default because the tags cost nothing until a player uses them, and adding them to a library later means measuring every file again with another program. Turn it off if you would rather have no such tags in your files.
 
 ### HDCD

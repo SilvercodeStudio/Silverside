@@ -171,7 +171,7 @@ struct ResultsView: View {
             Button("Disc \(report.discPosition ?? 0) Only") { model.changeDiscCover(of: recentRip, to: image) }
             Button("Every Disc") {
                 if let set = setOfDisc {
-                    model.changeCover(ofSet: set, rips: model.rips(of: set), to: image)
+                    model.changeCover(ofSet: set, rips: setRips(set), to: image)
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -684,11 +684,18 @@ struct ResultsView: View {
         }
     }
 
+    /// The rips whose covers a change for the whole set updates: the newest rip of each disc,
+    /// and this one, which may be an older rip of its disc.
+    private func setRips(_ set: RipSet) -> [RecentRip] {
+        let rips = model.rips(of: set)
+        return rips.contains { $0.file == recentRip.file } ? rips : rips + [recentRip]
+    }
+
     /// A cover for the whole album: for a disc of a set, every disc, and the discs that have
     /// covers of their own keep them. Nil takes the Cover Art Archive's front cover.
     private func useWholeSetCover(_ image: CoverImage?) {
         if let set = setOfDisc {
-            model.changeCover(ofSet: set, rips: model.rips(of: set), to: image, keepingDiscCovers: true)
+            model.changeCover(ofSet: set, rips: setRips(set), to: image, keepingDiscCovers: true)
         } else {
             model.changeCover(of: recentRip, to: image)
         }

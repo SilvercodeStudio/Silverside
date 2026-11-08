@@ -223,7 +223,7 @@ silverside config unset aac.mode                     # back to the default
 | `encodeAfterRip` | `false` | `rip` encodes when it finishes |
 | `keepRipAfterEncoding` | `false` | keep the WAV files after `rip --encode` |
 | `ejectAfterRip` | `false` | `rip` ejects the disc when every track is verified |
-| `replayGain` | `true` | ReplayGain tags: each track's gain and peak and the album's, as EBU R 128 measures them, for players that level albums; the audio is not changed (`encode --no-replay-gain`) |
+| `replayGain` | `true` | ReplayGain tags: each track's gain and peak and the album's, as EBU R 128 measures them, for players that level albums, and the dynamic range (DR and loudness range, [docs/DynamicRange.md](DynamicRange.md)); the audio is not changed (`encode --no-replay-gain`) |
 | `addToMusic` | `false` | add the encoded files to the Music app, except FLAC (`--add-to-music`) |
 | `ripOnInsert` | `false` | the app rips a disc when it goes in, if its release is certain and it is not ripped yet |
 | `hdcd` | `ask` | for a disc whose HDCD codes ask for peak extend or a gain: `decode` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--hdcd`) |

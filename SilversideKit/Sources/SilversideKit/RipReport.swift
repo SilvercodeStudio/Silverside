@@ -505,6 +505,9 @@ public struct RipReport: Codable, Equatable, Sendable {
         public var seconds: Int?
         /// The ReplayGain values written into the tags. Nil when they were not, and in older records.
         public var replayGain: ReplayGainRecord?
+        /// The dynamics of the album and its tracks, measured with ReplayGain. Nil when ReplayGain
+        /// was not, and in records from before 0.9.6.
+        public var dynamics: DynamicsRecord?
         /// True if the files hold the HDCD decode of the rip (at the format's `wideBits`), tagged HDCD=decoded.
         /// Nil (or false) when they hold the audio as it is on the disc.
         public var hdcdDecoded: Bool?
@@ -581,6 +584,92 @@ public struct RipReport: Codable, Equatable, Sendable {
 
             /// The values that the tags have as the album's: the whole release's, else the disc's.
             public var albumInTags: ReplayGain.Values? { release ?? album }
+        }
+
+        /// The dynamics of the album and its tracks: DR as the DR meter measures it
+        /// (`DynamicRange`), and the loudness range (`LoudnessRange`).
+        public struct DynamicsRecord: Codable, Equatable, Sendable {
+            public struct Track: Codable, Equatable, Sendable {
+                public var track: Int
+                /// The DR meter's value before rounding. Nil for silence.
+                public var dynamicRange: Double?
+                /// In LU. Nil for silence, and for a track under 3 seconds.
+                public var loudnessRange: Double?
+
+                public init(track: Int, dynamicRange: Double?, loudnessRange: Double?) {
+                    self.track = track
+                    self.dynamicRange = dynamicRange
+                    self.loudnessRange = loudnessRange
+                }
+            }
+
+            /// The values over every CD of a multi-disc release.
+            public struct Release: Codable, Equatable, Sendable {
+                public var dynamicRange: Int?
+                public var loudnessRange: Double?
+                public var discs: Int
+
+                public init(dynamicRange: Int?, loudnessRange: Double?, discs: Int) {
+                    self.dynamicRange = dynamicRange
+                    self.loudnessRange = loudnessRange
+                    self.discs = discs
+                }
+            }
+
+            public var tracks: [Track]
+            /// This disc's DR: the mean of its tracks' whole numbers, rounded. Nil when every track is silent.
+            public var dynamicRange: Int?
+            /// This disc's loudness range, over every track's windows.
+            public var loudnessRange: Double?
+            /// The disc's short-term loudness, for the loudness range of a multi-disc album.
+            public var histogram: LoudnessRange.Histogram
+            /// For a disc of a multi-disc release: the values over every CD of the release. Nil
+            /// until every disc is encoded into the album folder with its dynamics measured.
+            public var release: Release?
+
+            public init(
+                tracks: [Track], dynamicRange: Int?, loudnessRange: Double?, histogram: LoudnessRange.Histogram,
+                release: Release? = nil
+            ) {
+                self.tracks = tracks
+                self.dynamicRange = dynamicRange
+                self.loudnessRange = loudnessRange
+                self.histogram = histogram
+                self.release = release
+            }
+
+            /// The record of a disc's analyses, by track number.
+            public init(_ analyses: [(track: Int, analysis: ReplayGain.Analysis)]) {
+                tracks = analyses.map {
+                    Track(
+                        track: $0.track, dynamicRange: $0.analysis.dynamicRange,
+                        loudnessRange: $0.analysis.loudnessRange)
+                }
+                dynamicRange = DynamicRange.album(of: tracks.compactMap(\.dynamicRange))
+                let windows = analyses.flatMap(\.analysis.shortTermPowers)
+                loudnessRange = LoudnessRange.range(of: windows)
+                histogram = LoudnessRange.Histogram(windows)
+            }
+
+            /// The tags of a track: its DR and the disc's, as foobar2000's DR meter writes them
+            /// ("DYNAMIC RANGE", "ALBUM DYNAMIC RANGE"; a disc's, as it groups an album by disc
+            /// number), and with `ranges`, the loudness ranges as loudgain writes them beside
+            /// ReplayGain (the album's over the whole release, as its gain is).
+            public func tags(forTrack number: Int, ranges: Bool) -> [(key: String, value: String)] {
+                let track = tracks.first { $0.track == number }
+                var tags = [(key: String, value: String)]()
+                if let value = track?.dynamicRange { tags.append(("DYNAMIC RANGE", "\(DynamicRange.official(value))")) }
+                if let dynamicRange { tags.append(("ALBUM DYNAMIC RANGE", "\(dynamicRange)")) }
+                if ranges {
+                    if let value = track?.loudnessRange {
+                        tags.append(("REPLAYGAIN_TRACK_RANGE", String(format: "%.2f dB", value)))
+                    }
+                    if let value = release?.loudnessRange ?? loudnessRange {
+                        tags.append(("REPLAYGAIN_ALBUM_RANGE", String(format: "%.2f dB", value)))
+                    }
+                }
+                return tags
+            }
         }
 
         public init(

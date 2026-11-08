@@ -95,6 +95,8 @@ Apple, so macOS opens them without warnings.
   files go into the Music app (every format but FLAC).
 - **ReplayGain tags**, measured as EBU R 128 does, so players that read them
   play albums at one volume level. The raw audio samples are not changed.
+- **Dynamic range** of each track, disc, and set: the DR meter's number and
+  the loudness range, in the rip report and the tags.
 - **Multi-disc sets.** The discs of a release share the release choice, the
   album's names, the cover, one album folder, and one album gain. A set has
   a view of its own: each disc's state, the work left, and buttons that
@@ -302,9 +304,10 @@ makes, and the settings.
 
 ## How the audio processing was checked
 
-[ReplayGain](docs/ReplayGain.md), [HDCD](docs/HDCD.md), and
-[pre-emphasis](docs/PreEmphasis.md) each have a short page: what Silverside
-does, and how it was compared with independent tools and real discs.
+[ReplayGain](docs/ReplayGain.md), [dynamic range](docs/DynamicRange.md),
+[HDCD](docs/HDCD.md), and [pre-emphasis](docs/PreEmphasis.md) each have a
+short page: what Silverside does, and how it was compared with independent
+tools and real discs.
 
 ## Roadmap
 

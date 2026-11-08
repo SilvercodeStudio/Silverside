@@ -69,6 +69,8 @@ struct EncodingTests {
         // ReplayGain: the test rip's audio is noise, so it has a loudness; the album's covers both tracks.
         #expect(tags["REPLAYGAIN_TRACK_GAIN"]?.hasSuffix(" dB") == true && tags["REPLAYGAIN_ALBUM_PEAK"] != nil)
         #expect(tags["REPLAYGAIN_REFERENCE_LOUDNESS"] == "-18.00 LUFS")
+        // The same pass measures the dynamics: noise has a DR, and the album's is the disc's.
+        #expect(tags["DYNAMIC RANGE"].flatMap(Int.init) != nil && tags["ALBUM DYNAMIC RANGE"].flatMap(Int.init) != nil)
         #expect(try FLACTags.readFrontCover(files[0]).map { try EmbeddedCover(CoverImage(data: $0)).width } == 1000)
         #expect(FileManager.default.fileExists(atPath: library.appending(path: "\(album)/cover.jpg").path))
         #expect(throws: EncodingError.self) { try DiscEncoder(format: .flac).encode(disc, into: library) }
@@ -547,6 +549,8 @@ extension EncodingTests {
         let (files2, record2) = try encoder.encodeWithRecord(try RippedDisc(folder: folder2), into: library)
         let gain2 = try #require(record2?.replayGain)
         #expect(gain2.release == nil && gain2.histogram != nil)
+        let dynamics2 = try #require(record2?.dynamics)
+        #expect(dynamics2.release == nil && dynamics2.dynamicRange != nil)
         func albumGain(_ file: URL) throws -> String? {
             try FLACTags.read(file).first { $0.key == "REPLAYGAIN_ALBUM_GAIN" }?.value
         }
@@ -572,6 +576,12 @@ extension EncodingTests {
         #expect(saved2.encoding?.replayGain?.release == whole && saved2.encoding?.replayGain?.album == gain2.album)
         let markdown = try String(contentsOf: album.appending(path: "Rip Report (Disc 2).md"), encoding: .utf8)
         #expect(markdown.contains("the album, both discs, is \(whole.loudnessText)"))
+        // The dynamics over both discs: in both reports; the tags keep each disc's own DR.
+        let wholeDynamics = try #require(record1?.dynamics?.release)
+        #expect(wholeDynamics.discs == 2 && saved2.encoding?.dynamics?.release == wholeDynamics)
+        #expect(markdown.contains("the album, both discs, has DR"))
+        let tags2 = try FLACTags.read(files2[1])
+        #expect(tags2.first { $0.key == "ALBUM DYNAMIC RANGE" }?.value == dynamics2.dynamicRange.map { "\($0)" })
         let done = try #require(RipSet.replayGain(of: release, folders: [album]))
         #expect(done.whole == whole && done.discs.count == 2)
         #expect(done.text.hasPrefix("Album gain over both discs: \(whole.gainText), peak "))

@@ -935,6 +935,8 @@ public struct DiscEncoder: Sendable {
         // as many at a time as they encode.
         // For the last disc of a multi-disc release into the album folder, the album is the whole release.
         var replayGainRecord: RipReport.Encoding.ReplayGainRecord?
+        // The same pass measures the dynamics: DR and the loudness range.
+        var dynamicsRecord: RipReport.Encoding.DynamicsRecord?
         // A DTS stream is not audio to measure; its decode is.
         if replayGain && !dtsTracks.isEmpty && dtsDecoder == nil {
             log("ReplayGain: none, as the DTS stream is not audio a player plays.")
@@ -955,11 +957,20 @@ public struct DiscEncoder: Sendable {
             let whole = jobs.first.flatMap {
                 Self.releaseGain(of: release, in: $0.folder, disc: (medium.position, histogram))
             }
+            var dynamics = RipReport.Encoding.DynamicsRecord(
+                zip(jobs, analyses).map { (track: $0.ripped.number, analysis: $1) })
+            dynamics.release = jobs.first.flatMap {
+                Self.releaseDynamics(of: release, in: $0.folder, disc: (medium.position, dynamics))
+            }
+            dynamicsRecord = dynamics
             var tracks = [RipReport.Encoding.ReplayGainRecord.Track]()
             for (index, analysis) in analyses.enumerated() {
                 let track = analysis.loudness.map { ReplayGain.Values(loudness: $0, peak: analysis.peak) }
-                jobs[index].extraComments += ReplayGain.tags(track: track, album: whole?.values ?? album)
-                if let track { tracks.append(.init(track: jobs[index].ripped.number, values: track)) }
+                let number = jobs[index].ripped.number
+                jobs[index].extraComments +=
+                    ReplayGain.tags(track: track, album: whole?.values ?? album)
+                    + dynamics.tags(forTrack: number, ranges: true)
+                if let track { tracks.append(.init(track: number, values: track)) }
             }
             replayGainRecord = .init(
                 album: album, tracks: tracks, histogram: histogram, release: whole?.values, releaseDiscs: whole?.discs)
@@ -1143,6 +1154,7 @@ public struct DiscEncoder: Sendable {
                 seconds: Int(Date().timeIntervalSince(encodingStarted)), replayGain: replayGainRecord)
         }.map {
             var encoding = $0
+            encoding.dynamics = dynamicsRecord
             encoding.hdcdDecoded = decodes ? true : nil
             encoding.dtsDecoded = dtsDecoder != nil ? outcomes.surroundLayout : nil
             encoding.deEmphasizedTracks = deEmphasized.isEmpty ? nil : deEmphasized
@@ -1194,8 +1206,10 @@ public struct DiscEncoder: Sendable {
             try writeCueSheet(
                 listeningTracks, hiddenTrackFile: hiddenTrackFile, release: release, medium: medium, toc: disc.toc,
                 mcn: disc.report?.mcn, to: albumFolder, discPart: discPart)
-            if let whole = replayGainRecord?.release {
-                updateReleaseGain(whole, of: release, in: albumFolder, except: medium.position, library: library)
+            if replayGainRecord?.release != nil || dynamicsRecord?.release != nil {
+                updateReleaseGain(
+                    replayGainRecord?.release, dynamics: dynamicsRecord?.release, of: release, in: albumFolder,
+                    except: medium.position, library: library)
             }
             // With separate sources, image failure can leave the finished album in place:
             // those sources are still available for retry. Replacements prepared the image first.

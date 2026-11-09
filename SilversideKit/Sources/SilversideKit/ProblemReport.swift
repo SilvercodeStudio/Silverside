@@ -96,8 +96,10 @@ public enum ProblemReport {
     public static var system: String {
         var size = 0
         sysctlbyname("hw.model", nil, &size, nil, 0)
-        var model = [CChar](repeating: 0, count: max(size, 1))
-        sysctlbyname("hw.model", &model, &size, nil, 0)
+        var bytes = [UInt8](repeating: 0, count: max(size, 1))
+        sysctlbyname("hw.model", &bytes, &size, nil, 0)
+        // The name ends at its null byte.
+        let model = String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
         #if arch(arm64)
             let architecture = "Apple silicon"
         #else
@@ -105,6 +107,6 @@ public enum ProblemReport {
         #endif
         let version = ProcessInfo.processInfo.operatingSystemVersionString.replacingOccurrences(
             of: "Version ", with: "")
-        return ["macOS \(version)", String(cString: model), architecture].filter { !$0.isEmpty }.joined(separator: ", ")
+        return ["macOS \(version)", model, architecture].filter { !$0.isEmpty }.joined(separator: ", ")
     }
 }

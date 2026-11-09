@@ -49,7 +49,9 @@ struct DriveDetailView: View {
         .toolbar { toolbar }
         .sheet(isPresented: $releasePickerShown) {
             if let disc = slot.disc {
-                ReleasePickerSheet(disc: disc, useFound: { slot.useFound($0) }) { release in slot.choose(release) }
+                ReleasePickerSheet(disc: disc, useFound: { slot.useFound($0) }, noRelease: { slot.useNoRelease() }) {
+                    release in slot.choose(release)
+                }
             }
         }
         #if DEBUG
@@ -471,9 +473,11 @@ struct AlbumHeader: View {
                     if !disc.edits.isEmpty, editable {
                         Button("Undo Edits") { slot.disc?.edits = MetadataEdits() }.fixedSize()
                     }
-                    if disc.releases.count > 1 {
+                    // A release found by its track lengths may not be the disc: the picker can say so.
+                    if disc.releases.count > 1 || (disc.isFuzzy && !disc.releases.isEmpty) {
                         Button(
-                            disc.isAmbiguous ? "Choose Release…" : "Other Releases (\(disc.releases.count - 1))…"
+                            disc.isAmbiguous || disc.isFuzzy || disc.release == nil
+                                ? "Choose Release…" : "Other Releases (\(disc.releases.count - 1))…"
                         ) {
                             releasePickerShown = true
                         }

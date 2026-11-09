@@ -208,6 +208,11 @@ final class DriveSlot: Identifiable {
         changeDisc { await $0.useFound(release) }
     }
 
+    /// None of the releases is this disc (`DiscInfo.useNoRelease`).
+    func useNoRelease() {
+        changeDisc { await $0.useNoRelease() }
+    }
+
     func lookUpAgain() {
         disc?.lookup = .lookingUp
         changeDisc { await $0.lookUpRelease(fresh: true) }

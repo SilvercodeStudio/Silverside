@@ -406,7 +406,10 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print("Your set: \(set.artist) - \(set.title), disc \(position) of \(set.discCount)")
         case .release(let lookup?):
             guard let chosen = lookup.chosen, let toc else {
-                Swift.print("MusicBrainz: no release has this disc")
+                Swift.print(
+                    lookup.ranked.isEmpty
+                        ? "MusicBrainz: no release has this disc"
+                        : "MusicBrainz: no release, as you chose: its releases only nearly fit this disc")
                 return
             }
             Swift.print(

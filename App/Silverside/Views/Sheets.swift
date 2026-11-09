@@ -7,6 +7,8 @@ struct ReleasePickerSheet: View {
     var disc: DiscInfo
     /// Uses a release that a search found.
     var useFound: (MusicBrainzRelease) -> Void
+    /// None of the releases is the disc (`DiscInfo.useNoRelease`).
+    var noRelease: () -> Void
     var choose: (MusicBrainzRelease) -> Void
     @State private var selected: String?
     @State private var searchShown = false
@@ -47,6 +49,12 @@ struct ReleasePickerSheet: View {
                 Button("Search MusicBrainz…") { searchShown = true }
                     .help("None of these is your release: find it by its names, barcode, or catalog number")
                 Spacer()
+                Button("None of These") {
+                    noRelease()
+                    dismiss()
+                }
+                .disabled(disc.release == nil)
+                .help(Self.noReleaseHelp)
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Use This Release") {
                     if let release = disc.releases.first(where: { $0.id == selected }) { choose(release) }
@@ -67,6 +75,11 @@ struct ReleasePickerSheet: View {
             }
         }
     }
+
+    static let noReleaseHelp =
+        "MusicBrainz does not have this disc, and these releases only nearly fit it. The disc keeps the names "
+        + "you see as its own, and your cover, but not the release's IDs, label, genre, or cover; the next "
+        + "lookup and the rip choose no release. Search MusicBrainz… or a release here can still name it."
 
     /// "2003-11-18 · US · disc 1 of 2 · barcode … · Capitol CDP 7243 5 95713 2 4": what tells editions apart.
     static func details(of release: MusicBrainzRelease, toc: TOC) -> String {
@@ -174,6 +187,15 @@ struct ChangeReleaseSheet: View {
                     .disabled(!model.canChangeRelease(rip))
                     .help("Find the disc's release by its names, barcode, or catalog number")
                 Spacer()
+                Button("No Release") {
+                    model.useNoRelease(for: rip)
+                    dismiss()
+                }
+                .disabled(current?.isManual != false || !model.canChangeRelease(rip))
+                .help(
+                    "None of these releases is this disc: MusicBrainz does not have it. The rip keeps the names you see "
+                        + "as its own, and its cover, but not the release's IDs, label, or genre; a lookup of the "
+                        + "disc chooses no release from now on.")
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Change Release") {
                     if let release = releases.first(where: { $0.id == selected }) {

@@ -336,11 +336,43 @@ struct DiscInfo {
     /// in a custom set leaves it: the user chose MusicBrainz's release over it.
     mutating func choose(_ chosen: MusicBrainzRelease) async {
         if customSet != nil { try? CustomSetStore().remove(toc) }
-        try? ReleaseChoiceStore().remember(chosen)
+        try? ReleaseChoiceStore().remember(chosen, forDiscID: toc.musicBrainzDiscID)
         isAmbiguous = false
         // The picker's releases are the lookup's summaries; the details come by ID.
         let detailed = (try? await MusicBrainzClient().release(id: chosen.id)) ?? nil
         await use(detailed ?? chosen)
+    }
+
+    /// No Release: none of the releases is this disc, which MusicBrainz does not have; the lookup
+    /// found them because their track lengths nearly fit. The disc becomes one of its own, as
+    /// a disc that leaves a custom set does: it keeps the names on show as its own edits, and
+    /// the cover the user gave it, but not the release's cover, IDs, label, or genre. The
+    /// answer is kept for the disc (`ReleaseChoiceStore.rememberNoRelease`), so that the rip and
+    /// the next lookup choose no release; the picker can still choose one of them again.
+    mutating func useNoRelease() async {
+        guard let old = release, let shown = shownRelease else { return }
+        try? ReleaseChoiceStore().rememberNoRelease(forDiscID: toc.musicBrainzDiscID)
+        let own = userCover ?? keptCover
+        // A cover the user gave this disc was kept under the other release's ID, where it is not that release's.
+        if let own, ReleaseCoverStore().cover(forReleaseID: old.id) == own {
+            try? ReleaseCoverStore().forget(releaseID: old.id)
+        }
+        let single = singleRelease
+        release = nil
+        manual = single
+        medium = single.media.first
+        lookup = .notFound
+        isAmbiguous = false
+        namesFromEarlierRip = false
+        edits = MetadataEdits(keeping: shown, on: single, toc: toc)
+        cover = nil
+        sleeve = nil
+        keptCover = nil
+        userCover = nil
+        artworkRelease = nil
+        coverRelease = nil
+        coverReleaseImages = nil
+        if let own { useCover(own) }
     }
 
     /// Without a release, the names come from CD-Text or are typed in, and the files get no

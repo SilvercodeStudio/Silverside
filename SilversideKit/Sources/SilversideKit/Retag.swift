@@ -491,6 +491,38 @@ extension DiscEncoder {
             editsStore: editsStore, coverStore: coverStore, choiceStore: choiceStore)
     }
 
+    /// No Release: the rip's release is another disc's, which MusicBrainz found because its
+    /// track lengths nearly fit, and MusicBrainz does not have this disc. The rip becomes a disc
+    /// of its own (`MusicBrainzRelease.manual`), as one that leaves a custom set does: it keeps
+    /// every name it shows now as its own edits, and its cover, and loses the other release's
+    /// IDs, label, barcode, and genre. What the rip kept for the other release goes too: its
+    /// album edits, and a cover kept there that is the rip's own. The disc keeps the answer
+    /// (`ReleaseChoiceStore.rememberNoRelease`), so that a lookup of it, in a drive or a rip,
+    /// chooses no release again.
+    public func useNoRelease(
+        reportAt file: URL, library: URL? = nil, editsStore: ReleaseEditsStore = ReleaseEditsStore(),
+        coverStore: ReleaseCoverStore = ReleaseCoverStore(), choiceStore: ReleaseChoiceStore = ReleaseChoiceStore()
+    ) throws -> LibraryUpdate {
+        let report = try RipReport.read(from: file)
+        let folder = file.deletingLastPathComponent()
+        guard let other = report.release, !other.isManual else { throw EncodingError.noRelease(folder) }
+        let toc = try TOC(ctdbTOCString: report.toc)
+        let named = MetadataEdits.current(forReportAt: file, release: other, store: editsStore)
+            .applied(to: other, toc: toc)
+        let ownCover = CoverFiles.embedded(forDisc: report.discPosition, in: folder)
+            .flatMap { try? Data(contentsOf: $0) }.map(CoverImage.init)
+        let single = MusicBrainzRelease.manual(toc: toc, cdText: report.cdText)
+        let update = try changeRelease(
+            reportAt: file, to: single, edits: MetadataEdits(keeping: named, on: single, toc: toc), library: library,
+            editsStore: editsStore, coverStore: coverStore, choiceStore: choiceStore)
+        try editsStore.forget(RipIdentity(report: report), forReleaseID: other.id)
+        if let ownCover, coverStore.cover(forReleaseID: other.id) == ownCover {
+            try coverStore.forget(releaseID: other.id)
+        }
+        try choiceStore.rememberNoRelease(forDiscID: toc.musicBrainzDiscID)
+        return update
+    }
+
     /// `edits` with a title edit for each track whose title in `old` (the names a rip has now)
     /// differs from the title in `new`, so that the track keeps it.
     static func keepingTitles(
@@ -608,14 +640,14 @@ extension DiscEncoder {
             let update = try updateLibrary(
                 reportAt: updated, cover: cover, remember: false, library: library, editsStore: editsStore,
                 coverStore: coverStore, encoding: encoding)
-            try choiceStore.remember(release)
+            try choiceStore.remember(release, forDiscID: toc.musicBrainzDiscID)
             return update
         } catch {
             // Put back only while the rip's files are where they were: the moves check every
             // collision first, so a failure there moves nothing. Past them, the files have the
             // new release's names, and the reports must say so.
             guard audio.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else {
-                try? choiceStore.remember(release)
+                try? choiceStore.remember(release, forDiscID: toc.musicBrainzDiscID)
                 throw error
             }
             if let albumReport, let renamedReport, oldPart != newPart,

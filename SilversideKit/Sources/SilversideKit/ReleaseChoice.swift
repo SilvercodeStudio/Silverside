@@ -114,9 +114,28 @@ public struct ReleaseChoiceStore: Sendable {
         Set(load()[discID] ?? [])
     }
 
-    /// Keeps `release` as the choice for each disc ID of its media.
-    public func remember(_ release: MusicBrainzRelease) throws {
+    /// Keeps `release` as the choice for each disc ID of its media, and for `discID`, the disc
+    /// it was chosen for: a release that MusicBrainz found by the disc's track lengths does not
+    /// list that disc's ID. It replaces a choice of no release for the disc.
+    public func remember(_ release: MusicBrainzRelease, forDiscID discID: String? = nil) throws {
         guard !release.isManual else { return }
+        try save(release.id, forDiscIDs: release.media.flatMap(\.discIDs) + (discID.map { [$0] } ?? []))
+    }
+
+    /// Keeps the user's answer that no release of MusicBrainz's is the disc: it has releases
+    /// that nearly fit it, by their track lengths, but none of them is this disc. A lookup of
+    /// the disc then chooses none (`ReleaseLookup.find`), until a release is chosen for it.
+    public func rememberNoRelease(forDiscID discID: String) throws {
+        try save(MusicBrainzRelease.manualIDPrefix + discID, forDiscIDs: [discID])
+    }
+
+    /// True if the user said that no release of MusicBrainz's is the disc.
+    public func hasNoRelease(forDiscID discID: String) -> Bool {
+        (load()[discID] ?? []).contains { $0.hasPrefix(MusicBrainzRelease.manualIDPrefix) }
+    }
+
+    private func save(_ releaseID: String, forDiscIDs discIDs: [String]) throws {
+        guard !discIDs.isEmpty else { return }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let lock = open(url.path + ".lock", O_RDWR | O_CREAT, 0o644)
         guard lock >= 0 else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: url.path]) }
@@ -125,9 +144,9 @@ public struct ReleaseChoiceStore: Sendable {
         defer { flock(lock, LOCK_UN) }
 
         var choices = load()
-        for discID in release.media.flatMap(\.discIDs) {
+        for discID in discIDs {
             // One choice for each disc: a new choice replaces the old.
-            choices[discID] = [release.id]
+            choices[discID] = [releaseID]
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

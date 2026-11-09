@@ -44,6 +44,9 @@ final class LibraryRun: Identifiable {
         /// Take Out of Set: the rip becomes a disc of its own, with the names it had in its
         /// custom set (`DiscEncoder.leaveCustomSet`); `release` is not used.
         var leavesCustomSet = false
+        /// No Release: the rip's release only nearly fit its disc, and the rip becomes a disc
+        /// of its own with the names it has now (`DiscEncoder.useNoRelease`); `release` is the old one.
+        var dropsRelease = false
     }
 
     let id = UUID()
@@ -160,15 +163,19 @@ final class LibraryRun: Identifiable {
                     let result =
                         change.leavesCustomSet
                         ? try encoder.leaveCustomSet(reportAt: rip.file, library: library)
-                        : try encoder.changeRelease(
-                            reportAt: rip.file, to: change.release, keepingTrackEdits: change.keepsTrackNames,
-                            keepingTrackTitles: change.keepsTrackTitles, cover: change.cover, library: library)
+                        : change.dropsRelease
+                            ? try encoder.useNoRelease(reportAt: rip.file, library: library)
+                            : try encoder.changeRelease(
+                                reportAt: rip.file, to: change.release, keepingTrackEdits: change.keepsTrackNames,
+                                keepingTrackTitles: change.keepsTrackTitles, cover: change.cover, library: library)
                     onMain {
                         run.changedReport = (rip.file, result.report)
                         run.add(
                             (change.leavesCustomSet
                                 ? "\(rip.title): taken out of the set"
-                                : "\(rip.title): now \(change.release.artist) – \(change.release.title)")
+                                : change.dropsRelease
+                                    ? "\(rip.title): no longer \(change.release.artist) – \(change.release.title)"
+                                    : "\(rip.title): now \(change.release.artist) – \(change.release.title)")
                                 + (result.albumFolder == nil
                                     ? "; not encoded yet, so the files get the names when it is."
                                     : "; wrote the tags of \(Format.count(result.files.count, "file"))"

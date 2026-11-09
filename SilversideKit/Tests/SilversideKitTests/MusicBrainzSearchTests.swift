@@ -70,6 +70,18 @@ struct MusicBrainzSearchTests {
             toc: toc, mcn: nil, client: client, store: ReleaseChoiceStore(url: root.appending(path: "choices.json")))
         #expect(none.ranked.isEmpty && !none.foundByBarcode)
         #expect(await web.requests.count == 3)
+
+        // The user said that the release is not this disc: the lookup chooses none, and keeps
+        // the release for the picker, until a release is chosen for the disc again.
+        let store = ReleaseChoiceStore(url: root.appending(path: "choices.json"))
+        try store.rememberNoRelease(forDiscID: toc.musicBrainzDiscID)
+        let declined = try await ReleaseLookup.find(toc: toc, mcn: "0823564030142", client: client, store: store)
+        #expect(declined.chosen == nil && declined.ranked.map(\.id) == [Self.releaseID])
+        try store.remember(release, forDiscID: toc.musicBrainzDiscID)
+        #expect(!store.hasNoRelease(forDiscID: toc.musicBrainzDiscID))
+        #expect(store.choices(forDiscID: toc.musicBrainzDiscID) == [Self.releaseID])
+        let chosen = try await ReleaseLookup.find(toc: toc, mcn: "0823564030142", client: client, store: store)
+        #expect(chosen.chosen?.id == Self.releaseID)
     }
 
     /// A release with a length that MusicBrainz lacks on one disc: the disc whose known lengths

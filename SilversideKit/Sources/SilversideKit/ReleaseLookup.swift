@@ -59,12 +59,17 @@ public enum ReleaseLookup {
         let ranked = ReleaseRanking.ranked(
             lookup.releases, discID: discID, mcn: mcn, chosen: remembered, chosenForOtherDiscs: others)
         guard let releaseID else {
+            // The user said that none of the releases is this disc: they only nearly fit it.
+            if store.hasNoRelease(forDiscID: discID) {
+                return ReleaseLookupResult(
+                    ranked: ranked, chosen: nil, isExact: lookup.isExact, foundByBarcode: foundByBarcode)
+            }
             var chosen = ranked.first
             if let choose,
                 ReleaseRanking.isAmbiguous(ranked, mcn: mcn, chosen: remembered, chosenForOtherDiscs: others)
             {
                 chosen = choose(ranked)
-                if let chosen { try store.remember(chosen) }
+                if let chosen { try store.remember(chosen, forDiscID: discID) }
             }
             var failure: String?
             if details, let summary = chosen {
@@ -82,7 +87,7 @@ public enum ReleaseLookup {
             chosen = try await client.release(id: releaseID, useCache: useCache)
         }
         guard let chosen else { throw ReleaseLookupError.noSuchRelease(releaseID) }
-        try store.remember(chosen)
+        try store.remember(chosen, forDiscID: discID)
         return ReleaseLookupResult(
             ranked: ranked, chosen: chosen, isExact: lookup.isExact, detailsFailure: failure,
             foundByBarcode: foundByBarcode)

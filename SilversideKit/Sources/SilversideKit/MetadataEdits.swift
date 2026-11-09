@@ -325,6 +325,27 @@ public struct ReleaseEditsStore: Sendable {
         try encoder.encode(all).write(to: url, options: .atomic)
     }
 
+    /// Takes out the edits that `rip` made for the release, which turned out not to be its
+    /// disc's (`DiscEncoder.useNoRelease`): its names were never the release's. The edits of
+    /// other rips stay.
+    public func forget(_ rip: RipIdentity, forReleaseID releaseID: String) throws {
+        let lock = open(url.path + ".lock", O_RDWR | O_CREAT, 0o644)
+        guard lock >= 0 else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: url.path]) }
+        defer { close(lock) }
+        flock(lock, LOCK_EX)
+        defer { flock(lock, LOCK_UN) }
+
+        var all = load()
+        guard let entry = all[releaseID], entry.all.contains(where: { $0.from == rip }) else { return }
+        let entries = entry.all.filter { $0.from != rip }
+        all[releaseID] = entries.first.map {
+            Entry(edits: $0.edits, from: $0.from, earlier: Array(entries.dropFirst()))
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(all).write(to: url, options: .atomic)
+    }
+
     /// The edits, newest first, that some rip can still get from `edits(forReleaseID:rip:)`,
     /// which gives a rip the first edit from itself, from a rip of another disc, or for every
     /// rip. Once the newer edits come from rips of two discs, or one is for every rip, each rip

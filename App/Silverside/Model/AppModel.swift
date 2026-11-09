@@ -1247,6 +1247,35 @@ final class AppModel {
         }
     }
 
+    /// No Release for an earlier rip whose release only nearly fit its disc: the rip becomes a
+    /// disc of its own, with the names it has now (`DiscEncoder.useNoRelease`). The release's
+    /// other encoded rips follow, for their album gain, and the disc in a drive, if it is in one.
+    func useNoRelease(for rip: RecentRip) {
+        guard canChangeRelease(rip), let old = rip.report.release, !old.isManual else { return }
+        let others = recentRips.filter { other in
+            other.file != rip.file && (other.report.encoding != nil || !other.hasAudio)
+                && other.report.release?.id == old.id
+        }
+        let run = LibraryRun(
+            title: rip.title, encode: [], update: others,
+            change: .init(rip: rip, release: old, cover: nil, dropsRelease: true))
+        library = run
+        libraryShown = true
+        run.start(settings: settings, cover: nil) { [self] in
+            if run.changedReport != nil {
+                for slot in drives
+                where slot.disc?.toc.ctdbTOCString == rip.report.toc && slot.disc?.release?.id == old.id
+                    && slot.rip?.isRunning != true
+                {
+                    slot.useNoRelease()
+                }
+            }
+            if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
+            coverVersion += 1
+            refreshRecentRips()
+        }
+    }
+
     /// Look Up Metadata for an earlier rip: its release as MusicBrainz has it now (a disc ID
     /// added there since the rip, or names changed), into the reports of every rip of the
     /// release, so a set's discs all follow. The encoded files are brought up to date when names

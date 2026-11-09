@@ -30,6 +30,12 @@ command-line tool.
 
 ### Fixed
 
+- A disc that MusicBrainz does not have could be named after another release
+  whose track lengths nearly fit, with no way back: its IDs, label, genre,
+  and cover stayed, and so did the names you typed, for that release.
+  None of These in the release picker, and No Release in Change Release…,
+  now make it a disc of its own that keeps the names you see and your cover.
+  The disc then counts as not in MusicBrainz, in a drive and in a rip.
 - A track whose loud parts were clipped could be taken for a DTS stream after
   its rip (*Remember* on John Lennon's *Anthology*), and then its encoding
   failed. Clipped samples can look like DTS sync words, but too close

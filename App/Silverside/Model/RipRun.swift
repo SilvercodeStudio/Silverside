@@ -741,8 +741,11 @@ final class RipRun {
                         "MusicBrainz: the release's own lookup failed (\(failure)), so the files get no writers or genre"
                     )
                 }
-            } else if lookup != nil {
-                add("MusicBrainz: no release has this disc")
+            } else if let lookup {
+                add(
+                    lookup.ranked.isEmpty
+                        ? "MusicBrainz: no release has this disc"
+                        : "MusicBrainz: no release, as you chose: its releases only nearly fit this disc")
             }
         case .releaseLookupFailed(let error):
             add("MusicBrainz: the lookup failed (\(error))")

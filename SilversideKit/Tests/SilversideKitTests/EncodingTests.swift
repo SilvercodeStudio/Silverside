@@ -855,6 +855,59 @@ extension EncodingTests {
         #expect(update.files.isEmpty || update.files[0].lastPathComponent.contains("Typed Title"))
     }
 
+    /// No Release (Page McConnell's *Beauty of a Broken Heart*, which MusicBrainz lacks, matched
+    /// Enrique Iglesias's *Be With You* by its track lengths): the rip becomes a disc of its own
+    /// with every name it shows now and its cover, and loses the other release's IDs. The album
+    /// edits and the cover it kept for that release go, but another rip's edits there stay, and
+    /// the disc keeps the answer, so a lookup chooses no release.
+    @Test func takesARipOffAReleaseThatOnlyNearlyFits() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try DiscEncoder(format: .flac).encode(try RippedDisc(folder: folder), into: library)
+        let discJSON = folder.appending(path: "disc.json")
+        let report = try RipReport.read(from: discJSON)
+        let other = try #require(report.release)
+        let toc = try TOC(ctdbTOCString: report.toc)
+        let editsStore = ReleaseEditsStore(url: root.appending(path: "edits.json"))
+        let coverStore = ReleaseCoverStore(folder: root.appending(path: "covers"))
+        let choiceStore = ReleaseChoiceStore(url: root.appending(path: "choices.json"))
+        let otherRip = RipIdentity(toc: "0:1:2", date: Date(timeIntervalSince1970: 0))
+        try editsStore.remember(MetadataEdits(album: "Another Disc's"), forReleaseID: other.id, from: otherRip)
+        try editsStore.remember(
+            MetadataEdits(albumArtist: "Page McConnell", date: "2007"), forReleaseID: other.id,
+            from: RipIdentity(report: report))
+        try MetadataEdits(tracks: [1: .init(title: "Beauty of a Broken Heart")]).save(inReportAt: discJSON)
+        let cover = CoverImage(data: try Data(contentsOf: folder.appending(path: "cover.jpg")))
+        try coverStore.remember(cover, forReleaseID: other.id)
+        try choiceStore.remember(other, forDiscID: toc.musicBrainzDiscID)
+        let shown = MetadataEdits.current(forReportAt: discJSON, release: other, store: editsStore)
+            .applied(to: other, toc: toc)
+
+        let update = try DiscEncoder(format: .flac).useNoRelease(
+            reportAt: discJSON, library: library, editsStore: editsStore, coverStore: coverStore,
+            choiceStore: choiceStore)
+        let release = try #require(try RipReport.read(from: discJSON).release)
+        #expect(release.isManual && release.barcode == nil && release.country == nil)
+        let named = try #require(MetadataEdits.read(fromDiscJSONOf: folder)).applied(to: release, toc: toc)
+        #expect(named.title == shown.title && named.artist == "Page McConnell" && named.date == "2007")
+        #expect(
+            named.medium(for: toc)?.tracks.map(\.title) == ["Beauty of a Broken Heart", "Slipknot!"]
+                && shown.medium(for: toc)?.tracks.map(\.title) == ["Beauty of a Broken Heart", "Slipknot!"])
+        let tags = try FLACTags.read(try #require(update.files.first))
+        #expect(!tags.contains { $0.key == "MUSICBRAINZ_ALBUMID" || $0.key == "BARCODE" })
+        #expect(tags.contains { $0.key == "TITLE" && $0.value == "Beauty of a Broken Heart" })
+        #expect(tags.contains { $0.key == "ALBUMARTIST" && $0.value == "Page McConnell" })
+        #expect(editsStore.edits(forReleaseID: other.id, rip: nil) == MetadataEdits(album: "Another Disc's"))
+        #expect(coverStore.cover(forReleaseID: other.id) == nil)
+        #expect(FileManager.default.fileExists(atPath: folder.appending(path: "cover.jpg").path))
+        #expect(choiceStore.hasNoRelease(forDiscID: toc.musicBrainzDiscID))
+        // Only a rip of a release from MusicBrainz can leave it.
+        #expect(throws: EncodingError.self) {
+            try DiscEncoder(format: .flac).useNoRelease(reportAt: discJSON, choiceStore: choiceStore)
+        }
+    }
+
     /// Keep My Track Titles: each track keeps the title it has now, typed or the old release's;
     /// the album's names, the date, and the IDs are the new release's.
     @Test func keepsTheTrackTitlesOnAnotherRelease() throws {

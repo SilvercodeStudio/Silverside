@@ -140,6 +140,7 @@ struct WelcomeView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: names.isEmpty ? "opticaldiscdrive" : "checkmark.circle.fill")
                 .foregroundStyle(names.isEmpty ? Color.secondary : Theme.good)
+                .accessibilityHidden(true)
             if names.isEmpty {
                 Text("No CD drive yet. Connect one, and Silverside will find it as soon as macOS does.")
                     .fixedSize(horizontal: false, vertical: true)
@@ -195,6 +196,7 @@ private struct ChoiceRow: View {
             Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                 .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
                 .opacity(unavailable != nil ? 0.4 : 1)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(choice.title).font(.body.weight(.semibold))
                     .foregroundStyle(unavailable != nil ? .secondary : .primary)
@@ -208,6 +210,10 @@ private struct ChoiceRow: View {
         .contentShape(Rectangle())
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isSelected ? Color.accentColor : Color.secondary.opacity(0.25), lineWidth: 1))
+                .strokeBorder(isSelected ? Color.accentColor : Color.secondary.opacity(0.25), lineWidth: 1)
+        )
+        // One element, a radio button's choice: the radio mark shows only whether it is chosen.
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

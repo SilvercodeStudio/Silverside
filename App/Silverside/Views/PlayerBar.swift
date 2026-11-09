@@ -22,6 +22,7 @@ struct PlayerBar: View {
                     }
                     .buttonStyle(.plain)
                     .help(player.isPlaying ? "Pause" : "Play")
+                    .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
                     VStack(alignment: .leading, spacing: 1) {
                         Text(item.title).font(.callout.weight(.medium)).lineLimit(1)
                         Text(player.error ?? item.subtitle)
@@ -30,6 +31,7 @@ struct PlayerBar: View {
                             .lineLimit(1)
                     }
                     .frame(width: 240, alignment: .leading)
+                    .accessibilityElement(children: .combine)
                     Text(Format.duration(seconds: Int(dragged ?? player.position)))
                         .font(.callout).monospacedDigit().foregroundStyle(.secondary)
                     Slider(
@@ -41,6 +43,10 @@ struct PlayerBar: View {
                             self.dragged = nil
                         }
                     }
+                    .accessibilityLabel("Position")
+                    .accessibilityValue(
+                        "\(Format.duration(seconds: Int(dragged ?? player.position))) of \(Format.duration(seconds: Int(item.seconds)))"
+                    )
                     Text(Format.duration(seconds: Int(item.seconds)))
                         .font(.callout).monospacedDigit().foregroundStyle(.secondary)
                     Button {
@@ -50,6 +56,7 @@ struct PlayerBar: View {
                     }
                     .buttonStyle(.plain)
                     .help("Stop")
+                    .accessibilityLabel("Stop")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -79,5 +86,6 @@ struct PlayButton: View {
         .buttonStyle(.plain)
         .disabled(!isEnabled)
         .help(isCurrent && player.isPlaying ? "Pause" : "Play")
+        .accessibilityLabel(isCurrent && player.isPlaying ? "Pause" : "Play")
     }
 }

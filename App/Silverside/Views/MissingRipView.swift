@@ -14,6 +14,7 @@ struct MissingRipView: View {
                 Text(rip.subtitle).foregroundStyle(.secondary)
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "questionmark.folder").font(.title2).foregroundStyle(Theme.warning)
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Moved or deleted").font(.headline)
                         Text(

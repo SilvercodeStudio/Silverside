@@ -486,6 +486,11 @@ struct ResultsView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
             CoverView(data: cover, size: 112)
+                .coverAccessibility(hasCover: cover != nil) {
+                    coverPreview = CoverDrop.file(for: cover, name: coverFileName)
+                } choose: {
+                    chooseCover()
+                }
                 .overlay(alignment: .bottomTrailing) {
                     CoverArchiveBadge(release: report.release) { archivePickerShown = true }
                 }
@@ -876,7 +881,11 @@ struct ResultsView: View {
             if let encoding = report.encoding {
                 TableColumn("Encoding") { track in
                     if let file = encoding.file(ofTrack: track.number) {
-                        CheckedText(text: encoding.format.rawValue.uppercased()).help(file)
+                        CheckedText(
+                            text: encoding.format.rawValue.uppercased(),
+                            spoken: "Encoded as \(encoding.format.rawValue.uppercased())"
+                        )
+                        .help(file)
                     } else if encoding.silentTracksLeftOut?.contains(track.number) == true {
                         Text("Left out").foregroundStyle(.secondary)
                             .help("Digital silence: the album has no file for it. A disc image keeps it.")

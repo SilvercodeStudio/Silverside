@@ -89,10 +89,13 @@ struct TrackTable: View {
         TableColumn("") { track in
             // The gap before track 1 is ripped with track 1.
             let first = slot.disc?.toc.audioTracks.first?.number ?? 1
-            Toggle("", isOn: binding(for: track.number == 0 ? first : track.number))
-                .labelsHidden()
-                .disabled(slot.rip?.isRunning == true || track.number == 0)
-                .help(track.number == 0 ? "Ripped with track \(first)" : "")
+            Toggle(
+                track.number == 0 ? "Rip the hidden track" : "Rip track \(track.number)",
+                isOn: binding(for: track.number == 0 ? first : track.number)
+            )
+            .labelsHidden()
+            .disabled(slot.rip?.isRunning == true || track.number == 0)
+            .help(track.number == 0 ? "Ripped with track \(first)" : "")
         }
         .width(24)
         .customizationID("include")
@@ -400,7 +403,7 @@ struct FinishedStatus: View {
         let verdict = TrackVerdict(track, ctdb: ctdb)
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 5) {
-                Image(systemName: verdict.icon).foregroundStyle(verdict.color)
+                Image(systemName: verdict.icon).foregroundStyle(verdict.color).accessibilityHidden(true)
                 Text(verdict.text).foregroundStyle(verdict.color)
             }
             if let note {
@@ -410,6 +413,7 @@ struct FinishedStatus: View {
             }
         }
         .help(summary ?? help(for: verdict))
+        .accessibilityElement(children: .combine)
     }
 
     /// What the track needed, under its verdict: the samples CTDB repaired, and the re-reads.
@@ -465,12 +469,16 @@ struct RereadsCell: View {
 /// table of good results stays quiet, and color marks the tracks that need a look.
 struct CheckedText: View {
     var text: String
+    /// What VoiceOver says in place of the check mark and the text: "Accurate, 200 rips".
+    var spoken: String?
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: "checkmark").foregroundStyle(.secondary)
+            Image(systemName: "checkmark").foregroundStyle(.secondary).accessibilityHidden(true)
             Text(text).monospacedDigit()
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken ?? text)
     }
 }
 
@@ -483,12 +491,12 @@ struct AccurateRipCell: View {
             switch track.accurateRip {
             case .accurate:
                 let confidence = track.accurateRipConfidence.map { max($0[0], $0[1]) } ?? 0
-                CheckedText(text: String(confidence))
+                CheckedText(text: String(confidence), spoken: "Accurate, \(confidence) rips")
                     .help(
                         "Accurate: \(confidence) rips in AccurateRip have this track's checksum, at this pressing's offset (the larger of the v1 and v2 counts). AccurateRip stops counting at 200."
                     )
             case .otherPressings:
-                CheckedText(text: "Other pressing")
+                CheckedText(text: "Other pressing", spoken: "Accurate at another pressing's offset")
                     .help("Matches AccurateRip at other offsets only, so it is free of errors.")
             case .notAccurate:
                 Text("Not accurate").foregroundStyle(Theme.bad)
@@ -529,7 +537,7 @@ struct CTDBResultCell: View {
 
     var body: some View {
         if let confidence = track.ctdbConfidence, confidence > 0 {
-            CheckedText(text: String(confidence))
+            CheckedText(text: String(confidence), spoken: "Verified, \(confidence) rips")
                 .help("Verified: \(confidence) rips in the CUETools database have this track's checksum.")
         } else if let ctdb {
             switch ctdb.status {
@@ -560,7 +568,11 @@ struct EncodeCell: View {
                 Text("Encoding")
             }
         case .encoded(let file):
-            CheckedText(text: format?.rawValue.uppercased() ?? "Encoded").help(file.path)
+            CheckedText(
+                text: format?.rawValue.uppercased() ?? "Encoded",
+                spoken: "Encoded" + (format.map { " as \($0.rawValue.uppercased())" } ?? "")
+            )
+            .help(file.path)
         case .notEncoded:
             Text("Not encoded").foregroundStyle(.secondary)
         case .leftOut:
@@ -631,7 +643,7 @@ struct HiddenTrackVerdict: View {
         let unreadable = hidden.unreadableSectors?.count ?? 0
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 5) {
-                Image(systemName: hidden.readsAgree ? "checkmark" : "xmark.circle")
+                Image(systemName: hidden.readsAgree ? "checkmark" : "xmark.circle").accessibilityHidden(true)
                 Text(hidden.readsAgree ? "Reads agree" : "Reads differ")
             }
             .foregroundStyle(hidden.readsAgree ? AnyShapeStyle(.secondary) : AnyShapeStyle(Theme.bad))

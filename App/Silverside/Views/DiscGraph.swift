@@ -66,6 +66,15 @@ struct DiscGraph: View {
                         case .ended: hoveredTrack = nil
                         }
                     }
+                    // VoiceOver reads the tracks one by one, with the text that hovering shows.
+                    .accessibilityLabel("The disc by position")
+                    .accessibilityChildren {
+                        HStack {
+                            ForEach(tracks) { track in
+                                Rectangle().accessibilityLabel(text(for: track))
+                            }
+                        }
+                    }
             }
             .frame(height: height)
             HStack(spacing: 12) {
@@ -93,13 +102,22 @@ struct DiscGraph: View {
 
     private var hoverText: String {
         guard let number = hoveredTrack, let track = tracks.first(where: { $0.number == number }) else { return "" }
+        return text(for: track)
+    }
+
+    /// "Track 3 · 4:12 · 12 sectors re-read", and how much is read while the track is read.
+    private func text(for track: Track) -> String {
+        let number = track.number
+        let reading =
+            track.readFraction > 0 && track.readFraction < 1
+            ? " · \(Int(track.readFraction * 100))% read" : ""
         if track.isData {
             let size = ByteCountFormatter.string(fromByteCount: Int64(track.sectors * 2048), countStyle: .file)
             return "Data track \(number) · \(size)" + (track.dataState.map { " · \($0)" } ?? "")
                 + (track.unreadable.isEmpty
-                    ? "" : " · " + Format.count(track.unreadable.count, "sector") + " unreadable")
+                    ? "" : " · " + Format.count(track.unreadable.count, "sector") + " unreadable") + reading
         }
-        return "Track \(number) · \(Format.duration(sectors: track.sectors)) · \(track.troubleText)"
+        return "Track \(number) · \(Format.duration(sectors: track.sectors)) · \(track.troubleText)" + reading
     }
 
     /// Each track's place along the width, to scale.

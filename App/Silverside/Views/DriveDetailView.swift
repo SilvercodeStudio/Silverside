@@ -239,6 +239,11 @@ struct AlbumHeader: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             CoverView(data: disc.shownCover)
+                .coverAccessibility(hasCover: disc.shownCover != nil) {
+                    coverPreview = CoverDrop.file(for: disc.shownCover, name: coverFileName)
+                } choose: {
+                    if slot.rip?.isRunning != true { chooseCover() }
+                }
                 .overlay(alignment: .bottomTrailing) {
                     if slot.rip?.isRunning != true {
                         CoverArchiveBadge(
@@ -371,6 +376,7 @@ struct AlbumHeader: View {
                             .padding(.vertical, 4)
                     }
                     .frame(width: 120, alignment: .leading)
+                    .accessibilityElement(children: .combine)
                 }
                 HStack(alignment: .top, spacing: 8) {
                     FlowLayout(spacing: 8) {
@@ -777,6 +783,17 @@ enum NameField: Hashable {
         let next = backward ? index - 1 : index + 1
         return order.indices.contains(next) ? order[next] : nil
     }
+
+    /// The field's name for VoiceOver: the fields show no label of their own.
+    var name: String {
+        switch self {
+        case .album: "Album"
+        case .albumArtist: "Album Artist"
+        case .date: "Date"
+        case .title(let number): "Title of track \(number)"
+        case .artist(let number): "Artist of track \(number)"
+        }
+    }
 }
 
 /// Names typed and not yet accepted, by field, each with what accepting it does: so that a rip
@@ -806,6 +823,8 @@ struct NameTextField: View {
     /// The track fields in Tab's order, for a field in a track table.
     var tabOrder: (() -> [NameField])?
     var pending: PendingNames?
+    /// The name VoiceOver gives the field; nil for the field's own (`NameField.name`).
+    var accessibilityName: String?
     var commit: (String) -> Void
     /// The text as typed; nil shows `value`. It stays after it is accepted, until `value`
     /// changes with it: cleared at once, the field showed the old value for a moment, and the
@@ -825,6 +844,7 @@ struct NameTextField: View {
             })
         TextField("", text: text, prompt: prompt.map { Text($0) })
             .textFieldStyle(.plain)
+            .accessibilityLabel(accessibilityName ?? field.name)
             .focused(focus, equals: field)
             .onSubmit(accept)
             .onChange(of: focus.wrappedValue) { left, now in
@@ -897,11 +917,13 @@ struct EditableField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            // The field itself carries the label for VoiceOver.
+            Text(label).font(.caption).foregroundStyle(.secondary).accessibilityHidden(editable)
             HStack(spacing: 6) {
                 if editable {
                     NameTextField(
-                        value: text, prompt: prompt, field: field, focus: focus ?? $ownFocus, pending: pending
+                        value: text, prompt: prompt, field: field, focus: focus ?? $ownFocus, pending: pending,
+                        accessibilityName: label
                     ) { text = $0 }
                 } else {
                     Text(shown).lineLimit(1)
@@ -914,6 +936,7 @@ struct EditableField: View {
             .padding(.vertical, 4)
             .background(Color.secondary.opacity(editable ? 0.12 : 0.08), in: RoundedRectangle(cornerRadius: 6))
         }
+        .accessibilityElement(children: editable ? .contain : .combine)
     }
 }
 
@@ -947,6 +970,7 @@ struct Field: View {
                 .padding(.vertical, 4)
                 .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -1124,6 +1148,7 @@ struct ResultBanner: View {
             Image(systemName: report.isVerified ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                 .font(.title)
                 .foregroundStyle(report.isVerified ? Theme.good : Theme.warning)
+                .accessibilityLabel(report.isVerified ? "Verified" : "Not verified")
             VStack(alignment: .leading, spacing: 4) {
                 Text(RipRun.headline(for: report)).font(.headline)
                 ChipRow(chips: ResultChips.chips(for: report))

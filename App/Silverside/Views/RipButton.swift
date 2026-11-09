@@ -26,6 +26,7 @@ struct RipButton: View {
         .disabled(!enabled)
         .help(help)
         .accessibilityLabel(accessibilityText)
+        .accessibilityValue(accessibilityValue)
         .confirmationDialog("Stop the rip?", isPresented: $stopAsked) {
             Button("Stop", role: .destructive) { model.stopRip(slot) }
         } message: {
@@ -62,11 +63,22 @@ struct RipButton: View {
         }
     }
 
+    /// What a click does, as the button's name.
     private var accessibilityText: String {
         switch look {
         case .ready: "Rip"
-        case .ripping: slot.rip?.statusText ?? "Ripping"
-        case .done: slot.rip?.statusText ?? "Done"
+        case .ripping: "Stop Rip"
+        case .done: "Show Results"
+        }
+    }
+
+    /// What the picture shows: how far the rip is, or its verdict.
+    private var accessibilityValue: String {
+        switch look {
+        case .ready: ""
+        case .ripping(let fraction):
+            [slot.rip?.statusText, "\(Int(fraction * 100))%"].compactMap(\.self).joined(separator: ", ")
+        case .done(let verified): slot.rip?.statusText ?? (verified ? "Verified" : "Not verified")
         }
     }
 

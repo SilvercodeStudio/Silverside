@@ -146,6 +146,11 @@ struct SetView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 16) {
             CoverView(data: cover)
+                .coverAccessibility(hasCover: cover != nil) {
+                    coverPreview = CoverDrop.file(for: cover, name: coverFileName)
+                } choose: {
+                    chooseCover()
+                }
                 .overlay(alignment: .bottomTrailing) {
                     CoverArchiveBadge(release: release) { archivePickerShown = true }
                 }

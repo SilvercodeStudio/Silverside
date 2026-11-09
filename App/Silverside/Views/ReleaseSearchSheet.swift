@@ -98,7 +98,14 @@ struct ReleaseSearchSheet: View {
             ScrollView {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
                     ForEach(ordered) { result in
-                        card(result).onTapGesture { selected = result.id }
+                        // A button, so that the keyboard and VoiceOver can choose a release too.
+                        Button {
+                            selected = result.id
+                        } label: {
+                            card(result).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(selected == result.id ? .isSelected : [])
                     }
                 }
                 .padding(4)

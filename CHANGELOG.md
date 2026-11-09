@@ -17,6 +17,16 @@ command-line tool.
   (LRA, EBU Tech 3342). The rip report lists them, with the whole set's for a
   set, and the files get them as tags: DYNAMIC RANGE and ALBUM DYNAMIC RANGE
   (the disc's), and REPLAYGAIN_TRACK_RANGE and REPLAYGAIN_ALBUM_RANGE.
+- Help › Report a Problem… opens a new issue on GitHub in your browser, with
+  Silverside's version, your Mac, and your drives filled in, and Help › Send
+  Feedback… opens a new discussion there, for comments and ideas. Nothing is
+  sent until you submit it. The help now lists every file Silverside keeps,
+  and how to remove it.
+- VoiceOver names the app's own controls and pictures: the Rip button and
+  its progress, each track in the disc graph, the name fields, the track
+  table's checkboxes and results, the covers, the chips, and the player. The
+  pictures in the cover and release pickers are buttons, so the keyboard
+  reaches them too.
 
 ### Fixed
 

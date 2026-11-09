@@ -282,6 +282,7 @@ struct RepairSheet: View {
                     Image(systemName: isGood ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                         .font(.title2)
                         .foregroundStyle(isGood ? Theme.good : Theme.warning)
+                        .accessibilityLabel(isGood ? "Succeeded" : "Not verified")
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Repair · \(run.rip.title)").font(.headline)
@@ -334,6 +335,7 @@ struct DriveTestSheet: View {
                         GridRow {
                             Image(systemName: check.passed ? "checkmark.circle.fill" : "xmark.circle.fill")
                                 .foregroundStyle(check.passed ? Theme.good : Theme.bad)
+                                .accessibilityLabel(check.passed ? "Passed" : "Failed")
                             Text(check.name)
                             Text(check.result).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                             Text("\(check.milliseconds) ms").foregroundStyle(.secondary).monospacedDigit()
@@ -367,6 +369,7 @@ struct LibrarySheet: View {
                     Image(systemName: run.problems == 0 ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                         .font(.title2)
                         .foregroundStyle(run.problems == 0 ? Theme.good : Theme.warning)
+                        .accessibilityLabel(run.problems == 0 ? "No problems" : "Problems")
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(run.title).font(.headline)
@@ -398,7 +401,7 @@ struct HDCDQuestionSheet: View {
         let format = question.format
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Image("HDCD").resizable().scaledToFit().frame(height: 22)
+                Image("HDCD").resizable().scaledToFit().frame(height: 22).accessibilityHidden(true)
                 Text("“\(question.album)” uses HDCD").font(.title3.bold())
             }
             Text(
@@ -876,7 +879,7 @@ struct HDCDDecodeSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Image("HDCD").resizable().scaledToFit().frame(height: 22)
+                Image("HDCD").resizable().scaledToFit().frame(height: 22).accessibilityHidden(true)
                 Text("Decode HDCD").font(.title3.bold())
             }
             if let text = rip.report.hdcdText { Text(text).fixedSize(horizontal: false, vertical: true) }

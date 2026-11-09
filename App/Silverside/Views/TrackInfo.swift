@@ -58,6 +58,7 @@ struct InfoButton: View {
         }
         .buttonStyle(title == nil ? AnyButtonStyle(.plain) : AnyButtonStyle(.automatic))
         .help(help)
+        .accessibilityLabel(title ?? help)
         .popover(isPresented: $shown, arrowEdge: title == nil ? .trailing : .bottom) {
             InfoPopover(sections: sections())
         }

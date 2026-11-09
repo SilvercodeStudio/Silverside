@@ -60,6 +60,37 @@ See [Verification](help:verification#when-tracks-stay-unverified). In short: cle
 
 Some drives retry a bad sector for a long time. Stop ends the rip after the read under way, but the drive may take a while to give up on that read. If the drive stops answering, eject the disc from the Finder and insert it again.
 
-## Where are the settings and the profiles
+## Report a problem
 
-`~/Library/Application Support/Silverside/` holds `settings.json`, `DriveProfiles.json`, and the releases you chose. `~/Library/Caches/Silverside/` keeps the answers from MusicBrainz, AccurateRip, and CTDB, so a disc you rip again sends no new requests.
+Help › Report a Problem… opens a new issue for Silverside on GitHub in your browser. The issue has headings for you to fill in, and at its end Silverside's version, your macOS version and Mac model, and each drive with its read offset. Nothing is sent until you submit the issue, and you can change or delete any of it first. You need a GitHub account to submit.
+
+Attach the files that show the problem:
+
+- For a rip, its `Rip Report.log` or `disc.json`, from the rip's folder. Control-click a rip in the sidebar and choose Show in Finder.
+- For a drive, its report: Settings › Drives › Save Report.
+
+## Send feedback
+
+Comments, ideas, and questions that are not about a problem are welcome too. Help › Send Feedback… opens a new discussion for Silverside on GitHub, with Silverside's version and your macOS version at its end. As with a problem report, nothing is sent until you submit it.
+
+## Where Silverside keeps its files
+
+Silverside and the `silverside` command share these files. In `~/Library/Application Support/Silverside/`:
+
+- `settings.json`: the settings.
+- `DriveProfiles.json`: each drive's read offset, the discs that confirmed it, its cache size, and its test results.
+- `ReleaseChoices.json`: the release you chose for each disc.
+- `ReleaseEdits.json`: the album names you changed, kept by release, so every disc of a set gets them.
+- `CustomSets.json`: your custom sets.
+- `ReleaseCovers/`: the covers you chose, by release.
+- `History/`: a copy of each rip's report, so that Rip History keeps rips whose files you moved or deleted.
+- Files that end in `.lock` let the app and the command use the files at the same time.
+
+Elsewhere:
+
+- `~/Library/Caches/Silverside/`: the answers from MusicBrainz, the Cover Art Archive, AccurateRip, and CTDB, so a disc you rip again sends no new requests. You can delete it at any time; the next lookup asks again.
+- `~/Library/Preferences/app.silverside.Silverside.plist`: the app's own choices, such as the track table's columns.
+
+Your music is in the folders that Settings names: the Music library (`~/Music/Silverside Library` at first) and the Rips (`~/Music/Silverside Rips`) in General, and the disc images (`~/Music/Silverside Images`) in Encoding. The Rips folder also holds `.silverside-rip-locks`, which keeps two rips out of one folder.
+
+To remove Silverside, quit it, move it to the Trash, and delete the two `Silverside` folders and the `.plist` file above. Your music folders stay as they are. Keep `Application Support/Silverside` if you may install Silverside again: it has your drives' offsets and your rip history.

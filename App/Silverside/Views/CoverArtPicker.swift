@@ -165,13 +165,23 @@ struct CoverArtPickerSheet: View {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 180), spacing: 14)], spacing: 14) {
                     ForEach(images) { image in
-                        cell(image)
-                            .onTapGesture { selected = image.id }
-                            .simultaneousGesture(
-                                TapGesture(count: 2).onEnded {
-                                    selected = image.id
-                                    use()
-                                })
+                        // A button, so that the keyboard and VoiceOver can choose an image too.
+                        Button {
+                            selected = image.id
+                        } label: {
+                            cell(image).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(selected == image.id ? .isSelected : [])
+                        .accessibilityAction(named: "Use This Cover") {
+                            selected = image.id
+                            use()
+                        }
+                        .simultaneousGesture(
+                            TapGesture(count: 2).onEnded {
+                                selected = image.id
+                                use()
+                            })
                     }
                 }
                 .padding(4)
@@ -337,6 +347,7 @@ struct ArtworkBadge: View {
             }
             .buttonStyle(.plain)
             .padding(5)
+            .accessibilityLabel(Format.count(count, "more image") + " in the Artwork folder")
             .help(
                 "\(Format.count(count, "more image")) in the Artwork folder, such as the back and the booklet. Click to see them in Quick Look; the arrow keys go from one to the next."
             )
@@ -369,6 +380,10 @@ struct CoverArchiveBadge: View {
             }
             .buttonStyle(.plain)
             .padding(5)
+            .accessibilityLabel(
+                otherRelease != nil
+                    ? "\(count) images of another release" : "\(count) images in the Cover Art Archive"
+            )
             .help(
                 otherRelease != nil
                     ? "\(count) images of another release in the Cover Art Archive. Click to see them, and the other releases'."

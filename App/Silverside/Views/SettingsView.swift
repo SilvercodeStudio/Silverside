@@ -119,7 +119,7 @@ struct FolderField: View {
     var body: some View {
         LabeledContent(label) {
             HStack {
-                TextField("", text: $path).labelsHidden().textFieldStyle(.roundedBorder)
+                TextField("", text: $path).labelsHidden().textFieldStyle(.roundedBorder).accessibilityLabel(label)
                 Button("Choose…") {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = true

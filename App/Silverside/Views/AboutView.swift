@@ -125,6 +125,7 @@ struct Hero: View {
             .resizable()
             .scaledToFit()
             .frame(width: iconSize, height: iconSize)
+            .accessibilityLabel("Silverside")
             .shadow(color: .black.opacity(colorScheme == .dark ? 0.5 : 0.25), radius: 18, y: 10)
             .frame(maxWidth: .infinity)
             .frame(height: height)

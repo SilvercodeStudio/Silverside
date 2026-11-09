@@ -23,6 +23,8 @@ struct AppCommands: Commands {
             Button("Welcome to Silverside") { openWindow(id: "welcome") }
             Divider()
             Button("Silverside Website") { NSWorkspace.shared.open(AboutView.website) }
+            Button("Report a Problem…") { NSWorkspace.shared.open(model.problemReportURL()) }
+            Button("Send Feedback…") { NSWorkspace.shared.open(ProblemReport.feedbackURL()) }
         }
         CommandGroup(before: .textEditing) {
             Button("Find…", action: model.find)

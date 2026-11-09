@@ -313,7 +313,7 @@ struct SidebarView: View {
                     SidebarRow(
                         title: rip.title, subtitle: rip.subtitle,
                         systemImage: rip.isVerified ? "checkmark.circle" : "exclamationmark.triangle",
-                        tone: rip.isVerified ? .good : .warning
+                        tone: rip.isVerified ? .good : .warning, status: rip.isVerified ? "Verified" : "Not verified"
                     )
                     .tag(SidebarItem.rip(rip.file))
                     .help(rip.details)
@@ -340,7 +340,8 @@ struct SidebarView: View {
                     ForEach(model.sets.prefix(Self.recentCount)) { set in
                         SidebarRow(
                             title: set.title, subtitle: set.discsText,
-                            systemImage: "square.stack", tone: set.isComplete ? .good : .neutral
+                            systemImage: "square.stack", tone: set.isComplete ? .good : .neutral,
+                            status: set.isComplete ? "Complete" : nil
                         )
                         .tag(SidebarItem.set(set.releaseID))
                         .help(set.summary)
@@ -370,6 +371,8 @@ struct SidebarView: View {
             }
             .buttonStyle(.plain)
             .help("Open the rips folder in the Finder")
+            .accessibilityLabel("Rips folder")
+            .accessibilityValue(model.settings.rips)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
@@ -466,6 +469,8 @@ struct SidebarRow: View {
     var isRipping = false
     /// The drive reads the disc: the icon turns.
     var spins = false
+    /// What the icon's color says, for VoiceOver: "Verified".
+    var status: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// One turn of the disc, in seconds.
@@ -494,6 +499,8 @@ struct SidebarRow: View {
                 Image(systemName: systemImage).foregroundStyle(color)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(status ?? "")
     }
 
     private var color: Color {
@@ -527,6 +534,7 @@ struct NoDiscView: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 180, height: 180)
+                    .accessibilityHidden(true)
                 Text("Insert an audio CD").font(.title2.weight(.semibold))
                 Text(driveName.map { "\($0) is empty." } ?? "Choose a drive in the sidebar.")
                     .foregroundStyle(.secondary)

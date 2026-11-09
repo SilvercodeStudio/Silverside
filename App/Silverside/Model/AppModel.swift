@@ -381,6 +381,19 @@ final class AppModel {
 
     // MARK: Drives
 
+    /// Help › Report a Problem…: a new GitHub issue's page, filled in with the version, the Mac,
+    /// and every drive with its read offset. The user sends it, or not, in the browser.
+    func problemReportURL() -> URL {
+        let store = try? DriveProfileStore()
+        let drives = OpticalDrive.all().map { device in
+            ProblemReport.Drive(
+                profile: store?.profile(vendor: device.vendor, product: device.product, revision: device.revision)
+                    ?? DriveProfile(vendor: device.vendor, product: device.product, revision: device.revision),
+                interconnect: device.interconnect)
+        }
+        return ProblemReport.issueURL(drives: drives)
+    }
+
     /// Lists the drives again. A drive that is still there keeps its state; a disc that
     /// came or went is read, or forgotten.
     func refreshDrives() {

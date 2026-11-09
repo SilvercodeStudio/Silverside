@@ -68,14 +68,16 @@ struct Chip: View {
     private var content: some View {
         HStack(spacing: 4) {
             if isWorking {
-                ProgressView().controlSize(.mini)
+                ProgressView().controlSize(.mini).accessibilityHidden(true)
             } else if let logo {
-                Image(logo).resizable().scaledToFit().frame(height: 13)
+                Image(logo).resizable().scaledToFit().frame(height: 13).accessibilityHidden(true)
             } else if let systemImage {
-                Image(systemName: systemImage).font(.caption2.bold())
+                Image(systemName: systemImage).font(.caption2.bold()).accessibilityHidden(true)
             }
             Text(text)
         }
+        // One element for VoiceOver: the words, which say what the color and the image say.
+        .accessibilityElement(children: .combine)
         .font(.callout)
         .lineLimit(1)
         .fixedSize(horizontal: true, vertical: false)
@@ -183,6 +185,7 @@ struct SheenProgressBar: View {
             }
         }
         .frame(height: 6)
+        .accessibilityRepresentation { ProgressView(value: min(max(fraction, 0), 1)) }
     }
 }
 
@@ -208,6 +211,20 @@ struct CoverView: View {
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.2)))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(data == nil ? "No cover art" : "Cover art")
+        .accessibilityAddTraits(.isImage)
+    }
+}
+
+extension View {
+    /// A cover that a click shows at full size, or, with no cover, asks for one: a button for
+    /// VoiceOver, with Choose Cover… as a second action.
+    func coverAccessibility(hasCover: Bool, show: @escaping () -> Void, choose: @escaping () -> Void) -> some View {
+        accessibilityAddTraits(.isButton)
+            .accessibilityHint(hasCover ? "Shows the cover at full size" : "Chooses a cover")
+            .accessibilityAction { if hasCover { show() } else { choose() } }
+            .accessibilityAction(named: "Choose Cover…", choose)
     }
 }
 

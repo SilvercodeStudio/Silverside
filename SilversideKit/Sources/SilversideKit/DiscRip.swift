@@ -749,7 +749,7 @@ public struct DiscRip {
                 written.insert(Self.relativePath(of: file, in: folder))
                 // Only a cover given for this rip is new; one kept already would end the sleeves.
                 if options.cover != nil, let chosen, chosen.sharesAlbumEdits {
-                    try? coverStore.remember(cover, forReleaseID: chosen.id)
+                    try? coverStore.remember(cover, forReleaseID: chosen.id, fromDisc: toc.ctdbTOCString)
                 }
                 events(.artwork(.saved([file])))
             } catch {

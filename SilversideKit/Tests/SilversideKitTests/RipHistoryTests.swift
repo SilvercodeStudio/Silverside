@@ -79,6 +79,18 @@ struct RipHistoryTests {
         let again = try #require(history.entry(forReportAt: listed, hasAudio: false, known: known))
         #expect(again.report.drive.vendor != "Kept")
         #expect(again.edits?.album == "Edited Again")
+
+        // A rip that the scan did not find (a library folder used before) is checked the same way:
+        // the kept entry while it has not changed, its new names after it did.
+        var stale = again
+        stale.edits = MetadataEdits(album: "Stale")
+        #expect(history.current(stale, key: stale.key)?.edits?.album == "Stale")
+        edits.album = "Edited Once More"
+        try edits.save(inReportAt: report)
+        #expect(history.current(stale, key: stale.key)?.edits?.album == "Edited Once More")
+        #expect(history.current(stale, key: "another rip") == nil)
+        try FileManager.default.removeItem(at: report)
+        #expect(history.current(stale, key: stale.key) == nil)
     }
 
     /// A disc that MusicBrainz does not know gets the names of its newest rip that has any.

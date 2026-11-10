@@ -352,11 +352,12 @@ struct DiscInfo {
     mutating func useNoRelease() async {
         guard let old = release, let shown = shownRelease else { return }
         try? ReleaseChoiceStore().rememberNoRelease(forDiscID: toc.musicBrainzDiscID)
-        let own = userCover ?? keptCover
-        // A cover the user gave this disc was kept under the other release's ID, where it is not that release's.
-        if let own, ReleaseCoverStore().cover(forReleaseID: old.id) == own {
-            try? ReleaseCoverStore().forget(releaseID: old.id)
-        }
+        // A cover chosen on this disc was kept under the other release's ID, where it is not that
+        // release's, so it goes with the disc. One chosen on a disc of that release stays its own.
+        let store = ReleaseCoverStore()
+        let chosenHere = store.coverSource(forReleaseID: old.id) == toc.ctdbTOCString
+        let own = userCover ?? (chosenHere ? keptCover : nil)
+        if chosenHere { try? store.forget(releaseID: old.id) }
         let single = singleRelease
         release = nil
         manual = single
@@ -482,7 +483,9 @@ struct DiscInfo {
     /// in again, even if no rip finished to save it.
     mutating func useCover(_ cover: CoverImage) {
         userCover = cover
-        if let id = baseRelease?.id { try? ReleaseCoverStore().remember(cover, forReleaseID: id) }
+        if let id = baseRelease?.id {
+            try? ReleaseCoverStore().remember(cover, forReleaseID: id, fromDisc: toc.ctdbTOCString)
+        }
     }
 
     private mutating func use(_ chosen: MusicBrainzRelease) async {

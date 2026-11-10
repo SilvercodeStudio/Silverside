@@ -127,18 +127,13 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         var missing = [RipHistory.Entry]()
         for (key, entry) in entries where !keys.contains(key) {
             // There only if the report at that place is still this rip's: a later rip of the disc
-            // can have taken its folder.
-            guard RipHistory.isThere(entry, key: key) else {
+            // can have taken its folder. A report that changed is read again, for its new names.
+            guard let now = history.current(entry, key: key) else {
                 missing.append(entry)
                 continue
             }
-            // An entry from before the history kept edits gets them now.
-            if entry.stamp == nil, let read = history.entry(forReportAt: entry.url, hasAudio: entry.hasAudio) {
-                _ = try? history.record(read)
-                present.append(read)
-            } else {
-                present.append(entry)
-            }
+            if now != entry { _ = try? history.record(now) }
+            present.append(now)
         }
         let store = ReleaseEditsStore()
         return (

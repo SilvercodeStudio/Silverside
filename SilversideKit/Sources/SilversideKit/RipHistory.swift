@@ -112,6 +112,16 @@ public struct RipHistory: Sendable {
             stamp: stamp)
     }
 
+    /// The rip as its report file has it now: the kept entry while its album report has not
+    /// changed, else the report read again, with its new names. Nil when the file is gone, or
+    /// has another rip's report (a later rip of the disc that took its folder).
+    public func current(_ entry: Entry, key: String) -> Entry? {
+        guard let now = self.entry(forReportAt: entry.url, hasAudio: entry.hasAudio, known: [entry.file: entry]),
+            now.key == key
+        else { return nil }
+        return now
+    }
+
     /// The entries by their report file's path.
     public static func byFile(_ entries: [String: Entry]) -> [String: Entry] {
         Dictionary(entries.values.map { ($0.file, $0) }, uniquingKeysWith: { first, _ in first })

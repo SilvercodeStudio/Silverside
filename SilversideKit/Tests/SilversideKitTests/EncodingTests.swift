@@ -451,9 +451,9 @@ extension EncodingTests {
         // Every tag is as it was: the names, the credits, and the ReplayGain values.
         let after = try FLACTags.read(files[0])
         #expect(after.map { "\($0.key)=\($0.value)" } == before.map { "\($0.key)=\($0.value)" })
-        try store.remember(cover, forReleaseID: "rel-1")
+        try store.remember(cover, forReleaseID: "rel-1", fromDisc: nil)
         #expect(store.cover(forReleaseID: "rel-1") == cover)
-        try store.remember(Self.png(width: 10, height: 10, gray: 0.2), forReleaseID: "rel-1")
+        try store.remember(Self.png(width: 10, height: 10, gray: 0.2), forReleaseID: "rel-1", fromDisc: nil)
         #expect(store.cover(forReleaseID: "rel-1")?.data.count ?? 0 < cover.data.count)
         try store.forget(releaseID: "rel-1")
         #expect(store.cover(forReleaseID: "rel-1") == nil)
@@ -858,8 +858,9 @@ extension EncodingTests {
     /// No Release (Page McConnell's *Beauty of a Broken Heart*, which MusicBrainz lacks, matched
     /// Enrique Iglesias's *Be With You* by its track lengths): the rip becomes a disc of its own
     /// with every name it shows now and its cover, and loses the other release's IDs. The album
-    /// edits and the cover it kept for that release go, but another rip's edits there stay, and
-    /// the disc keeps the answer, so a lookup chooses no release.
+    /// edits and the cover it kept for that release go, but another rip's edits there stay, as
+    /// does a cover chosen on a disc of that release, and the disc keeps the answer, so a lookup
+    /// chooses no release.
     @Test func takesARipOffAReleaseThatOnlyNearlyFits() throws {
         let (folder, library) = try makeRip()
         let root = folder.deletingLastPathComponent()
@@ -879,14 +880,34 @@ extension EncodingTests {
             from: RipIdentity(report: report))
         try MetadataEdits(tracks: [1: .init(title: "Beauty of a Broken Heart")]).save(inReportAt: discJSON)
         let cover = CoverImage(data: try Data(contentsOf: folder.appending(path: "cover.jpg")))
-        try coverStore.remember(cover, forReleaseID: other.id)
         try choiceStore.remember(other, forDiscID: toc.musicBrainzDiscID)
+        func noRelease() throws -> LibraryUpdate {
+            try DiscEncoder(format: .flac).useNoRelease(
+                reportAt: discJSON, library: library, editsStore: editsStore, coverStore: coverStore,
+                choiceStore: choiceStore)
+        }
+        // A cover chosen on a real disc of the other release is that release's, even when this
+        // rip has the same image: the rip got it from there.
+        let snapshot = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        let saved = root.appending(path: "saved")
+        try FileManager.default.createDirectory(at: saved, withIntermediateDirectories: true)
+        for item in snapshot {
+            try FileManager.default.copyItem(at: item, to: saved.appending(path: item.lastPathComponent))
+        }
+        try coverStore.remember(cover, forReleaseID: other.id, fromDisc: otherRip.toc)
+        _ = try noRelease()
+        #expect(coverStore.cover(forReleaseID: other.id) == cover)
+        #expect(coverStore.coverSource(forReleaseID: other.id) == otherRip.toc)
+        // Again from the start, with the cover chosen on this disc.
+        for item in snapshot {
+            try FileManager.default.removeItem(at: item)
+            try FileManager.default.copyItem(at: saved.appending(path: item.lastPathComponent), to: item)
+        }
+        try coverStore.remember(cover, forReleaseID: other.id, fromDisc: report.toc)
         let shown = MetadataEdits.current(forReportAt: discJSON, release: other, store: editsStore)
             .applied(to: other, toc: toc)
 
-        let update = try DiscEncoder(format: .flac).useNoRelease(
-            reportAt: discJSON, library: library, editsStore: editsStore, coverStore: coverStore,
-            choiceStore: choiceStore)
+        let update = try noRelease()
         let release = try #require(try RipReport.read(from: discJSON).release)
         #expect(release.isManual && release.barcode == nil && release.country == nil)
         let named = try #require(MetadataEdits.read(fromDiscJSONOf: folder)).applied(to: release, toc: toc)
@@ -900,6 +921,7 @@ extension EncodingTests {
         #expect(tags.contains { $0.key == "ALBUMARTIST" && $0.value == "Page McConnell" })
         #expect(editsStore.edits(forReleaseID: other.id, rip: nil) == MetadataEdits(album: "Another Disc's"))
         #expect(coverStore.cover(forReleaseID: other.id) == nil)
+        #expect(coverStore.coverSource(forReleaseID: other.id) == nil)
         #expect(FileManager.default.fileExists(atPath: folder.appending(path: "cover.jpg").path))
         #expect(choiceStore.hasNoRelease(forDiscID: toc.musicBrainzDiscID))
         // Only a rip of a release from MusicBrainz can leave it.

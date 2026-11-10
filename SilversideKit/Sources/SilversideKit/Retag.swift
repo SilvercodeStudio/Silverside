@@ -5,6 +5,8 @@ import Foundation
 /// each release, "<id>.jpg" or ".png", in Application Support. For a box set whose discs
 /// each have their own sleeve in the Cover Art Archive, "<id>.sleeves" says that each disc
 /// takes its sleeve (see `CoverArtImage.sleeve`); the cover, if any, stays the set's.
+/// "<id>.source" names the disc the cover was chosen on, so that No Release forgets only a
+/// cover that came from its own disc.
 public struct ReleaseCoverStore: Sendable {
     public let folder: URL
 
@@ -24,6 +26,10 @@ public struct ReleaseCoverStore: Sendable {
 
     private func artworkFile(for releaseID: String) -> URL {
         folder.appending(path: "\(Self.name(releaseID)).artwork")
+    }
+
+    private func sourceFile(for releaseID: String) -> URL {
+        folder.appending(path: "\(Self.name(releaseID)).source")
     }
 
     private static func name(_ releaseID: String) -> String {
@@ -66,18 +72,27 @@ public struct ReleaseCoverStore: Sendable {
         files(for: releaseID).lazy.compactMap { try? Data(contentsOf: $0) }.first.map(CoverImage.init)
     }
 
-    /// Keeps a cover for every disc of the release, in place of any disc's own sleeve.
-    public func remember(_ cover: CoverImage, forReleaseID releaseID: String) throws {
+    /// Keeps a cover for every disc of the release, in place of any disc's own sleeve. `disc`
+    /// is the TOC (`RipReport.toc`, CTDB's string) of the disc it was chosen on, if any.
+    public func remember(_ cover: CoverImage, forReleaseID releaseID: String, fromDisc disc: String?) throws {
         guard let fileExtension = cover.fileExtension else { throw CoverArtError.unknownFormat }
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try forget(releaseID: releaseID)
         try cover.data.write(to: files(for: releaseID).first { $0.pathExtension == fileExtension }!, options: .atomic)
+        if let disc { try Data(disc.utf8).write(to: sourceFile(for: releaseID), options: .atomic) }
+    }
+
+    /// The TOC of the disc the release's cover was chosen on. Nil when no cover is kept, or
+    /// it was kept before 0.9.6 or not on a disc.
+    public func coverSource(forReleaseID releaseID: String) -> String? {
+        guard cover(forReleaseID: releaseID) != nil else { return nil }
+        return (try? String(contentsOf: sourceFile(for: releaseID), encoding: .utf8)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     /// Forgets the cover, the other release's artwork, and the discs' sleeves: the release
     /// takes the archive's main front again.
     public func forget(releaseID: String) throws {
-        for file in files(for: releaseID) + [artworkFile(for: releaseID)]
+        for file in files(for: releaseID) + [artworkFile(for: releaseID), sourceFile(for: releaseID)]
         where FileManager.default.fileExists(atPath: file.path) {
             try FileManager.default.removeItem(at: file)
         }
@@ -225,7 +240,9 @@ extension DiscEncoder {
                 }
                 coverFile = try cover.write(to: destination)
             }
-            if remember, release.sharesAlbumEdits { try coverStore.remember(cover, forReleaseID: release.id) }
+            if remember, release.sharesAlbumEdits {
+                try coverStore.remember(cover, forReleaseID: release.id, fromDisc: report.toc)
+            }
         } else {
             coverFile = [albumFolder, folder].compactMap { $0 }
                 .flatMap { folder in ["cover.jpg", "cover.png"].map { folder.appending(path: $0) } }
@@ -496,7 +513,8 @@ extension DiscEncoder {
     /// of its own (`MusicBrainzRelease.manual`), as one that leaves a custom set does: it keeps
     /// every name it shows now as its own edits, and its cover, and loses the other release's
     /// IDs, label, barcode, and genre. What the rip kept for the other release goes too: its
-    /// album edits, and a cover kept there that is the rip's own. The disc keeps the answer
+    /// album edits, and a cover kept there that was chosen on this disc. A cover chosen on a
+    /// disc of that release stays: it is that release's. The disc keeps the answer
     /// (`ReleaseChoiceStore.rememberNoRelease`), so that a lookup of it, in a drive or a rip,
     /// chooses no release again.
     public func useNoRelease(
@@ -509,16 +527,12 @@ extension DiscEncoder {
         let toc = try TOC(ctdbTOCString: report.toc)
         let named = MetadataEdits.current(forReportAt: file, release: other, store: editsStore)
             .applied(to: other, toc: toc)
-        let ownCover = CoverFiles.embedded(forDisc: report.discPosition, in: folder)
-            .flatMap { try? Data(contentsOf: $0) }.map(CoverImage.init)
         let single = MusicBrainzRelease.manual(toc: toc, cdText: report.cdText)
         let update = try changeRelease(
             reportAt: file, to: single, edits: MetadataEdits(keeping: named, on: single, toc: toc), library: library,
             editsStore: editsStore, coverStore: coverStore, choiceStore: choiceStore)
         try editsStore.forget(RipIdentity(report: report), forReleaseID: other.id)
-        if let ownCover, coverStore.cover(forReleaseID: other.id) == ownCover {
-            try coverStore.forget(releaseID: other.id)
-        }
+        if coverStore.coverSource(forReleaseID: other.id) == report.toc { try coverStore.forget(releaseID: other.id) }
         try choiceStore.rememberNoRelease(forDiscID: toc.musicBrainzDiscID)
         return update
     }

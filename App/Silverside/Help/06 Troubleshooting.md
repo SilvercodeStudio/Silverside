@@ -91,7 +91,7 @@ Elsewhere:
 - `~/Library/Caches/Silverside/`: the answers from MusicBrainz, the Cover Art Archive, AccurateRip, and CTDB, so a disc you rip again sends no new requests. You can delete it at any time; the next lookup asks again.
 - `~/Library/Preferences/app.silverside.Silverside.plist`: the app's own choices, such as the track table's columns.
 
-Your music is in the folders that Settings names: the Music library (`~/Music/Silverside Library` at first) and the Rips (`~/Music/Silverside Rips`) in General, and the disc images (`~/Music/Silverside Images`) in Encoding. The Rips folder also holds `.silverside-rip-locks`, which keeps two rips out of one folder.
+Your music is in the folders that Settings names: the Music library (`~/Music/Silverside Library` at first) and the Rips (`~/Music/Silverside Rips`) in General, and the disc images (`~/Music/Silverside Images`) in Encoding. The Rips folder also holds `.silverside-rip-locks`, which keeps two rips out of one folder. The folder at the bottom of the sidebar opens the library in the Finder, or the Rips folder when rips are not encoded; hold Option for the other one.
 
 To move the library, to a NAS for example, quit Silverside, copy the library folder to its new place, then choose that place for the Music library in Settings › General. Each album's report finds its album where the report is, and a rip's report keeps its album's place relative to the library, so nothing else needs to change. Check that your rips show and play from the new place before you delete the old copy.
 

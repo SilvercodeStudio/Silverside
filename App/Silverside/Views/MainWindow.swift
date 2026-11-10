@@ -356,26 +356,7 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 360)
-        .sidebarFooter {
-            Button {
-                model.revealFolder(model.settings.ripsURL)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "folder")
-                    Text(model.settings.rips).lineLimit(1).truncationMode(.middle)
-                }
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Open the rips folder in the Finder")
-            .accessibilityLabel("Rips folder")
-            .accessibilityValue(model.settings.rips)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-        }
+        .sidebarFooter { FolderFooter() }
     }
 
     private func subtitle(of slot: DriveSlot) -> String {
@@ -448,6 +429,46 @@ extension View {
 }
 
 /// The sidebar's material, behind a footer, for macOS 15.
+/// The folder where rips end up: the library when rips are encoded, else the rips folder. With
+/// Option held, the other one.
+private struct FolderFooter: View {
+    @Environment(AppModel.self) private var model
+    @State private var optionHeld = false
+
+    var body: some View {
+        let showsLibrary = model.settings.encodeAfterRip != optionHeld
+        let path = showsLibrary ? model.settings.library : model.settings.rips
+        Button {
+            model.revealFolder(showsLibrary ? model.settings.libraryURL : model.settings.ripsURL)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: showsLibrary ? "music.note.house" : "folder")
+                Text(path).lineLimit(1).truncationMode(.middle)
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(
+            showsLibrary
+                ? "Open the music library in the Finder: the encoded albums. Hold Option for the rips folder, "
+                    + "where each rip's WAV files wait to be encoded."
+                : "Open the rips folder in the Finder: each rip's WAV files, before they are encoded. Hold Option "
+                    + "for the music library."
+        )
+        .accessibilityLabel(showsLibrary ? "Music library" : "Rips folder")
+        .accessibilityValue(path)
+        .accessibilityAction(named: showsLibrary ? "Open Rips Folder" : "Open Music Library") {
+            model.revealFolder(showsLibrary ? model.settings.ripsURL : model.settings.libraryURL)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .onModifierKeysChanged(mask: .option) { _, keys in optionHeld = keys.contains(.option) }
+    }
+}
+
 private struct SidebarMaterial: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()

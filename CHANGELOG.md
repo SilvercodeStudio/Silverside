@@ -37,6 +37,8 @@ command-line tool.
 - Earlier rips show at once when the app opens, and a library on a NAS opens
   much faster. Silverside keeps a copy of each album's report on the Mac, and
   reads a report from the library again only when it changed.
+- The folder at the bottom of the sidebar is now the music library when rips
+  are encoded. Hold Option to see the rips folder there instead.
 
 ### Fixed
 

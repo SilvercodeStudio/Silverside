@@ -60,6 +60,8 @@ extension SecureTrackRip {
             text =
                 "free of errors, but matches only other pressings (offsets "
                 + offsets.map(\.signedDescription).joined(separator: ", ") + ")"
+        case .verifiedByCTDB(let confidence):
+            text = "verified by CTDB (\(confidence) submissions), in one read"
         case .consistent:
             text = "not in AccurateRip; reads agree" + rereads
         case .consistentButNotAccurate:

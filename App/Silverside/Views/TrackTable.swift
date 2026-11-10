@@ -426,8 +426,8 @@ struct FinishedStatus: View {
             if rereads > 0 { parts.append(Format.count(rereads, "sector") + " re-read") }
             if unreadable > 0 { parts.append("\(unreadable) unreadable") }
         }
-        // "3,356 repaired": the column is narrow, and the verdict and the tooltip say they are samples.
-        if track.repairedSamples > 0 { parts.append(track.repairedSamples.formatted() + " repaired") }
+        // Name the unit: next to "105 sectors re-read", a bare "2,277 repaired" reads as sectors.
+        if track.repairedSamples > 0 { parts.append(track.repairedSamples.formatted() + " samples repaired") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 

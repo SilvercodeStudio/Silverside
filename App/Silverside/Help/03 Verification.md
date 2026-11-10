@@ -8,13 +8,13 @@ A rip is only as good as the check that proves it. Silverside uses two databases
 
 AccurateRip holds checksums of each track from many people's rips of the same disc. A track that matches is **accurate**: the data is bit for bit what other drives read. The number after it (conf 52) is how many rips agree. A track can also match **another pressing**: the same audio at a different alignment, which also proves it free of errors. The drive's own offset is already corrected, so the difference is in the disc: pressings from other plants or years often differ this way, and burned CD-R copies are sometimes offset by a few samples. The AccurateRip chip counts these tracks with the accurate ones; its tooltip, and each track's status, tell them apart.
 
-A disc that is not in AccurateRip cannot be proved this way. Then Silverside reads each track twice and reports whether the reads agree.
+A disc that is not in AccurateRip cannot be proved this way. Then a track that CTDB has (below) is proved by CTDB's checksum as soon as it is read. Any other track is read twice, and Silverside reports whether the reads agree.
 
 AccurateRip keeps no checksum for a track that is all silence, so such a track shows **No checksum**, not "Not accurate", even when the rest of the disc is in AccurateRip. CTDB checks it with the rest of the disc.
 
 ## CUETools database (CTDB)
 
-CTDB checks the whole disc at once, so a rip of some tracks only is not checked. It also holds repair data: when a few thousand samples are wrong, CTDB can correct them. Silverside tries a repair when a track is not verified, then checks the repaired track against AccurateRip again. **Verified** means the disc matches an entry; **repaired** means it matches after the repair.
+CTDB also keeps a checksum of each track. A track that matches one is verified as soon as it is read, so it is read once, as a track that AccurateRip matches is. These checksums leave out about a tenth of a second at the start of the first track and at the end of the last, so Silverside reads those parts twice and compares them. After the last track, CTDB checks the whole disc at once, so a rip of some tracks only gets the check of each track but not the check of the disc. CTDB also holds repair data: when a few thousand samples are wrong, CTDB can correct them. Silverside tries a repair when a track is not verified, then checks the repaired track against AccurateRip again. **Verified** means the disc matches an entry; **repaired** means it matches after the repair.
 
 ## Read offsets
 

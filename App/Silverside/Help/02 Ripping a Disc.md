@@ -57,7 +57,7 @@ A rip that is not encoded has an **Encode** button, which encodes it into the li
 
 ## Read modes
 
-- **Secure** reads each track once and checks it against AccurateRip. A track that does not match is read again, and the sectors that read differently are re-read until two reads agree. Then the whole disc is checked against the CUETools database and, if it still has errors, repaired with that database's repair data. Use Secure unless you have a reason not to.
+- **Secure** reads each track once and checks it against AccurateRip and CTDB's checksum of the track. A track that does not match is read again, and the sectors that read differently are re-read until two reads agree. Then the whole disc is checked against the CUETools database and, if it still has errors, repaired with that database's repair data. Use Secure unless you have a reason not to.
 - **Fast** reads each track once. It is for clean discs when time matters, or to see what a drive makes of a disc before a secure rip.
 
 ## Options for one rip

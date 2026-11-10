@@ -482,6 +482,8 @@ public struct DiscRip {
         }
         var secure = SecureRipper(ripper: ripper)
         secure.cacheFlushSectors = profile.cacheFlushSectors
+        // A track with its CRC in CTDB is verified as it is read, with no second read.
+        secure.ctdbChecks = CTDB.trackChecks(toc: toc, entries: entries)
         let events = self.events
         secure.progress = { events(.reading($0)) }
 
@@ -1225,10 +1227,14 @@ public struct DiscRip {
             report.accurateRip = .accurate
             report.accurateRipConfidence = [v1, v2]
         case .matchesOtherPressings: report.accurateRip = .otherPressings
+        case .verifiedByCTDB(let confidence):
+            report.accurateRip = unmatched
+            report.ctdbConfidence = confidence
         case .consistent, .consistentButNotAccurate, .suspect: report.accurateRip = unmatched
         }
         // A track free of errors needs no suspects: they could only let a repair change it.
-        let errorFree = report.accurateRip == .accurate || report.accurateRip == .otherPressings
+        let errorFree =
+            report.accurateRip == .accurate || report.accurateRip == .otherPressings || (report.ctdbConfidence ?? 0) > 0
         return (rip.samples, rip.summary, errorFree ? TrackAudio(samples: rip.samples) : TrackAudio(rip), report)
     }
 
@@ -1253,15 +1259,15 @@ public struct DiscRip {
         return (CRC32.checksum(of: read.samples[...]), independent && read.unreadable.isEmpty)
     }
 
-    /// Earlier rips (the `pool` option): an accurate version replaces this read; otherwise
-    /// every version joins the repair.
+    /// Earlier rips (the `pool` option), for a track that no database verified: an accurate
+    /// version replaces this read; otherwise every version joins the repair.
     private func pool(
         _ track: TOC.Track, toc: TOC, records: [AccurateRipRecord], samples: inout [UInt32], audio: inout TrackAudio,
         report: inout RipReport.Track, summary: inout String
     ) {
-        guard !options.pool.isEmpty, report.accurateRip != .accurate, report.accurateRip != .otherPressings else {
-            return
-        }
+        guard !options.pool.isEmpty, report.accurateRip != .accurate, report.accurateRip != .otherPressings,
+            (report.ctdbConfidence ?? 0) == 0
+        else { return }
         let pooled = RipPool.versions(of: track, toc: toc, in: options.pool, records: records)
         for file in pooled.skipped { events(.poolFileSkipped(file)) }
         for version in pooled.versions {

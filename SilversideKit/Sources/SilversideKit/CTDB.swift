@@ -94,6 +94,34 @@ public enum CRC32 {
     }
 }
 
+/// One track's CRCs in CTDB's entries, at shift 0, for a check of the track as soon as it is
+/// read (`CTDB.trackChecks`): a track that matches one is verified, as a track that matches
+/// AccurateRip is. An entry kept at another pressing's alignment does not match here; the
+/// check of the whole disc after the rip finds its shift.
+public struct CTDBTrackCheck: Equatable, Sendable {
+    /// The samples of the track that the CRC covers, counted from the track's start. The
+    /// first track leaves out the disc's first row, and the last track its last row and remainder.
+    public var range: Range<Int>
+    /// The track's length in sectors.
+    public var sectors: Int
+    /// Each CRC that an entry has for the track, with the most submissions of an entry that has it.
+    public var confidences: [UInt32: Int]
+
+    /// The submissions that have the track's CRC, or 0 if none has it.
+    public func confidence(of samples: [UInt32]) -> Int {
+        guard samples.count >= range.upperBound else { return 0 }
+        return confidences[CRC32.checksum(of: samples[range])] ?? 0
+    }
+
+    /// The sectors of the track, counted from its start, with samples that the CRC does not cover.
+    public var uncoveredSectors: [Int] {
+        let size = CDDA.samplesPerSector
+        let before = 0..<(range.lowerBound + size - 1) / size
+        let after = min(range.upperBound / size, sectors)..<sectors
+        return Array(Set(before).union(after)).sorted()
+    }
+}
+
 /// Checks and repairs a disc's audio with CUETools DB data.
 public enum CTDB {
     /// The disc's CRC at `shift`: the samples between the left-out first and last rows.
@@ -108,6 +136,30 @@ public enum CTDB {
         trackRanges(toc: toc, layout: layout, shift: shift, count: audio.count).map {
             CRC32.checksum(of: audio[$0])
         }
+    }
+
+    /// The check of each audio track, by track number, against `entries`' track CRCs: none
+    /// if the disc is too short for CTDB.
+    public static func trackChecks(toc: TOC, entries: [CTDBEntry]) -> [Int: CTDBTrackCheck] {
+        let audioTracks = toc.audioTracks
+        guard let first = audioTracks.first,
+            (toc.audioLeadOutLBA - first.startLBA) * CDDA.samplesPerSector >= 3 * CTDBLayout.strideSamples
+        else { return [:] }
+        let layout = CTDBLayout(toc: toc)
+        let ranges = trackRanges(toc: toc, layout: layout, count: layout.sampleCount)
+        var checks = [Int: CTDBTrackCheck]()
+        for (index, track) in audioTracks.enumerated() {
+            let offset = (track.startLBA - first.startLBA) * CDDA.samplesPerSector
+            let range = (ranges[index].lowerBound - offset)..<(ranges[index].upperBound - offset)
+            var confidences = [UInt32: Int]()
+            for entry in entries where entry.trackCRCs.count == audioTracks.count {
+                confidences[entry.trackCRCs[index]] = max(confidences[entry.trackCRCs[index]] ?? 0, entry.confidence)
+            }
+            guard !range.isEmpty, !confidences.isEmpty else { continue }
+            checks[track.number] = CTDBTrackCheck(
+                range: range, sectors: toc.sectorRange(of: track).count, confidences: confidences)
+        }
+        return checks
     }
 
     /// The samples that each track CRC covers, in the disc's audio of `count` samples: the

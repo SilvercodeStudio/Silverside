@@ -6,6 +6,9 @@ public struct SecureTrackRip: Sendable {
         /// The track matches AccurateRip only at other offsets: the read is free of
         /// errors, and it is shifted against the pressings that the database has.
         case matchesOtherPressings(offsets: [Int])
+        /// The first read has the track's CRC in CTDB (`CTDBTrackCheck`), with `confidence`
+        /// submissions, and a second read of the sectors that the CRC leaves out agrees.
+        case verifiedByCTDB(confidence: Int)
         /// The disc is not in AccurateRip, and two reads agree on every sample.
         case consistent
         /// Two reads agree, but the track does not match AccurateRip. Either this
@@ -132,6 +135,11 @@ public struct SecureRipper {
     /// re-reads as before.
     public var repairCanTakeOver: (([Int]) -> Bool)?
 
+    /// The tracks' CRCs in CTDB, by track number (`CTDB.trackChecks`). A track whose first read
+    /// has its CRC needs no second read, as a track that matches AccurateRip: only the sectors
+    /// that the CRC leaves out, at the disc's edges, are read again and compared.
+    public var ctdbChecks: [Int: CTDBTrackCheck] = [:]
+
     /// True if C2 flags in `flagged` of a track's `sectors` say nothing about where errors are.
     /// A scratch flags a few hundred sectors, not a whole track. Flags on every sector come
     /// from a drive that reports them wrong: the PLDS DS8A5SH and the HL-DT-ST GUC0N, read in
@@ -199,6 +207,12 @@ public struct SecureRipper {
         }
         if !first.matchingOffsets.isEmpty {
             result.status = .matchesOtherPressings(offsets: first.matchingOffsets)
+            return result
+        }
+        if let check = ctdbChecks[track.number], case let confidence = check.confidence(of: first.samples),
+            confidence > 0, try edgesAgree(of: track, check: check, with: result)
+        {
+            result.status = .verifiedByCTDB(confidence: confidence)
             return result
         }
 
@@ -409,6 +423,30 @@ public struct SecureRipper {
         result.sectorVersions = versions.mapValues(\.ranked)
         result.suspectSectors = versions.keys.sorted()
         return result
+    }
+
+    /// True if a read again of the sectors that `check` leaves out, after a cache flush, gives
+    /// the first read's samples. A sector there that the drive flagged or could not read does
+    /// not count as agreed, so the track gets the whole secure rip.
+    private func edgesAgree(of track: TOC.Track, check: CTDBTrackCheck, with first: SecureTrackRip) throws -> Bool {
+        let uncovered = check.uncoveredSectors
+        guard !uncovered.isEmpty else { return true }
+        let flagged = Set(first.usableC2Samples.map { $0 / CDDA.samplesPerSector } + first.unreadableSectors)
+        guard flagged.isDisjoint(with: uncovered) else { return false }
+        let reader = ripper.reader
+        let sectors = reader.toc.sectorRange(of: track)
+        let size = CDDA.samplesPerSector
+        let runs = Self.runs(of: uncovered)
+        let absolute = runs.map { (sectors.lowerBound + $0.lowerBound)..<(sectors.lowerBound + $0.upperBound) }
+        guard try reader.flushCache(awayFrom: absolute, count: cacheFlushSectors) else { return false }
+        for run in runs {
+            let start = sectors.lowerBound * size
+            let read = try reader.read((start + run.lowerBound * size)..<(start + run.upperBound * size), withC2: false)
+            guard read.unreadable.isEmpty,
+                read.samples[...] == first.samples[(run.lowerBound * size)..<(run.upperBound * size)]
+            else { return false }
+        }
+        return true
     }
 
     /// Finds a choice of versions for the suspect sectors that matches AccurateRip.

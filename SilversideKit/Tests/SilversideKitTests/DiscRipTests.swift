@@ -409,7 +409,8 @@ struct DiscRipTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let report = result.report
         #expect(report.tracks.map(\.accurateRip) == [.accurate, .noChecksum, .accurate])
-        #expect(report.tracks[1].fullReads == 2)
+        // CTDB has the track's CRC, so one read verifies it.
+        #expect(report.tracks[1].fullReads == 1 && report.tracks[1].ctdbConfidence == 5)
         #expect(report.isVerified && !report.mayCheckAgain)
         #expect(report.noChecksumNote == "AccurateRip has no checksum for track 2 (it keeps none for a silent track)")
         #expect(RipReport.AccurateRipStatus.unmatched(trackAt: 1, records: []) == .notInDatabase)
@@ -539,11 +540,54 @@ struct DiscRipTests {
         #expect(notRepairing.report.tracks[1].rereadsLeftToRepair == nil)
         #expect(notRepairing.report.tracks[1].rereadRounds > 0)
 
-        let (firstTrack, _, _, root3) = try await rip(web: web()) { $0.unstableSectors = [300] }
+        // Sector 600: a read before the rip's own passes sector 300, so the rip's first read of
+        // it is right, and CTDB verifies the track in that one read.
+        let (firstTrack, _, _, root3) = try await rip(web: web()) { $0.unstableSectors = [600] }
         defer { try? FileManager.default.removeItem(at: root3) }
         #expect(firstTrack.report.tracks[0].rereadsLeftToRepair == nil)
         #expect(firstTrack.report.tracks[0].rereadRounds > 0)
         #expect([.verified, .repaired].contains(firstTrack.report.ctdb.status))
+    }
+
+    /// A disc that CTDB has and AccurateRip does not: each track is verified by its CRC in CTDB
+    /// as it is read, with no second read, and only the sectors at the disc's edges that the
+    /// CRCs leave out are read again. When that read again differs, the track gets the whole
+    /// secure rip.
+    @Test func verifiesEachTrackWithCTDBInOneRead() async throws {
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900])
+        let ctdb = Self.ctdbAnswer(toc: toc, samples: samples)
+        func web() -> FakeWeb {
+            FakeWeb([("http://db.cuetools.net/lookup2.php", ctdb.lookup), ("http://p.cuetools.net/1", ctdb.repairData)])
+        }
+        let (result, events, _, root) = try await rip(web: web())
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(result.report.tracks.map(\.fullReads) == [1, 1])
+        #expect(result.report.tracks.map(\.ctdbConfidence) == [5, 5])
+        #expect(result.report.tracks.map(\.accurateRip) == [.notInDatabase, .notInDatabase])
+        #expect(result.report.ctdb.status == .verified && result.report.isVerified)
+        // The track shows as verified as soon as it is read.
+        let finished = events.compactMap { event -> Int? in
+            if case .trackFinished(let track, _, _) = event { return track.ctdbConfidence }
+            return nil
+        }
+        #expect(finished == [5, 5])
+
+        // The checks leave out the disc's first row in track 1, and its last row in track 2 (the
+        // disc is 170 rows, with no remainder).
+        let entry = CTDBEntry(
+            id: 1, confidence: 5, crc32: 0, trackCRCs: [1, 2], repairDataURL: nil, syndromeCount: 8,
+            column0Syndromes: [])
+        let checks = CTDB.trackChecks(toc: toc, entries: [entry])
+        #expect(checks[1]?.uncoveredSectors == Array(0..<10))
+        #expect(checks[2]?.uncoveredSectors == Array(890..<900))
+        #expect(checks[1]?.confidences == [1: 5])
+
+        // The last sector reads wrong the first time, and right when read again.
+        let (edge, _, _, root2) = try await rip(web: web()) { $0.unstableSectors = [1699] }
+        defer { try? FileManager.default.removeItem(at: root2) }
+        #expect(edge.report.tracks[0].fullReads == 1)
+        #expect(edge.report.tracks[1].fullReads > 1)
+        #expect(edge.report.isVerified)
     }
 
     /// The test counts suspect samples by their place in a CTDB row, those of the tracks done

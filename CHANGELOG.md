@@ -39,6 +39,13 @@ command-line tool.
   reads a report from the library again only when it changed.
 - The folder at the bottom of the sidebar is now the music library when rips
   are encoded. Hold Option to see the rips folder there instead.
+- A disc that CTDB has and AccurateRip does not rips in about half the time.
+  Each track is checked against CTDB's checksum of the track as soon as it is
+  read, so a track that matches needs no second read, as with AccurateRip,
+  and shows as verified at once. A rip of some tracks only is checked this
+  way too.
+- A repaired track's line in the track table says "samples repaired", so it
+  does not read as more sectors than were re-read.
 
 ### Fixed
 

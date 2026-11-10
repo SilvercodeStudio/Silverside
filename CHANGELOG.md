@@ -28,6 +28,13 @@ command-line tool.
   pictures in the cover and release pickers are buttons, so the keyboard
   reaches them too.
 
+### Changed
+
+- The library can move, to a NAS for example: copy it, then choose the new
+  place in Settings › General. A report in an album folder finds its album
+  where it is now, and a rip's report keeps its album's place relative to the
+  library, not as a full path.
+
 ### Fixed
 
 - A disc that MusicBrainz does not have could be named after another release

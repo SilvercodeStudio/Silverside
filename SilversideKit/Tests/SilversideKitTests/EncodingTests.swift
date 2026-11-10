@@ -908,6 +908,39 @@ extension EncodingTests {
         }
     }
 
+    /// A library that moves, to a NAS for one: an album folder's report finds its album where
+    /// the report is now, not where the encoding put it. A rip's disc.json keeps the album folder
+    /// relative to the library, which the settings name, so it follows the library too.
+    @Test func findsTheAlbumWhereTheLibraryIsNow() throws {
+        let (folder, library) = try makeRip()
+        let root = folder.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = try DiscEncoder(format: .flac).encode(try RippedDisc(folder: folder), into: library)
+        let album = files[0].deletingLastPathComponent()
+        let relative = String(album.standardizedFileURL.path.dropFirst(library.standardizedFileURL.path.count + 1))
+        let moved = root.appending(path: "NAS/Silverside Library", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: moved.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: library, to: moved)
+        let report = moved.appending(path: relative).appending(path: "Rip Report (Disc 2).json")
+        #expect(
+            try RipReport.read(from: report).encoding?.folder
+                == moved.appending(path: relative).standardizedFileURL.path)
+
+        var encoding = try #require(try RipReport.read(from: report).encoding)
+        encoding.folder = album.path
+        let stored = encoding.stored(library: library)
+        #expect(stored.folder == relative)
+        #expect(encoding.stored(library: root.appending(path: "Elsewhere")).folder == album.path)
+        var read = stored
+        read.resolve(reportAt: folder.appending(path: "disc.json"), library: moved)
+        #expect(read.folder == moved.appending(path: relative).standardizedFileURL.path)
+        // An older report's whole path stays as it is.
+        var older = encoding
+        older.resolve(reportAt: folder.appending(path: "disc.json"), library: moved)
+        #expect(older.folder == album.path)
+    }
+
     /// Keep My Track Titles: each track keeps the title it has now, typed or the old release's;
     /// the album's names, the date, and the IDs are the new release's.
     @Test func keepsTheTrackTitlesOnAnotherRelease() throws {

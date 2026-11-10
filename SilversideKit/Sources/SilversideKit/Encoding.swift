@@ -141,7 +141,9 @@ public struct RippedDisc: Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         self.report = try? report.map {
-            try decoder.decode(RipReport.self, from: JSONSerialization.data(withJSONObject: $0))
+            var decoded = try decoder.decode(RipReport.self, from: JSONSerialization.data(withJSONObject: $0))
+            decoded.encoding?.resolve(reportAt: folder.appending(path: "disc.json"))
+            return decoded
         }
         if let report, let reportTracks = report["tracks"] as? [[String: Any]] {
             let ctdb = (report["ctdb"] as? [String: Any])?["status"] as? String

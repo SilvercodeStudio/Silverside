@@ -498,7 +498,9 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// The AAC or MP3 settings; nil for the lossless formats, which have none.
         public var aac: AACOptions?
         public var mp3: MP3Options?
-        /// The album folder in the library.
+        /// The album folder in the library, as a whole path. A report file keeps it relative to
+        /// the library (`stored(library:)`), so the library can move, to a NAS for one; reading
+        /// the file gives the whole path again (`resolve(reportAt:library:)`).
         public var folder: String
         public var files: [File]
         /// The time the encoding took, in seconds, checks included. Nil in older records.
@@ -733,13 +735,46 @@ public struct RipReport: Codable, Equatable, Sendable {
             files.first { $0.track == number }?.file
         }
 
+        /// True for an album folder's report, "Rip Report.json" or "Rip Report (Disc 2).json":
+        /// its album is the folder it is in, wherever the library is.
+        public static func isAlbumReport(_ file: URL) -> Bool {
+            file.lastPathComponent.hasPrefix("Rip Report") && file.pathExtension == "json"
+        }
+
+        /// The library that report files keep their album folders relative to: the settings' own.
+        static func defaultLibrary() -> URL? { (try? Settings.load())?.libraryURL }
+
+        /// The record as a report file keeps it: the album folder relative to `library`
+        /// ("Grateful Dead/Cornell 5-8-77") when it is in it, else as a whole path.
+        public func stored(library: URL?) -> Encoding {
+            guard let library else { return self }
+            let root = library.standardizedFileURL.path
+            let album = URL(filePath: folder, directoryHint: .isDirectory).standardizedFileURL.path
+            guard album.hasPrefix(root + "/") else { return self }
+            var stored = self
+            stored.folder = String(album.dropFirst(root.count + 1))
+            return stored
+        }
+
+        /// Makes `folder` a whole path again, as read from the report file at `url`: an album
+        /// folder's report is in its album, wherever the library is now; a folder relative to
+        /// the library is in `library`, the settings' unless given. A whole path stays as it is.
+        public mutating func resolve(reportAt url: URL, library: URL? = nil) {
+            if Self.isAlbumReport(url) {
+                folder = url.deletingLastPathComponent().standardizedFileURL.path
+            } else if !folder.hasPrefix("/"), let root = library ?? Self.defaultLibrary() {
+                folder = root.appending(path: folder, directoryHint: .isDirectory).standardizedFileURL.path
+            }
+        }
+
         /// Sets "encoding" in a report file (a rip's disc.json, or an archive manifest's
-        /// "ripReport"), and keeps every other key.
+        /// "ripReport"), and keeps every other key. The album folder is kept relative to the library.
         public func save(inReportAt url: URL) throws {
             var object = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]) ?? [:]
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            let value = try JSONSerialization.jsonObject(with: encoder.encode(self))
+            let value = try JSONSerialization.jsonObject(
+                with: encoder.encode(stored(library: Self.defaultLibrary())))
             if var nested = object["ripReport"] as? [String: Any] {
                 nested["encoding"] = value
                 object["ripReport"] = nested
@@ -768,7 +803,15 @@ public struct RipReport: Codable, Equatable, Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(self).write(to: url, options: .atomic)
+        try encoder.encode(stored(library: Encoding.defaultLibrary())).write(to: url, options: .atomic)
+    }
+
+    /// The report as a file keeps it: its album folder relative to `library` (`Encoding.stored`).
+    func stored(library: URL?) -> RipReport {
+        guard let encoding else { return self }
+        var stored = self
+        stored.encoding = encoding.stored(library: library)
+        return stored
     }
 
     /// Changes the report in `url`, a rip's disc.json or an album folder's report, and keeps
@@ -782,8 +825,11 @@ public struct RipReport: Codable, Equatable, Sendable {
         var report = try read(from: url)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
+        // The album folder as the file keeps it: relative to the library.
+        let library = Encoding.defaultLibrary()
         func keys(_ report: RipReport) throws -> [String: Any] {
-            try JSONSerialization.jsonObject(with: encoder.encode(report)) as? [String: Any] ?? [:]
+            try JSONSerialization.jsonObject(with: encoder.encode(report.stored(library: library))) as? [String: Any]
+                ?? [:]
         }
         let before = try keys(report)
         try change(&report)
@@ -811,8 +857,15 @@ public struct RipReport: Codable, Equatable, Sendable {
 
     /// Reads a report: a rip's disc.json, or an archive manifest that holds one under
     /// "ripReport" (the manifest's release fills in for a report without one). A manifest
-    /// from before rips had reports has none to read, and throws.
+    /// from before rips had reports has none to read, and throws. The album folder is a whole
+    /// path (`Encoding.resolve`).
     public static func read(from url: URL) throws -> RipReport {
+        var report = try decode(from: url)
+        report.encoding?.resolve(reportAt: url)
+        return report
+    }
+
+    private static func decode(from url: URL) throws -> RipReport {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let data = try Data(contentsOf: url)

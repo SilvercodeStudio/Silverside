@@ -93,4 +93,6 @@ Elsewhere:
 
 Your music is in the folders that Settings names: the Music library (`~/Music/Silverside Library` at first) and the Rips (`~/Music/Silverside Rips`) in General, and the disc images (`~/Music/Silverside Images`) in Encoding. The Rips folder also holds `.silverside-rip-locks`, which keeps two rips out of one folder.
 
+To move the library, to a NAS for example, quit Silverside, copy the library folder to its new place, then choose that place for the Music library in Settings › General. Each album's report finds its album where the report is, and a rip's report keeps its album's place relative to the library, so nothing else needs to change. Check that your rips show and play from the new place before you delete the old copy.
+
 To remove Silverside, quit it, move it to the Trash, and delete the two `Silverside` folders and the `.plist` file above. Your music folders stay as they are. Keep `Application Support/Silverside` if you may install Silverside again: it has your drives' offsets and your rip history.

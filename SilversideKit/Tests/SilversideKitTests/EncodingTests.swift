@@ -457,6 +457,17 @@ extension EncodingTests {
         #expect(store.cover(forReleaseID: "rel-1")?.data.count ?? 0 < cover.data.count)
         try store.forget(releaseID: "rel-1")
         #expect(store.cover(forReleaseID: "rel-1") == nil)
+
+        // A cover kept from this rip names its disc; one chosen for the whole set names none.
+        let report = try RipReport.read(from: folder.appending(path: "disc.json"))
+        let release = try #require(report.release)
+        for forWholeSet in [false, true] {
+            try encoder.updateLibrary(
+                reportAt: folder.appending(path: "disc.json"), cover: cover, forWholeSet: forWholeSet,
+                library: library, coverStore: store)
+            #expect(store.cover(forReleaseID: release.id) == cover)
+            #expect(store.coverSource(forReleaseID: release.id) == (forWholeSet ? nil : report.toc))
+        }
     }
 
     /// A library update after the album was renamed: the folder moves, the tags and the CUE

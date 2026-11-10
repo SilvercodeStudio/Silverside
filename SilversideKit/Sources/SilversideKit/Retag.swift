@@ -157,15 +157,17 @@ extension DiscEncoder {
     /// made on one disc reaches the others. `file` is a rip's `disc.json`, or the album
     /// folder's "Rip Report.json" after the rip's files were deleted. A new `cover` replaces
     /// the cover file in the rip's folder and the album's, and is kept for the release (unless
-    /// `remember` is false, as when the archive's own cover is put back). `discCover` sets or
+    /// `remember` is false, as when the archive's own cover is put back), as chosen on this
+    /// disc unless `forWholeSet`: a cover chosen for a set has no one disc that owns it, so No
+    /// Release on one of its discs leaves it (`ReleaseCoverStore.coverSource`). `discCover` sets or
     /// removes the disc's own cover, which its files embed in place of the album's. A rip's `disc.json`
     /// records its encoding only when the rip itself encoded; for one encoded later, the album
     /// folder in `library`, named as this encoder names it, is looked at. A rip not yet
     /// encoded gets the cover file only. `encoding`, if given, is the album's encoding record
     /// for a disc.json that lacks one.
     public func updateLibrary(
-        reportAt file: URL, cover: CoverImage? = nil, remember: Bool = true, discCover: DiscCoverChange = .keep,
-        library: URL? = nil, editsStore: ReleaseEditsStore = ReleaseEditsStore(),
+        reportAt file: URL, cover: CoverImage? = nil, remember: Bool = true, forWholeSet: Bool = false,
+        discCover: DiscCoverChange = .keep, library: URL? = nil, editsStore: ReleaseEditsStore = ReleaseEditsStore(),
         coverStore: ReleaseCoverStore = ReleaseCoverStore(), encoding found: RipReport.Encoding? = nil
     ) throws -> LibraryUpdate {
         var report = try RipReport.read(from: file)
@@ -241,7 +243,7 @@ extension DiscEncoder {
                 coverFile = try cover.write(to: destination)
             }
             if remember, release.sharesAlbumEdits {
-                try coverStore.remember(cover, forReleaseID: release.id, fromDisc: report.toc)
+                try coverStore.remember(cover, forReleaseID: release.id, fromDisc: forWholeSet ? nil : report.toc)
             }
         } else {
             coverFile = [albumFolder, folder].compactMap { $0 }

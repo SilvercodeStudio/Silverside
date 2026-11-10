@@ -109,7 +109,7 @@ final class LibraryRun: Identifiable {
         }
     }
 
-    /// Starts the work on a thread of its own. `cover`, if given, becomes every disc's cover;
+    /// Starts the work on a thread of its own. `cover`, if given, becomes every disc's cover, as one chosen for the set;
     /// `discCovers` sets or removes a disc's own (a box set's sleeve), by its report file.
     func start(
         settings: Settings, cover: CoverImage?, discCovers: [URL: DiscCoverChange] = [:],
@@ -200,7 +200,7 @@ final class LibraryRun: Identifiable {
                     var encoder = DiscEncoder(settings: settings)
                     encoder.log = { line in onMain { run.add("  \(line)") } }
                     let result = try encoder.updateLibrary(
-                        reportAt: LibraryUpdate.following(rip.file, moves: moves), cover: cover,
+                        reportAt: LibraryUpdate.following(rip.file, moves: moves), cover: cover, forWholeSet: true,
                         discCover: discCovers[rip.file] ?? .keep, library: library)
                     if let moved = result.movedFolder { moves.append(moved) }
                     if update.contains(where: { $0.file == rip.file }) {

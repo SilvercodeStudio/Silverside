@@ -860,15 +860,19 @@ public struct RipReport: Codable, Equatable, Sendable {
     /// from before rips had reports has none to read, and throws. The album folder is a whole
     /// path (`Encoding.resolve`).
     public static func read(from url: URL) throws -> RipReport {
-        var report = try decode(from: url)
+        try read(from: url, data: Data(contentsOf: url))
+    }
+
+    /// Reads a report from the file's data, read already: `url` is where it is.
+    public static func read(from url: URL, data: Data) throws -> RipReport {
+        var report = try decode(data, from: url)
         report.encoding?.resolve(reportAt: url)
         return report
     }
 
-    private static func decode(from url: URL) throws -> RipReport {
+    private static func decode(_ data: Data, from url: URL) throws -> RipReport {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let data = try Data(contentsOf: url)
         if let report = try? decoder.decode(RipReport.self, from: data) { return report }
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard let nested = object?["ripReport"] else {

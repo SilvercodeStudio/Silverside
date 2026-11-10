@@ -34,6 +34,9 @@ command-line tool.
   place in Settings › General. A report in an album folder finds its album
   where it is now, and a rip's report keeps its album's place relative to the
   library, not as a full path.
+- Earlier rips show at once when the app opens, and a library on a NAS opens
+  much faster. Silverside keeps a copy of each album's report on the Mac, and
+  reads a report from the library again only when it changed.
 
 ### Fixed
 

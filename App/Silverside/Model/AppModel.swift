@@ -840,13 +840,28 @@ final class AppModel {
 
     // MARK: Earlier rips
 
+    /// True after the first look through the rips folder and the library.
+    @ObservationIgnored private var hasScannedRips = false
+
+    /// Looks through the rips folder and the library again. The first time, the history's rips
+    /// show at once, since a library on a NAS can take some seconds to list.
     func refreshRecentRips(then completion: (@MainActor () -> Void)? = nil) {
         let folder = settings.ripsURL
         let library = settings.libraryURL
         let history = history
+        let isFirst = !hasScannedRips
         Task.detached(priority: .utility) {
+            if isFirst {
+                let rips = RecentRip.remembered(rips: folder, library: library, history: history)
+                await MainActor.run {
+                    guard !self.hasScannedRips else { return }
+                    self.recentRips = rips.present
+                    self.missingRips = rips.missing
+                }
+            }
             let rips = RecentRip.scan(rips: folder, library: library, history: history)
             await MainActor.run {
+                self.hasScannedRips = true
                 self.recentRips = rips.present
                 self.missingRips = rips.missing
                 completion?()

@@ -166,8 +166,12 @@ public struct MetadataEdits: Equatable, Sendable {
 
     /// The edits beside a report: in a rip's disc.json, or in the album folder's copy of it.
     public static func read(fromReportAt url: URL) -> MetadataEdits? {
-        guard let data = try? Data(contentsOf: url),
-            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        (try? Data(contentsOf: url)).flatMap(read(fromReportData:))
+    }
+
+    /// The edits in a report file's data, read already.
+    public static func read(fromReportData data: Data) -> MetadataEdits? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let edits = object["edits"]
         else { return nil }
         return try? JSONDecoder().decode(MetadataEdits.self, from: JSONSerialization.data(withJSONObject: edits))
@@ -180,10 +184,17 @@ public struct MetadataEdits: Equatable, Sendable {
     public static func current(
         forReportAt url: URL, release: MusicBrainzRelease, store: ReleaseEditsStore = ReleaseEditsStore()
     ) -> MetadataEdits {
-        let own = read(fromReportAt: url) ?? MetadataEdits()
-        guard release.sharesAlbumEdits,
-            let kept = store.edits(forReleaseID: release.id, rip: RipIdentity(reportAt: url))
-        else { return own }
+        current(
+            own: read(fromReportAt: url) ?? MetadataEdits(), release: release, rip: RipIdentity(reportAt: url),
+            store: store)
+    }
+
+    /// The names a rip has now, from its own edits, read already.
+    public static func current(
+        own: MetadataEdits, release: MusicBrainzRelease, rip: RipIdentity?,
+        store: ReleaseEditsStore = ReleaseEditsStore()
+    ) -> MetadataEdits {
+        guard release.sharesAlbumEdits, let kept = store.edits(forReleaseID: release.id, rip: rip) else { return own }
         return own.merged(with: kept)
     }
 

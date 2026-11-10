@@ -35,13 +35,22 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         hasAudio = false
     }
 
-    /// A rip from the history: where its report was last seen, there or not.
-    init(history entry: RipHistory.Entry, isMissing: Bool) {
+    /// A rip as the history has it: a rip in the rips folder, a report kept in the library next
+    /// to the encoded files, or where its report was last seen, there or not. Its names are its
+    /// own edits, with those kept for its release on top.
+    init(entry: RipHistory.Entry, isMissing: Bool, store: ReleaseEditsStore) {
         file = entry.url
         folder = entry.url.deletingLastPathComponent()
         report = entry.report
         hasAudio = entry.hasAudio
         self.isMissing = isMissing
+        if let release = report.release {
+            names =
+                MetadataEdits.current(
+                    own: entry.edits ?? MetadataEdits(), release: release, rip: RipIdentity(report: report),
+                    store: store
+                ).albumLevel
+        }
     }
 
     /// The rip's key in the history.
@@ -102,99 +111,118 @@ nonisolated struct RecentRip: Identifiable, Sendable {
             + (hasAudio ? "" : " Encoded into the library; the rip's WAV files were deleted, and this is its report.")
     }
 
-    /// The rips in the rips folder, and the reports in the library's album folders, the
-    /// newest first. A rip that is in both places (kept after encoding) is listed once.
     /// The rips found, kept in the history (`RipHistory`), and the history's other rips: those
     /// elsewhere (a library folder used before), and those whose files are gone, as missing.
+    /// An album report that has not changed since the history kept it is not read again, so a
+    /// library on a NAS costs only its folder listings.
     static func scan(rips: URL, library: URL, history: RipHistory) -> (present: [RecentRip], missing: [RecentRip]) {
-        var present = scan(rips: rips, library: library)
+        let entries = history.entries()
+        let found = scan(rips: rips, library: library, history: history, known: RipHistory.byFile(entries))
         var keys = Set<String>()
-        for rip in present {
-            keys.insert((try? history.record(rip.report, file: rip.file, hasAudio: rip.hasAudio)) ?? rip.historyKey)
+        var present = [RipHistory.Entry]()
+        for entry in found {
+            keys.insert((try? history.record(entry)) ?? entry.key)
+            present.append(entry)
         }
-        var missing = [RecentRip]()
-        for (key, entry) in history.entries() where !keys.contains(key) {
+        var missing = [RipHistory.Entry]()
+        for (key, entry) in entries where !keys.contains(key) {
             // There only if the report at that place is still this rip's: a later rip of the disc
             // can have taken its folder.
-            let isThere = RipHistory.isThere(entry, key: key)
-            if isThere {
-                present.append(RecentRip(history: entry, isMissing: false))
+            guard RipHistory.isThere(entry, key: key) else {
+                missing.append(entry)
+                continue
+            }
+            // An entry from before the history kept edits gets them now.
+            if entry.stamp == nil, let read = history.entry(forReportAt: entry.url, hasAudio: entry.hasAudio) {
+                _ = try? history.record(read)
+                present.append(read)
             } else {
-                missing.append(RecentRip(history: entry, isMissing: true))
+                present.append(entry)
             }
         }
+        let store = ReleaseEditsStore()
         return (
-            named(present).sorted { $0.report.date > $1.report.date },
-            named(missing).sorted { $0.report.date > $1.report.date }
+            present.map { RecentRip(entry: $0, isMissing: false, store: store) }.sorted {
+                $0.report.date > $1.report.date
+            },
+            missing.map { RecentRip(entry: $0, isMissing: true, store: store) }.sorted {
+                $0.report.date > $1.report.date
+            }
         )
     }
 
-    /// The rips with their album's names as edited, as the library has them.
-    private static func named(_ rips: [RecentRip]) -> [RecentRip] {
+    /// The history's rips without a look at their files, for the moment before a scan ends.
+    /// A rip in the rips folder or the library counts as there, and one elsewhere as missing.
+    static func remembered(rips: URL, library: URL, history: RipHistory) -> (present: [RecentRip], missing: [RecentRip])
+    {
+        let folders = [rips, library].map { $0.standardizedFileURL.path + "/" }
         let store = ReleaseEditsStore()
-        return rips.map { rip in
-            guard let release = rip.report.release else { return rip }
-            var named = rip
-            named.names = MetadataEdits.current(forReportAt: rip.file, release: release, store: store).albumLevel
-            return named
+        let all = history.entries().values.map { entry in
+            RecentRip(entry: entry, isMissing: !folders.contains { entry.file.hasPrefix($0) }, store: store)
         }
+        .sorted { $0.report.date > $1.report.date }
+        return (all.filter { !$0.isMissing }, all.filter(\.isMissing))
     }
 
-    static func scan(rips: URL, library: URL) -> [RecentRip] {
-        var found = scanRips(rips)
+    /// The rips in the rips folder, and the reports in the library's album folders. A rip that
+    /// is in both places (kept after encoding) is listed once.
+    private static func scan(rips: URL, library: URL, history: RipHistory, known: [String: RipHistory.Entry])
+        -> [RipHistory.Entry]
+    {
+        var found = scanRips(rips, history: history)
         // A repair's report keeps the rip's time; its own time tells it apart.
-        func identity(_ rip: RecentRip) -> String {
-            "\(rip.report.toc) \(rip.report.date.timeIntervalSince1970) \(rip.report.repaired?.timeIntervalSince1970 ?? 0)"
+        func identity(_ entry: RipHistory.Entry) -> String {
+            let report = entry.report
+            return "\(report.toc) \(report.date.timeIntervalSince1970) \(report.repaired?.timeIntervalSince1970 ?? 0)"
         }
         var seen = Set(found.map(identity))
-        for rip in scanLibrary(library, skipping: rips) {
-            let key = identity(rip)
+        for entry in scanLibrary(library, skipping: rips, history: history, known: known) {
+            let key = identity(entry)
             guard !seen.contains(key) else { continue }
             seen.insert(key)
-            found.append(rip)
+            found.append(entry)
         }
-        return found.sorted { $0.report.date > $1.report.date }
+        return found
     }
 
-    private static func scanRips(_ folder: URL) -> [RecentRip] {
+    private static func scanRips(_ folder: URL, history: RipHistory) -> [RipHistory.Entry] {
         let manager = FileManager.default
         guard
             let entries = try? manager.contentsOfDirectory(
                 at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles)
         else { return [] }
-        var rips = [RecentRip]()
-        for entry in entries {
-            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+        return entries.compactMap { entry in
+            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { return nil }
             let json = entry.appending(path: "disc.json")
-            guard manager.fileExists(atPath: json.path), let report = try? RipReport.read(from: json) else { continue }
-            rips.append(RecentRip(folder: entry, report: report))
+            guard manager.fileExists(atPath: json.path) else { return nil }
+            return history.entry(forReportAt: json, hasAudio: true)
         }
-        return rips
     }
 
     /// "Rip Report*.json" files up to four levels down (the album folder template is
     /// usually artist/album), leaving the rips folder alone if it is inside the library.
-    private static func scanLibrary(_ library: URL, skipping rips: URL) -> [RecentRip] {
-        let manager = FileManager.default
+    private static func scanLibrary(
+        _ library: URL, skipping rips: URL, history: RipHistory, known: [String: RipHistory.Entry]
+    ) -> [RipHistory.Entry] {
         guard
-            let enumerator = manager.enumerator(
-                at: library, includingPropertiesForKeys: [.isDirectoryKey],
+            let enumerator = FileManager.default.enumerator(
+                at: library, includingPropertiesForKeys: [.isDirectoryKey] + RipHistory.Stamp.resourceKeys,
                 options: [.skipsHiddenFiles, .skipsPackageDescendants])
         else { return [] }
         let skipped = rips.standardizedFileURL.path
-        var found = [RecentRip]()
+        var found = [RipHistory.Entry]()
         while let entry = enumerator.nextObject() as? URL {
             let isDirectory = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
             if isDirectory {
                 if enumerator.level >= 4 || entry.standardizedFileURL.path == skipped { enumerator.skipDescendants() }
                 continue
             }
-            let name = entry.lastPathComponent
             // A decoded copy beside an album ("… (HDCD)") is not a rip of its own.
-            guard name.hasPrefix("Rip Report"), name.hasSuffix(".json"), let report = try? RipReport.read(from: entry),
-                report.encoding?.albumSuffix == nil
+            guard RipReport.Encoding.isAlbumReport(entry),
+                let rip = history.entry(forReportAt: entry, hasAudio: false, known: known),
+                rip.report.encoding?.albumSuffix == nil
             else { continue }
-            found.append(RecentRip(libraryReport: entry, report: report))
+            found.append(rip)
         }
         return found
     }

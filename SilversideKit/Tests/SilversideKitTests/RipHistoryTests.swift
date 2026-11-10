@@ -40,6 +40,47 @@ struct RipHistoryTests {
         #expect(history.entries().isEmpty)
     }
 
+    /// An album report that has not changed since the history kept it is not read again, so a
+    /// library on a NAS costs only its listings. A changed one, and a rip's disc.json, are.
+    @Test func readsOnlyTheAlbumReportsThatChanged() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (folder, library) = try PreEmphasisTests().makeRip(emphasized: [])
+        let files = try DiscEncoder(format: .flac).encode(try RippedDisc(folder: folder), into: library)
+        let report = files[0].deletingLastPathComponent().appending(path: "Rip Report.json")
+        var edits = MetadataEdits()
+        edits.album = "Edited"
+        try edits.save(inReportAt: report)
+        let history = RipHistory(directory: root.appending(path: "History"))
+
+        let read = try #require(history.entry(forReportAt: report, hasAudio: false))
+        #expect(read.edits?.album == "Edited")
+        #expect(read.stamp != nil)
+        try history.record(read)
+
+        // The history's copy says another drive, so a result with it was not read from the file.
+        var kept = read
+        kept.report.drive.vendor = "Kept"
+        let known = [read.file: kept]
+        #expect(history.entry(forReportAt: report, hasAudio: false, known: known)?.report.drive.vendor == "Kept")
+        #expect(RipHistory.isThere(kept, key: kept.key))
+        // A rip's disc.json is read each time: its album folder can follow the library setting.
+        let disc = folder.appending(path: "disc.json")
+        let rip = try #require(history.entry(forReportAt: disc, hasAudio: true))
+        var keptRip = rip
+        keptRip.report.drive.vendor = "Kept"
+        #expect(history.entry(forReportAt: disc, hasAudio: true, known: [rip.file: keptRip])?.report == rip.report)
+
+        // A changed report is read again. (A URL keeps the size and time it was given, as a
+        // folder listing gives them, so a new listing has new URLs.)
+        edits.album = "Edited Again"
+        try edits.save(inReportAt: report)
+        let listed = URL(filePath: report.path)
+        let again = try #require(history.entry(forReportAt: listed, hasAudio: false, known: known))
+        #expect(again.report.drive.vendor != "Kept")
+        #expect(again.edits?.album == "Edited Again")
+    }
+
     /// A disc that MusicBrainz does not know gets the names of its newest rip that has any.
     @Test func findsTheNamesOfADiscThatMusicBrainzDoesNotKnow() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")

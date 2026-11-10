@@ -6,6 +6,9 @@ import Foundation
 /// the history folder with its whole report and where its report file was last seen. The app
 /// records each rip it finds when it looks through the rips folder and the library; the
 /// command line records its own rips and encodings.
+///
+/// The history is on the Mac's own disk, so it is also a cache of a library on a slower disk,
+/// such as a NAS: an album report that has the size and time the history kept is not read again.
 public struct RipHistory: Sendable {
     /// One rip: its report, and its report file, as it was last seen.
     public struct Entry: Codable, Equatable, Sendable {
@@ -14,8 +17,32 @@ public struct RipHistory: Sendable {
         public var file: String
         /// True if the report is in a rip's folder with its audio.
         public var hasAudio: Bool
+        /// The rip's own edits ("edits" in its report file). Known only with `stamp`.
+        public var edits: MetadataEdits?
+        /// The report file's size and time when it was read. Nil in an entry from before 0.9.6.
+        public var stamp: Stamp?
 
         public var url: URL { URL(filePath: file) }
+        public var key: String { RipHistory.key(of: report, file: url) }
+    }
+
+    /// A file's size and modification time. A file with both unchanged has the same report.
+    public struct Stamp: Codable, Equatable, Sendable {
+        public var size: Int
+        /// Seconds since 1970, with the file system's fraction of a second.
+        public var modified: TimeInterval
+
+        /// The keys to ask a folder listing for, so that `init(of:)` sends no request of its own.
+        /// A URL keeps the values it was first given, so look at a changed file with a new URL.
+        public static let resourceKeys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey]
+
+        public init?(of file: URL) {
+            guard let values = try? file.resourceValues(forKeys: Set(Self.resourceKeys)), let size = values.fileSize,
+                let modified = values.contentModificationDate
+            else { return nil }
+            self.size = size
+            self.modified = modified.timeIntervalSince1970
+        }
     }
 
     public let directory: URL
@@ -44,8 +71,13 @@ public struct RipHistory: Sendable {
     /// Keeps the rip, or updates it if its report or its place changed. Returns its key.
     @discardableResult
     public func record(_ report: RipReport, file: URL, hasAudio: Bool) throws -> String {
-        let key = Self.key(of: report, file: file)
-        let entry = Entry(report: report, file: file.standardizedFileURL.path, hasAudio: hasAudio)
+        try record(Entry(report: report, file: file.standardizedFileURL.path, hasAudio: hasAudio))
+    }
+
+    /// Keeps the entry, or updates it if it changed. Returns its key.
+    @discardableResult
+    public func record(_ entry: Entry) throws -> String {
+        let key = entry.key
         let url = directory.appending(path: key + ".json")
         let data = try Self.encoder.encode(entry)
         guard (try? Data(contentsOf: url)) != data else { return key }
@@ -56,8 +88,33 @@ public struct RipHistory: Sendable {
 
     /// Keeps the report in `file`, if it can be read. A rip folder's `disc.json` has its audio.
     public func recordReport(at file: URL) {
-        guard let report = try? RipReport.read(from: file) else { return }
-        _ = try? record(report, file: file, hasAudio: file.lastPathComponent == "disc.json")
+        guard let entry = entry(forReportAt: file, hasAudio: file.lastPathComponent == "disc.json") else { return }
+        _ = try? record(entry)
+    }
+
+    /// The rip whose report is in `file`, with the file's stamp and edits. `known` is the
+    /// history's entries by file (`byFile`): an album report whose stamp is the one kept there is
+    /// not read again. A rip's `disc.json` is always read, because its album folder can be
+    /// relative to the library, which the settings can change. Nil if the file has no report.
+    public func entry(forReportAt file: URL, hasAudio: Bool, known: [String: Entry] = [:]) -> Entry? {
+        let path = file.standardizedFileURL.path
+        let stamp = Stamp(of: file)
+        if let stamp, RipReport.Encoding.isAlbumReport(file), let entry = known[path], entry.stamp == stamp,
+            entry.hasAudio == hasAudio
+        {
+            return entry
+        }
+        guard let data = try? Data(contentsOf: file), let report = try? RipReport.read(from: file, data: data) else {
+            return nil
+        }
+        return Entry(
+            report: report, file: path, hasAudio: hasAudio, edits: MetadataEdits.read(fromReportData: data),
+            stamp: stamp)
+    }
+
+    /// The entries by their report file's path.
+    public static func byFile(_ entries: [String: Entry]) -> [String: Entry] {
+        Dictionary(entries.values.map { ($0.file, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// Keeps each album report (`Rip Report*.json`) in an album folder.
@@ -96,7 +153,8 @@ public struct RipHistory: Sendable {
     /// True if the rip's report is still where it was last seen: a report there of another rip
     /// (a later rip of the disc that took its folder) does not count.
     public static func isThere(_ entry: Entry, key: String) -> Bool {
-        (try? RipReport.read(from: entry.url)).map { Self.key(of: $0, file: entry.url) } == key
+        if let stamp = entry.stamp, Stamp(of: entry.url) == stamp { return true }
+        return (try? RipReport.read(from: entry.url)).map { Self.key(of: $0, file: entry.url) } == key
     }
 
     /// True if two reports are of one rip: the same disc, ripped (and repaired) at the same

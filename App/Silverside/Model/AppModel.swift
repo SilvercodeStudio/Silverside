@@ -247,7 +247,9 @@ final class AppModel {
                 }
             } ?? []
         guard !rips.isEmpty else { return }
+        workCount += 1
         Task { @MainActor in
+            defer { workCount -= 1 }
             do {
                 let images = try await CoverArtClient().images(releaseID: release.id)
                 var covers = [URL: DiscCoverChange]()
@@ -315,7 +317,9 @@ final class AppModel {
     /// A cover for every disc of a set. Nil takes the Cover Art Archive's front cover. The
     /// discs' own covers go, unless `keepingDiscCovers`: then those discs keep embedding theirs.
     func changeCover(ofSet set: RipSet, rips: [RecentRip], to image: CoverImage?, keepingDiscCovers: Bool = false) {
+        workCount += 1
         Task { @MainActor in
+            defer { workCount -= 1 }
             var cover = image
             if cover == nil {
                 try? ReleaseCoverStore().forget(releaseID: set.releaseID)
@@ -342,14 +346,14 @@ final class AppModel {
 
     /// The newest cover change of an earlier rip, which artwork saved after it waits for.
     @ObservationIgnored private var coverChange: Task<Void, Never>?
-    /// The cover changes under way, which an update's relaunch waits for.
-    @ObservationIgnored private var coverChanges = 0
 
     /// Puts `images` (a release's, but its main front) in the Artwork folders of earlier rips,
     /// their rip folders and album folders, in place of the images there.
     func saveArtwork(_ images: [CoverArtImage], of rips: [RecentRip]) {
         let folders = ArtworkOffer.folders(of: rips)
+        workCount += 1
         Task { @MainActor in
+            defer { workCount -= 1 }
             // A cover change just asked for rewrites the same reports: it goes first.
             await coverChange?.value
             while library?.isRunning == true { try? await Task.sleep(for: .milliseconds(250)) }
@@ -615,22 +619,31 @@ final class AppModel {
 
     // MARK: Updates
 
+    /// Work under way that quitting would cut short, counted from when it is asked for until it
+    /// ends: changes to earlier rips' covers, artwork, releases, and names (a lookup, a download,
+    /// files and reports rewritten), and the scans that update the history. Each such task adds
+    /// one as it is started, and takes it away when it ends, also while it waits for other work.
+    @ObservationIgnored private var workCount = 0
+
     /// True while the app does work that quitting would cut short: a rip or its encoding, a
-    /// drive's test or data track, a repair, library work, new names or covers in an earlier
-    /// rip's files, Check Again, or a video.
+    /// drive's test or data track, a repair, library work, the counted work above, new names in
+    /// an earlier rip's files, Check Again, a video, or the command line tool's install.
     var hasWorkUnderWay: Bool {
         drives.contains { $0.rip?.isRunning == true || $0.isBusy } || repair?.isRunning == true
-            || library?.isRunning == true || !updatingNames.isEmpty || coverChanges > 0 || !checking.isEmpty
-            || !makingVideo.isEmpty
+            || library?.isRunning == true || workCount > 0 || !updatingNames.isEmpty || !checking.isEmpty
+            || !makingVideo.isEmpty || commandLineTool.isWorking
     }
 
     /// An update that is ready relaunches the app at once, unless work is under way: then it
     /// waits for the work to end, and says so.
     private func postponeRelaunch(_ install: @escaping () -> Void) -> Bool {
         guard hasWorkUnderWay else { return false }
-        alert = AppAlert(
-            title: "The update waits for the work to end",
-            message: "Silverside installs the update and opens again when the work under way is done.")
+        // An alert already on show stays: the update waits all the same.
+        if alert == nil {
+            alert = AppAlert(
+                title: "The update waits for the work to end",
+                message: "Silverside installs the update and opens again when the work under way is done.")
+        }
         Task { @MainActor in
             while hasWorkUnderWay { try? await Task.sleep(for: .seconds(2)) }
             install()
@@ -885,6 +898,7 @@ final class AppModel {
         let library = settings.libraryURL
         let history = history
         let isFirst = !hasScannedRips
+        workCount += 1
         Task.detached(priority: .utility) {
             if isFirst {
                 let rips = RecentRip.remembered(rips: folder, library: library, history: history)
@@ -896,6 +910,7 @@ final class AppModel {
             }
             let rips = RecentRip.scan(rips: folder, library: library, history: history)
             await MainActor.run {
+                self.workCount -= 1
                 self.hasScannedRips = true
                 self.recentRips = rips.present
                 self.missingRips = rips.missing
@@ -914,9 +929,11 @@ final class AppModel {
         guard panel.runModal() == .OK, let folder = panel.url else { return }
         let keys = Set(missingRips.map(\.historyKey))
         let history = history
+        workCount += 1
         Task.detached(priority: .userInitiated) {
             let found = history.locate(keys, in: folder)
             await MainActor.run {
+                self.workCount -= 1
                 self.refreshRecentRips()
                 self.alert = AppAlert(
                     title: found == 0 ? "No moved rips found there" : "Found \(Format.count(found, "rip"))",
@@ -1004,9 +1021,9 @@ final class AppModel {
     /// Archive's front cover back.
     func changeCover(of rip: RecentRip, to image: CoverImage?) {
         let settings = settings
-        coverChanges += 1
+        workCount += 1
         coverChange = Task { @MainActor in
-            defer { coverChanges -= 1 }
+            defer { workCount -= 1 }
             do {
                 var cover = image
                 if cover == nil, let release = rip.report.release, !release.isManual {
@@ -1040,9 +1057,9 @@ final class AppModel {
     /// disc embeds the set's cover again. The set's cover and the other discs stay as they are.
     func changeDiscCover(of rip: RecentRip, to image: CoverImage?) {
         let settings = settings
-        coverChanges += 1
+        workCount += 1
         coverChange = Task { @MainActor in
-            defer { coverChanges -= 1 }
+            defer { workCount -= 1 }
             do {
                 let (file, change): (URL, DiscCoverChange) = (rip.file, image.map { .set($0) } ?? .remove)
                 _ = try await Task.detached {
@@ -1079,7 +1096,9 @@ final class AppModel {
             other.file != rip.file && (other.report.encoding != nil || !other.hasAudio)
                 && [old, chosen.id].contains(other.report.release?.id)
         }
+        workCount += 1
         Task { @MainActor in
+            defer { workCount -= 1 }
             // The picker's releases are the disc lookup's; the details (writers, genre) come by ID.
             let release = ((try? await MusicBrainzClient().release(id: chosen.id)) ?? nil) ?? chosen
             var cover = ReleaseCoverStore().cover(forReleaseID: release.id)
@@ -1339,7 +1358,9 @@ final class AppModel {
             !lookingUpReleases.contains(release.id)
         else { return }
         lookingUpReleases.insert(release.id)
+        workCount += 1
         Task { @MainActor in
+            defer { workCount -= 1 }
             defer { lookingUpReleases.remove(release.id) }
             let fresh: MusicBrainzRelease?
             do {

@@ -67,8 +67,11 @@ Decided 2026-11-11:
   system profile stays off (its default).
 - **No relaunch during work.** `AppModel.postponeRelaunch` holds "Install and
   Relaunch" while `hasWorkUnderWay` (a rip or its encoding, a busy drive, a
-  repair, library work, new names or covers, Check Again, a video), says so
-  in an alert, and installs when the work ends.
+  repair, library work, Check Again, a video, the command line tool's
+  install, and `workCount`: every task that changes earlier rips' covers,
+  artwork, releases, or names, and the scans that write the history, from
+  when it is asked for until it ends), says so in an alert unless one is on
+  show, and installs when the work ends.
 - The build phase "Remove Sparkle's XPC services" runs in an archive only:
   checked 2026-11-11 with an archive, the framework has no `XPCServices` and
   `codesign --verify --deep --strict` passes. The export with Developer ID

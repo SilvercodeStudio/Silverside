@@ -121,10 +121,15 @@ install: release
 install-cli-local:
 	@$(MAKE) install PREFIX=$(HOME)/.local
 
-# A universal release build of the app, copied whole; an older copy is replaced.
+# A universal release build of the app, copied whole; an older copy is replaced. The path is
+# checked before anything is removed: make -n still runs a line with $(MAKE) in it, and then
+# the path is the printed command, and an empty answer from xcodebuild gives "/", which would
+# remove the whole of APP_DIR.
 install-app:
 	@$(MAKE) build CONFIG=Release
-	@app="$$($(MAKE) app CONFIG=Release)"; \
+	@set -e; app="$$($(MAKE) -s app CONFIG=Release)"; \
+	case "$$app" in *.app) ;; *) echo "install-app: not an app path: '$$app'" >&2; exit 1 ;; esac; \
+	if [ ! -d "$$app" ]; then echo "install-app: no app at $$app" >&2; exit 1; fi; \
 	install -d "$(APP_DIR)"; \
 	rm -rf "$(APP_DIR)/$$(basename "$$app")"; \
 	ditto "$$app" "$(APP_DIR)/$$(basename "$$app")"; \

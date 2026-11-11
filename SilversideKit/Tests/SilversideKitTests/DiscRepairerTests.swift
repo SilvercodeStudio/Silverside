@@ -235,6 +235,26 @@ struct DiscRepairerTests {
         #expect(proved.tracks.isEmpty && proved.audio == samples)
     }
 
+    /// A last track shorter than the rows that the CRCs leave out has an empty range, whose CRC
+    /// is that of no samples. It matches whatever the track holds, so it proves nothing: the
+    /// track gets no confidence, even when every sample of it is wrong.
+    @Test func givesNoConfidenceToATrackThatTheCRCsDoNotCover() async throws {
+        let toc = try TOC(audioTrackStarts: [0, 1800], leadOutLBA: 1805)
+        let layout = CTDBLayout(toc: toc)
+        let samples = (0..<(1805 * 588)).map { UInt32(truncatingIfNeeded: $0 &* 2_654_435_761) }
+        let (entry, _) = entry(for: samples, toc: toc)
+        #expect(CTDB.provingTrackCRCs(of: samples, toc: toc, layout: layout)[1] == nil)
+        var wrong = samples
+        for index in (1800 * 588)..<wrong.count { wrong[index] ^= 0x5555 }
+        let repairer = DiscRepairer(toc: toc, records: [], entries: [entry])
+        let result = try await repairer.repair(tracks(of: wrong, toc: toc), repairing: false)
+        #expect(result.trackConfidences == [5, 0])
+        // With an error in track 1 too, the disc is not verified, and no track has a confidence.
+        wrong[100_000] ^= 1
+        let failed = try await repairer.repair(tracks(of: wrong, toc: toc), repairing: false)
+        #expect(failed.trackConfidences == [0, 0])
+    }
+
     @Test func choosesTheMostFrequentValue() {
         let audio = TrackAudio(versions: [[1, 2, 3, 4], [1, 5, 3, 6], [1, 5, 7, 8]])
         #expect(audio.samples == [1, 5, 3, 4])

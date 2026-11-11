@@ -138,6 +138,16 @@ public enum CTDB {
         }
     }
 
+    /// The track CRCs that can prove a track: nil for a track that the CRCs do not cover (an
+    /// empty range), whose CRC is that of no samples and would match whatever the track holds.
+    public static func provingTrackCRCs(of audio: [UInt32], toc: TOC, layout: CTDBLayout, shift: Int = 0)
+        -> [UInt32?]
+    {
+        trackRanges(toc: toc, layout: layout, shift: shift, count: audio.count).map {
+            $0.isEmpty ? nil : CRC32.checksum(of: audio[$0])
+        }
+    }
+
     /// The check of each audio track, by track number, against `entries`' track CRCs: none
     /// if the disc is too short for CTDB.
     public static func trackChecks(toc: TOC, entries: [CTDBEntry]) -> [Int: CTDBTrackCheck] {

@@ -282,7 +282,7 @@ public struct DiscRepairer {
         let hints = Self.accurateRipShifts(of: audio, toc: toc, trackStarts: trackStarts, records: records)
         // The track CRCs at each hint shift, once: they are the same for every entry.
         let hintCRCs = hints.filter(layout.shifts.contains).map {
-            (shift: $0, crcs: CTDB.trackCRCs(of: audio, toc: toc, layout: layout, shift: $0))
+            (shift: $0, crcs: CTDB.provingTrackCRCs(of: audio, toc: toc, layout: layout, shift: $0))
         }
         var best: (entry: CTDBEntry, shift: Int, tracks: [Int], changed: [Int], audio: [UInt32])?
         entries: for (rank, entry) in usable.enumerated()
@@ -410,7 +410,7 @@ public struct DiscRepairer {
         }
         var confidences = [Int](repeating: 0, count: toc.audioTracks.count)
         for shift in shifts {
-            let crcs = CTDB.trackCRCs(of: audio, toc: toc, layout: layout, shift: shift)
+            let crcs = CTDB.provingTrackCRCs(of: audio, toc: toc, layout: layout, shift: shift)
             for entry in entries where entry.trackCRCs.count == crcs.count {
                 for index in crcs.indices where crcs[index] == entry.trackCRCs[index] {
                     confidences[index] = max(confidences[index], entry.confidence)

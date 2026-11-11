@@ -590,6 +590,32 @@ struct DiscRipTests {
         #expect(edge.report.isVerified)
     }
 
+    /// A last track shorter than the rows that CTDB's CRCs leave out has no CRC to check: its
+    /// range is empty, and it gets the secure rip. A rip of such a disc, with CTDB or without,
+    /// does not stop on it.
+    @Test func ripsALastTrackShorterThanCTDBsLeftOutRows() async throws {
+        let (toc, samples) = try makeDisc(trackSectors: [1800, 5])
+        let layout = CTDBLayout(toc: toc)
+        #expect(CTDB.trackRanges(toc: toc, layout: layout, count: layout.sampleCount)[1].isEmpty)
+        #expect(CTDB.trackChecks(toc: toc, entries: []).isEmpty)
+        let entry = CTDBEntry(
+            id: 1, confidence: 5, crc32: 0, trackCRCs: [1, 2], repairDataURL: nil, syndromeCount: 8,
+            column0Syndromes: [])
+        #expect(Array(CTDB.trackChecks(toc: toc, entries: [entry]).keys) == [1])
+
+        let (offline, _, _, root) = try await rip(trackSectors: [1800, 5])
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(offline.report.tracks.count == 2)
+        let ctdb = Self.ctdbAnswer(toc: toc, samples: samples)
+        let web = FakeWeb([
+            ("http://db.cuetools.net/lookup2.php", ctdb.lookup), ("http://p.cuetools.net/1", ctdb.repairData),
+        ])
+        let (online, _, _, root2) = try await rip(trackSectors: [1800, 5], web: web)
+        defer { try? FileManager.default.removeItem(at: root2) }
+        #expect(online.report.tracks.map(\.fullReads) == [1, 2])
+        #expect(online.report.ctdb.status == .verified)
+    }
+
     /// The test counts suspect samples by their place in a CTDB row, those of the tracks done
     /// too, up to half of a column's erasures; and it needs an entry that a clean track proves.
     @Test func repairTakesOverOnlyWithinHalfOfEachColumn() throws {

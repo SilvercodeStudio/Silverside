@@ -142,7 +142,7 @@ public enum CTDB {
     /// if the disc is too short for CTDB.
     public static func trackChecks(toc: TOC, entries: [CTDBEntry]) -> [Int: CTDBTrackCheck] {
         let audioTracks = toc.audioTracks
-        guard let first = audioTracks.first,
+        guard !entries.isEmpty, let first = audioTracks.first,
             (toc.audioLeadOutLBA - first.startLBA) * CDDA.samplesPerSector >= 3 * CTDBLayout.strideSamples
         else { return [:] }
         let layout = CTDBLayout(toc: toc)
@@ -164,7 +164,8 @@ public enum CTDB {
 
     /// The samples that each track CRC covers, in the disc's audio of `count` samples: the
     /// track's samples at `shift`, without the first row and the last row and remainder. At a
-    /// shift, a track's last samples are in the next track's range.
+    /// shift, a track's last samples are in the next track's range. A track that lies wholly in
+    /// the left-out rows (a first or last track shorter than they are) has an empty range.
     public static func trackRanges(toc: TOC, layout: CTDBLayout, shift: Int = 0, count: Int) -> [Range<Int>] {
         let audioTracks = toc.audioTracks
         let first = audioTracks[0].startLBA
@@ -174,7 +175,8 @@ public enum CTDB {
             var end = (sectors.upperBound - first) * CDDA.samplesPerSector + shift
             if index == 0 { start += layout.prefixSamples }
             if index == audioTracks.count - 1 { end -= layout.suffixSamples }
-            return max(start, 0)..<min(end, count)
+            let lower = min(max(start, 0), count)
+            return lower..<max(lower, min(end, count))
         }
     }
 

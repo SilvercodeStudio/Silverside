@@ -24,4 +24,4 @@ The first time Silverside opens, it asks what a rip should become: Apple Lossles
 
 Silverside is for archival copies of discs that you own, for your personal use. It does not support piracy, and you use it at your own risk. Before its first rip, the welcome asks you to agree to this. The agreement can be viewed in Settings › General.
 
-The `silverside` command-line tool does the same work from a terminal, with the same settings.
+The `silverside` command-line tool does the same work from a terminal, with the same settings. It comes inside the app: Silverside › Install Command Line Tool… puts it on your PATH (see [Command Line Tool](help:command-line-tool)).

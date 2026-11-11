@@ -305,8 +305,10 @@ should become (Apple Lossless, FLAC, AAC, or MP3).
 ## The command-line tool
 
 `silverside` does everything the app does, from a terminal, with the same
-settings file. See [docs/cli.md](docs/cli.md) for its commands, what a rip
-makes, and the settings.
+settings file. It comes inside the app: Silverside › Install Command Line
+Tool… puts it on your PATH, and app updates update it too. See
+[docs/cli.md](docs/cli.md) for its commands, what a rip makes, and the
+settings.
 
 ## How the audio processing was checked
 

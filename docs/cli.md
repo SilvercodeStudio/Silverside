@@ -6,7 +6,14 @@ Silverside is and how it rips.
 
 ## Install
 
-From a copy of this repository, with Xcode installed:
+The app has the command inside it. In the app, choose Silverside › Install
+Command Line Tool… (or Settings › General): it links `silverside` into
+`/usr/local/bin` (which may ask for your password) or `~/.local/bin`, with its
+shell completions for zsh, bash, and fish. They are links into the app, so
+each update of the app updates the command too. If you move the app, install
+the command again; Remove in the same window takes the links away.
+
+Or, from a copy of this repository, with Xcode installed:
 
 ```sh
 make install                    # silverside in /usr/local/bin (may need sudo)

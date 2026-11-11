@@ -59,6 +59,19 @@ codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "get-task-allow"
 # The build phase "Remove Sparkle's XPC services" removes nothing if a new Sparkle moves them.
 [ ! -e "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" ] ||
     { echo "Sparkle's XPC services are still in the app: check the build phase that removes them."; exit 1; }
+# The silverside command inside, for Install Command Line Tool…: signed as the app is, and this version.
+HELPER="$APP/Contents/Helpers/silverside"
+[ -x "$HELPER" ] || { echo "No silverside command in the app: check the build phase that puts it there."; exit 1; }
+helper_info=$(codesign -dvv "$HELPER" 2>&1)
+echo "$helper_info" | grep -q "Authority=Developer ID Application" && echo "$helper_info" | grep -q "flags=.*(runtime)" ||
+    { echo "The silverside command is not signed with Developer ID and the hardened runtime."; exit 1; }
+case "$("$HELPER" --version)" in
+"$VERSION"*) ;;
+*) echo "The silverside command is not version $VERSION: $("$HELPER" --version)"; exit 1 ;;
+esac
+for file in _silverside silverside.bash silverside.fish; do
+    [ -s "$APP/Contents/Resources/Completions/$file" ] || { echo "No $file completions in the app."; exit 1; }
+done
 echo "Silverside $VERSION: signed with Developer ID, hardened runtime, Apple Events."
 
 if [ "${NOTARIZE:-1}" = 0 ]; then

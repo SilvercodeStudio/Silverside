@@ -25,11 +25,19 @@ struct HelpTopic: Identifiable, Hashable {
     }
 }
 
+/// A page that another window asks the Help window to show: set `slug`, then open the window.
+@Observable
+final class HelpPageRequest {
+    static let shared = HelpPageRequest()
+    var slug: String?
+}
+
 /// The Help window: topics on the left, the page on the right, with Back and Forward.
 struct HelpView: View {
     @State private var topics = HelpTopic.all()
     @State private var selection: String?
     @State private var browser: HelpBrowser?
+    private let request = HelpPageRequest.shared
 
     var body: some View {
         NavigationSplitView {
@@ -82,7 +90,17 @@ struct HelpView: View {
                     section = UserDefaults.standard.string(forKey: "helpSection")
                 }
             #endif
+            if let asked = request.slug {
+                slug = asked
+                request.slug = nil
+            }
             browser.open(slug, section: section)
+        }
+        // A request while the window is open shows the page in it.
+        .onChange(of: request.slug) { _, slug in
+            guard let slug, let browser else { return }
+            request.slug = nil
+            browser.open(slug)
         }
     }
 }

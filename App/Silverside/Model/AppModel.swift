@@ -120,6 +120,8 @@ final class AppModel {
     @ObservationIgnored private(set) lazy var updater = AppUpdater { [weak self] install in
         self?.postponeRelaunch(install) ?? false
     }
+    /// The `silverside` command in the app, linked into a folder on the PATH.
+    let commandLineTool = CommandLineTool()
 
     /// False until the first look at the drives: a disc in a drive at launch is not ripped by itself.
     @ObservationIgnored private var hasListedDrives = false

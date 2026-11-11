@@ -113,19 +113,36 @@ Decided 2026-11-11:
   for each version.
 - The steps of a release: `Releasing.md`.
 
-### The CLI inside the app
+### The CLI inside the app (done 2026-11-11, for 0.9.7)
 
-- `silverside` in `Contents/Helpers/silverside`: a universal release build,
-  with the embedded Info.plist of its commit, signed with the hardened runtime
-  before the app is signed and notarized.
-- How it gets there is open: a build phase in the app (slow: `swift build -c
-  release`), or `make dist` copying it in before signing.
-- **Install Command Line Tool…** (in the app menu, or Settings): a symbolic
-  link to the helper, so that each app update brings a new CLI. Where to:
-  `/usr/local/bin` needs an administrator password (`osascript … with
-  administrator privileges`); `~/.local/bin` needs none, but may not be in the
-  `PATH`. Offer the shell completions too. The same item can remove the link.
+- `silverside` in `Contents/Helpers/silverside`, and its completions in
+  `Contents/Resources/Completions` (`_silverside`, `silverside.bash`,
+  `silverside.fish`, made by the command itself). The build phase "Put the
+  command line tool in the app" runs `make release` (a universal build with
+  the commit's embedded Info.plist) in a Release build only, an archive or
+  `make install-app`, with a clean environment, so SwiftPM does not see
+  Xcode's settings. It signs the command with the hardened runtime (identifier
+  `app.silverside.cli`); the export signs it again with Developer ID and a
+  timestamp (checked 2026-11-11). It costs about 2 minutes on a first build,
+  and adds about 19 MB to the app.
+- **Install Command Line Tool…** (the app menu, and Settings › General), in a
+  window of its own (`CommandLineToolView`, `CommandLineTool`): symbolic links
+  in `make install`'s layout (`CommandLineInstall` in the engine, with tests),
+  so each app update brings a new CLI. `/usr/local/bin` runs the links as the
+  user first, then through `osascript … with administrator privileges`, which
+  asks for the password; `~/.local/bin` needs none. The window reads the PATH
+  of the user's login shell, says when `~/.local/bin` is not on it, and
+  chooses that folder when it is. It knows a link to another copy of the app
+  (moved, or deleted) and a copy from `make install`, which Install replaces;
+  Remove takes away only links to a Silverside app. An app that macOS runs
+  from a hidden copy (App Translocation) or a read-only disk image is told to
+  move to Applications first.
+- `make dist` checks the command: there, signed with Developer ID and the
+  hardened runtime, of the app's version, with the three completions.
 - `make install` stays for people who build from source.
+- Not tried yet: the administrator's path on a Mac where `/usr/local` is not
+  the user's, and the notarization of a build with the command (both at the
+  0.9.7 release).
 
 ### The DMG
 

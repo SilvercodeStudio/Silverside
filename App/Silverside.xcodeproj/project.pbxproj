@@ -79,6 +79,7 @@
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
 				000000000000000150000000 /* Record the Git commit */,
+				000000000000000170000000 /* Put the command line tool in the app */,
 				000000000000000160000000 /* Remove Sparkle's XPC services */,
 			);
 			buildRules = (
@@ -165,6 +166,31 @@
 				"if [ \"$ACTION\" = install ]; then",
 				"    /usr/libexec/PlistBuddy -c \"Add :SilversideArchive bool true\" \"$plist\"",
 				"fi",
+				"",
+			);
+		};
+		000000000000000170000000 /* Put the command line tool in the app */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			name = "Put the command line tool in the app";
+			shellPath = /bin/sh;
+			shellScript = (
+				"# The silverside command in the app (Contents/Helpers), with its shell completions (Resources/Completions),",
+				"# for Install Command Line Tool…: a Release build only (an archive, make install-app), as make release builds it.",
+				"[ \"$CONFIGURATION\" = Release ] || exit 0",
+				"root=\"$SRCROOT/..\"",
+				"# Xcode's settings (SDKROOT, ARCHS, and the rest) are not for SwiftPM: make runs as in a terminal.",
+				"set -- HOME=\"$HOME\" PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+				"[ -n \"$DEVELOPER_DIR\" ] && set -- \"$@\" DEVELOPER_DIR=\"$DEVELOPER_DIR\"",
+				"env -i \"$@\" make -s -C \"$root\" release || exit 1",
+				"command=\"$root/SilversideKit/.build/out/Products/Release/silverside\"",
+				"contents=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH\"",
+				"mkdir -p \"$contents/Helpers\" \"$contents/Resources/Completions\"",
+				"ditto \"$command\" \"$contents/Helpers/silverside\"",
+				"\"$command\" --generate-completion-script zsh > \"$contents/Resources/Completions/_silverside\" || exit 1",
+				"\"$command\" --generate-completion-script bash > \"$contents/Resources/Completions/silverside.bash\" || exit 1",
+				"\"$command\" --generate-completion-script fish > \"$contents/Resources/Completions/silverside.fish\" || exit 1",
+				"codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --options runtime --identifier app.silverside.cli \"$contents/Helpers/silverside\"",
 				"",
 			);
 		};
@@ -365,7 +391,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.9.6;
+				MARKETING_VERSION = 0.9.7;
 				PRODUCT_BUNDLE_IDENTIFIER = app.silverside.Silverside;
 				PRODUCT_NAME = Silverside;
 				REGISTER_APP_GROUPS = YES;
@@ -423,7 +449,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.9.6;
+				MARKETING_VERSION = 0.9.7;
 				PRODUCT_BUNDLE_IDENTIFIER = app.silverside.Silverside;
 				PRODUCT_NAME = Silverside;
 				REGISTER_APP_GROUPS = YES;

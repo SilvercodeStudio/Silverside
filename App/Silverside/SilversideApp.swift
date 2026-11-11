@@ -40,6 +40,15 @@ import SwiftUI
         .restorationBehavior(.disabled)
         .commandsRemoved()
 
+        Window("Command Line Tool", id: "commandLineTool") {
+            CommandLineToolView()
+                .environment(model)
+                .windowMinimizeBehavior(.disabled)
+        }
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
+
         Window("Silverside Help", id: "help") {
             HelpView()
         }

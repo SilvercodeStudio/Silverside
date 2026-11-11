@@ -3,6 +3,15 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.9.7 (not released yet)
+
+### Added
+
+- The `silverside` command-line tool comes inside the app. Silverside ›
+  Install Command Line Tool… (or Settings › General) links it into
+  `/usr/local/bin` or `~/.local/bin`, with its zsh, bash, and fish
+  completions, so each update of the app updates the command too.
+
 ## 0.9.6 (2026-11-11)
 
 ### Added

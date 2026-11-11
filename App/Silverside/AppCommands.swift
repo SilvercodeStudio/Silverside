@@ -20,6 +20,10 @@ struct AppCommands: Commands {
                 Button("Check for Updates…", action: model.updater.checkForUpdates)
                     .disabled(!model.updater.canCheckForUpdates)
             }
+            // Only in a Release build, which has the command inside.
+            if model.commandLineTool.isAvailable {
+                Button("Install Command Line Tool…") { openWindow(id: "commandLineTool") }
+            }
         }
         CommandGroup(replacing: .newItem) {}
         CommandGroup(replacing: .help) {

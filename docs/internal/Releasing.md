@@ -47,7 +47,8 @@ the next version; and how to update Sparkle. The plan behind the updates is in
    source…"). Bring `Milestones.md` up to date. Run `make format`, `make
    lint`, `make test`, and `make build`, and commit ("Finish 0.9.7: …").
 2. **`make dist`.** It needs a clean tree. It archives, exports with Developer
-   ID, checks the signature, notarizes (a few minutes), staples, zips, and
+   ID, checks the signature (and that the `silverside` command inside is
+   signed, of this version, with its completions), notarizes (a few minutes), staples, zips, and
    adds the version to the feed. The Keychain asks once whether
    `generate_keys` and `generate_appcast` may use the key: Always Allow.
    It leaves `build/dist/Silverside-0.9.7.zip`, the notes
@@ -77,7 +78,11 @@ the next version; and how to update Sparkle. The plan behind the updates is in
    new item.
 7. **Check the update** on a Mac with the release before: Silverside › Check
    for Updates… finds the new version, shows its notes, installs it, and opens
-   it again; About shows the new version.
+   it again; About shows the new version. Install a test copy from the zip, or
+   with the Finder or `ditto`: a copy that follows symbolic links (`cp -L`,
+   some sync tools) turns Sparkle.framework's links into folders, and its
+   signature no longer holds (`codesign --verify --deep --strict` says "bundle
+   format is ambiguous").
 8. **Start the next version:** raise the version in the three places, and add
    `## 0.9.8 (not released yet)` to CHANGELOG.md. Commit.
 

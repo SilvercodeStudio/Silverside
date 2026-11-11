@@ -25,6 +25,7 @@ struct SettingsView: View {
 
 struct GeneralSettings: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     @State private var lame = MP3Encoder.lame()
 
     /// MP3 only with lame, unless the settings already chose it: the menu still shows that choice.
@@ -93,6 +94,13 @@ struct GeneralSettings: View {
                 Toggle(SilversideLicense.personalUseAgreement, isOn: $model.settings.agreedToPersonalUse)
                 Text("\(SilversideLicense.personalUse) Without this agreement, Silverside does not rip a disc.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            if model.commandLineTool.isAvailable {
+                Section("Command line tool") {
+                    Button("Install Command Line Tool…") { openWindow(id: "commandLineTool") }
+                    Text("The silverside command does what the app does, from Terminal, with the same settings.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Section("Updates") {
                 if model.updater.isAvailable {

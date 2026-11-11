@@ -84,7 +84,7 @@
           </a>
           <a class="ss-btn ss-btn--ghost" href="#how">How it works</a>
         </div>
-        <p class="ss-detail">Version 0.9.5 · Free and open source · macOS 15 or later · Apple silicon and Intel</p>
+        <p class="ss-detail">Version 0.9.6 · Free and open source · macOS 15 or later · Apple silicon and Intel</p>
       </div>
       <div class="ss-iris edge-bottom" aria-hidden="true"></div>
     </section>
@@ -383,11 +383,11 @@
             <summary>Why not just import with the Music app?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
             <p>Music never tells you whether your copy matches anyone else's. Silverside checks every track against AccurateRip and CTDB and shows you the result, and it re-reads and repairs what a plain import would copy wrong.</p>
             <p>The names come from MusicBrainz, where volunteers keep album and track data consistent and accurate, rather than from the Gracenote data Music uses. And Music cannot write FLAC.</p>
-            <p>If you listen in Music, Silverside can add each finished album to it, in Apple Lossless, AAC, or MP3.</p>
+            <p>If you listen in Music, Silverside can add each finished album to it, in any format but FLAC.</p>
           </details>
           <details>
             <summary>What is AccurateRip?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-            <p>A shared database of checksums from other people's rips. When your track matches, the confidence number tells you how many rips agree with yours. The CUETools database does the same for whole discs, and keeps the data that repairs a damaged rip.</p>
+            <p>A shared database of checksums from other people's rips. When your track matches, the confidence number tells you how many rips agree with yours. The CUETools database does the same for each track and the whole disc, and keeps the data that repairs a damaged rip.</p>
           </details>
           <details>
             <summary>Which drives work?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
@@ -403,7 +403,7 @@
           </details>
           <details>
             <summary>Does it need an account, or send anything about me?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-            <p>No account. To look up a disc, Silverside sends the disc's IDs to AccurateRip, CTDB, MusicBrainz, and the Cover Art Archive, and nothing else. See <a href="privacy.html">Privacy</a>.</p>
+            <p>No account. To look up a disc, Silverside sends the disc's IDs to AccurateRip, CTDB, MusicBrainz, and the Cover Art Archive. To find updates, it asks this website for the newest version. Nothing else leaves your Mac. See <a href="privacy.html">Privacy</a>.</p>
           </details>
           <details>
             <summary>What does it need?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
@@ -429,7 +429,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
           Download for Mac
         </a>
-        <p class="ss-detail">Version 0.9.5 · Free and open source · macOS 15 or later · Apple silicon and Intel</p>
+        <p class="ss-detail">Version 0.9.6 · Free and open source · macOS 15 or later · Apple silicon and Intel</p>
       </div>
     </section>
 
@@ -444,6 +444,7 @@
           <li><a href="https://ffmpeg.org">FFmpeg</a> decodes a DTS-CD's surround sound when it is installed. Silverside runs it as a separate program and does not include it.</li>
           <li>FFmpeg's HDCD decoder finds and decodes the HDCD codes in a rip. Chris Moeller wrote it from Christopher Key's HDCD library, with work by Gumboot and Burt P. Silverside includes it under its <a href="license.html#hdcd">BSD license</a>.</li>
           <li>Apple's AudioToolbox encodes FLAC, Apple Lossless, and AAC.</li>
+          <li><a href="https://sparkle-project.org">Sparkle</a> finds and installs Silverside's updates. Silverside includes it under its <a href="license.html#sparkle">MIT license</a>.</li>
           <li><a href="https://adelaide.casa/cdeg/">Adélaïde Casa</a>'s notes for the Divacore record, and <a href="https://extended.graphics">Adam Gashlin</a>'s Compact Disc Extended Graphics page, made CD+EG's graphics public. Silverside's CD+EG rendering code was informed by their work.</li>
           <li><a href="https://www.exactaudiocopy.de">Exact Audio Copy</a>, <a href="https://tmkk.undo.jp/xld/index_e.html">XLD</a>, and <a href="https://github.com/cyanreg/cyanrip">cyanrip</a> are the rippers that inspired Silverside. It uses no code from them.</li>
         </ul>

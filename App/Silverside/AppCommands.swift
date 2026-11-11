@@ -15,6 +15,11 @@ struct AppCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About Silverside") { openWindow(id: "about") }
+            // Only in a build that make dist made: a build from source does not update itself.
+            if model.updater.isAvailable {
+                Button("Check for Updates…", action: model.updater.checkForUpdates)
+                    .disabled(!model.updater.canCheckForUpdates)
+            }
         }
         CommandGroup(replacing: .newItem) {}
         CommandGroup(replacing: .help) {

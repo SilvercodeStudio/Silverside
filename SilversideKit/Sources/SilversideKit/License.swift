@@ -27,6 +27,10 @@ public enum SilversideLicense {
         The HDCD decoder in SilversideKit/Vendor/HDCD comes from FFmpeg and is under its own BSD license, in \
         that folder.
 
+        The app includes Sparkle (https://sparkle-project.org), which installs its updates. Sparkle is under \
+        its own license, the MIT License, with the licenses of the code it includes; the app shows them with \
+        this license.
+
         The disc and format logos that Silverside shows (such as Compact Disc, CD-Text, HDCD, DTS, Super \
         Audio CD, DVD, and Blu-ray Disc) are trademarks of their owners. They are not covered by this \
         license. Silverside shows them only to identify the format of a disc. Silverside claims no ownership \

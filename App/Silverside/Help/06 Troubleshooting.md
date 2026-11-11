@@ -24,7 +24,7 @@ killall SystemUIServer
 
 ## The disc could not be read
 
-A disc takes a moment to mount after it appears. Try Again reads it once more. A disc that macOS cannot mount at all (a data disc in a format the Mac does not know) has no audio to rip.
+A disc takes a moment to mount after it appears. Try Again reads it once more. A blank CD-R or CD-RW is named as one: the sidebar says "Blank CD-R". A disc that macOS cannot mount at all (a data disc in a format the Mac does not know) has no audio to rip.
 
 ## Not in MusicBrainz
 
@@ -50,7 +50,7 @@ With "Rip it at once" on (Settings › General), a disc rips by itself only when
 
 ## Music did not get the files
 
-"Add the files to the Music app" does nothing for FLAC, which Music cannot read; choose Apple Lossless. If the banner says Silverside may not control Music, you said no when macOS asked, or the question did not show: allow Silverside under System Settings › Privacy & Security › Automation, so the next album goes in. For the album that did not, drag its folder from the library onto Music's window.
+"Add the files to Apple's Music app" does nothing for FLAC, which Music cannot read; choose Apple Lossless. If the banner says Silverside may not control Music, you said no when macOS asked, or the question did not show: allow Silverside under System Settings › Privacy & Security › Automation, so the next album goes in. For the album that did not, drag its folder from the library onto Music's window.
 
 ## Tracks are not accurate
 
@@ -67,7 +67,7 @@ Help › Report a Problem… opens a new issue for Silverside on GitHub in your 
 Attach the files that show the problem:
 
 - For a rip, its `Rip Report.log` or `disc.json`, from the rip's folder. Control-click a rip in the sidebar and choose Show in Finder.
-- For a drive, its report: Settings › Drives › Save Report.
+- For a drive, its report: Settings › Drives › Test Drive…, then Save Report….
 
 ## Send feedback
 
@@ -89,10 +89,11 @@ Silverside and the `silverside` command share these files. In `~/Library/Applica
 Elsewhere:
 
 - `~/Library/Caches/Silverside/`: the answers from MusicBrainz, the Cover Art Archive, AccurateRip, and CTDB, so a disc you rip again sends no new requests. You can delete it at any time; the next lookup asks again.
-- `~/Library/Preferences/app.silverside.Silverside.plist`: the app's own choices, such as the track table's columns.
+- `~/Library/Caches/app.silverside.Silverside/`: an update that Silverside downloaded, until it is installed.
+- `~/Library/Preferences/app.silverside.Silverside.plist`: the app's own choices, such as the track table's columns and whether to check for updates.
 
 Your music is in the folders that Settings names: the Music library (`~/Music/Silverside Library` at first) and the Rips (`~/Music/Silverside Rips`) in General, and the disc images (`~/Music/Silverside Images`) in Encoding. The Rips folder also holds `.silverside-rip-locks`, which keeps two rips out of one folder. The folder at the bottom of the sidebar opens the library in the Finder, or the Rips folder when rips are not encoded; hold Option for the other one.
 
 To move the library, to a NAS for example, quit Silverside, copy the library folder to its new place, then choose that place for the Music library in Settings › General. Each album's report finds its album where the report is, and a rip's report keeps its album's place relative to the library, so nothing else needs to change. Check that your rips show and play from the new place before you delete the old copy.
 
-To remove Silverside, quit it, move it to the Trash, and delete the two `Silverside` folders and the `.plist` file above. Your music folders stay as they are. Keep `Application Support/Silverside` if you may install Silverside again: it has your drives' offsets and your rip history.
+To remove Silverside, quit it, move it to the Trash, and delete the folders and the `.plist` file above. Your music folders stay as they are. Keep `Application Support/Silverside` if you may install Silverside again: it has your drives' offsets and your rip history.

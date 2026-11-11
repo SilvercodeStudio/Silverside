@@ -1,13 +1,17 @@
 #!/bin/sh
 # make dist: the app as others get it, in build/dist. It archives the app (as Product › Archive
 # does), exports it signed with Developer ID, sends it to Apple for notarization, staples the
-# ticket to it, and zips it as Silverside-<version>.zip.
+# ticket to it, and zips it as Silverside-<version>.zip. Then it adds the version to Sparkle's
+# update feed, docs/site/appcast.xml, signed with the key in the Keychain, with the version's
+# CHANGELOG entry as its notes. docs/internal/Releasing.md has the whole release.
 #
 #   NOTARY_PROFILE  the notarytool keychain profile (default: silverside), made once with
 #                   xcrun notarytool store-credentials silverside --apple-id ... --team-id ...
-#   NOTARIZE=0      stop after the export and its checks: nothing goes to Apple.
+#   NOTARIZE=0      stop after the export and its checks: nothing goes to Apple, and no feed.
+#   FEED=0          stop after the zip: the feed stays as it is.
 #   ALLOW_DIRTY=1   build with changes that are not committed (the About window then shows
-#                   the commit with "-dirty"). A release is of a commit, so this is for tries.
+#                   the commit with "-dirty"). A release is of a commit, so this is for tries,
+#                   and such a build gets no feed.
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -16,10 +20,18 @@ ARCHIVE="$DIST/Silverside.xcarchive"
 EXPORT="$DIST/export"
 APP="$EXPORT/Silverside.app"
 PROFILE="${NOTARY_PROFILE:-silverside}"
+# The Keychain item of Sparkle's private key: generate_keys --account silverside made it.
+KEY_ACCOUNT=silverside
+FEED_FILE=docs/site/appcast.xml
+RELEASES=https://github.com/SilvercodeStudio/Silverside/releases/download
 
-if [ "${ALLOW_DIRTY:-0}" != 1 ] && [ -n "$(git status --porcelain)" ]; then
-    echo "There are changes that are not committed. Commit them, or set ALLOW_DIRTY=1 for a try."
-    exit 1
+DIRTY=0
+if [ -n "$(git status --porcelain)" ]; then
+    if [ "${ALLOW_DIRTY:-0}" != 1 ]; then
+        echo "There are changes that are not committed. Commit them, or set ALLOW_DIRTY=1 for a try."
+        exit 1
+    fi
+    DIRTY=1
 fi
 
 rm -rf "$DIST"
@@ -44,6 +56,9 @@ codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "com.apple.secur
     { echo "No Apple Events entitlement: Add to Music would fail."; exit 1; }
 codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "get-task-allow" &&
     { echo "The app can be debugged (get-task-allow): notarization refuses it."; exit 1; }
+# The build phase "Remove Sparkle's XPC services" removes nothing if a new Sparkle moves them.
+[ ! -e "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" ] ||
+    { echo "Sparkle's XPC services are still in the app: check the build phase that removes them."; exit 1; }
 echo "Silverside $VERSION: signed with Developer ID, hardened runtime, Apple Events."
 
 if [ "${NOTARIZE:-1}" = 0 ]; then
@@ -78,3 +93,52 @@ ZIP="$DIST/Silverside-$VERSION.zip"
 ditto -c -k --norsrc --keepParent "$APP" "$ZIP"
 zipinfo -1 "$ZIP" | grep -q '/\._' && { echo "The zip has AppleDouble files: unzip would break the seal."; exit 1; }
 echo "Notarized and stapled: $ZIP"
+
+# Sparkle's update feed.
+if [ "${FEED:-1}" = 0 ]; then
+    echo "No feed (FEED=0)."
+    exit 0
+fi
+if [ "$DIRTY" = 1 ]; then
+    echo "No feed: the build has changes that are not committed."
+    exit 0
+fi
+case "$(grep -m 1 "^## $VERSION " CHANGELOG.md || true)" in
+"## $VERSION ("[0-9]*")") ;;
+*)
+    echo "No feed: CHANGELOG.md needs a dated heading for this version, \"## $VERSION (YYYY-MM-DD)\"."
+    exit 1
+    ;;
+esac
+
+# Sparkle's tools from the package that the archive used, so that they match its framework.
+build_dir=$(xcodebuild -workspace Silverside.xcworkspace -scheme Silverside -configuration Release \
+    -showBuildSettings 2>/dev/null | awk -F' = ' '/^ *BUILD_DIR =/ {print $2; exit}')
+SPARKLE_BIN="$build_dir/../../SourcePackages/artifacts/sparkle/Sparkle/bin"
+[ -x "$SPARKLE_BIN/generate_appcast" ] || { echo "No Sparkle tools at $SPARKLE_BIN."; exit 1; }
+
+# An app with another key than the Keychain's would get an item with no signature.
+key=$("$SPARKLE_BIN/generate_keys" --account "$KEY_ACCOUNT" -p 2>/dev/null || true)
+[ -n "$key" ] || { echo "No Sparkle key \"$KEY_ACCOUNT\" in the Keychain: see docs/internal/Releasing.md."; exit 1; }
+[ "$key" = "$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "$APP/Contents/Info.plist")" ] ||
+    { echo "The app's SUPublicEDKey is not the public half of the Keychain's key."; exit 1; }
+
+# generate_appcast works in a folder: the feed as it is, the new zip, and its notes (the
+# CHANGELOG entry without its heading), which it embeds as Markdown. It keeps the older items,
+# whose zips are not there, and signs the feed, as the app's Info.plist asks.
+FEED_DIR="$DIST/feed"
+mkdir -p "$FEED_DIR"
+cp "$ZIP" "$FEED_DIR/"
+NOTES="$FEED_DIR/Silverside-$VERSION.md"
+awk -v heading="## $VERSION " 'index($0, heading) == 1 {on = 1; next} on && /^## / {exit} on' CHANGELOG.md >"$NOTES"
+if [ -f "$FEED_FILE" ]; then cp "$FEED_FILE" "$FEED_DIR/appcast.xml"; fi
+echo "Signing the feed (the Keychain may ask to let generate_appcast use the key)…"
+"$SPARKLE_BIN/generate_appcast" --account "$KEY_ACCOUNT" --maximum-deltas 0 --embed-release-notes \
+    --download-url-prefix "$RELEASES/$VERSION/" --link https://silverside.app "$FEED_DIR"
+grep "$RELEASES/$VERSION/Silverside-$VERSION.zip\"" "$FEED_DIR/appcast.xml" | grep -q "sparkle:edSignature=" ||
+    { echo "The feed's item for $VERSION has no signature: $FEED_DIR/appcast.xml"; exit 1; }
+cp "$FEED_DIR/appcast.xml" "$FEED_FILE"
+echo "The feed lists $VERSION: $FEED_FILE. Publish in this order, so that the feed never names a missing file:"
+echo "  git tag -a $VERSION -m $VERSION && git push origin $VERSION"
+echo "  gh release create $VERSION $ZIP --title \"Silverside $VERSION\" --notes-file $NOTES"
+echo "  Commit $FEED_FILE alone, and push main: GitHub Pages publishes the feed."

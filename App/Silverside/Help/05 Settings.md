@@ -7,14 +7,15 @@ Silverside and the `silverside` command line share one settings file, so a chang
 - **Music library** is where encoded albums go, in folders named by the Naming settings.
 - **Rips** is where each rip's WAV files, report, and cover go. Keep it out of the library: music apps would import the WAV files.
 - **After a rip:** encode the disc into the library in the chosen format; keep or delete the rip's WAV files once the album is encoded and verified; add the files to the Music app; eject the disc when every track is verified. MP3 is in the list of formats once the LAME encoder is installed (see Encoding).
-- **Add the files to the Music app** works for every format but FLAC, which Music cannot read. Music adds the files where they are, in the library folder, or copies them into its own folder if "Copy files to Music Media folder when adding to Library" is on in Music's settings. The first time, macOS asks whether Silverside may control Music; the answer is in System Settings › Privacy & Security › Automation. A file renamed later by Update the Library or a name change stays in Music, which follows a moved file on the same disk.
+- **Add the files to Apple's Music app** works for every format but FLAC, which Music cannot read. Music adds the files where they are, in the library folder, or copies them into its own folder if "Copy files to Music Media folder when adding to Library" is on in Music's settings. The first time, macOS asks whether Silverside may control Music; the answer is in System Settings › Privacy & Security › Automation. A file renamed later by Update the Library or a name change stays in Music, which follows a moved file on the same disk.
 - **When a disc goes in, rip it at once:** a disc that goes in while Silverside runs is ripped five seconds after its lookup, if MusicBrainz names its release for certain (an exact match, and not one of several releases unless you chose one for the set) and the disc is not ripped yet. The status bar counts down, with Rip Now and Cancel. Otherwise the disc waits for you, and the status bar says why. A disc already in a drive when Silverside starts is never ripped by itself. With eject after the rip on as well, a set rips with no more than a swap of discs.
 - **Artwork:** the front cover only (saved as `cover.jpg` and embedded in the files), every image in the Cover Art Archive, or none.
 - **Personal use:** Silverside is for archival copies of discs that you own, for your personal use, at your own risk. It rips a disc only while this box is checked. The welcome asks for it first; if you uncheck it, the next rip asks again.
+- **Updates:** check for a new version of Silverside once a day. At its second launch, Silverside asks whether to; this box changes the answer. **Check for Updates…** in the Silverside menu checks at once. An update that arrives during a rip, a repair, or other work waits for the work to end before Silverside installs it and opens again. A copy built from the source code does not check, and has no Check for Updates….
 
 ## Ripping
 
-C2 error flags are a drive's own report of sectors it had trouble with. Silverside re-reads them first. The flags are a hint only; the reads decide.
+**Ask the drive for C2 error flags:** C2 error flags are a drive's own report of sectors it had trouble with. Silverside re-reads them first. The flags are a hint only; the reads decide. A drive that flags nearly every sector of a track says nothing about where the errors are, so its flags are not used for that track, and the log and the report say so.
 
 **Test and copy** reads each track once more after its rip, and keeps the CRC-32 of both reads in the report, as Exact Audio Copy does. It is off by default: the rip already compares reads of every doubtful sector, and the test read takes as long as another read of the disc. Turn it on for a record that EAC's users will recognize.
 
@@ -34,7 +35,7 @@ MP3 needs LAME, a free encoder that Silverside runs as a separate program, becau
 brew install lame
 ```
 
-Until LAME is installed, MP3 is missing from the formats in General and in the welcome, and if MP3 is already the format, its options here are dimmed. Silverside looks for LAME every few seconds while Settings or the welcome is open, so MP3 turns on as soon as the install ends. The options are lame's: a variable bit rate from a quality (0 is the best, about 245 kbit/s), or a constant or average bit rate.
+Until LAME is installed, MP3 is missing from the formats in General and dimmed in the welcome, and if MP3 is already the format, its options here are dimmed. Silverside looks for LAME every few seconds while Settings or the welcome is open, so MP3 turns on as soon as the install ends. The options are lame's: a variable bit rate from a quality (0 is the best, about 245 kbit/s), or a constant or average bit rate.
 
 Every encoded file is decoded again and compared with the audio it was made from before it goes into the library: the rip, or the rip after HDCD decoding, de-emphasis, or DTS decoding.
 

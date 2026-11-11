@@ -202,6 +202,10 @@ private struct AcknowledgmentsSheet: View {
             "finds and decodes the HDCD codes in a rip. Chris Moeller wrote it from Christopher Key's HDCD library, with work by Gumboot and Burt P. Silverside includes it under its BSD license (see License)."
         ),
         (
+            "[Sparkle](https://sparkle-project.org)",
+            "finds and installs Silverside's updates. Silverside includes it under its MIT license (see License)."
+        ),
+        (
             "[Adélaïde Casa](https://adelaide.casa/cdeg/) and [Adam Gashlin](https://extended.graphics)",
             "made CD+EG's graphics public: Adélaïde Casa's notes for the Divacore record, and Adam Gashlin's Compact Disc Extended Graphics page. Silverside's CD+EG rendering code was informed by their work."
         ),
@@ -237,8 +241,9 @@ private struct AcknowledgmentsSheet: View {
     }
 }
 
-/// The notice, the license (the GNU GPL, from the copy of LICENSE in the app's bundle), and the
-/// HDCD decoder's.
+/// The notice, the license (the GNU GPL, from the copy of LICENSE in the app's bundle), the HDCD
+/// decoder's, and Sparkle's (`Licenses/Sparkle.txt`, its LICENSE file, with the licenses of the code
+/// it includes).
 private struct LicenseSheet: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -248,7 +253,16 @@ private struct LicenseSheet: View {
             .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? SilversideLicense.text
         return own.trimmingCharacters(in: .newlines)
             + "\n\n\nThe HDCD decoder from FFmpeg (libavfilter/af_hdcd.c), which Silverside includes:\n\n"
-            + SilversideLicense.hdcdDecoder
+            + SilversideLicense.hdcdDecoder + sparkle
+    }
+
+    private var sparkle: String {
+        guard
+            let text = Bundle.main.url(forResource: "Sparkle", withExtension: "txt")
+                .flatMap({ try? String(contentsOf: $0, encoding: .utf8) })
+        else { return "" }
+        return "\n\n\nSparkle (sparkle-project.org), which Silverside includes to install its updates:\n\n"
+            + text.trimmingCharacters(in: .newlines)
     }
 
     var body: some View {

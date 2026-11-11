@@ -57,6 +57,28 @@ shares. Without a terminal, as in a script, `rip` stops until you agree with
 | `eject` | Ejects the disc from a drive (`-d`), or from every drive (`--all`: CDs, DVDs, and Blu-ray discs). A drive named with `-d` ejects a disc that macOS never recognized, through Disc Recording as `drutil eject` does, or opens its empty tray. A drive that hangs in a read is safer to unplug than to eject. |
 | `license` | Shows the notice and the license (the GNU GPL, version 3 or later), and the code from others that the CLI includes. |
 
+## More options
+
+`silverside help <command>` lists every option. Some that the rest of this
+page does not name:
+
+- `rip --tracks 1,3-5` rips those tracks only (a data track's number saves
+  it); `--release <MusicBrainz ID>` chooses the release, and the choice is kept
+  for the other discs of the release.
+- `rip --offset N` uses that read offset, in samples, for this rip only.
+- `rip --single-pass` reads each track once, with no re-reads (the app's Fast
+  mode); `--no-repair` checks the rip against CTDB but does not repair it;
+  `--no-c2` does not ask the drive for C2 error flags.
+- `rip --offline` looks up nothing: no AccurateRip, CTDB, MusicBrainz, or
+  drive offset list.
+- `rip --eject` ejects the disc after the rip if every track is verified.
+- `drives --clear-offset` removes an offset that `--set-offset` set.
+- `metadata --release <MusicBrainz ID>` chooses the release; `--manual` makes
+  one from the disc's CD-Text, for a disc that MusicBrainz does not know, to
+  fill in with `--set`; `--clear-edits` removes every edit of the disc and of
+  its release's album names.
+- `cdtext --json` prints the CD-Text as JSON.
+
 ## What a rip makes
 
 A rip's folder is in `~/Music/Silverside Rips` (the `rips` setting), named from the
@@ -66,7 +88,7 @@ release, such as `Grateful Dead - Cornell 5-8-77 (Disc 1)`, and holds:
   next track's (a pregap belongs to the track before it)
 - `disc.json`: the rip report, with the TOC and the MusicBrainz release, and
   after `rip --encode`, the encoding: the format, the encoder and its settings,
-  and each track's file (the album folder's `Rip Report (Disc N).json` has it too)
+  and each track's file (the album folder's `Rip Report.json`, or `Rip Report (Disc N).json` in a set, has it too)
 - `cover.jpg`, and `Artwork/` with `--artwork all`
 - `Track NN.suspects`, for tracks that are not verified: the other values that
   reads gave for their suspect samples, for a later `silverside repair`
@@ -157,7 +179,7 @@ MusicBrainz disc titles have a date and venue, titles end with
 tag and leaves the file name; `segueMarks` in the settings changes that.
 It encodes only tracks that AccurateRip or CTDB verified,
 unless you give `--allow-unverified`. The rip's report goes into the album
-folder too, as `Rip Report (Disc 1).json`. Files that are already in the
+folder too, as `Rip Report.json` (`Rip Report (Disc 1).json` for a release of several discs). Files that are already in the
 library stay unless you give `--overwrite`; at a terminal, `rip --encode`
 asks first. An album folder that holds a rip of another release of the same
 name (another edition) is not used either, unless you give `--overwrite`:
@@ -222,7 +244,7 @@ silverside config unset aac.mode                     # back to the default
 | `testAndCopy` | `false` | after each track, read it once more and keep both CRC-32s in the report (`rip --test`) |
 | `encodeAfterRip` | `false` | `rip` encodes when it finishes |
 | `keepRipAfterEncoding` | `false` | keep the WAV files after `rip --encode` |
-| `ejectAfterRip` | `false` | `rip` ejects the disc when every track is verified |
+| `ejectAfterRip` | `false` | `rip` ejects the disc when every track is verified (`--eject`) |
 | `replayGain` | `true` | ReplayGain tags: each track's gain and peak and the album's, as EBU R 128 measures them, for players that level albums, and the dynamic range (DR and loudness range, [docs/DynamicRange.md](DynamicRange.md)); the audio is not changed (`encode --no-replay-gain`) |
 | `addToMusic` | `false` | add the encoded files to the Music app, except FLAC (`--add-to-music`) |
 | `ripOnInsert` | `false` | the app rips a disc when it goes in, if its release is certain and it is not ripped yet |

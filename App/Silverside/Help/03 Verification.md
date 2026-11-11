@@ -40,7 +40,7 @@ Under a track's status, a short line says what the track needed: the sectors tha
 The result banner says what is most likely to help next. In short:
 
 - Clean the disc and rip again. The new rip pools with the first (see [Options for one rip](help:ripping-a-disc#options-for-one-rip)): a track that either rip got accurate is kept.
-- Rip in another drive. Each drive reads damage differently, so two drives together often get what one cannot.
+- Rip in another drive. Each drive reads damage differently, so two drives together often get what one cannot. When every read agreed and the drive reported no errors, the disc itself holds that audio, and the advice does not ask for this; for a CD-R, rip a pressed copy instead.
 - Repair the rip.
 - For a new release, wait, then use Check Again (below).
 - Accept the rip as-is. When nothing verifies a few tracks, listen to them: damage that no drive can read is often a short spot you cannot hear. **Encode…** in the banner after the rip, or on the earlier rip, asks you to accept it, then encodes it into the library as a verified rip is, and the rip's WAV files go unless Settings keep them. The report says that you accepted it and which tracks are not verified, and the rip shows an "Accepted as-is" chip. Check Again can still verify it later.
@@ -51,7 +51,7 @@ Repair, in the toolbar of an earlier rip and in the Disc menu, checks the rip ag
 
 Repair needs CTDB to know the disc. For a disc that CTDB does not know, or that Repair cannot fix, rip it again, best in another drive: a rip reads each sector that disagrees again and again, and checks the tracks against AccurateRip, which Repair does not. A new rip of the disc keeps, without reading them, only the tracks that AccurateRip says an earlier rip got accurate; it reads every other track, also one that only CTDB verified. Stopping it part way is safe: the earlier rip stays as it was until the new one has read every track.
 
-To work on a few bad tracks, put the disc in a free drive (another drive often reads them better) and use Repair, not a rip of those tracks: a rip of some tracks writes into the earlier rip's folder with a report of those tracks only, and CTDB cannot check it.
+To work on a few bad tracks, put the disc in a free drive (another drive often reads them better) and use Repair, not a rip of those tracks: a rip of some tracks writes into the earlier rip's folder with a report of those tracks only. CTDB checks each of those tracks, but cannot check or repair the whole disc.
 
 A rip that CTDB verifies as it is gets its report brought up to date: a rip made offline becomes a verified rip. A rip that the repair changes stays as it was, and the repaired rip goes in a folder of its own next to it ("… repaired"), with its own report, so it can be encoded like any rip.
 
@@ -59,9 +59,9 @@ A rip that CTDB verifies as it is gets its report brought up to date: a rip made
 
 A new release is often in neither AccurateRip nor CTDB at first, so its tracks show as Copied: the reads agree, but no database can confirm them. Other people's rips fill the databases in over the weeks after a release, and CTDB usually has a disc first.
 
-Check Again, in the toolbar of an earlier rip, looks the disc up in both databases again and checks the rip against what they have now. A set's toolbar has it too, for every disc that can use it. The disc does not have to be in a drive: Silverside checks the rip's WAV files, or, after they are deleted, the album's FLAC or Apple Lossless files, which must still decode to exactly the audio that was ripped. The rip's report gets the new results and the date of the check. A match found before is never lost, even if a database cannot be reached.
+Check Again, in the toolbar of an earlier rip, looks the disc up in both databases again and checks the rip against what they have now. A set's toolbar has it too, for every disc that can use it. The disc does not have to be in a drive: Silverside checks the rip's WAV files, or, after they are deleted, the album's lossless files, which must still decode to exactly the audio that was ripped. The rip's report gets the new results and the date of the check. A match found before is never lost, even if a database cannot be reached.
 
-Check Again shows for a rip that is not verified, for one that AccurateRip or CTDB did not have, and for one with tracks AccurateRip did not match, since a second database is a second, independent proof. It cannot check AAC or MP3 files, or a library decoded from HDCD, as these are no longer the ripped audio. When CTDB has the disc now but the rip does not match, Repair can try to fix it. `silverside check` does the same from a terminal.
+Check Again shows for a rip that is not verified, for one that AccurateRip or CTDB did not have, and for one with tracks AccurateRip did not match, since a second database is a second, independent proof. It cannot check AAC or MP3 files, or an album that was decoded (HDCD, DTS) or de-emphasized, as these are no longer the ripped audio. When CTDB has the disc now but the rip does not match, Repair can try to fix it. `silverside check` does the same from a terminal.
 
 ## Multi-disc sets
 

@@ -3,7 +3,7 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
-## 0.9.6 (not released yet)
+## 0.9.6 (2026-11-11)
 
 ### Added
 
@@ -27,6 +27,11 @@ command-line tool.
   table's checkboxes and results, the covers, the chips, and the player. The
   pictures in the cover and release pickers are buttons, so the keyboard
   reaches them too.
+- Silverside updates itself: once a day, if you agree at its second launch
+  (Settings › General changes it), it asks silverside.app for a new version,
+  and Silverside › Check for Updates… asks at once. An update that arrives
+  during a rip or other work waits for the work to end. A copy built from the
+  source code does not check.
 
 ### Changed
 

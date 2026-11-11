@@ -1,8 +1,8 @@
 # App updates with Sparkle
 
-A plan, discussed 2026-11-01. Not started. It comes after the work for a
-notarized release (a Developer ID team in the project, the hardened runtime,
-`notarytool`), which it needs.
+A plan, discussed 2026-11-01 and 2026-11-11. The app's side is done (2026-11-11);
+`make dist` does not yet write the feed. The notarized release that it needs
+is `make dist` (2026-11-04).
 
 ## Decisions
 
@@ -20,54 +20,98 @@ notarized release (a Developer ID team in the project, the hardened runtime,
 - **A DMG with a background,** the window that shows the app and an arrow to
   Applications (see below).
 
-## Still to decide
+Decided 2026-11-11:
 
-- Sparkle is an outside dependency (CLAUDE.md asks to discuss each one). It is
-  MIT-licensed, so it fits the GPL; it needs a credit in Acknowledgments and on
-  the site.
-- One archive or two: the DMG serves both the download button and Sparkle
-  (Sparkle mounts a DMG and finds the app), or a zip for Sparkle beside it.
-  One DMG keeps the release simple.
+- **Sparkle is an agreed dependency** (MIT, so it fits the GPL), 2.10.1 or
+  later; 2.9 is the least for a signed feed. Credit it in NOTICE,
+  Acknowledgments, and the site, and add it to the dependency line in
+  CLAUDE.md.
+- **Only a `make dist` build checks for updates:** the updater starts only
+  when Info.plist has `SilversideArchive`. A build from source, or from `make
+  install-app`, never replaces itself with a released one.
+- **A signed feed:** `SURequireSignedFeed` and `SUVerifyUpdateBeforeExtraction`
+  (the first needs the second). `generate_appcast` signs the feed when the
+  app's Info.plist asks for it; never edit `appcast.xml` by hand after that.
+- **Release notes embedded in the feed,** as Markdown from the version's
+  CHANGELOG entry (Sparkle 2.9, macOS 12), so no notes file needs a
+  signature of its own. This replaces the notes pages below.
+- **No XPC services:** an app without a sandbox does not use them. A build
+  phase after the framework is copied removes them in an archive
+  (`ACTION=install`), from Sparkle's "Removing XPC Services".
+- **The zip first,** as `make dist` makes it now; the DMG follows in a commit
+  of its own, and then serves both the download button and Sparkle (Sparkle
+  mounts a DMG and finds the app).
+- **No delta updates at first** (`--maximum-deltas 0`): the 0.9.5 zip is
+  11 MB. They can come later with no change to the app; `generate_appcast`
+  needs the last few archives beside the new one, which the GitHub Releases
+  keep.
 
 ## Parts
 
-### Sparkle in the app
+### Sparkle in the app (done 2026-11-11)
 
 - Swift Package Manager, the app target only: the engine and the CLI do not
-  link it.
-- One `SPUStandardUpdaterController`; **Check for Updates…** in the app menu;
-  "Automatically check for updates" in Settings › General.
-- Info.plist: `SUFeedURL` = `https://silverside.app/appcast.xml`, and
-  `SUPublicEDKey`. The feed is HTTPS, so it needs no App Transport Security
-  exception. Leave Sparkle's system profile off.
-- **No relaunch during a rip.** "Install and Relaunch" would quit a rip,
-  encoding, or repair in the middle. The delegate's
-  `updater(_:shouldPostponeRelaunchForUpdate:untilInvokingBlock:)` holds the
-  relaunch until the work ends.
-- The site's privacy page gets a line: an update check sends the app's version
-  and the IP address to GitHub Pages.
+  link it. Pinned to an exact version (2.10.1) in the project: Xcode writes
+  no pin for it, because the workspace's `Package.resolved` is SilversideKit's
+  (it changed that file's `originHash` only). A new Sparkle is a change of the
+  version in the project, and of `App/Silverside/Licenses/Sparkle.txt` if its
+  LICENSE changed.
+- `AppUpdater` (in `Model/`): one `SPUStandardUpdaterController`, made only
+  with `SilversideArchive`; **Check for Updates…** after About in the app
+  menu; "Check for updates automatically" in Settings › General, bound to
+  `automaticallyChecksForUpdates` (Sparkle keeps it in the app's defaults). A
+  build from source shows a line that says it does not check.
+- Info.plist: `SUFeedURL` = `https://silverside.app/appcast.xml`,
+  `SUPublicEDKey`, `SURequireSignedFeed`, `SUVerifyUpdateBeforeExtraction`. The
+  feed is HTTPS, so it needs no App Transport Security exception. Sparkle's
+  system profile stays off (its default).
+- **No relaunch during work.** `AppModel.postponeRelaunch` holds "Install and
+  Relaunch" while `hasWorkUnderWay` (a rip or its encoding, a busy drive, a
+  repair, library work, new names or covers, Check Again, a video), says so
+  in an alert, and installs when the work ends.
+- The build phase "Remove Sparkle's XPC services" runs in an archive only:
+  checked 2026-11-11 with an archive, the framework has no `XPCServices` and
+  `codesign --verify --deep --strict` passes. The export with Developer ID
+  signs `Autoupdate` and `Updater.app` again (still to check in a real `make
+  dist`, with notarization).
+- Credits: Acknowledgments, the License sheet (Sparkle's whole LICENSE, with
+  bsdiff's and the others' BSD texts, which a binary must reproduce), NOTICE
+  (and `SilversideLicense.notice`), the site's home page and license page.
+  The privacy page and the help (Settings, the files Silverside keeps) say
+  what a check sends and where an update is kept.
 
 ### The signing key
 
 - Sparkle's `generate_keys` makes an EdDSA key pair. The private key goes in
-  the login Keychain; the public key into Info.plist.
-- **Back up the private key** (`generate_keys -x <file>`), out of the repo.
+  the login Keychain; the public key into Info.plist. With no option it makes
+  a key (or prints the one there); `-p` and `-x` only look one up.
+- **Back up the private key** (`generate_keys -x <file>`), out of the repo; on
+  another Mac, `generate_keys -f <file>` puts it back in the Keychain.
   Without it, the installed apps cannot check an update. (Sparkle can fall
-  back on the Developer ID signature to change keys, but do not count on it.)
+  back on the Developer ID signature to change keys, but do not count on it;
+  with `SUVerifyUpdateBeforeExtraction` that needs a DMG signed with
+  Developer ID, and one update cannot change both the key and the
+  certificate.)
 
-### The feed and the files
+### The feed and the files (done 2026-11-11)
 
 - `appcast.xml` in `docs/site`, published by Pages with the rest of the site.
-- The DMG in a GitHub Release (`gh release create v0.9.3 …`), not in the repo:
-  Pages refuses files over 100 MB, and a binary in Git stays in its history.
-  The feed's links point at the release's files; Sparkle follows GitHub's
-  redirects.
-- `generate_appcast` writes the feed from a folder of the archives: the
-  signature, size, versions, `minimumSystemVersion` 15.0, and delta updates
-  (much smaller downloads), if wanted.
-- Release notes: a page for each version, `docs/site/releases/0.9.3.html`,
-  made from that version's CHANGELOG entry, in the site's style; the feed
-  links to it.
+- The zip (later the DMG) in a GitHub Release (`gh release create 0.9.7 …`;
+  the tags have no "v"), not in the repo: Pages refuses files over 100 MB, and
+  a binary in Git stays in its history. The feed's links point at the
+  release's files; Sparkle follows GitHub's redirects.
+- `make dist` runs `generate_appcast` (the package's copy) on a folder with
+  the feed as it is, the new zip, and its notes: it adds the item (signature,
+  size, versions, `minimumSystemVersion` 15.0), keeps the older items (at
+  most 3, its default), and signs the feed. Tried 2026-11-11 with a throwaway
+  key: an older item stays when its zip is not in the folder, and an app that
+  is not validly signed is refused. With the app's key not the one it signs
+  with, it warns and leaves the enclosure unsigned, so `make dist` checks the
+  key first and the item's `sparkle:edSignature` after.
+- Release notes: the version's CHANGELOG entry, embedded in the feed as
+  Markdown (`--embed-release-notes`, `sparkle:format="markdown"`), not a page
+  for each version.
+- The steps of a release: `Releasing.md`.
 
 ### The CLI inside the app
 
@@ -104,9 +148,9 @@ notarized release (a Developer ID team in the project, the hardened runtime,
 2. Build the DMG.
 3. `notarytool submit --wait`, then `stapler staple`. (Done 2026-11-04, for a
    zip of the app; the DMG takes its place.)
-4. `generate_appcast`.
-5. `gh release create`, with the DMG.
-6. Commit `appcast.xml` and the notes page to `docs/site`, and push `main`.
+4. `generate_appcast`. (Done 2026-11-11.)
+5. `gh release create`, with the DMG. (By hand for now: `Releasing.md`.)
+6. Commit `appcast.xml` to `docs/site`, and push `main`. (By hand.)
 
 Upload before the feed changes: a feed that points at a missing file fails for
 everyone who checks then.

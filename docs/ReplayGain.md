@@ -7,7 +7,9 @@ ReplayGain tags tell a player how much to turn each one up or down to play them
 at the same level. Silverside measures each track and the whole album as the
 broadcast standard EBU R 128 (ITU-R BS.1770) does, and writes five tags: the
 track's gain and peak, the album's gain and peak, and the reference level
-(−18 LUFS). The audio itself is not changed, in any format.
+(−18 LUFS). The audio itself is not changed, in any format. The same pass
+measures the dynamic range, and the setting writes those tags too: see
+[DynamicRange.md](DynamicRange.md).
 
 For a set of several discs, the album is the whole set: when the last disc is
 encoded, every disc gets the album gain over all of them, so a show split across

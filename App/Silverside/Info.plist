@@ -27,5 +27,16 @@
 			</dict>
 		</dict>
 	</dict>
+	<!-- Sparkle: the feed of versions, and the public half of the key that signs the feed and each
+	     update (the private half is in the Keychain of the Mac that runs make dist, and backed up).
+	     Only a build that make dist made checks for updates (AppUpdater). -->
+	<key>SUFeedURL</key>
+	<string>https://silverside.app/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>y9xmISyIi7T8tB18Y3AUBogJU33ELvdA8xGI1VqAJJo=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

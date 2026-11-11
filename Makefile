@@ -148,7 +148,8 @@ open-app:
 		@$(MAKE) install-app && open "$(APP_DIR)/Silverside.app"
 
 # The app as others get it: archived, exported with Developer ID, notarized, stapled, and zipped
-# in build/dist. See scripts/dist.sh for NOTARY_PROFILE, NOTARIZE=0, and ALLOW_DIRTY=1.
+# in build/dist, and added to the update feed (docs/site/appcast.xml). See scripts/dist.sh for
+# NOTARY_PROFILE, NOTARIZE=0, FEED=0, and ALLOW_DIRTY=1, and docs/internal/Releasing.md.
 dist:
 	@scripts/dist.sh
 

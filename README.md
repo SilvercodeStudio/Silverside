@@ -2,7 +2,7 @@
 
 Welcome to Silverside!
 
-<img src="./docs/site/images/icon.png" alt="Silverside.app logo">
+<img src="./docs/site/images/icon.png" alt="Silverside logo; a compact disc on a tile">
 
 Silverside is a CD ripping app for macOS intended to produce secure,
 verified rips of audio CDs, inspired by Exact Audio Copy (EAC) for
@@ -32,12 +32,13 @@ it comes with no warranty (see [LICENSE](LICENSE)).
 - Other supported formats for audio extraction:
   - Proper pre-emphasis handling (these discs are rare and from the early/mid 80s.)
   - DTS-CD - when ffmpeg is installed
-  - DVD-Audio (MLP lossless high-resolution surround) - coming soon
   - CD+G and CD+EG (CDs with graphics, mostly karaoke) - the graphics as a
     `.cdg` file for each track, and as a video of the whole disc
   - Super Audio CD (SACD) extraction is not possible with a standard
     PC CD/DVD/BD drive. The CD layer of hybrid CD/SACD discs can still
     be ripped as standard CD audio.
+  - DVD-Audio (MLP lossless high-resolution surround) - planned for a
+    future 2.0 version.
 
 See also:
 
@@ -54,7 +55,7 @@ course some audio CDs that you want to rip.
 
 Any drive that macOS sees as a CD drive works, however it is connected.
 No Mac that runs macOS 15 came with a built-in optical drive, so in
-practice the drive is external: USB (tested with four drives),
+practice the drive is external: USB (tested with six drives),
 Thunderbolt, or a SATA drive in an enclosure.
 
 Encoding to MP3 requires an [external CLI encoder app](#encoding-to-mp3)
@@ -91,7 +92,7 @@ Apple, so macOS opens them without warnings.
   the discs of a box set can each take their own sleeve.
 - **Encoding** to FLAC, Apple Lossless (ALAC), AAC, AIFF, WAV, or MP3, with
   tags and the cover embedded. Each file is checked after encoding: a
-  lossless file must decoded to exactly the ripped audio. Optionally, the
+  lossless file must decode to exactly the ripped audio. Optionally, the
   files go into the Music app (every format but FLAC).
 - **ReplayGain tags**, measured as EBU R 128 does, so players that read them
   play albums at one volume level. The raw audio samples are not changed.
@@ -149,11 +150,16 @@ Apple, so macOS opens them without warnings.
   rip, to check it.
 - **Rip on insertion**, if you want it: a disc whose release is certain, and
   that is not ripped yet, rips a few seconds after it goes in.
-
-### Known limits
-
+- **Updates.** The app from silverside.app checks for a new version once a
+  day, if you agree, and installs it with [Sparkle](https://sparkle-project.org).
+  A copy built from source does not update itself.
 
 ## Ripping marginal CDs
+
+Silverside will do its best to read accurate data from a marginal CD,
+even if it means reading the troubled areas many times. However, it cannot
+deal with all possible damage, especially to the reflective layer that holds
+the actual data.
 
 Note that it will take longer to rip a marginal CD than a nice
 defect-free CD (no major scratches, gouges, disc rot, etc).
@@ -244,8 +250,8 @@ Note that some of these require an external tool (ffmpeg or LAME) for full use.
 - Multi-disc set handling for metadata
   - Shared names and covers; support for different cover art for individual
     discs or subsets of discs, e.g. "Summer Magic 1985" concert sets.
-- Detailed rip reports in Markdown text and JSON saved to output folders 
-  and internal history data. (EAC log format planned.)
+- Detailed rip reports in Markdown text and JSON saved to output folders
+  and internal history data, and an EAC-style log (`Rip Report.log`).
 - Enhanced CDs - multisession audio discs with PC/Mac extra features
   - mainly from the late 1990's to early 2000s
   - The data can be extracted to a regular folder for examination, and is
@@ -280,7 +286,7 @@ Note that some of these require an external tool (ffmpeg or LAME) for full use.
 - Disc image and CUE sheet generation can be passed to burner apps.
 - DVD, DVD-Audio, Blu-ray and 4K UHD Blu-ray discs are recognized, but are not supported
   for audio extraction.
-- Planned: DVD-Audio extraction (or audio from regular DVDs)
+- Planned for a future version: DVD-Audio extraction
 
 ## Building from source
 
@@ -311,38 +317,21 @@ tools and real discs.
 
 ## Roadmap
 
-### Planned for 1.0
+### Possible later (2.0 or beyond, no date)
 
-- **Search MusicBrainz by album or artist**, for a disc whose TOC it does not
-  know (a burned disc, or a pressing it has not seen), and tag the disc from
-  the release you choose.
 - **Whole-disc images in the CloneCD format** (`.ccd`, `.img`, `.sub`), for
   archiving: every session of a multisession disc such as an Enhanced CD,
   with the full subchannel, which also keeps CD-Text and CD+G graphics.
-- **Mixed-mode discs** (a data track first, then music), checked on real
-  discs, and CUE sheets that describe the whole disc.
-- **Copy-controlled discs:** checked on real discs, with a note in the report
-  when a disc looks copy-controlled.
-- More tests with real discs: CD+G.
-- Signed and notarized release builds, with Add to Music working under
-  macOS's hardened runtime.
-- Polish in the app.
-
-### Possible later (2.0 or beyond, no date)
-
 - Submit to MusicBrainz straight from the app. Today Silverside opens
   MusicBrainz's release editor filled in from the disc, to check and submit
   there.
 - Submit rips to CTDB, also later from a saved rip.
 - CD burning, with verification.
-- CD+G graphics as a `.cdg` file beside the audio.
 - A slower drive speed, for quieter rips, and slowing down by itself on a
   troubled disc.
 - A C2 error-flag check for each drive, kept in its profile.
 - A warning before a lossy encode of a DTS-CD; 
 - DVD-Audio extraction support.
-- An option to leave out silent filler tracks (as before a hidden track at the
-  end).
 - A second metadata source (GnuDB), and AcoustID.
 - Several encodings at once (for example FLAC and AAC).
 - More filename template options, and per-track pregap adjustments.

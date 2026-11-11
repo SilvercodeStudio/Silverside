@@ -115,6 +115,11 @@ final class AppModel {
     var libraryShown = false
     /// The rip whose release the Change Release sheet chooses.
     var changingRelease: RecentRip?
+    /// Updates through Sparkle, in a build that `make dist` made. Made in `init`, so that its
+    /// checks start at launch.
+    @ObservationIgnored private(set) lazy var updater = AppUpdater { [weak self] install in
+        self?.postponeRelaunch(install) ?? false
+    }
 
     /// False until the first look at the drives: a disc in a drive at launch is not ripped by itself.
     @ObservationIgnored private var hasListedDrives = false
@@ -139,6 +144,7 @@ final class AppModel {
         #endif
         refreshDrives()
         refreshRecentRips()
+        _ = updater
         if selection == nil { selection = drives.first.map { .drive($0.id) } }
         watcher = DiskWatcher { [weak self] in self?.discsChanged() }
         observers.append(
@@ -334,6 +340,8 @@ final class AppModel {
 
     /// The newest cover change of an earlier rip, which artwork saved after it waits for.
     @ObservationIgnored private var coverChange: Task<Void, Never>?
+    /// The cover changes under way, which an update's relaunch waits for.
+    @ObservationIgnored private var coverChanges = 0
 
     /// Puts `images` (a release's, but its main front) in the Artwork folders of earlier rips,
     /// their rip folders and album folders, in place of the images there.
@@ -601,6 +609,31 @@ final class AppModel {
 
     func stopRip(_ slot: DriveSlot) {
         slot.rip?.stop()
+    }
+
+    // MARK: Updates
+
+    /// True while the app does work that quitting would cut short: a rip or its encoding, a
+    /// drive's test or data track, a repair, library work, new names or covers in an earlier
+    /// rip's files, Check Again, or a video.
+    var hasWorkUnderWay: Bool {
+        drives.contains { $0.rip?.isRunning == true || $0.isBusy } || repair?.isRunning == true
+            || library?.isRunning == true || !updatingNames.isEmpty || coverChanges > 0 || !checking.isEmpty
+            || !makingVideo.isEmpty
+    }
+
+    /// An update that is ready relaunches the app at once, unless work is under way: then it
+    /// waits for the work to end, and says so.
+    private func postponeRelaunch(_ install: @escaping () -> Void) -> Bool {
+        guard hasWorkUnderWay else { return false }
+        alert = AppAlert(
+            title: "The update waits for the work to end",
+            message: "Silverside installs the update and opens again when the work under way is done.")
+        Task { @MainActor in
+            while hasWorkUnderWay { try? await Task.sleep(for: .seconds(2)) }
+            install()
+        }
+        return true
     }
 
     // MARK: Repairs
@@ -969,7 +1002,9 @@ final class AppModel {
     /// Archive's front cover back.
     func changeCover(of rip: RecentRip, to image: CoverImage?) {
         let settings = settings
+        coverChanges += 1
         coverChange = Task { @MainActor in
+            defer { coverChanges -= 1 }
             do {
                 var cover = image
                 if cover == nil, let release = rip.report.release, !release.isManual {
@@ -1003,7 +1038,9 @@ final class AppModel {
     /// disc embeds the set's cover again. The set's cover and the other discs stay as they are.
     func changeDiscCover(of rip: RecentRip, to image: CoverImage?) {
         let settings = settings
+        coverChanges += 1
         coverChange = Task { @MainActor in
+            defer { coverChanges -= 1 }
             do {
                 let (file, change): (URL, DiscCoverChange) = (rip.file, image.map { .set($0) } ?? .remove)
                 _ = try await Task.detached {

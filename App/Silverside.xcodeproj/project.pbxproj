@@ -10,6 +10,7 @@
 		000000000000000000000201 /* SilversideKit in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000211 /* SilversideKit */; };
 		000000000000000000000202 /* SilversideDarwin in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000212 /* SilversideDarwin */; };
 		000000000000000000000203 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000130 /* LICENSE */; };
+		000000000000000000000204 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000221 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +45,7 @@
 			files = (
 				000000000000000000000201 /* SilversideKit in Frameworks */,
 				000000000000000000000202 /* SilversideDarwin in Frameworks */,
+				000000000000000000000204 /* Sparkle in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -77,6 +79,7 @@
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
 				000000000000000150000000 /* Record the Git commit */,
+				000000000000000160000000 /* Remove Sparkle's XPC services */,
 			);
 			buildRules = (
 			);
@@ -87,6 +90,7 @@
 			packageProductDependencies = (
 				000000000000000000000211 /* SilversideKit */,
 				000000000000000000000212 /* SilversideDarwin */,
+				000000000000000000000221 /* Sparkle */,
 			);
 			productName = Silverside;
 			productReference = 000000000000000000000120 /* Silverside.app */;
@@ -100,7 +104,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2630;
-				LastUpgradeCheck = 2700;
+				LastUpgradeCheck = 2720;
 				TargetAttributes = {
 					000000000000000100000000 = {
 						CreatedOnToolsVersion = 26.3;
@@ -118,6 +122,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				000000000000000000000210 /* XCLocalSwiftPackageReference "../SilversideKit" */,
+				000000000000000000000220 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -160,6 +165,22 @@
 				"if [ \"$ACTION\" = install ]; then",
 				"    /usr/libexec/PlistBuddy -c \"Add :SilversideArchive bool true\" \"$plist\"",
 				"fi",
+				"",
+			);
+		};
+		000000000000000160000000 /* Remove Sparkle's XPC services */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			name = "Remove Sparkle's XPC services";
+			shellPath = /bin/sh;
+			shellScript = (
+				"# Sparkle's XPC services are for a sandboxed app, and Silverside has no sandbox: an archive leaves",
+				"# them out (Sparkle's \"Removing XPC Services\"), and signs the framework again for its new contents.",
+				"[ \"$ACTION\" = install ] || exit 0",
+				"framework=\"$TARGET_BUILD_DIR/$WRAPPER_NAME/Contents/Frameworks/Sparkle.framework\"",
+				"[ -d \"$framework\" ] || { echo \"error: no Sparkle.framework in the app\"; exit 1; }",
+				"rm -rf \"$framework/Versions/B/XPCServices\" \"$framework/XPCServices\"",
+				"codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --preserve-metadata=identifier,entitlements,flags,runtime \"$framework\"",
 				"",
 			);
 		};
@@ -210,6 +231,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 5A35N7A73U;
 				DRIVERKIT_DEPLOYMENT_TARGET = 27.0;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -280,6 +302,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 5A35N7A73U;
 				DRIVERKIT_DEPLOYMENT_TARGET = 27.0;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -314,7 +337,6 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
-				DEVELOPMENT_TEAM = 5A35N7A73U;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -373,7 +395,6 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
-				DEVELOPMENT_TEAM = 5A35N7A73U;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -452,6 +473,17 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		000000000000000000000220 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		000000000000000000000211 /* SilversideKit */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -460,6 +492,11 @@
 		000000000000000000000212 /* SilversideDarwin */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SilversideDarwin;
+		};
+		000000000000000000000221 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000220 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

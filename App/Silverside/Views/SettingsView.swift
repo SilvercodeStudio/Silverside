@@ -94,6 +94,19 @@ struct GeneralSettings: View {
                 Text("\(SilversideLicense.personalUse) Without this agreement, Silverside does not rip a disc.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Updates") {
+                if model.updater.isAvailable {
+                    @Bindable var updater = model.updater
+                    Toggle("Check for updates automatically", isOn: $updater.checksAutomatically)
+                    Text(
+                        "Once a day, Silverside asks silverside.app for the newest version. Check for Updates… in the Silverside menu asks at once."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("This copy was built from its source code, so it does not check for updates.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
         .watchingForLAME($lame)
@@ -390,7 +403,7 @@ struct RippingSettings: View {
             }
             Section("How a rip works") {
                 Text(
-                    "Each track is read once with the drive's offset corrected, and checked against AccurateRip. A track that does not match is read again, and the sectors that differ are re-read until they agree. Then the whole disc is checked against CUETools DB and, if it has errors, repaired with CTDB's data. Fast mode in the toolbar reads each track once, with no re-reads."
+                    "Each track is read once with the drive's offset corrected, and checked against AccurateRip and CTDB's checksum of the track. A track that does not match is read again, and the sectors that differ are re-read until they agree. Then the whole disc is checked against CUETools DB and, if it has errors, repaired with CTDB's data. Fast mode in the toolbar reads each track once, with no re-reads."
                 )
                 .font(.callout).foregroundStyle(.secondary)
             }

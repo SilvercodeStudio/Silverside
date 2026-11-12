@@ -474,6 +474,38 @@ public struct DiscEncoder: Sendable {
         return files
     }
 
+    /// Moves the videos that a rip made in its own folder into the album folder, under the
+    /// album's names, and returns them. A rip that was not encoded gets its video beside it
+    /// (`CDGraphicsVideo.destination`), as a rip that is not verified does until it is
+    /// accepted; without this, its encoding left the video in the rip's folder, which then
+    /// held nothing else. A video of the same picture in the album folder is replaced.
+    func placeRipVideos(of disc: RippedDisc, release: MusicBrainzRelease, in album: URL) throws
+        -> [RipReport.Encoding.Video]
+    {
+        guard !disc.isAlbum, !RippedDisc.overlap(disc.folder, album) else { return [] }
+        let manager = FileManager.default
+        var videos = [RipReport.Encoding.Video]()
+        for picture in [CDGraphicsVideo.Picture.extended, .standard] {
+            // Named as the rip had it when the video was made: its release then, or its folder.
+            let names = [disc.release, release].map {
+                CDGraphicsVideo.fileName(
+                    release: $0, toc: disc.toc, picture: picture, untitled: disc.folder.lastPathComponent)
+            }
+            guard
+                let source = names.map({ disc.folder.appending(path: $0) }).first(where: {
+                    manager.fileExists(atPath: $0.path)
+                })
+            else { continue }
+            let target = album.appending(
+                path: CDGraphicsVideo.fileName(release: release, toc: disc.toc, picture: picture))
+            if manager.fileExists(atPath: target.path) { try manager.removeItem(at: target) }
+            try manager.moveItem(at: source, to: target)
+            log(target.lastPathComponent)
+            videos.append(.init(file: target.lastPathComponent, picture: picture))
+        }
+        return videos
+    }
+
     /// The folder beside a data track's image that holds its files: "Data track" for "Data track.iso".
     static func filesFolder(of image: URL) -> URL {
         image.deletingPathExtension().appending(path: "", directoryHint: .isDirectory)
@@ -1147,6 +1179,12 @@ public struct DiscEncoder: Sendable {
                     encodedFiles.contains { $0.track == copy.track } || silentTracksLeftOut.contains(copy.track)
                 },
                 fromAlbum: disc.isAlbum) : []
+        let ripVideos =
+            if let albumFolder, albumSuffix == nil, !graphicsFiles.isEmpty {
+                try placeRipVideos(of: disc, release: release, in: albumFolder)
+            } else {
+                [RipReport.Encoding.Video]()
+            }
         let encoding = albumFolder.map {
             // Whole seconds, as the report's JSON keeps dates, so the record returned equals the one saved.
             RipReport.Encoding(
@@ -1171,9 +1209,11 @@ public struct DiscEncoder: Sendable {
                     disc.isAlbum ? disc.report : nil,
                     try? RipReport.read(from: album.appending(path: "Rip Report\(discPart).json")),
                 ]
-                let videos = (earlier.compactMap { $0?.encoding?.videos }.first ?? []).filter {
-                    FileManager.default.fileExists(atPath: album.appending(path: $0.file).path)
+                let kept = (earlier.compactMap { $0?.encoding?.videos }.first ?? []).filter { video in
+                    FileManager.default.fileExists(atPath: album.appending(path: video.file).path)
+                        && !ripVideos.contains { $0.picture == video.picture }
                 }
+                let videos = (kept + ripVideos).sorted { $0.picture == .extended && $1.picture != .extended }
                 encoding.videos = videos.isEmpty ? nil : videos
             }
             return encoding

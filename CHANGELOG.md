@@ -27,6 +27,9 @@ command-line tool.
   was ripped again into the same folder; opening the earlier rip showed the
   later one. Each rip now has a row of its own and opens as itself, marked
   "Replaced" when a later rip of the disc took its place.
+- The video of a CD+G disc's graphics stayed in the rip's folder when the rip
+  was not verified and was accepted and encoded later. It now moves into the
+  album folder with the music, as a verified rip's video does.
 
 ## 0.9.6 (2026-11-11)
 

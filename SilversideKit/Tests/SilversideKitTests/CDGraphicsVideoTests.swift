@@ -271,6 +271,41 @@ struct CDGraphicsVideoTests {
         #expect(FileManager.default.fileExists(atPath: url.path))
     }
 
+    /// A rip that was not verified gets its videos beside it; when it is accepted and encoded,
+    /// they move into the album folder, and the album's report records them, so the rip's
+    /// folder can go with its WAV files.
+    @Test func movesARipsVideosIntoItsAlbumWhenEncoded() throws {
+        let (folder, library) = try EncodingTests().makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        try Data(Self.extendedPack(6, [0, 2, 1, 1, 0b111000])).write(to: folder.appending(path: "Track 01.cdg"))
+        try RipReport.update(reportAt: folder.appending(path: "disc.json")) {
+            $0.tracks[0].graphics = .init(file: "Track 01.cdg", extended: true)
+        }
+        var video = CDGraphicsVideo()
+        video.scale = 1
+        let made = try CDGraphicsVideo.Pictures.both.pictures.map {
+            video.picture = $0
+            return try video.write(try RippedDisc(folder: folder))
+        }
+        #expect(made.allSatisfy { $0.deletingLastPathComponent().path == folder.path })
+
+        let disc = try RippedDisc(folder: folder)
+        let (_, record) = try DiscEncoder(format: .flac).encodeWithRecord(disc, into: library)
+        let album = URL(filePath: try #require(record).folder)
+        #expect(made.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
+        let names = made.map(\.lastPathComponent)
+        #expect(names.allSatisfy { FileManager.default.fileExists(atPath: album.appending(path: $0).path) })
+        let expected: [RipReport.Encoding.Video] = [
+            .init(file: names[0], picture: .extended), .init(file: names[1], picture: .standard),
+        ]
+        #expect(record?.videos == expected)
+        #expect(
+            try RipReport.read(from: album.appending(path: "Rip Report (Disc 2).json")).encoding?.videos == expected)
+        // Nothing of them is left in the rip's folder, which can go with the WAV files.
+        let left = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        #expect(!left.contains { $0.hasSuffix(".m4v") }, "\(left)")
+    }
+
     /// A rip's album folder that now holds another edition's album keeps its video: the rip's
     /// goes beside the rip (review of 6d31199).
     @Test func leavesAnotherEditionsVideoAlone() throws {

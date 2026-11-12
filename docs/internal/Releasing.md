@@ -39,9 +39,12 @@ the next version; and how to update Sparkle. The plan behind the updates is in
   the old key and the Developer ID certificate, in a DMG); avoid needing it.
 - **GitHub's CLI:** `brew install gh`, then `gh auth login`. The release page
   on github.com works too.
-- **Python 3** (`python3`; the one with Xcode's command line tools will do).
-  `make dist` makes its own environment for dmgbuild in `build/tools` the
-  first time, from the internet; there is nothing to install by hand.
+- **Python 3.15 or later** (`brew install python`). Xcode's command line
+  tools have Python 3.9, which dmgbuild 1.6.7 refuses (it needs 3.10).
+  `make dist` uses the first `python3` on the PATH, or `PYTHON=<path>`, and
+  stops before the archive if it is older. It makes its own environment for
+  dmgbuild in `build/tools` the first time, from the internet; there is
+  nothing else to install by hand.
 
 Every step of a release that publishes something (a tag, a push, `gh`, the
 feed's commit) is done by hand, by the maintainer, never by an agent.

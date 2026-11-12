@@ -305,6 +305,10 @@ make install-cli-local    # only the silverside command-line tool, copied into ~
 make test                 # the engine's tests
 ```
 
+The build needs no Python. The helper scripts (`make dist`, and the scripts
+that draw the icon and the disk image's background) need Python 3.15 or
+later, such as from `brew install python`; the one with Xcode is too old.
+
 The app from `make install-app` has the command-line tool inside it, as the
 released app does: Silverside › Install Command Line Tool… links it. A Debug
 build run from Xcode does not have it. Open `Silverside.xcworkspace` in Xcode

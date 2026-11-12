@@ -11,6 +11,8 @@
 #                   xcrun notarytool store-credentials silverside --apple-id ... --team-id ...
 #   NOTARIZE=0      stop after the export and its checks: nothing goes to Apple, and no feed.
 #   FEED=0          stop after the disk image: the feed stays as it is.
+#   PYTHON          the Python that makes dmgbuild's environment (default: python3), 3.15 or
+#                   later; Xcode's is 3.9, which dmgbuild refuses.
 #   ALLOW_DIRTY=1   build with changes that are not committed (the About window then shows
 #                   the commit with "-dirty"). A release is of a commit, so this is for tries,
 #                   and such a build gets no feed.
@@ -30,6 +32,7 @@ RELEASES=https://github.com/SilvercodeStudio/Silverside/releases/download
 # their own under build/tools, made at the first use.
 DMGBUILD_PACKAGES="dmgbuild==1.6.7 ds_store==1.3.3 mac_alias==2.2.3"
 DMGBUILD_ENV=build/tools/dmgbuild-1.6.7
+PYTHON="${PYTHON:-python3}"
 
 DIRTY=0
 if [ -n "$(git status --porcelain)" ]; then
@@ -38,6 +41,15 @@ if [ -n "$(git status --porcelain)" ]; then
         exit 1
     fi
     DIRTY=1
+fi
+
+# Before the archive, so a missing Python does not cost a build. dmgbuild needs 3.10; the project
+# asks for 3.15.
+if [ "${NOTARIZE:-1}" != 0 ] && ! "$PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 15))' 2>/dev/null; then
+    found=$("$PYTHON" --version 2>/dev/null || true)
+    echo "make dist needs Python 3.15 or later for dmgbuild; $PYTHON is ${found:-not found}."
+    echo "Install it with brew install python, or name another with PYTHON=<path>."
+    exit 1
 fi
 
 rm -rf "$DIST"
@@ -88,7 +100,7 @@ fi
 if [ ! -x "$DMGBUILD_ENV/bin/dmgbuild" ]; then
     echo "Installing dmgbuild in $DMGBUILD_ENV…"
     rm -rf "$DMGBUILD_ENV"
-    python3 -m venv "$DMGBUILD_ENV"
+    "$PYTHON" -m venv "$DMGBUILD_ENV"
     # shellcheck disable=SC2086 # one argument for each package
     "$DMGBUILD_ENV/bin/pip" install -q --disable-pip-version-check $DMGBUILD_PACKAGES
 fi

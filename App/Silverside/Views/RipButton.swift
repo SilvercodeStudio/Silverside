@@ -96,7 +96,7 @@ struct RipButton: View {
         guard let rip = slot.rip, let report = rip.report else { return }
         if let recent = model.recentRips.first(where: { $0.report.toc == report.toc && $0.report.date == report.date })
         {
-            model.selection = .rip(recent.file)
+            model.selection = .rip(recent.id)
         } else if let folder = rip.folder {
             model.revealInFinder(folder)
         }

@@ -173,7 +173,7 @@ struct MainWindow: View {
                         try? await Task.sleep(for: .seconds(1))
                         guard let rip = model.recentRips.first(where: { recentTitle.map($0.title.contains) ?? true })
                         else { return }
-                        model.selection = .rip(rip.file)
+                        model.selection = .rip(rip.id)
                         if UserDefaults.standard.bool(forKey: "repair") { model.startRepair(rip) }
                         // `-searchMusicBrainz 1` opens the MusicBrainz search for it.
                         if UserDefaults.standard.bool(forKey: "searchMusicBrainz") {
@@ -206,10 +206,11 @@ struct DetailView: View {
                 } else if let set = model.selectedSet {
                     SetView(ripSet: set)
                 } else if let rip = model.selectedRip, rip.isMissing {
-                    MissingRipView(rip: rip).id(rip.file)
+                    MissingRipView(rip: rip).id(rip.id)
                 } else if let rip = model.selectedRip {
                     ResultsView(folder: rip.folder, report: rip.report, hasAudio: rip.hasAudio, reportFile: rip.file)
-                        .id(rip.file)
+                        // A new view when the rip's report moves, as after Change Release.
+                        .id("\(rip.id) \(rip.file.path)")
                 } else if model.drives.isEmpty {
                     NoDriveView()
                 } else {
@@ -306,29 +307,42 @@ struct SidebarView: View {
                 }
             }
             Section("Recent Rips") {
-                if model.recentRips.isEmpty {
+                // A rip whose library is offline keeps its place, so a NAS not mounted yet does
+                // not make the newest rips look gone.
+                let rips = model.allRips.filter { !$0.isMissing || $0.isOffline }
+                if rips.isEmpty {
                     Text("No rips yet").foregroundStyle(.secondary)
                 }
-                ForEach(model.recentRips.prefix(Self.recentCount)) { rip in
-                    SidebarRow(
-                        title: rip.title, subtitle: rip.subtitle,
-                        systemImage: rip.isVerified ? "checkmark.circle" : "exclamationmark.triangle",
-                        tone: rip.isVerified ? .good : .warning, status: rip.isVerified ? "Verified" : "Not verified"
-                    )
-                    .tag(SidebarItem.rip(rip.file))
-                    .help(rip.details)
-                    .contextMenu {
-                        Button("Show in Finder") { model.revealInFinder(rip.folder) }
-                        Button("Edit Notes…") { model.notesRip = rip }
-                        Button("Change Release…") { model.changingRelease = rip }
-                            .disabled(!model.canChangeRelease(rip))
-                        Divider()
-                        Button("Move to Trash…") { model.moveToTrash(rip) }.disabled(!model.canMoveToTrash(rip))
+                ForEach(rips.prefix(Self.recentCount)) { rip in
+                    if rip.isOffline {
+                        SidebarRow(
+                            title: rip.title, subtitle: rip.subtitle, systemImage: "externaldrive.badge.xmark",
+                            tone: .neutral, status: "Offline"
+                        )
+                        .tag(SidebarItem.rip(rip.id))
+                        .help(
+                            "Its folder cannot be reached now: \((rip.folder.path as NSString).abbreviatingWithTildeInPath)"
+                        )
+                    } else {
+                        SidebarRow(
+                            title: rip.title, subtitle: rip.subtitle,
+                            systemImage: rip.isVerified ? "checkmark.circle" : "exclamationmark.triangle",
+                            tone: rip.isVerified ? .good : .warning,
+                            status: rip.isVerified ? "Verified" : "Not verified"
+                        )
+                        .tag(SidebarItem.rip(rip.id))
+                        .help(rip.details)
+                        .contextMenu {
+                            Button("Show in Finder") { model.revealInFinder(rip.folder) }
+                            Button("Edit Notes…") { model.notesRip = rip }
+                            Button("Change Release…") { model.changingRelease = rip }
+                                .disabled(!model.canChangeRelease(rip))
+                            Divider()
+                            Button("Move to Trash…") { model.moveToTrash(rip) }.disabled(!model.canMoveToTrash(rip))
+                        }
                     }
                 }
-                if model.recentRips.count > Self.recentCount || !model.missingRips.isEmpty
-                    || model.selection == .history
-                {
+                if rips.count > Self.recentCount || !model.missingRips.isEmpty || model.selection == .history {
                     Label("All Rips (\(model.allRips.count))", systemImage: "clock")
                         .tag(SidebarItem.history)
                         .help("Every rip Silverside knows, in a table you can search and sort")

@@ -382,17 +382,17 @@ struct SetView: View {
             .width(min: 140, ideal: 220)
             TableColumn("") { row in
                 if row.number == nil, let disc = row.disc {
-                    Button("Show") { model.selection = .rip(disc.file) }.buttonStyle(.link)
+                    Button("Show") { model.showRip(at: disc.file) }.buttonStyle(.link)
                 }
             }
             .width(60)
         }
         .contextMenu(forSelectionType: SetRow.ID.self) { ids in
             if let file = file(ofDiscIn: ids) {
-                Button("Show Disc") { model.selection = .rip(file) }
+                Button("Show Disc") { model.showRip(at: file) }
             }
         } primaryAction: { ids in
-            if let file = file(ofDiscIn: ids) { model.selection = .rip(file) }
+            if let file = file(ofDiscIn: ids) { model.showRip(at: file) }
         }
         .alternatingRowBackgrounds(.disabled)
     }

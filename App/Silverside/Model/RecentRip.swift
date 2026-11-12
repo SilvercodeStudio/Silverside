@@ -17,7 +17,18 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     /// True when the rip is only in the history: its files were moved or deleted (`RipHistory`).
     /// `folder` and `file` are where they were last seen.
     var isMissing = false
-    var id: URL { file }
+    /// True when the place where the rip was last seen cannot be reached now: the library's
+    /// folder is not there, or its volume is not mounted (a NAS not mounted yet). Its files may
+    /// well be there, so it is shown as offline, not as moved or deleted. Implies `isMissing`.
+    var isOffline = false
+    /// True when another rip of the disc is at the place where this one was last seen: the disc
+    /// was ripped again into the same folder, or encoded again into the same album. Implies
+    /// `isMissing`.
+    var isReplaced = false
+    /// The rip's key in the history (`RipHistory.key`): its disc, and when it was ripped and
+    /// repaired. Not its report's place: a disc ripped again into the same folder leaves the
+    /// earlier rip in the history at that place, and a rip keeps its key when its album moves.
+    let id: String
 
     /// A rip in the rips folder.
     init(folder: URL, report: RipReport) {
@@ -25,6 +36,7 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         file = folder.appending(path: "disc.json")
         self.report = report
         hasAudio = true
+        id = RipHistory.key(of: report, file: file)
     }
 
     /// A report kept in the library, next to the encoded files.
@@ -33,17 +45,24 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         self.file = file
         self.report = report
         hasAudio = false
+        id = RipHistory.key(of: report, file: file)
     }
 
     /// A rip as the history has it: a rip in the rips folder, a report kept in the library next
     /// to the encoded files, or where its report was last seen, there or not. Its names are its
     /// own edits, with those kept for its release on top.
-    init(entry: RipHistory.Entry, isMissing: Bool, store: ReleaseEditsStore) {
+    init(
+        entry: RipHistory.Entry, isMissing: Bool, isOffline: Bool = false, isReplaced: Bool = false,
+        store: ReleaseEditsStore
+    ) {
         file = entry.url
         folder = entry.url.deletingLastPathComponent()
         report = entry.report
         hasAudio = entry.hasAudio
-        self.isMissing = isMissing
+        self.isMissing = isMissing || isOffline || isReplaced
+        self.isOffline = isOffline
+        self.isReplaced = isReplaced
+        id = RipHistory.key(of: entry.report, file: entry.url)
         if let release = report.release {
             names =
                 MetadataEdits.current(
@@ -54,7 +73,7 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     }
 
     /// The rip's key in the history.
-    var historyKey: String { RipHistory.key(of: report, file: file) }
+    var historyKey: String { id }
 
     /// The album, with the disc's number in a set: "Europe '72 (Disc 2)".
     var title: String {
@@ -66,7 +85,11 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     var artist: String { names.albumArtist ?? report.release?.artist ?? "" }
     var isVerified: Bool { report.isVerified }
     /// Where the rip is: its folder with the audio, or the library with its encoded files.
-    var location: String { isMissing ? "Moved or deleted" : hasAudio ? "Rips folder" : "Library" }
+    var location: String {
+        isOffline
+            ? "Offline"
+            : isReplaced ? "Replaced" : isMissing ? "Moved or deleted" : hasAudio ? "Rips folder" : "Library"
+    }
     var driveName: String { "\(report.drive.vendor) \(report.drive.product)" }
     /// What the disc is: "CD", "Enhanced CD", "HDCD, decoded".
     var medium: String { DiscLogo.medium(of: report) ?? "" }
@@ -102,7 +125,15 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         parts.append(report.date.formatted(date: .abbreviated, time: .omitted))
         let unverified = report.tracks.count - verifiedCount
         if unverified > 0 { parts.append("\(unverified) unverified" + (report.accepted != nil ? ", accepted" : "")) }
-        if isMissing { parts.append("moved or deleted") } else if !hasAudio { parts.append("encoded") }
+        if isOffline {
+            parts.append("offline")
+        } else if isReplaced {
+            parts.append("replaced")
+        } else if isMissing {
+            parts.append("moved or deleted")
+        } else if !hasAudio {
+            parts.append("encoded")
+        }
         return parts.joined(separator: " · ")
     }
 
@@ -115,7 +146,7 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     /// elsewhere (a library folder used before), and those whose files are gone, as missing.
     /// An album report that has not changed since the history kept it is not read again, so a
     /// library on a NAS costs only its folder listings.
-    static func scan(rips: URL, library: URL, history: RipHistory) -> (present: [RecentRip], missing: [RecentRip]) {
+    static func scan(rips: URL, library: URL, history: RipHistory) -> Found {
         let entries = history.entries()
         let found = scan(rips: rips, library: library, history: history, known: RipHistory.byFile(entries))
         var keys = Set<String>()
@@ -125,7 +156,13 @@ nonisolated struct RecentRip: Identifiable, Sendable {
             present.append(entry)
         }
         var missing = [RipHistory.Entry]()
+        var offline = [RipHistory.Entry]()
+        var places = Places(rips: rips, library: library)
         for (key, entry) in entries where !keys.contains(key) {
+            if places.isOffline(entry.url) {
+                offline.append(entry)
+                continue
+            }
             // There only if the report at that place is still this rip's: a later rip of the disc
             // can have taken its folder. A report that changed is read again, for its new names.
             guard let now = history.current(entry, key: key) else {
@@ -135,28 +172,88 @@ nonisolated struct RecentRip: Identifiable, Sendable {
             if now != entry { _ = try? history.record(now) }
             present.append(now)
         }
-        let store = ReleaseEditsStore()
-        return (
-            present.map { RecentRip(entry: $0, isMissing: false, store: store) }.sorted {
-                $0.report.date > $1.report.date
-            },
-            missing.map { RecentRip(entry: $0, isMissing: true, store: store) }.sorted {
-                $0.report.date > $1.report.date
+        return Found(present: present, offline: offline, missing: missing)
+    }
+
+    /// The history's rips, in three lists, the newest first: those found, those whose place
+    /// cannot be reached now, and those moved, deleted, or replaced (`isReplaced`: a rip found
+    /// is at their place).
+    struct Found {
+        var present: [RecentRip]
+        var offline: [RecentRip]
+        var missing: [RecentRip]
+
+        init(present: [RipHistory.Entry], offline: [RipHistory.Entry], missing: [RipHistory.Entry]) {
+            let store = ReleaseEditsStore()
+            func rips(_ entries: [RipHistory.Entry], missing: Bool, offline: Bool) -> [RecentRip] {
+                entries.map { RecentRip(entry: $0, isMissing: missing, isOffline: offline, store: store) }
+                    .sorted { $0.report.date > $1.report.date }
             }
-        )
+            self.present = rips(present, missing: false, offline: false)
+            self.offline = rips(offline, missing: true, offline: true)
+            let places = Set(present.map { $0.url.standardizedFileURL.path })
+            self.missing = missing.map {
+                RecentRip(
+                    entry: $0, isMissing: true, isReplaced: places.contains($0.url.standardizedFileURL.path),
+                    store: store)
+            }
+            .sorted { $0.report.date > $1.report.date }
+        }
+    }
+
+    /// Which places cannot be reached now: the rips folder or the library when its folder is not
+    /// there, and a volume under /Volumes that is not mounted. Each is looked at once.
+    struct Places {
+        private let roots: [String]
+        private var reachable: [String: Bool] = [:]
+
+        init(rips: URL, library: URL) {
+            roots = [rips, library].map { $0.standardizedFileURL.path }
+        }
+
+        mutating func isOffline(_ file: URL) -> Bool {
+            let path = file.standardizedFileURL.path
+            if let root = roots.first(where: { path.hasPrefix($0 + "/") }), !isReachable(root, volume: false) {
+                return true
+            }
+            let parts = path.split(separator: "/")
+            guard parts.count > 2, parts[0] == "Volumes" else { return false }
+            return !isReachable("/Volumes/\(parts[1])", volume: true)
+        }
+
+        /// A folder that exists, or, with `volume`, a folder that is a mounted volume: an empty
+        /// folder can stay at a NAS's mount point after it is gone.
+        private mutating func isReachable(_ path: String, volume: Bool) -> Bool {
+            if let known = reachable[path] { return known }
+            let url = URL(filePath: path, directoryHint: .isDirectory)
+            let found =
+                volume
+                ? (try? url.resourceValues(forKeys: [.isVolumeKey]))?.isVolume == true
+                : FileManager.default.fileExists(atPath: path)
+            reachable[path] = found
+            return found
+        }
     }
 
     /// The history's rips without a look at their files, for the moment before a scan ends.
-    /// A rip in the rips folder or the library counts as there, and one elsewhere as missing.
-    static func remembered(rips: URL, library: URL, history: RipHistory) -> (present: [RecentRip], missing: [RecentRip])
-    {
+    /// A rip in the rips folder or the library counts as there, one whose place cannot be
+    /// reached as offline, and one elsewhere as missing.
+    static func remembered(rips: URL, library: URL, history: RipHistory) -> Found {
         let folders = [rips, library].map { $0.standardizedFileURL.path + "/" }
-        let store = ReleaseEditsStore()
-        let all = history.entries().values.map { entry in
-            RecentRip(entry: entry, isMissing: !folders.contains { entry.file.hasPrefix($0) }, store: store)
+        var places = Places(rips: rips, library: library)
+        var present = [RipHistory.Entry]()
+        var offline = [RipHistory.Entry]()
+        var missing = [RipHistory.Entry]()
+        for entry in history.entries().values {
+            if places.isOffline(entry.url) {
+                offline.append(entry)
+            } else if folders.contains(where: { entry.file.hasPrefix($0) }) {
+                present.append(entry)
+            } else {
+                missing.append(entry)
+            }
         }
-        .sorted { $0.report.date > $1.report.date }
-        return (all.filter { !$0.isMissing }, all.filter(\.isMissing))
+        return Found(present: present, offline: offline, missing: missing)
     }
 
     /// The rips in the rips folder, and the reports in the library's album folders. A rip that

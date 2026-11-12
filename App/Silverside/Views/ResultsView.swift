@@ -581,7 +581,7 @@ struct ResultsView: View {
                 }
                 if let notes = report.notes {
                     Button {
-                        model.notesRip = model.allRips.first { $0.file == recentRip.file } ?? recentRip
+                        model.notesRip = model.rip(at: recentRip.file) ?? recentRip
                     } label: {
                         Label(notes, systemImage: "note.text").font(.callout).foregroundStyle(.secondary)
                             .multilineTextAlignment(.leading).lineLimit(4)
@@ -608,7 +608,7 @@ struct ResultsView: View {
                             .help("The whole set: each disc's state, the album's names, and the work left")
                     }
                     if let release = report.release, release.isManual {
-                        let rip = model.allRips.first { $0.file == recentRip.file } ?? recentRip
+                        let rip = model.rip(at: recentRip.file) ?? recentRip
                         Button(release.isCustomSet ? "Change Set…" : "Part of a Set…") {
                             model.customSetTarget = .rip(rip)
                         }
@@ -619,7 +619,7 @@ struct ResultsView: View {
                     }
                     if report.release != nil {
                         // The model's rip knows whether its files are still there.
-                        let rip = model.allRips.first { $0.file == recentRip.file } ?? recentRip
+                        let rip = model.rip(at: recentRip.file) ?? recentRip
                         Button("Change Release…") { model.changingRelease = rip }
                             .disabled(!model.canChangeRelease(rip))
                             .help(

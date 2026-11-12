@@ -29,7 +29,7 @@ struct HistoryView: View {
                 Text("Rip History").font(.title2.weight(.semibold))
                 Text(summary).foregroundStyle(.secondary)
                 Spacer()
-                if !model.missingRips.isEmpty {
+                if model.missingRips.contains(where: { !$0.isReplaced }) {
                     Button("Look for Moved Rips…") { model.locateMissingRips() }
                         .help(
                             "Choose a folder, such as a NAS, where moved albums or rips are. Silverside keeps their new places."
@@ -54,11 +54,15 @@ struct HistoryView: View {
                 .width(min: 80, ideal: 200)
             }
             .alternatingRowBackgrounds(.disabled)
-            .contextMenu(forSelectionType: URL.self) { files in
-                if let file = files.first, let rip = model.allRips.first(where: { $0.file == file }) {
-                    Button("Show Results") { model.selection = .rip(rip.file) }
+            .contextMenu(forSelectionType: String.self) { ids in
+                if let id = ids.first, let rip = model.allRips.first(where: { $0.id == id }) {
+                    Button("Show Results") { model.selection = .rip(rip.id) }
                     Button("Edit Notes…") { model.notesRip = rip }
-                    if rip.isMissing {
+                    if rip.isOffline {
+                        // Its files may well be there: nothing to look for or forget.
+                    } else if rip.isReplaced {
+                        Button("Remove from History") { model.forget(rip) }
+                    } else if rip.isMissing {
                         Button("Look for Moved Rips…") { model.locateMissingRips() }
                         Button("Remove from History") { model.forget(rip) }
                     } else {
@@ -69,8 +73,8 @@ struct HistoryView: View {
                         Button("Move to Trash…") { model.moveToTrash(rip) }.disabled(!model.canMoveToTrash(rip))
                     }
                 }
-            } primaryAction: { files in
-                if let file = files.first { model.selection = .rip(file) }
+            } primaryAction: { ids in
+                if let id = ids.first { model.selection = .rip(id) }
             }
         }
         .navigationTitle("Rip History")
@@ -86,7 +90,11 @@ struct HistoryView: View {
         let unverified = all.filter { !$0.isVerified }.count
         var text = Format.count(all.count, "rip")
         if unverified > 0 { text += ", \(unverified) not verified" }
-        if !model.missingRips.isEmpty { text += ", \(model.missingRips.count) moved or deleted" }
+        if !model.offlineRips.isEmpty { text += ", \(model.offlineRips.count) offline" }
+        let replaced = model.missingRips.filter(\.isReplaced).count
+        let moved = model.missingRips.count - replaced
+        if replaced > 0 { text += ", \(replaced) replaced" }
+        if moved > 0 { text += ", \(moved) moved or deleted" }
         if !model.historySearch.isEmpty { text += " · \(Format.count(rows.count, "match", plural: "matches"))" }
         return text
     }

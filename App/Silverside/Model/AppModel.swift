@@ -7,7 +7,9 @@ import SilversideKit
 /// What the sidebar can select: a drive, or an earlier rip.
 enum SidebarItem: Hashable {
     case drive(String)
-    case rip(URL)
+    /// An earlier rip, by its key in the history (`RecentRip.id`). `AppModel.showRip(at:)`
+    /// finds the rip whose report is at a file.
+    case rip(String)
     /// Every earlier rip, in a table.
     case history
     /// Every multi-disc set, in a table.
@@ -47,6 +49,11 @@ final class AppModel {
     private(set) var missingRips: [RecentRip] = [] {
         didSet { listsChanged() }
     }
+    /// Rips whose place cannot be reached now (`RecentRip.isOffline`): a library on a NAS that is
+    /// not mounted. A scan when a volume is mounted finds them again.
+    private(set) var offlineRips: [RecentRip] = [] {
+        didSet { listsChanged() }
+    }
     /// Every rip in the history, there or not, the newest first. Kept, not worked out at each
     /// use: the history's table and the sidebar read it for every change.
     private(set) var allRips: [RecentRip] = []
@@ -59,7 +66,7 @@ final class AppModel {
 
     private func listsChanged() {
         listsVersion += 1
-        allRips = (recentRips + missingRips).sorted { $0.report.date > $1.report.date }
+        allRips = (recentRips + offlineRips + missingRips).sorted { $0.report.date > $1.report.date }
         sets = RipSet.sets(
             in: recentRips.map { .init(folder: $0.folder, file: $0.file, report: $0.report, hasAudio: $0.hasAudio) },
             editsStore: ReleaseEditsStore()
@@ -75,7 +82,7 @@ final class AppModel {
     var historyOrder = [KeyPathComparator(\RecentRip.date, order: .reverse)]
     var setsSearch = ""
     var setsOrder = [KeyPathComparator(\RipSet.lastRipped, order: .reverse)]
-    var historySelection: URL?
+    var historySelection: String?
     var setsSelection: String?
     /// True when Find (⌘F) asks the table on screen to put the insertion point in its search field.
     var wantsSearchField = false
@@ -127,6 +134,8 @@ final class AppModel {
     @ObservationIgnored private var hasListedDrives = false
     @ObservationIgnored private var watcher: DiskWatcher?
     @ObservationIgnored private var observers: [any NSObjectProtocol] = []
+    /// The scan of the earlier rips that a volume's mount or unmount asks for, a moment later.
+    @ObservationIgnored private var volumeScan: Task<Void, Never>?
 
     init() {
         settings = (try? Settings.load()) ?? Settings()
@@ -155,6 +164,35 @@ final class AppModel {
             ) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refreshDrives() }
             })
+        // A NAS mounted after launch, or a disk unplugged, changes which rips are there.
+        for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {
+            observers.append(
+                NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) {
+                    [weak self] notification in
+                    let volume = notification.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL
+                    MainActor.assumeIsolated { self?.volumeChanged(volume) }
+                })
+        }
+    }
+
+    /// Scans the earlier rips again when a volume that holds the rips folder, the library, or a
+    /// rip not found comes or goes. Several shares of a NAS mount together, and SMB can connect
+    /// again just after, so the scan waits a moment for the last of them.
+    private func volumeChanged(_ volume: URL?) {
+        if let volume {
+            let root = volume.standardizedFileURL.path
+            let places =
+                [settings.ripsURL, settings.libraryURL].map(\.standardizedFileURL.path)
+                + (offlineRips + missingRips).map(\.file.path)
+            guard places.contains(where: { $0 == root || $0.hasPrefix(root.hasSuffix("/") ? root : root + "/") })
+            else { return }
+        }
+        volumeScan?.cancel()
+        volumeScan = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.refreshRecentRips()
+        }
     }
 
     /// The drive that the sidebar selects, if any.
@@ -190,15 +228,27 @@ final class AppModel {
     private func exists(_ item: SidebarItem) -> Bool {
         switch item {
         case .drive(let id): drives.contains { $0.id == id }
-        case .rip(let url): allRips.contains { $0.file == url }
+        case .rip(let id): allRips.contains { $0.id == id }
         case .history, .sets: true
         case .set(let id): sets.contains { $0.releaseID == id }
         }
     }
 
     var selectedRip: RecentRip? {
-        guard case .rip(let url) = selection else { return nil }
-        return recentRips.first { $0.file == url } ?? missingRips.first { $0.file == url }
+        guard case .rip(let id) = selection else { return nil }
+        return allRips.first { $0.id == id }
+    }
+
+    /// The rip whose report is at `file` now: the one there, before an earlier rip of the disc
+    /// that the history keeps at the same place.
+    func rip(at file: URL) -> RecentRip? {
+        recentRips.first { $0.file == file } ?? offlineRips.first { $0.file == file }
+            ?? missingRips.first { $0.file == file }
+    }
+
+    /// Shows the rip whose report is at `file`.
+    func showRip(at file: URL) {
+        if let rip = rip(at: file) { selection = .rip(rip.id) }
     }
 
     /// The earlier rips of a disc that still have their audio, by its TOC: the pool for a new rip or a repair.
@@ -721,7 +771,7 @@ final class AppModel {
             guard let self else { return }
             refreshRecentRips { [weak self] in
                 // The repaired rip, or the rip with its new report, is what to look at now.
-                if let folder = run.reportFolder { self?.selection = .rip(folder.appending(path: "disc.json")) }
+                if let folder = run.reportFolder { self?.showRip(at: folder.appending(path: "disc.json")) }
             }
         }
     }
@@ -890,6 +940,8 @@ final class AppModel {
 
     /// True after the first look through the rips folder and the library.
     @ObservationIgnored private var hasScannedRips = false
+    /// The newest scan: an older one that ends after it does not replace its lists.
+    @ObservationIgnored private var scanNumber = 0
 
     /// Looks through the rips folder and the library again. The first time, the history's rips
     /// show at once, since a library on a NAS can take some seconds to list.
@@ -898,25 +950,31 @@ final class AppModel {
         let library = settings.libraryURL
         let history = history
         let isFirst = !hasScannedRips
+        scanNumber += 1
+        let number = scanNumber
         workCount += 1
         Task.detached(priority: .utility) {
             if isFirst {
                 let rips = RecentRip.remembered(rips: folder, library: library, history: history)
                 await MainActor.run {
                     guard !self.hasScannedRips else { return }
-                    self.recentRips = rips.present
-                    self.missingRips = rips.missing
+                    self.show(rips)
                 }
             }
             let rips = RecentRip.scan(rips: folder, library: library, history: history)
             await MainActor.run {
                 self.workCount -= 1
                 self.hasScannedRips = true
-                self.recentRips = rips.present
-                self.missingRips = rips.missing
+                if number == self.scanNumber { self.show(rips) }
                 completion?()
             }
         }
+    }
+
+    private func show(_ rips: RecentRip.Found) {
+        recentRips = rips.present
+        offlineRips = rips.offline
+        missingRips = rips.missing
     }
 
     /// Looks for moved rips in a folder the user chooses, such as a NAS, and keeps their new places.
@@ -927,7 +985,8 @@ final class AppModel {
         panel.message = "Choose the folder that has the moved albums or rips. Silverside looks up to six folders deep."
         panel.prompt = "Look Here"
         guard panel.runModal() == .OK, let folder = panel.url else { return }
-        let keys = Set(missingRips.map(\.historyKey))
+        // A replaced rip is not looked for: another rip of the disc is at its place.
+        let keys = Set(missingRips.filter { !$0.isReplaced }.map(\.historyKey))
         let history = history
         workCount += 1
         Task.detached(priority: .userInitiated) {
@@ -947,7 +1006,7 @@ final class AppModel {
     /// Takes a missing rip out of the history.
     func forget(_ rip: RecentRip) {
         try? history.forget(key: rip.historyKey)
-        if case .rip(let url) = selection, url == rip.file { selection = .history }
+        if selection == .rip(rip.id) { selection = .history }
         refreshRecentRips()
     }
 
@@ -1113,7 +1172,6 @@ final class AppModel {
             libraryShown = true
             run.start(settings: settings, cover: nil) { [self] in
                 if run.changedReport != nil, let leavesSet { try? CustomSetStore().remove(leavesSet) }
-                if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
                 coverVersion += 1
                 refreshRecentRips()
             }
@@ -1171,7 +1229,6 @@ final class AppModel {
                         message: "The earlier rip of disc \(position) could not leave the set. The log says why.")
                 }
             }
-            if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
             coverVersion += 1
             refreshRecentRips()
         }
@@ -1315,7 +1372,6 @@ final class AppModel {
         run.start(settings: settings, cover: nil) { [self] in
             // The set changes only once the rip's files have.
             if run.changedReport != nil { try? CustomSetStore().remove(toc) }
-            if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
             refreshRecentRips()
         }
     }
@@ -1343,7 +1399,6 @@ final class AppModel {
                     slot.useNoRelease()
                 }
             }
-            if let moved = run.changedReport, selection == .rip(moved.from) { selection = .rip(moved.to) }
             coverVersion += 1
             refreshRecentRips()
         }
@@ -1434,12 +1489,10 @@ final class AppModel {
             guard let edits = waitingEdits.removeValue(forKey: rip.file) else { return }
             do {
                 try edits.save(inReportAt: rip.file)
-                let update = try await Task.detached {
+                // A renamed album moves its report; the rip keeps its key, so the selection follows.
+                _ = try await Task.detached {
                     try DiscEncoder(settings: settings).updateLibrary(reportAt: rip.file, library: settings.libraryURL)
                 }.value
-                if !rip.hasAudio, let album = update.albumFolder, selection == .rip(rip.file) {
-                    selection = .rip(album.appending(path: rip.file.lastPathComponent))
-                }
             } catch {
                 alert = AppAlert(title: "The library could not be updated", message: "\(error)")
             }

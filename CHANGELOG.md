@@ -17,6 +17,17 @@ command-line tool.
 - Silverside downloads as a disk image: open it, and drag Silverside to the
   Applications folder.
 
+### Fixed
+
+- A library on a NAS that was not yet connected when Silverside opened made
+  its rips look moved or deleted, and they stayed so. Such rips now show as
+  offline and keep their place in Recent Rips, and Silverside looks again when
+  a disk or network share is connected or disconnected.
+- Rip History could show one rip twice, and leave out another, when a disc
+  was ripped again into the same folder; opening the earlier rip showed the
+  later one. Each rip now has a row of its own and opens as itself, marked
+  "Replaced" when a later rip of the disc took its place.
+
 ## 0.9.6 (2026-11-11)
 
 ### Added

@@ -666,7 +666,7 @@ struct AlbumHeader: View {
                     ? "You have a verified rip of this disc, from \(place). Click to open it."
                     : "You have a rip of this disc that is not verified, from \(place). Click to open it: Repair "
                         + "there, with the disc in a drive, reads again only what it needs. A new rip pools with it.",
-                action: { model.selection = .rip(rip.file) })
+                action: { model.selection = .rip(rip.id) })
         }
     }
 

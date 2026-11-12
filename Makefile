@@ -61,7 +61,7 @@ help:
 	@echo "make install-cli-local  the same, under ~/.local (no sudo)"
 	@echo "make install-app    build the app for release (Apple silicon and Intel) and copy it to APP_DIR ($(APP_DIR))"
 	@echo "make open-app       make install-app, open the app, and install the CLI under ~/.local"
-	@echo "make dist           the app for others: Developer ID, notarized, stapled, zipped in build/dist (NOTARIZE=0 stops before Apple)"
+	@echo "make dist           the app for others: Developer ID, notarized, stapled, in a disk image in build/dist (NOTARIZE=0 stops before Apple)"
 	@echo "make uninstall      remove what make install put under PREFIX"
 	@echo "make site           serve the website (docs/site) at http://localhost:8000"
 	@echo "make rip-art        render the Rip button's pictures from SilversideRipIcon.icon (after the icon changes)"
@@ -147,8 +147,8 @@ open-app:
 				|| echo "The CLI did not install: see $(PACKAGE)/.build/open-app-cli.log" ) &
 		@$(MAKE) install-app && open "$(APP_DIR)/Silverside.app"
 
-# The app as others get it: archived, exported with Developer ID, notarized, stapled, and zipped
-# in build/dist, and added to the update feed (docs/site/appcast.xml). See scripts/dist.sh for
+# The app as others get it: archived, exported with Developer ID, notarized, stapled, and put in a
+# signed, notarized disk image in build/dist, and added to the update feed (docs/site/appcast.xml). See scripts/dist.sh for
 # NOTARY_PROFILE, NOTARIZE=0, FEED=0, and ALLOW_DIRTY=1, and docs/internal/Releasing.md.
 dist:
 	@scripts/dist.sh

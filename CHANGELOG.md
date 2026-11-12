@@ -12,6 +12,11 @@ command-line tool.
   `/usr/local/bin` or `~/.local/bin`, with its zsh, bash, and fish
   completions, so each update of the app updates the command too.
 
+### Changed
+
+- Silverside downloads as a disk image: open it, and drag Silverside to the
+  Applications folder.
+
 ## 0.9.6 (2026-11-11)
 
 ### Added

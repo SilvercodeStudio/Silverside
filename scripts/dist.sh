@@ -1,14 +1,16 @@
 #!/bin/sh
 # make dist: the app as others get it, in build/dist. It archives the app (as Product › Archive
-# does), exports it signed with Developer ID, sends it to Apple for notarization, staples the
-# ticket to it, and zips it as Silverside-<version>.zip. Then it adds the version to Sparkle's
-# update feed, docs/site/appcast.xml, signed with the key in the Keychain, with the version's
-# CHANGELOG entry as its notes. docs/internal/Releasing.md has the whole release.
+# does), exports it signed with Developer ID, sends it to Apple for notarization, and staples the
+# ticket to it. Then it puts the app in a disk image, Silverside-<version>.dmg (dmgbuild, with the
+# window that App/DMG lays out), which it signs, notarizes, and staples too. Last, it adds the
+# version to Sparkle's update feed, docs/site/appcast.xml, signed with the key in the Keychain,
+# with the version's CHANGELOG entry as its notes. docs/internal/Releasing.md has the whole
+# release; this script publishes nothing.
 #
 #   NOTARY_PROFILE  the notarytool keychain profile (default: silverside), made once with
 #                   xcrun notarytool store-credentials silverside --apple-id ... --team-id ...
 #   NOTARIZE=0      stop after the export and its checks: nothing goes to Apple, and no feed.
-#   FEED=0          stop after the zip: the feed stays as it is.
+#   FEED=0          stop after the disk image: the feed stays as it is.
 #   ALLOW_DIRTY=1   build with changes that are not committed (the About window then shows
 #                   the commit with "-dirty"). A release is of a commit, so this is for tries,
 #                   and such a build gets no feed.
@@ -24,6 +26,10 @@ PROFILE="${NOTARY_PROFILE:-silverside}"
 KEY_ACCOUNT=silverside
 FEED_FILE=docs/site/appcast.xml
 RELEASES=https://github.com/SilvercodeStudio/Silverside/releases/download
+# dmgbuild (MIT) and the two packages it needs, at these versions, in a Python environment of
+# their own under build/tools, made at the first use.
+DMGBUILD_PACKAGES="dmgbuild==1.6.7 ds_store==1.3.3 mac_alias==2.2.3"
+DMGBUILD_ENV=build/tools/dmgbuild-1.6.7
 
 DIRTY=0
 if [ -n "$(git status --porcelain)" ]; then
@@ -79,33 +85,65 @@ if [ "${NOTARIZE:-1}" = 0 ]; then
     exit 0
 fi
 
-# The zips leave out extended attributes (--norsrc). Without it, ditto stores each file's
-# com.apple.provenance as a "._" file beside it, and a tool other than ditto or Archive Utility
-# (unzip, for one) unpacks those as files in the bundle, which breaks its seal.
-echo "Sending to Apple for notarization (usually a few minutes; a first submission can take longer)…"
-UPLOAD="$DIST/upload.zip"
-ditto -c -k --norsrc --keepParent "$APP" "$UPLOAD"
-submitted=$(xcrun notarytool submit "$UPLOAD" --keychain-profile "$PROFILE" --output-format json)
-rm -f "$UPLOAD"
-id=$(echo "$submitted" | plutil -extract id raw -o - - 2>/dev/null || echo "")
-[ -n "$id" ] || { echo "The upload failed: $submitted"; exit 1; }
-echo "Submission $id. If this is stopped, xcrun notarytool wait $id --keychain-profile $PROFILE"
-result=$(xcrun notarytool wait "$id" --keychain-profile "$PROFILE" --output-format json || true)
-status=$(echo "$result" | plutil -extract status raw -o - - 2>/dev/null || echo unknown)
-if [ "$status" != Accepted ]; then
-    echo "Notarization: $status."
-    xcrun notarytool log "$id" --keychain-profile "$PROFILE"
-    exit 1
+if [ ! -x "$DMGBUILD_ENV/bin/dmgbuild" ]; then
+    echo "Installing dmgbuild in $DMGBUILD_ENV…"
+    rm -rf "$DMGBUILD_ENV"
+    python3 -m venv "$DMGBUILD_ENV"
+    # shellcheck disable=SC2086 # one argument for each package
+    "$DMGBUILD_ENV/bin/pip" install -q --disable-pip-version-check $DMGBUILD_PACKAGES
 fi
 
+# notarize FILE: sends the file to Apple and waits for the result. It stops the script if Apple
+# does not accept it, and prints Apple's log.
+notarize() {
+    submitted=$(xcrun notarytool submit "$1" --keychain-profile "$PROFILE" --output-format json)
+    id=$(echo "$submitted" | plutil -extract id raw -o - - 2>/dev/null || echo "")
+    [ -n "$id" ] || { echo "The upload failed: $submitted"; exit 1; }
+    echo "Submission $id. If this is stopped, xcrun notarytool wait $id --keychain-profile $PROFILE"
+    result=$(xcrun notarytool wait "$id" --keychain-profile "$PROFILE" --output-format json || true)
+    status=$(echo "$result" | plutil -extract status raw -o - - 2>/dev/null || echo unknown)
+    if [ "$status" != Accepted ]; then
+        echo "Notarization: $status."
+        xcrun notarytool log "$id" --keychain-profile "$PROFILE"
+        exit 1
+    fi
+}
+
+# The app gets its own ticket, so that a copy dragged out of the disk image opens without a
+# network connection. The upload leaves out extended attributes (--norsrc): ditto would store
+# each file's com.apple.provenance as a "._" file beside it.
+echo "Sending the app to Apple for notarization (usually a few minutes; a first submission can take longer)…"
+UPLOAD="$DIST/upload.zip"
+ditto -c -k --norsrc --keepParent "$APP" "$UPLOAD"
+notarize "$UPLOAD"
+rm -f "$UPLOAD"
 xcrun stapler staple -q "$APP"
 spctl --assess --type execute -vv "$APP" 2>&1 | grep -q "source=Notarized Developer ID" ||
     { echo "Gatekeeper does not accept the stapled app."; spctl --assess --type execute -vv "$APP"; exit 1; }
 
-ZIP="$DIST/Silverside-$VERSION.zip"
-ditto -c -k --norsrc --keepParent "$APP" "$ZIP"
-zipinfo -1 "$ZIP" | grep -q '/\._' && { echo "The zip has AppleDouble files: unzip would break the seal."; exit 1; }
-echo "Notarized and stapled: $ZIP"
+# The disk image, signed with the app's certificate. App/DMG/dmg_settings.py has its window.
+echo "Making the disk image…"
+DMG="$DIST/Silverside-$VERSION.dmg"
+IDENTITY=$(echo "$info" | sed -n 's/^Authority=\(Developer ID Application: .*\)$/\1/p' | head -n 1)
+"$DMGBUILD_ENV/bin/dmgbuild" -s App/DMG/dmg_settings.py -D app="$APP" Silverside "$DMG" >"$DIST/dmgbuild.log" 2>&1 ||
+    { cat "$DIST/dmgbuild.log"; echo "dmgbuild failed."; exit 1; }
+codesign --sign "$IDENTITY" --timestamp "$DMG"
+echo "Sending the disk image to Apple for notarization…"
+notarize "$DMG"
+xcrun stapler staple -q "$DMG"
+spctl --assess --type open --context context:primary-signature -vv "$DMG" 2>&1 | grep -q "source=Notarized Developer ID" ||
+    { echo "Gatekeeper does not accept the disk image."; spctl --assess --type open --context context:primary-signature -vv "$DMG"; exit 1; }
+# The app in the image must still be whole: a copy that follows symbolic links, or Finder
+# information on the bundle, breaks its signature.
+MOUNT=$(mktemp -d "$DIST/mount.XXXXXX")
+hdiutil attach -quiet -nobrowse -readonly -mountpoint "$MOUNT" "$DMG"
+image_ok=1
+codesign --verify --deep --strict "$MOUNT/Silverside.app" && xcrun stapler validate -q "$MOUNT/Silverside.app" &&
+    [ "$(readlink "$MOUNT/Applications")" = /Applications ] || image_ok=0
+hdiutil detach -quiet "$MOUNT"
+rmdir "$MOUNT"
+[ "$image_ok" = 1 ] || { echo "The app in the disk image is not signed and stapled as it should be."; exit 1; }
+echo "Notarized and stapled: $DMG"
 
 # Sparkle's update feed.
 if [ "${FEED:-1}" = 0 ]; then
@@ -136,22 +174,22 @@ key=$("$SPARKLE_BIN/generate_keys" --account "$KEY_ACCOUNT" -p 2>/dev/null || tr
 [ "$key" = "$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "$APP/Contents/Info.plist")" ] ||
     { echo "The app's SUPublicEDKey is not the public half of the Keychain's key."; exit 1; }
 
-# generate_appcast works in a folder: the feed as it is, the new zip, and its notes (the
+# generate_appcast works in a folder: the feed as it is, the new disk image, and its notes (the
 # CHANGELOG entry without its heading), which it embeds as Markdown. It keeps the older items,
-# whose zips are not there, and signs the feed, as the app's Info.plist asks.
+# whose files are not there, and signs the feed, as the app's Info.plist asks.
 FEED_DIR="$DIST/feed"
 mkdir -p "$FEED_DIR"
-cp "$ZIP" "$FEED_DIR/"
+cp "$DMG" "$FEED_DIR/"
 NOTES="$FEED_DIR/Silverside-$VERSION.md"
 awk -v heading="## $VERSION " 'index($0, heading) == 1 {on = 1; next} on && /^## / {exit} on' CHANGELOG.md >"$NOTES"
 if [ -f "$FEED_FILE" ]; then cp "$FEED_FILE" "$FEED_DIR/appcast.xml"; fi
 echo "Signing the feed (the Keychain may ask to let generate_appcast use the key)…"
 "$SPARKLE_BIN/generate_appcast" --account "$KEY_ACCOUNT" --maximum-deltas 0 --embed-release-notes \
     --download-url-prefix "$RELEASES/$VERSION/" --link https://silverside.app "$FEED_DIR"
-grep "$RELEASES/$VERSION/Silverside-$VERSION.zip\"" "$FEED_DIR/appcast.xml" | grep -q "sparkle:edSignature=" ||
+grep "$RELEASES/$VERSION/Silverside-$VERSION.dmg\"" "$FEED_DIR/appcast.xml" | grep -q "sparkle:edSignature=" ||
     { echo "The feed's item for $VERSION has no signature: $FEED_DIR/appcast.xml"; exit 1; }
 cp "$FEED_DIR/appcast.xml" "$FEED_FILE"
 echo "The feed lists $VERSION: $FEED_FILE. Publish in this order, so that the feed never names a missing file:"
 echo "  git tag -a $VERSION -m $VERSION && git push origin $VERSION"
-echo "  gh release create $VERSION $ZIP --title \"Silverside $VERSION\" --notes-file $NOTES"
+echo "  gh release create $VERSION $DMG --title \"Silverside $VERSION\" --notes-file $NOTES"
 echo "  Commit $FEED_FILE alone, and push main: GitHub Pages publishes the feed."

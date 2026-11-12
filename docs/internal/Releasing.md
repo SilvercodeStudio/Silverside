@@ -39,6 +39,12 @@ the next version; and how to update Sparkle. The plan behind the updates is in
   the old key and the Developer ID certificate, in a DMG); avoid needing it.
 - **GitHub's CLI:** `brew install gh`, then `gh auth login`. The release page
   on github.com works too.
+- **Python 3** (`python3`; the one with Xcode's command line tools will do).
+  `make dist` makes its own environment for dmgbuild in `build/tools` the
+  first time, from the internet; there is nothing to install by hand.
+
+Every step of a release that publishes something (a tag, a push, `gh`, the
+feed's commit) is done by hand, by the maintainer, never by an agent.
 
 ## A release
 
@@ -48,15 +54,19 @@ the next version; and how to update Sparkle. The plan behind the updates is in
    lint`, `make test`, and `make build`, and commit ("Finish 0.9.7: …").
 2. **`make dist`.** It needs a clean tree. It archives, exports with Developer
    ID, checks the signature (and that the `silverside` command inside is
-   signed, of this version, with its completions), notarizes (a few minutes), staples, zips, and
-   adds the version to the feed. The Keychain asks once whether
-   `generate_keys` and `generate_appcast` may use the key: Always Allow.
-   It leaves `build/dist/Silverside-0.9.7.zip`, the notes
+   signed, of this version, with its completions), notarizes the app and
+   staples it, puts it in a disk image, signs, notarizes, and staples that
+   too (two waits of a few minutes each), checks it, and adds the version to
+   the feed. The Keychain asks once whether `generate_keys` and
+   `generate_appcast` may use the key: Always Allow. It leaves
+   `build/dist/Silverside-0.9.7.dmg`, the notes
    `build/dist/feed/Silverside-0.9.7.md`, and a changed
    `docs/site/appcast.xml`.
-   - `make dist FEED=0` makes the zip only, for a build that is not to be
-     published. Without a dated CHANGELOG heading, the feed step stops with a
-     message (after the zip is made).
+   - `make dist FEED=0` makes the disk image only, for a build that is not to
+     be published. Without a dated CHANGELOG heading, the feed step stops
+     with a message (after the disk image is made).
+   - `make dist` deletes `build/dist` first: upload the last release's disk
+     image before the next try.
 3. **Look at the feed's change** (`git diff docs/site/appcast.xml`): one new
    item with the version, the download URL under
    `releases/download/0.9.7/`, the notes, and `sparkle:edSignature` on the
@@ -67,19 +77,20 @@ the next version; and how to update Sparkle. The plan behind the updates is in
    `scripts/dist.sh`, then copy its `appcast.xml` to `docs/site`.
 4. **Tag and push the tag:** `git tag -a 0.9.7 -m 0.9.7` on the commit that
    was built, then `git push origin 0.9.7`.
-5. **Upload the zip** before the feed names it: `gh release create 0.9.7
-   build/dist/Silverside-0.9.7.zip --title "Silverside 0.9.7" --notes-file
-   build/dist/feed/Silverside-0.9.7.md`. Check that the download works:
-   `curl -sIL https://github.com/SilvercodeStudio/Silverside/releases/download/0.9.7/Silverside-0.9.7.zip`
-   ends in `200`, with the zip's size.
+5. **Upload the disk image** before the feed names it: `gh release create
+   0.9.7 build/dist/Silverside-0.9.7.dmg --title "Silverside 0.9.7"
+   --notes-file build/dist/feed/Silverside-0.9.7.md`. Check that the download
+   works:
+   `curl -sIL https://github.com/SilvercodeStudio/Silverside/releases/download/0.9.7/Silverside-0.9.7.dmg`
+   ends in `200`, with the disk image's size.
 6. **Publish the feed:** commit `docs/site/appcast.xml` alone ("Publish 0.9.7
    in the update feed") and push `main`. The Pages workflow publishes it in a
    minute or two; `curl -s https://silverside.app/appcast.xml` then shows the
    new item.
 7. **Check the update** on a Mac with the release before: Silverside › Check
    for Updates… finds the new version, shows its notes, installs it, and opens
-   it again; About shows the new version. Install a test copy from the zip, or
-   with the Finder or `ditto`: a copy that follows symbolic links (`cp -L`,
+   it again; About shows the new version. Install a test copy from the disk
+   image, or with the Finder or `ditto`: a copy that follows symbolic links (`cp -L`,
    some sync tools) turns Sparkle.framework's links into folders, and its
    signature no longer holds (`codesign --verify --deep --strict` says "bundle
    format is ambiguous").
@@ -96,6 +107,24 @@ the next version; and how to update Sparkle. The plan behind the updates is in
   that already updated stay on it until the next version.
 - **The feed was edited by hand:** run `generate_appcast` again (step 3), or
   revert it.
+
+## The disk image's window
+
+`App/DMG/dmg_settings.py` lays it out for dmgbuild, over `background.png`
+and `background@2x.png`. `make_dmg_background.py` draws the pictures (it needs
+numpy and Pillow: `python3 -m venv /tmp/bg && /tmp/bg/bin/pip install numpy
+pillow`, then `/tmp/bg/bin/python App/DMG/make_dmg_background.py App/DMG`).
+The window's size and the icons' places are in both files; keep them the
+same. To look at the window without a release, make a disk image from any
+copy of the app with the dmgbuild in `build/tools`:
+
+```sh
+build/tools/dmgbuild-1.6.7/bin/dmgbuild -s App/DMG/dmg_settings.py \
+    -D app=<path to Silverside.app> Silverside /tmp/Try.dmg && open /tmp/Try.dmg
+```
+
+Finder writes the names under the icons in black on a picture, in both
+appearances, so the picture must be light enough behind them.
 
 ## Updating Sparkle
 

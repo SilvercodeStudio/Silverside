@@ -1,8 +1,7 @@
 # App updates with Sparkle
 
-A plan, discussed 2026-11-01 and 2026-11-11. The app's side is done (2026-11-11);
-`make dist` does not yet write the feed. The notarized release that it needs
-is `make dist` (2026-11-04).
+A plan, discussed 2026-11-01, 2026-11-11, and 2026-11-12. All of it is done
+(2026-11-12) but the test of a real update, from 0.9.6 to 0.9.7 (see the end).
 
 ## Decisions
 
@@ -38,9 +37,9 @@ Decided 2026-11-11:
 - **No XPC services:** an app without a sandbox does not use them. A build
   phase after the framework is copied removes them in an archive
   (`ACTION=install`), from Sparkle's "Removing XPC Services".
-- **The zip first,** as `make dist` makes it now; the DMG follows in a commit
-  of its own, and then serves both the download button and Sparkle (Sparkle
-  mounts a DMG and finds the app).
+- **The zip first,** as `make dist` made it for 0.9.6; the DMG followed in a
+  commit of its own (2026-11-12), and serves both the download button and
+  Sparkle (Sparkle mounts a DMG and finds the app).
 - **No delta updates at first** (`--maximum-deltas 0`): the 0.9.5 zip is
   11 MB. They can come later with no change to the app; `generate_appcast`
   needs the last few archives beside the new one, which the GitHub Releases
@@ -75,8 +74,8 @@ Decided 2026-11-11:
 - The build phase "Remove Sparkle's XPC services" runs in an archive only:
   checked 2026-11-11 with an archive, the framework has no `XPCServices` and
   `codesign --verify --deep --strict` passes. The export with Developer ID
-  signs `Autoupdate` and `Updater.app` again (still to check in a real `make
-  dist`, with notarization).
+  signs `Autoupdate` and `Updater.app` again, and Apple notarized them (the
+  0.9.6 `make dist`, 2026-11-11).
 - Credits: Acknowledgments, the License sheet (Sparkle's whole LICENSE, with
   bsdiff's and the others' BSD texts, which a binary must reproduce), NOTICE
   (and `SilversideLicense.notice`), the site's home page and license page.
@@ -99,12 +98,12 @@ Decided 2026-11-11:
 ### The feed and the files (done 2026-11-11)
 
 - `appcast.xml` in `docs/site`, published by Pages with the rest of the site.
-- The zip (later the DMG) in a GitHub Release (`gh release create 0.9.7 …`;
+- The DMG in a GitHub Release (`gh release create 0.9.7 …`;
   the tags have no "v"), not in the repo: Pages refuses files over 100 MB, and
   a binary in Git stays in its history. The feed's links point at the
   release's files; Sparkle follows GitHub's redirects.
 - `make dist` runs `generate_appcast` (the package's copy) on a folder with
-  the feed as it is, the new zip, and its notes: it adds the item (signature,
+  the feed as it is, the new DMG, and its notes: it adds the item (signature,
   size, versions, `minimumSystemVersion` 15.0), keeps the older items (at
   most 3, its default), and signs the feed. Tried 2026-11-11 with a throwaway
   key: an older item stays when its zip is not in the folder, and an app that
@@ -147,38 +146,58 @@ Decided 2026-11-11:
   the user's, and the notarization of a build with the command (both at the
   0.9.7 release).
 
-### The DMG
+### The DMG (done 2026-11-12, for 0.9.7)
 
-- A window that opens by itself, with the app's icon, a link to
-  `/Applications`, and a background picture with an arrow between them, at 1×
-  and 2× (a two-image TIFF, `tiffutil -cathidpicheck`).
-- Tools: `create-dmg` (Homebrew, a shell script around `hdiutil` and Finder
-  scripting) or `dmgbuild` (Python, no Finder scripting, so it also runs
-  headless). Either is a build tool, not shipped; mention it to the user before
-  adding.
-- The background is design work: the grooves and the iris band from the site
-  and the About window would fit.
-- Sign the DMG (`codesign`), notarize it (that covers the app inside), and
-  staple it.
+- `dmgbuild` (MIT, Python; agreed 2026-11-12), with `ds_store` and
+  `mac_alias`, its own packages, at pinned versions. `make dist` puts them in
+  a Python environment of their own, `build/tools/dmgbuild-<version>`, at
+  the first use; nothing is installed for the whole Mac, and nothing is
+  shipped. It writes the window's `.DS_Store` itself, with no Finder
+  scripting.
+- `App/DMG`: `dmg_settings.py` (the window, 660 × 400 points of picture; the
+  app at (180, 180) and the link to `/Applications` at (480, 180), 128-point
+  icons), `background.png` and `background@2x.png` (dmgbuild joins them into
+  a two-image TIFF with `tiffutil -cathidpicheck`), and
+  `make_dmg_background.py`, which draws them (numpy and Pillow; not run by
+  the build). The volume's icon is the app's `AppIcon.icns`. The format is
+  ULFO (LZFSE), HFS+.
+- Found on macOS 27 (2026-11-12):
+  - Finder counts the title bar (32 points) in the window's height, so the
+    settings ask for 432.
+  - Finder draws the icons' names in black on a picture, in the dark
+    appearance too, so the picture is light (the light site's colors).
+  - Finder's own path bar and status bar, when the user has them on, cover
+    the lowest 56 points of the window; the settings cannot turn them off.
+  - `hide_extensions` sets Finder information on the app, which fails
+    `codesign --verify --strict` ("detritus"), so it is not used. Finder
+    leaves out ".app" anyway, unless the user has it show every extension.
+  - `hdiutil` warns that `create`, `attach`, and `convert` are deprecated in
+    favor of `diskutil image`; they still work.
+- `make dist` notarizes the app and staples it (so a copy dragged out opens
+  with no network), builds the DMG, signs it with the app's Developer ID
+  certificate, notarizes and staples it, and checks it: Gatekeeper accepts it
+  (`spctl --type open`), and the app inside verifies, has its ticket, and has
+  the link to `/Applications`. Two notarizations: a few more minutes.
 
 ### `make dist`
 
 1. Archive and export with Developer ID; the CLI inside, signed. (Done
-   2026-11-04, without the CLI: `scripts/dist.sh`.)
-2. Build the DMG.
-3. `notarytool submit --wait`, then `stapler staple`. (Done 2026-11-04, for a
-   zip of the app; the DMG takes its place.)
-4. `generate_appcast`. (Done 2026-11-11.)
-5. `gh release create`, with the DMG. (By hand for now: `Releasing.md`.)
-6. Commit `appcast.xml` to `docs/site`, and push `main`. (By hand.)
+   2026-11-04, `scripts/dist.sh`; the CLI inside since 2026-11-11.)
+2. Notarize and staple the app; build the DMG; sign, notarize, and staple it.
+   (Done 2026-11-04 for a zip; the DMG since 2026-11-12.)
+3. `generate_appcast`. (Done 2026-11-11.)
+4. `gh release create`, with the DMG. (By hand: `Releasing.md`.)
+5. Commit `appcast.xml` to `docs/site`, and push `main`. (By hand.)
 
 Upload before the feed changes: a feed that points at a missing file fails for
 everyone who checks then.
 
 ### Testing before the first release
 
-- A build with a lower version, pointed at a test feed (`defaults write … SUFeedURL`),
-  finds the update, checks its signature, installs it, and relaunches.
+- A build with a lower version finds the update, checks its signature,
+  installs it, and relaunches. The plan: the 0.9.6 that `make dist` made
+  (2026-11-11, installed in `~/Applications`, the only copy with Sparkle) and
+  the 0.9.7 release's real feed.
 - An update that arrives during a demo rip waits for the rip.
 - **App Translocation:** an app opened from Downloads, not moved, runs from a
   read-only place, and Sparkle cannot replace it; Sparkle says so. Moving it

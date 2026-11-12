@@ -433,7 +433,7 @@ struct FinishedStatus: View {
 
     private func help(for verdict: TrackVerdict) -> String {
         switch verdict {
-        case .verified: "The track matches AccurateRip or the CUETools database."
+        case .verified: "The track matches AccurateRip or CUETools DB (CTDB)."
         case .repaired:
             "CTDB's repair data corrected \(Format.count(track.repairedSamples, "sample")) of the track, and the result is verified."
         case .copied: "The reads agree, but no database has this disc to check against."
@@ -538,7 +538,7 @@ struct CTDBResultCell: View {
     var body: some View {
         if let confidence = track.ctdbConfidence, confidence > 0 {
             CheckedText(text: String(confidence), spoken: "Verified, \(confidence) rips")
-                .help("Verified: \(confidence) rips in the CUETools database have this track's checksum.")
+                .help("Verified: \(confidence) rips in CUETools DB (CTDB) have this track's checksum.")
         } else if let ctdb {
             switch ctdb.status {
             case .verified, .repaired: CheckedText(text: "Verified")

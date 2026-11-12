@@ -57,7 +57,7 @@ A rip that is not encoded has an **Encode** button, which encodes it into the li
 
 ## Read modes
 
-- **Secure** reads each track once and checks it against AccurateRip and CTDB's checksum of the track. A track that does not match is read again, and the sectors that read differently are re-read until two reads agree. Then the whole disc is checked against the CUETools database and, if it still has errors, repaired with that database's repair data. Use Secure unless you have a reason not to.
+- **Secure** reads each track once and checks it against AccurateRip and CTDB's checksum of the track. A track that does not match is read again, and the sectors that read differently are re-read until two reads agree. Then the whole disc is checked against CTDB and, if it still has errors, repaired with CTDB's repair data. Use Secure unless you have a reason not to.
 - **Fast** reads each track once. It is for clean discs when time matters, or to see what a drive makes of a disc before a secure rip.
 
 ## Options for one rip
@@ -83,7 +83,7 @@ Stop ends the rip after the read under way. The tracks ripped so far stay in the
 
 HDCD (High Definition Compatible Digital) discs were mastered to hold more dynamic range than a standard 16-bit CD can, yet they can still play in every CD player. Dynamic range is the difference between the quietest sounds and the loudest sounds that the disc can reproduce, usually expressed in decibels (dB). 
 
-The HDCD mastering process hides inaudible control codes in the lowest bit of the audio samples. A decoder that understands these can restore more dynamic range, up to approximately 20 bits worth of resolution. Only a player with an HDCD decoder reads these codes, and there are two types of changes they can ask for:
+The HDCD mastering process hides inaudible control codes in the lowest bit of the audio samples. A decoder that understands these can restore more dynamic range, up to about 20 bits of resolution. Only a player with an HDCD decoder reads these codes, and there are two types of changes they can ask for:
 
 - **Peak extend:** the loudest peaks were compressed by up to 9 dB to fit on the disc. The decoder expands them again.
 - **Gain** (also called Low Level Range Extend): passages were raised by up to 7.5 dB to fit on the disc. The decoder lowers them again, and their finest detail goes below the 16 bits that a CD holds.
@@ -197,7 +197,7 @@ A saved data track goes into the album's folder twice:
 
 The image does not open in today's macOS. The Mac side is in HFS, which macOS no longer reads, and the Windows side counts its sectors from the start of the disc rather than the track (the report says where the track starts), so programs that expect a standalone image look in the wrong places. To reach the Mac side, open the image in a classic Mac emulator, such as SheepShaver or Basilisk II, or in a tool for HFS volumes. Its addresses start at the track, so the image burned to a CD-R should also mount on a real classic Mac. The Windows side of such a burned disc does not read correctly; use the folder instead.
 
-The data track is read after the music's rip is complete and its report written, so a data track that cannot be read costs nothing of the music: the rip shows a "Data track not saved" chip that says why. To save it later, or to save the data track of a rip that left it out, put the disc in a drive and choose **Disc › Save Data Track…**, with the drive or the rip selected (an earlier rip also has the button in its toolbar). It reads only the data track, not the music, and another drive may read it. Once the newest rip of the disc has its data track, the disc's chip says "data track saved". The image goes into the rip's folder, and into the album folder with its files if the rip was encoded.
+The data track is read after the music's rip is complete and its report written, so a data track that cannot be read costs nothing of the music: the rip shows a "Data track not saved" chip that says why. To save it later, or to save the data track of a rip that left it out, put the disc in a drive and choose **Disc › Save Data Track**, with the drive or the rip selected (an earlier rip also has the button in its toolbar). It reads only the data track, not the music, and another drive may read it. Once the newest rip of the disc has its data track, the disc's chip says "data track saved". The image goes into the rip's folder, and into the album folder with its files if the rip was encoded.
 
 Silverside does not yet copy a whole Enhanced CD, the music and the data track together, into one image that could be burned again or kept for an archive (in the CloneCD format, which keeps both sessions and the subchannel). That is planned. For now, the rip keeps the music, verified, and the data track as above.
 

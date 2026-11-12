@@ -98,8 +98,10 @@ struct GeneralSettings: View {
             if model.commandLineTool.isAvailable {
                 Section("Command line tool") {
                     Button("Install Command Line Tool…") { openWindow(id: "commandLineTool") }
-                    Text("The silverside command does what the app does, from Terminal, with the same settings.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    Text(
+                        "The silverside command rips, repairs, checks, and encodes from Terminal, with the same settings."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
                 }
             }
             Section("Updates") {
@@ -314,7 +316,7 @@ struct DriveSettings: View {
             }
             Section("Checks") {
                 HStack {
-                    Button("Test Drive…") { start(.test, profile) }
+                    Button("Test Drive") { start(.test, profile) }
                         .help("Read the TOC, audio, C2 flags, and the Q subchannel, and time the reads")
                     Button("Measure Cache") { start(.cache, profile) }
                         .help("Time re-reads to find how many sectors the drive keeps in memory")
@@ -376,7 +378,7 @@ struct RippingSettings: View {
                     "The report keeps the CRC-32 of both reads, as Exact Audio Copy does. The rip already compares reads of every doubtful sector, so this is a check for the record, and it takes as long as another read of the disc."
                 )
                 .font(.caption).foregroundStyle(.secondary)
-                Picker("Data tracks (Enhanced CDs)", selection: $model.settings.dataTracks) {
+                Picker("Data tracks", selection: $model.settings.dataTracks) {
                     Text("Ask each time").tag(DataTrackChoice.ask)
                     Text("Save").tag(DataTrackChoice.save)
                     Text("Audio only").tag(DataTrackChoice.skip)
@@ -411,7 +413,7 @@ struct RippingSettings: View {
             }
             Section("How a rip works") {
                 Text(
-                    "Each track is read once with the drive's offset corrected, and checked against AccurateRip and CTDB's checksum of the track. A track that does not match is read again, and the sectors that differ are re-read until they agree. Then the whole disc is checked against CUETools DB and, if it has errors, repaired with CTDB's data. Fast mode in the toolbar reads each track once, with no re-reads."
+                    "Each track is read once with the drive's offset corrected, and checked against AccurateRip and the track's checksum in CUETools DB (CTDB). A track that does not match is read again, and the sectors that differ are re-read until they agree. Then the whole disc is checked against CTDB and, if it has errors, repaired with CTDB's data. Fast mode in the toolbar reads each track once, with no re-reads."
                 )
                 .font(.callout).foregroundStyle(.secondary)
             }
@@ -474,7 +476,7 @@ struct EncodingSettings: View {
                     Text("Keep as pressed").tag(HDCDChoice.keep)
                 }
                 Text(
-                    "A few HDCD discs have codes that ask a player to expand the loudest peaks or lower the level. Decode gives the adjusted audio as an HDCD player would. This gives 20-bit FLAC (about 5% larger) and Apple Lossless (~30% larger) files. Decode makes the audio ~6 dB quieter, but ReplayGain makes up the difference. Keep as pressed keeps the original data (peaks compressed). An HDCD disc whose codes ask for nothing is always kept as pressed."
+                    "A few HDCD discs have codes that ask a player to expand the loudest peaks or lower the level. Decode gives the adjusted audio as an HDCD player would. Lossless files become 20-bit (24-bit for AIFF and WAV): FLAC about 5% larger, Apple Lossless about a third larger. Decode makes the audio about 6 dB quieter; ReplayGain, if it is on, makes up the difference. Keep as pressed keeps the original data (peaks compressed). An HDCD disc whose codes ask for nothing is always kept as pressed."
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
@@ -485,7 +487,7 @@ struct EncodingSettings: View {
                     Text("Keep as pressed").tag(PreEmphasisChoice.keep)
                 }
                 Text(
-                    "A few old CDs were mastered with pre-emphasis, a treble boost that a CD player reverses on playback. De-emphasize removes the treble boost, as a CD player does, so the recording sounds as the artist intended. Many ripping or player apps ignore this. The de-emphasized files are 20-bit FLAC and Apple Lossless, tagged DE_EMPHASIZED=yes. Keep as pressed gives bit-for-bit copies of the disc (treble boosted), tagged PRE_EMPHASIS=yes.\n\nA disc image always keeps the disc as pressed."
+                    "A few old CDs were mastered with pre-emphasis, a treble boost that a CD player reverses on playback. De-emphasize removes the treble boost, as a CD player does, so the recording sounds as the artist intended. Many ripping or player apps ignore this. The de-emphasized lossless files are 20-bit (24-bit for AIFF and WAV), tagged DE_EMPHASIZED=yes. Keep as pressed gives bit-for-bit copies of the disc (treble boosted), tagged PRE_EMPHASIS=yes.\n\nA disc image always keeps the disc as pressed."
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }

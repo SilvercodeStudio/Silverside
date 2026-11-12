@@ -103,7 +103,7 @@ struct DriveDetailView: View {
             } label: {
                 Label("Options", systemImage: "slider.horizontal.3").padding(.horizontal, 4)
             }
-            .help("Choices for the next rip: its folder, earlier rips to pool, offline")
+            .help("Choices for the next rip: its folder, earlier rips to pool, reading every track again, offline")
             .disabled(slot.disc == nil || isRipping)
             .popover(isPresented: $optionsShown, arrowEdge: .bottom) {
                 RipOptionsView(slot: slot)
@@ -115,7 +115,7 @@ struct DriveDetailView: View {
                 Text("Fast (one read)").tag(true)
             }
             .help(
-                "Secure re-reads tracks that do not match AccurateRip. Fast reads each track once. Normally, secure is recommended."
+                "Secure reads again the tracks that match neither AccurateRip nor CTDB. Fast reads each track once. Use Secure for most discs."
             )
             .disabled(isRipping)
             .padding(.leading, 10)
@@ -362,7 +362,7 @@ struct AlbumHeader: View {
                     .frame(width: 120)
                     .help(
                         disc.yearIsFirstRelease
-                            ? "This edition has no date in MusicBrainz. The grey date is the release group's first release; type a date to tag the files with one."
+                            ? "This edition has no date in MusicBrainz. The gray date is the release group's first release; type a date to tag the files with one."
                             : "")
                 }
                 HStack(alignment: .top, spacing: 16) {
@@ -728,7 +728,7 @@ struct AlbumHeader: View {
             ResultChips.lengthsMatch(toc: disc.toc, how: disc.matchKind)
         case .found:
             Chip(
-                text: "MusicBrainz · Disc ID match", tone: .good, systemImage: "checkmark",
+                text: "MusicBrainz · disc ID match", tone: .good, systemImage: "checkmark",
                 help: disc.release.map(ResultChips.discIDMatchHelp) ?? "", link: disc.release?.pageURL)
         case .notFound:
             Chip(
@@ -1106,7 +1106,7 @@ struct StatusBar: View {
         guard let disc = slot.disc else { return "" }
         if disc.lookup == .lookingUp { return "Looking up the disc in MusicBrainz…" }
         let count = slot.selectedTracks.count
-        let text = "Ready to rip \(count) of \(disc.toc.audioTracks.count) tracks"
+        let text = "Ready to rip \(count) of " + Format.count(disc.toc.audioTracks.count, "track")
         // The hidden track is read with track 1, so it is named only while track 1 is chosen.
         guard let first = disc.toc.audioTracks.first, slot.selectedTracks.contains(first.number),
             disc.hiddenTrackRow(found: false) != nil
@@ -1176,7 +1176,7 @@ struct ResultBanner: View {
             }
             Spacer()
             if let folder, !report.isVerified, report.ctdb.status != .notInDatabase {
-                Button("Repair…") { model.startRepair(RecentRip(folder: folder, report: report)) }
+                Button("Repair") { model.startRepair(RecentRip(folder: folder, report: report)) }
                     .help("Check the rip against CTDB again, pooled with the other rips of this disc, and repair it")
                     .disabled(model.repair?.isRunning == true)
             }
@@ -1325,7 +1325,7 @@ struct RipOptionsView: View {
             Divider()
             Toggle("Read every track again", isOn: $slot.choices.readsEveryTrack)
             Text(
-                "Without it, a track that an earlier rip has a copy of that AccurateRip says is accurate is kept, not read again: a stopped rip's tracks, or another drive's."
+                "Without it, a track is not read again if an earlier rip (a stopped one, or another drive's) has a copy that AccurateRip says is accurate."
             )
             .font(.caption).foregroundStyle(.secondary)
             Divider()
@@ -1400,8 +1400,8 @@ enum ResultChips {
             help: "When MusicBrainz has the release of this disc, but not its disc ID: opens MusicBrainz in your "
                 + "browser, where you find the release and add the disc ID to it (you need an account). MusicBrainz "
                 + "offers only releases with \(count) \(count == 1 ? "track" : "tracks"), as on this disc; if the "
-                + "release's track list differs, such as one copied from a cover that counts takes the disc does "
-                + "not, correct it there first. Then use Look Up Metadata.",
+                + "release's track list differs from the disc (for example, it counts tracks that the disc does "
+                + "not have), correct it there first. Then use Look Up Metadata.",
             link: MusicBrainzRelease.submissionURL(for: toc))
     }
 
@@ -1565,8 +1565,8 @@ enum ResultChips {
                     text: hidden.readsAgree ? "Hidden track · reads agree" : "Hidden track · reads differ",
                     tone: hidden.readsAgree ? .neutral : .bad,
                     help: "The disc hides \(Format.duration(sectors: hidden.sectors)) of audio before track 1, kept as "
-                        + "track 0. " + HiddenTrackStatus.notCoveredHelp + " The check is that "
-                        + "\(hidden.reads) reads " + (hidden.readsAgree ? "agree." : "agree, and they do not.")))
+                        + "track 0. " + HiddenTrackStatus.notCoveredHelp + " \(hidden.reads) reads were compared: "
+                        + (hidden.readsAgree ? "they agree." : "they differ.")))
         }
         let suspects = report.tracks.reduce(0) { $0 + $1.suspectSectors.count }
         let unresolved = report.tracks.reduce(0) { $0 + $1.unresolvedSectors.count }
@@ -1583,9 +1583,15 @@ enum ResultChips {
             }
             chips.append(Chip(text: text, tone: unresolved > 0 && !report.isVerified ? .bad : .warning))
         } else if unresolved > 0 {
-            chips.append(Chip(text: "\(unresolved) sectors unresolved", tone: report.isVerified ? .warning : .bad))
+            chips.append(
+                Chip(
+                    text: Format.count(unresolved, "sector") + " unresolved", tone: report.isVerified ? .warning : .bad)
+            )
         }
-        if repaired > 0 { chips.append(Chip(text: "\(repaired.formatted()) samples repaired", tone: .warning)) }
+        if repaired > 0 {
+            chips.append(
+                Chip(text: "\(repaired.formatted()) \(repaired == 1 ? "sample" : "samples") repaired", tone: .warning))
+        }
         if report.hdcd != nil, let chip = hdcd(report.tracks) { chips.append(chip) }
         if let text = report.dtsText {
             chips.append(
@@ -1636,7 +1642,7 @@ enum ResultChips {
                     text: "Data track not saved", tone: .warning, systemImage: "externaldrive.badge.xmark",
                     help: failures.map { "Data track \($0.number): \($0.reason)" }.joined(separator: " ")
                         + " The audio's rip is whole. To save the data track, put the disc in a drive and choose"
-                        + " Disc › Save Data Track…; another drive may read it."))
+                        + " Disc › Save Data Track; another drive may read it."))
         }
         if let encoding = report.encoding {
             let leftOut = encoding.silentTracksLeftOut ?? []

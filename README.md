@@ -66,15 +66,22 @@ to be installed. All other supported formats are handled natively.
 Apps in the Mac App Store must run in Apple's App Sandbox, which does not
 allow the low-level access to the drive that accurate ripping needs: reading
 raw audio sectors, the C2 error flags, the subchannel, and the full table of
-contents. So Silverside is distributed from [silverside.app](https://silverside.app)
-instead. Release builds are signed with a Developer ID and notarized by
-Apple, so macOS opens them without warnings.
+contents. So Silverside is distributed outside the App Store, from GitHub.
+Release builds are signed with a Developer ID and notarized by Apple, so
+macOS opens them without warnings.
+
+## Download
+
+Download the disk image from
+[GitHub Releases](https://github.com/SilvercodeStudio/Silverside/releases), or
+from [silverside.app](https://silverside.app). Open it, and drag Silverside to
+the Applications folder. The app updates itself.
 
 ## Silverside features
 
 - **Accurate rips.** Each track is read with the drive's read offset corrected,
-  and checked against [AccurateRip](http://www.accuraterip.com) and the
-  [CUETools database](http://cue.tools/wiki/CUETools_Database) (CTDB), which
+  and checked against [AccurateRip](http://www.accuraterip.com) and
+  [CUETools DB](http://cue.tools/wiki/CUETools_Database) (CTDB), which
   hold checksums from other people's rips of the same disc.
 - **Secure re-reads.** A track that does not match is read again. Sectors that
   read differently, that the drive flags with C2 errors, or that cannot be
@@ -150,8 +157,8 @@ Apple, so macOS opens them without warnings.
   rip, to check it.
 - **Rip on insertion**, if you want it: a disc whose release is certain, and
   that is not ripped yet, rips a few seconds after it goes in.
-- **Updates.** The app from silverside.app checks for a new version once a
-  day, if you agree, and installs it with [Sparkle](https://sparkle-project.org).
+- **Updates.** The released app checks for a new version once a day, if you
+  agree, and installs it with [Sparkle](https://sparkle-project.org).
   A copy built from source does not update itself.
 
 ## Ripping marginal CDs
@@ -253,11 +260,11 @@ Note that some of these require an external tool (ffmpeg or LAME) for full use.
 - Detailed rip reports in Markdown text and JSON saved to output folders
   and internal history data, and an EAC-style log (`Rip Report.log`).
 - Enhanced CDs - multisession audio discs with PC/Mac extra features
-  - mainly from the late 1990's to early 2000s
+  - mainly from the late 1990s to early 2000s
   - The data can be extracted to a regular folder for examination, and is
     also saved as a complete `.iso` image for hybrid filesystem (Mac HFS and PC) support.
 - Mixed-mode CDs - an earlier form of enhanced CD with data in track 1
-  - mainly from the early 1990's. Data folder and `.iso` also extracted.
+  - mainly from the early 1990s. Data folder and `.iso` also extracted.
 - CD-Text - song titles on disc; relatively common.
   - Additional character blocks such as Japanese MS-JIS are supported.
 - CD+G - CD+Graphics: Mainly karaoke, but a few commercial album releases use it.
@@ -273,7 +280,7 @@ Note that some of these require an external tool (ffmpeg or LAME) for full use.
 - HDCD - High Definition Compatible Digital discs - hidden codes can allow expansion 
   of 16-bit data to 20-bit on certain titles for increased dynamic range
 - pre-emphasis handling (de-emphasis) - a rare form of noise reduction on some
-  early 1980's CDs. If the ripping app and player combo doesn't reverse it, and most
+  early 1980s CDs. If the ripping app and player combo doesn't reverse it, and most
   don't, the resulting sound will be harsh and trebly, but Silverside can decode it 
   to de-emphasized 20-bit FLAC/ALAC to sound as the artist intended. 
    - Pre-emphasis is detected in both the TOC and Q subchannel; some tools miss the
@@ -294,18 +301,20 @@ With Xcode installed, from a copy of this repository:
 
 ```sh
 make install-app          # the Mac app, for Apple silicon and Intel, in ~/Applications
-make install-cli-local    # the silverside command-line tool, in ~/.local/bin
+make install-cli-local    # only the silverside command-line tool, copied into ~/.local/bin
 make test                 # the engine's tests
 ```
 
-Open `Silverside.xcworkspace` in Xcode to work on the app, the engine, and the
-command-line tool together. At its first launch, the app asks what a rip
+The app from `make install-app` has the command-line tool inside it, as the
+released app does: Silverside › Install Command Line Tool… links it. A Debug
+build run from Xcode does not have it. Open `Silverside.xcworkspace` in Xcode
+to work on the app, the engine, and the command-line tool together. At its first launch, the app asks what a rip
 should become (Apple Lossless, FLAC, AAC, or MP3).
 
 ## The command-line tool
 
-`silverside` does everything the app does, from a terminal, with the same
-settings file. It comes inside the app: Silverside › Install Command Line
+`silverside` rips, repairs, checks, encodes, and looks up names from a
+terminal, with the same engine and the same settings file. It comes inside the app: Silverside › Install Command Line
 Tool… puts it on your PATH, and app updates update it too. See
 [docs/cli.md](docs/cli.md) for its commands, what a rip makes, and the
 settings.
@@ -332,7 +341,7 @@ tools and real discs.
 - A slower drive speed, for quieter rips, and slowing down by itself on a
   troubled disc.
 - A C2 error-flag check for each drive, kept in its profile.
-- A warning before a lossy encode of a DTS-CD; 
+- A warning before a lossy encode of a DTS-CD.
 - DVD-Audio extraction support.
 - A second metadata source (GnuDB), and AcoustID.
 - Several encodings at once (for example FLAC and AAC).

@@ -7,8 +7,9 @@ struct Rip: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Rip audio tracks to WAV files, check them against AccurateRip and CUETools DB, and repair them.",
         discussion: """
-            Each track is read once. A track that does not match AccurateRip is read again, and the sectors that \
-            read differently (or have C2 errors) are re-read until their data matches or the re-reads give up. \
+            Each track is read once. A track that matches neither AccurateRip nor its CTDB checksum is read again, \
+            and the sectors that read differently (or have C2 errors) are re-read until their data matches or the \
+            re-reads give up. \
             Then the whole disc is checked against CTDB and, if it has errors, repaired with CTDB's repair data. \
             The folder gets the WAV files, disc.json (the rip report, the TOC, and the release), and cover.jpg. \
             In a terminal, a status line shows each read, with C2 errors and sectors that cannot be read.
@@ -85,7 +86,7 @@ struct Rip: AsyncParsableCommand {
     @Flag(help: "Do not look up AccurateRip, CTDB, MusicBrainz, or AccurateRip's drive offset list.")
     var offline = false
 
-    @Flag(help: "Read each track once, with no re-reads of tracks that do not match AccurateRip.")
+    @Flag(help: "Read each track once, with no re-reads of tracks that match neither AccurateRip nor CTDB.")
     var singlePass = false
 
     @Flag(help: "Check the rip against CUETools DB, but do not repair it.")
@@ -108,8 +109,8 @@ struct Rip: AsyncParsableCommand {
 
     @Flag(
         help: """
-            Read every track. Without it, a track that an earlier rip in the folder (a stopped rip leaves its \
-            tracks there) or the pool has an accurate copy of, by AccurateRip, is kept and not read again.
+            Read every track. Without it, a track is not read again if an earlier rip in the folder (a stopped \
+            rip leaves its tracks there) or the pool has a copy that AccurateRip says is accurate.
             """)
     var readAll = false
 

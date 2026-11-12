@@ -43,7 +43,7 @@ drive, `-d` can be left out.
 Silverside is for archival copies of discs that you own, for your personal use,
 at your own risk. The first `silverside rip` at a terminal asks you to agree to
 this (type `yes`), and remembers the answer in the settings, which the app
-shares. Without a terminal, as in a script, `rip` stops until you agree with
+shares. Without a terminal, as in a script, `rip` does not run until you agree with
 `silverside --accept-disclaimer`.
 
 ## Commands

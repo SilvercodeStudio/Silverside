@@ -15,7 +15,7 @@ struct CommandLineToolView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Command Line Tool").font(.title2.bold())
             Text(
-                "The silverside command does what the app does, from Terminal, with the same settings. Silverside links it into a folder, with its completions for zsh, bash, and fish, so that each update of the app updates the command too."
+                "The silverside command rips, repairs, checks, and encodes from Terminal, with the same settings. Silverside links it into a folder, with its completions for zsh, bash, and fish, so that each update of the app updates the command too."
             )
             .fixedSize(horizontal: false, vertical: true)
             Picker("Folder", selection: $tool.place) {

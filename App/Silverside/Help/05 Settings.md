@@ -1,6 +1,6 @@
 # Settings
 
-Silverside and the `silverside` command line share one settings file, so a change in either applies to both.
+Silverside and the `silverside` command share one settings file, so a change in either applies to both.
 
 ## General
 
@@ -11,7 +11,7 @@ Silverside and the `silverside` command line share one settings file, so a chang
 - **When a disc goes in, rip it at once:** a disc that goes in while Silverside runs is ripped five seconds after its lookup, if MusicBrainz names its release for certain (an exact match, and not one of several releases unless you chose one for the set) and the disc is not ripped yet. The status bar counts down, with Rip Now and Cancel. Otherwise the disc waits for you, and the status bar says why. A disc already in a drive when Silverside starts is never ripped by itself. With eject after the rip on as well, a set rips with no more than a swap of discs.
 - **Artwork:** the front cover only (saved as `cover.jpg` and embedded in the files), every image in the Cover Art Archive, or none.
 - **Personal use:** Silverside is for archival copies of discs that you own, for your personal use, at your own risk. It rips a disc only while this box is checked. The welcome asks for it first; if you uncheck it, the next rip asks again.
-- **Command line tool:** Install Command Line Tool… (also in the Silverside menu) links the `silverside` command inside the app into `/usr/local/bin`, which may ask for your password, or `~/.local/bin`, with its completions for zsh, bash, and fish beside it. It is a link, so each update of the app updates the command too. If you move the app, install it again. The window says when `~/.local/bin` is not on your shell's PATH, and Remove takes the links away. A copy built from the source code with `make install-app` has the command too; `make install` copies it instead. See [Command Line Tool](help:command-line-tool).
+- **Command line tool:** Install Command Line Tool… (also in the Silverside menu) links the `silverside` command inside the app into `/usr/local/bin`, which may ask for your password, or `~/.local/bin`, and its completions for zsh, bash, and fish in the folders beside it. It is a link, so each update of the app updates the command too. If you move the app, install it again. The window says when `~/.local/bin` is not on your shell's PATH, and Remove takes the links away. A copy built from the source code with `make install-app` has the command too; `make install` copies it instead. See [Command Line Tool](help:command-line-tool).
 - **Updates:** check for a new version of Silverside once a day. At its second launch, Silverside asks whether to; this box changes the answer. **Check for Updates…** in the Silverside menu checks at once. An update that arrives during a rip, a repair, or other work waits for the work to end before Silverside installs it and opens again. A copy built from the source code does not check, and has no Check for Updates….
 
 ## Ripping
@@ -20,15 +20,15 @@ Silverside and the `silverside` command line share one settings file, so a chang
 
 **Test and copy** reads each track once more after its rip, and keeps the CRC-32 of both reads in the report, as Exact Audio Copy does. It is off by default: the rip already compares reads of every doubtful sector, and the test read takes as long as another read of the disc. Turn it on for a record that EAC's users will recognize.
 
-**Write EAC-style log** (on by default) puts `Rip Report.log` beside each rip's report: the same facts in the layout of Exact Audio Copy's logs, for people and tools that read those. See Ripping a Disc › Where the files go.
+**Write EAC-style log** (on by default) puts `Rip Report.log` beside each rip's report: the same facts in the layout of Exact Audio Copy's logs, for people and tools that read those. See [Where the files go](help:ripping-a-disc#where-the-files-go).
 
-**Video of CD+G graphics** says what to do with a disc that has pictures or karaoke lyrics on it: ask (the default, until you keep an answer), make a video of them with Apple Lossless or AAC audio, or make none (see Ripping a Disc › CD+G graphics). The `.cdg` files are saved either way. **CD+EG video picture** says which picture a CD+EG disc's video shows: 256 colors, as a CD+EG player shows it; 16 colors, as a CD+G player does; or both, in two files.
+**Video of CD+G graphics** says what to do with a disc that has pictures or karaoke lyrics on it: ask (the default, until you keep an answer), make a video of them with Apple Lossless or AAC audio, or make none (see [CD+G graphics](help:ripping-a-disc#cdg-graphics)). The `.cdg` files are saved either way. **CD+EG video picture** says which picture a CD+EG disc's video shows: 256 colors, as a CD+EG player shows it; 16 colors, as a CD+G player does; or both, in two files.
 
-**Data tracks** says what to do with the extras for a computer that some CDs have after the music: ask (the default, until you keep an answer), save them as `Data track.iso` with their files in a `Data track` folder in the album's folder, or rip the audio only (see Ripping a Disc › Enhanced CDs). Saving costs about a minute and twice the track's size, often 50 to 600 MB each.
+**Data tracks** says what to do with the extras for a computer that some CDs have after the music: ask (the default, until you keep an answer), save them as `Data track.iso` with their files in a `Data track` folder in the album's folder, or rip the audio only (see [Enhanced CDs](help:ripping-a-disc#enhanced-cds)). Saving costs about a minute and twice the track's size, often 50 to 600 MB each.
 
 ## Encoding
 
-The format itself is chosen in General; this tab shows the options of that format only. FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit rate mode, bit rate, and VBR quality.
+The format itself is chosen in General. This tab shows that format's options, and what to do with special discs. FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit rate mode, bit rate, and VBR quality.
 
 MP3 needs LAME, a free encoder that Silverside runs as a separate program, because Apple's frameworks cannot write MP3. Install it with Homebrew (brew.sh), in Terminal:
 
@@ -36,7 +36,7 @@ MP3 needs LAME, a free encoder that Silverside runs as a separate program, becau
 brew install lame
 ```
 
-Until LAME is installed, MP3 is missing from the formats in General and dimmed in the welcome, and if MP3 is already the format, its options here are dimmed. Silverside looks for LAME every few seconds while Settings or the welcome is open, so MP3 turns on as soon as the install ends. The options are lame's: a variable bit rate from a quality (0 is the best, about 245 kbit/s), or a constant or average bit rate.
+Until LAME is installed, MP3 is missing from the formats in General and dimmed in the welcome, and if MP3 is already the format, its options here are dimmed. Silverside looks for LAME every few seconds while Settings or the welcome is open, so MP3 turns on as soon as the install ends. The options are LAME's: a variable bit rate from a quality (0 is the best, about 245 kbit/s), or a constant or average bit rate.
 
 Every encoded file is decoded again and compared with the audio it was made from before it goes into the library: the rip, or the rip after HDCD decoding, de-emphasis, or DTS decoding.
 

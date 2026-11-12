@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Silverside — Accurate CD ripping for the Mac</title>
-  <meta name="description" content="Silverside rips audio CDs on macOS and checks every track against other people's rips in AccurateRip and the CUETools database, so you know your copy is exact. Then it names, tags, and encodes the album for your library.">
+  <meta name="description" content="Silverside rips audio CDs on macOS and checks every track against other people's rips in AccurateRip and CUETools DB (CTDB), so you know your copy is exact. Then it names, tags, and encodes the album for your library.">
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#17110b" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#e8dec9" media="(prefers-color-scheme: light)">
@@ -113,8 +113,8 @@
     <section id="how" class="section gutter" aria-labelledby="how-title">
       <div class="wrap">
         <div class="section-head">
-          <h2 id="how-title" class="ss-display section-title">Rip once. Know it's right.</h2>
-          <p>A green check in Silverside means something: your audio matched rips made by other people, on other drives, from the same disc.</p>
+          <h2 id="how-title" class="ss-display section-title">Rip once. Know it is right.</h2>
+          <p>A green check means that your audio matched rips that other people made, on other drives, from the same disc.</p>
         </div>
         <div class="steps">
           <article class="ss-card">
@@ -123,7 +123,7 @@
               <span class="ss-card__num">01</span>
             </div>
             <h3 class="ss-card__title">Read</h3>
-            <p class="ss-card__text">Every sector is read with your drive's read offset corrected. Anything that doesn't agree, or that the drive flags, is read again until it does.</p>
+            <p class="ss-card__text">Every sector is read with your drive's read offset corrected. Anything that does not agree, or that the drive flags, is read again, round after round, to find the right value.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head">
@@ -131,7 +131,7 @@
               <span class="ss-card__num">02</span>
             </div>
             <h3 class="ss-card__title">Verify</h3>
-            <p class="ss-card__text">Each track is checked against AccurateRip and the CUETools database. Where CTDB has repair data, damaged sectors are fixed and checked again.</p>
+            <p class="ss-card__text">Each track is checked against AccurateRip and CUETools DB (CTDB). Where CTDB has repair data, damaged sectors are fixed and checked again.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head">
@@ -161,7 +161,7 @@
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/></svg></div></div>
             <h3 class="ss-card__title">Before the disc fades</h3>
-            <p class="ss-card__text">CDs do not last forever. Scratches accumulate, and in disc rot the reflective layer breaks down, often from the edge in. Rip the discs you care about now, especially the worn ones, while there is still enough of them for CTDB to repair the rest.</p>
+            <p class="ss-card__text">CDs do not last forever. Scratches accumulate, and in disc rot the reflective layer breaks down, often from the edge in. Rip the discs you care about now, especially the worn ones, while enough of the audio is left for CTDB to repair the rest.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M14 10.5v5"/><circle cx="12.5" cy="15.5" r="1.5"/></svg></div></div>
@@ -224,7 +224,7 @@
         <div class="spotlight-text">
           <span class="ss-eyebrow">Rip report</span>
           <h2 id="report-title" class="ss-display spotlight-title">A record of every rip, in plain language.</h2>
-          <p>AccurateRip confidence for each track, the CTDB entry it matched, the disc IDs, your drive and its read offset, the encoder, and every file it wrote. It's Markdown to read and JSON to keep, with a log in Exact Audio Copy's layout for the tools that read those, and a CUE sheet to burn the disc again exactly.</p>
+          <p>AccurateRip confidence for each track, the CTDB entry it matched, the disc IDs, your drive and its read offset, the encoder, and every file it wrote. It is Markdown to read and JSON to keep, with a log in Exact Audio Copy's layout for the tools that read those, and a CUE sheet to burn the disc again exactly.</p>
         </div>
       </div>
     </section>
@@ -234,7 +234,7 @@
         <div class="spotlight-text">
           <span class="ss-eyebrow">Formats</span>
           <h2 id="formats-title" class="ss-display spotlight-title">Exact copies, in the format you use.</h2>
-          <p>Apple Lossless for the Music app, FLAC for everything else, AAC or MP3 when space matters, or plain WAV files with the report. Albums land in your library folder, named and tagged, with the cover embedded, and Silverside can add them to Music for you.</p>
+          <p>Apple Lossless for the Music app, FLAC for everything else, AAC or MP3 when space matters, or plain WAV or AIFF files with the report. Albums land in your library folder, named and tagged, with the cover embedded, and Silverside can add them to Music for you.</p>
           <ul class="ss-chips" aria-label="Supported formats">
             <li class="ss-chip">Apple Lossless</li>
             <li class="ss-chip">FLAC</li>
@@ -274,7 +274,7 @@
           <span class="hdcd-logo hdcd-logo--large" role="img" aria-label="HDCD"></span>
           <h2 id="hdcd-title" class="ss-display spotlight-title">HDCD discs, decoded to 20 bits.</h2>
           <p>HDCD discs hide codes in the audio. They tell a decoder to expand the loudest peaks and lower raised passages, as the master was made, with detail below the 16 bits of a CD. Few players have a decoder, so most people hear these discs squeezed.</p>
-          <p>Silverside reads the codes in every track and shows what they ask for. Most discs with the logo ask for nothing, and Silverside says so. When they ask for more, Silverside decodes them into 20-bit FLAC or Apple Lossless, or into AAC or MP3 before the codes are lost. Or keep the disc exactly as pressed, and decode a copy later.</p>
+          <p>Silverside reads the codes in every track and shows what they ask for. Most discs with the logo ask for nothing, and Silverside says so. When they ask for more, Silverside decodes them into 20-bit FLAC or Apple Lossless. For AAC or MP3, it decodes first, because a lossy file loses the codes. Or keep the disc exactly as pressed, and decode a copy later.</p>
         </div>
       </div>
     </section>
@@ -285,7 +285,7 @@
           <span class="dts-logo dts-logo--large" role="img" aria-label="DTS"></span>
           <h2 id="dts-title" class="ss-display spotlight-title">DTS-CDs, decoded to surround sound.</h2>
           <p>A DTS-CD holds multichannel surround sound instead of stereo: a DTS stream that a compatible AV receiver must decode. Any other player plays it as loud static, so a plain rip of a DTS-CD fills your library with noise.</p>
-          <p>Silverside automatically recognizes DTS-CDs when the disc goes in, and verifies the CD rip as it would any other. Then it keeps the album in raw DTS-encoded form, with a decoded copy beside it: every channel, in FLAC or Apple Lossless at the stream's own 20 or 24 bits, or in AAC, gapless from track to track. Or keep just the decoded audio. Each track plays decoded in Silverside too. Decoding uses ffmpeg, which you install with <code>brew install ffmpeg</code>.</p>
+          <p>Silverside finds a DTS-CD when the disc goes in, and verifies the rip as it does any other. In a lossless format, it keeps the album as the disc has it, with a decoded copy beside it: every channel, in FLAC, Apple Lossless, or AIFF at the stream's own 20 or 24 bits, gapless from track to track. Or keep only the decoded audio. In AAC or MP3, it keeps only the decoded audio, in AAC. Each track plays decoded in Silverside too. Decoding uses ffmpeg, which you install with <code>brew install ffmpeg</code>.</p>
         </div>
         <div class="ss-card result-panel">
           <!-- Real results: Marvin Gaye, Forever Yours (DTS Entertainment), 2026-10-29: 11 of 11 accurate, CTDB verified, a 5.1 stream at 20 bits. -->
@@ -308,43 +308,43 @@
         <div class="section-head">
           <span class="ss-eyebrow">And more</span>
           <h2 id="more-title" class="ss-display section-title">Built for the discs you actually have.</h2>
-          <p>Scratched discs, box sets, bootlegs with a hidden track, and the drive you happen to own.</p>
+          <p>Scratched discs, box sets, bootlegs with a hidden track, and the drive you have.</p>
         </div>
         <div class="features">
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M3.6 9.2l4.2 1.6-2.2 3.2"/></svg></div></div>
             <h3 class="ss-card__title">Damaged discs</h3>
-            <p class="ss-card__text">Sectors that read differently, that the drive flags, or that cannot be read at all are re-read until they agree. What is still wrong, CTDB repairs. Rip a stubborn disc again in another drive: Silverside keeps the tracks the first rip got right, reads only the rest, and pools both rips.</p>
+            <p class="ss-card__text">Sectors that read differently, that the drive flags, or that cannot be read at all are read again, round after round, to find the right value. What is still wrong, CTDB repairs. Rip a stubborn disc again in another drive: Silverside keeps the tracks the first rip got right, reads only the rest, and pools both rips.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 12h7"/><circle cx="17" cy="12" r="1"/></svg></div></div>
             <h3 class="ss-card__title">Your drive, known</h3>
-            <p class="ss-card__text">The read offset comes from AccurateRip's list of drives and is confirmed by your own rips. Silverside measures the drive's cache too, so a re-read is a real read, not a copy from memory.</p>
+            <p class="ss-card__text">The read offset comes from AccurateRip's list of drives and is confirmed by your own rips. Settings › Drives measures the drive's cache, and a drive not yet measured gets a large cache flush, so a re-read is a real read, not a copy from memory.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></div></div>
             <h3 class="ss-card__title">Several drives at once</h3>
-            <p class="ss-card__text">Each drive rips on its own, so several discs can rip at the same time. Turn on ripping at insertion, and a disc whose release is certain starts by itself, so a stack of discs needs only swapping.</p>
+            <p class="ss-card__text">Each drive rips on its own, so several discs can rip at the same time. Turn on Rip it at once, and a disc not yet ripped whose release is certain starts by itself, so a stack of discs needs only swapping.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="6"/><path d="M13 6.6a6 6 0 0 1 0 10.8M16 6.1a6 6 0 0 1 0 11.8"/><circle cx="9" cy="12" r="1.5"/></svg></div></div>
             <h3 class="ss-card__title">Box sets, one album</h3>
-            <p class="ss-card__text">The discs of a set share the release, the names, the cover, one album folder, and one album gain. The set has a view of its own, with each disc's state and the work left. Sub-sets of large collections, such as individual concerts, can have their own art.</p>
+            <p class="ss-card__text">The discs of a set share the release, the names, the cover, one album folder, and one album gain. The set has a view of its own, with each disc's state and the work left. A disc can have its own cover, such as one concert's sleeve in a box set.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L18 10l-4-4L4 16v4z"/><path d="M12.5 7.5l4 4"/></svg></div></div>
             <h3 class="ss-card__title">Names you can change</h3>
-            <p class="ss-card__text">Edit the album, artist, date, and track titles, before the rip or after it. The files are named and tagged with your edits, and what MusicBrainz said stays in the report. A disc that MusicBrainz does not know is named from its CD-Text, or by you, and Add to MusicBrainz opens its editor with those names, the track lengths, and the disc ID filled in, to help contribute to this free database.</p>
+            <p class="ss-card__text">Edit the album, artist, date, and track titles, before the rip or after it. The files are named and tagged with your edits, and what MusicBrainz said stays in the report. A disc that MusicBrainz does not know takes its names from CD-Text, or from you. Add to MusicBrainz… then opens MusicBrainz's editor with those names, the track lengths, and the disc ID filled in.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg></div></div>
             <h3 class="ss-card__title">Even loudness</h3>
-            <p class="ss-card__text">ReplayGain tags, measured as EBU R 128 does, let players that read them play every album at one level, and a show split across discs too. The audio samples are not changed.</p>
+            <p class="ss-card__text">ReplayGain tags, measured as EBU R 128 does, let players that read them play every album at the same level, a show split across discs too. The audio samples do not change.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></div></div>
             <h3 class="ss-card__title">Hidden tracks and extras</h3>
-            <p class="ss-card__text">A song hidden before track 1 is ripped and encoded as track 0. An Enhanced CD's data track is kept as a disc image, with its files ready to open. A karaoke disc's CD+G graphics are saved beside each track, and become a video of the whole disc that plays anywhere, in 256 colors for a CD+EG disc. Pregaps, index points, ISRCs, the MCN, and CD-Text go into the report and the CUE sheet.</p>
+            <p class="ss-card__text">A song hidden before track 1 is ripped and encoded as track 0. An Enhanced CD's data track is kept as a disc image, with its files ready to open. A karaoke disc's CD+G graphics are saved beside each track, and become one video file (.m4v) of the whole disc, in 256 colors for a CD+EG disc. Pregaps, index points, ISRCs, the MCN, and CD-Text go into the report and the CUE sheet.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 16h4c3 0 4-8 7-8h7"/><path d="M3 20h18"/></svg></div></div>
@@ -364,12 +364,12 @@
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5-5.5 3.5z"/></svg></div></div>
             <h3 class="ss-card__title">Listen first</h3>
-            <p class="ss-card__text">Preview any track directly from the disc, read the way a rip reads it, or from an earlier rip, from its WAV file or its encoded file, including DTS multichannel audio downmixed to stereo.</p>
+            <p class="ss-card__text">Play any track: from the disc, read as a rip reads it, or from an earlier rip's WAV or encoded file. DTS surround sound plays mixed down to stereo.</p>
           </article>
           <article class="ss-card">
             <div class="ss-card__head"><div class="ss-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></svg></div></div>
             <h3 class="ss-card__title">A command-line tool</h3>
-            <p class="ss-card__text"><code>silverside</code> rips, repairs, encodes, and looks up metadata from a terminal, with the same engine and the same settings as the app. It comes inside the app, which installs it on your PATH and keeps it up to date.</p>
+            <p class="ss-card__text"><code>silverside</code> rips, repairs, encodes, and looks up metadata from a terminal, with the same engine and the same settings as the app. It comes inside the app: Silverside › Install Command Line Tool… links it into your PATH, and each update of the app updates it.</p>
           </article>
         </div>
       </div>
@@ -387,7 +387,7 @@
           </details>
           <details>
             <summary>What is AccurateRip?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-            <p>A shared database of checksums from other people's rips. When your track matches, the confidence number tells you how many rips agree with yours. The CUETools database does the same for each track and the whole disc, and keeps the data that repairs a damaged rip.</p>
+            <p>A shared database of checksums from other people's rips. When your track matches, the confidence number tells you how many rips agree with yours. CTDB does the same for each track and the whole disc, and keeps the data that repairs a damaged rip.</p>
           </details>
           <details>
             <summary>Which drives work?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
@@ -403,7 +403,7 @@
           </details>
           <details>
             <summary>Does it need an account, or send anything about me?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-            <p>No account. To look up a disc, Silverside sends the disc's IDs to AccurateRip, CTDB, MusicBrainz, and the Cover Art Archive. To find updates, it asks this website for the newest version. Nothing else leaves your Mac. See <a href="privacy.html">Privacy</a>.</p>
+            <p>No account. To look up a disc, Silverside sends the disc's IDs to AccurateRip, CTDB, and MusicBrainz, and the release's ID to the Cover Art Archive. To find updates, it asks this website for the newest version. Nothing else leaves your Mac. See <a href="privacy.html">Privacy</a>.</p>
           </details>
           <details>
             <summary>What does it need?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
@@ -445,7 +445,7 @@
           <li>FFmpeg's HDCD decoder finds and decodes the HDCD codes in a rip. Chris Moeller wrote it from Christopher Key's HDCD library, with work by Gumboot and Burt P. Silverside includes it under its <a href="license.html#hdcd">BSD license</a>.</li>
           <li>Apple's AudioToolbox encodes FLAC, Apple Lossless, and AAC.</li>
           <li><a href="https://sparkle-project.org">Sparkle</a> finds and installs Silverside's updates. Silverside includes it under its <a href="license.html#sparkle">MIT license</a>.</li>
-          <li><a href="https://adelaide.casa/cdeg/">Adélaïde Casa</a>'s notes for the Divacore record, and <a href="https://extended.graphics">Adam Gashlin</a>'s Compact Disc Extended Graphics page, made CD+EG's graphics public. Silverside's CD+EG rendering code was informed by their work.</li>
+          <li><a href="https://adelaide.casa/cdeg/">Adélaïde Casa</a>'s notes for the Divacore record, and <a href="https://extended.graphics">Adam Gashlin</a>'s Compact Disc Extended Graphics page, documented CD+EG's graphics. Silverside draws CD+EG as their work describes it.</li>
           <li><a href="https://www.exactaudiocopy.de">Exact Audio Copy</a>, <a href="https://tmkk.undo.jp/xld/index_e.html">XLD</a>, and <a href="https://github.com/cyanreg/cyanrip">cyanrip</a> are the rippers that inspired Silverside. It uses no code from them.</li>
         </ul>
         <p class="acks-note">Silverside is for archival copies of discs that you own, for your personal use. It does not support piracy. You use it at your own risk: it comes with no warranty. See the <a href="license.html#personal-use">License</a>.</p>

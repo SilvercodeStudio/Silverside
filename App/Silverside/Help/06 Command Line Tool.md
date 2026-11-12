@@ -1,6 +1,6 @@
 # Command Line Tool
 
-The `silverside` command does what the app does, from Terminal: it rips, repairs, checks, encodes, and looks up names, with the same engine and the same settings file. Use it for scripts, for a Mac without a screen nearby, or if you like a terminal. The app and the command can run at the same time, on different drives.
+The `silverside` command rips, repairs, checks, encodes, and looks up names from Terminal, with the same engine and the same settings file. Use it for scripts, for a Mac without a screen nearby, or if you like a terminal. The app and the command can run at the same time, on different drives.
 
 <!-- toc -->
 
@@ -11,7 +11,7 @@ The command comes inside the app. Choose **Silverside › Install Command Line T
 - **/usr/local/bin** is on every shell's PATH. It may ask for an administrator's password.
 - **~/.local/bin** needs no password, but your shell must have it on its PATH. The window says if it does not; for zsh, add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zprofile`.
 
-Silverside puts links to the command, and to its completions for zsh, bash, and fish, in that folder. Because they are links into the app, each update of the app updates the command too. If you move the app to another folder, install the command again. **Remove** in the same window takes the links away.
+Silverside puts a link to the command in that folder, and links to its completions for zsh, bash, and fish in the usual folders beside it (under `/usr/local` or `~/.local`). Because they are links into the app, each update of the app updates the command too. If you move the app to another folder, install the command again. **Remove** in the same window takes the links away.
 
 To check it, open a new Terminal window and type:
 
@@ -19,7 +19,7 @@ To check it, open a new Terminal window and type:
 silverside --version
 ```
 
-A copy of Silverside built from its source code has the command too; `make install` copies it into a folder instead of linking it.
+A copy built from the source code with `make install-app` has the command too. `make install` copies the command into a folder instead of linking it.
 
 ## Get started
 

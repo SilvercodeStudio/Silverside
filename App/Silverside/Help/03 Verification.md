@@ -12,7 +12,7 @@ A disc that is not in AccurateRip cannot be proved this way. Then a track that C
 
 AccurateRip keeps no checksum for a track that is all silence, so such a track shows **No checksum**, not "Not accurate", even when the rest of the disc is in AccurateRip. CTDB checks it with the rest of the disc.
 
-## CUETools database (CTDB)
+## CUETools DB (CTDB)
 
 CTDB also keeps a checksum of each track. A track that matches one is verified as soon as it is read, so it is read once, as a track that AccurateRip matches is. These checksums leave out about a tenth of a second at the start of the first track and at the end of the last, so Silverside reads those parts twice and compares them. After the last track, CTDB checks the whole disc at once, so a rip of some tracks only gets the check of each track but not the check of the disc. CTDB also holds repair data: when a few thousand samples are wrong, CTDB can correct them. Silverside tries a repair when a track is not verified, then checks the repaired track against AccurateRip again. **Verified** means the disc matches an entry; **repaired** means it matches after the repair.
 
@@ -30,7 +30,7 @@ The report lists each track's CRC-32, as Exact Audio Copy and XLD print it, with
 |---|---|
 | Verified, green | AccurateRip or CTDB verifies the track. |
 | Repaired, orange | CTDB's repair data corrected the track, and the result is verified. |
-| Copied, grey | The reads agree, but no database has this disc to check against. |
+| Copied, gray | The reads agree, but no database has this disc to check against. |
 | Not verified, red | No database matches the track, and a repair was not possible. |
 
 Under a track's status, a short line says what the track needed: the sectors that were read again (in red when some never agreed), and the samples that CTDB corrected. The AccurateRip and CTDB columns show how many rips in each database have the track's checksum. Control-click the column headings to show more columns or hide some: the Re-reads column counts the re-read sectors in a column of their own.

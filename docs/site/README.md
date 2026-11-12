@@ -1,6 +1,6 @@
 # silverside.app
 
-The website for Silverside: static HTML and CSS, no build step. One small script, `js/site.js`, runs the theme button and opens a screenshot full size over the page; without it, the page follows the system appearance and a screenshot's link opens the image itself. GitHub Pages serves this folder as https://silverside.app.
+The website for Silverside: static HTML and CSS, no build step. One small script, `js/site.js`, closes the menu on phones, runs the theme button, and opens a screenshot full size over the page; without it, the page follows the system appearance and a screenshot's link opens the image itself. GitHub Pages serves this folder as https://silverside.app.
 
 ## Preview
 
@@ -12,11 +12,12 @@ Switch macOS between Light and Dark (System Settings › Appearance) to see both
 
 ## Files
 
-- `index.html`: the home page. `privacy.html`: the privacy page.
+- `index.html`: the home page. `screenshots.html`: the screenshots. `privacy.html` and `license.html`: the privacy and license pages.
+- `js/site.js`: the phone menu, the theme button, and the full-size screenshots.
 - `css/tokens.css`: the design tokens as CSS custom properties, from the Silverside design system. Dark is the base; light follows `prefers-color-scheme` (or `data-theme="light"` on `<html>`).
 - `css/site.css`: the design system's components (`ss-` classes) and the page layout. Every color, radius, and font comes from a token.
 - `images/`: the app icon and the screenshots, each in dark and light, at two widths for `srcset`.
-- `tools/shot.swift`: crops a window screenshot to the window's edge and writes the JPEGs the pages use (see below).
+- `tools/shot.swift`: crops a window screenshot to the window's edge and writes the WebP images the pages use (see below). `tools/og-image.swift`: makes the link preview picture (`og:image`) from the hero screenshot.
 - `CNAME`: the custom domain. `.nojekyll`: Pages serves the files as they are.
 
 ## Publishing
@@ -25,7 +26,7 @@ Switch macOS between Light and Dark (System Settings › Appearance) to see both
 
 1. Settings › Pages › Build and deployment › Source: **GitHub Actions**.
 2. Settings › Pages › Custom domain: `silverside.app`, then Enforce HTTPS once the certificate is issued.
-3. At the DNS provider: `A` records for the apex at GitHub Pages' addresses (185.199.108.153, 185.199.109.153, 185.199.110.153, 185.199.111.153), and their `AAAA` records; optionally `www` as a `CNAME` to `silverside-app.github.io`. GitHub's "Managing a custom domain" page has the current list.
+3. At the DNS provider: `A` records for the apex at GitHub Pages' addresses (185.199.108.153, 185.199.109.153, 185.199.110.153, 185.199.111.153), and their `AAAA` records; optionally `www` as a `CNAME` to `silvercodestudio.github.io`. GitHub's "Managing a custom domain" page has the current list.
 
 ## Screenshots
 

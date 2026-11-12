@@ -270,7 +270,7 @@ struct ResultsView: View {
                     Button {
                         model.saveDataTrack(number, of: recentRip)
                     } label: {
-                        Label("Save Data Track…", systemImage: "externaldrive.badge.plus")
+                        Label("Save Data Track", systemImage: "externaldrive.badge.plus")
                     }
                     .help(
                         model.freeDrive(with: recentRip).map {

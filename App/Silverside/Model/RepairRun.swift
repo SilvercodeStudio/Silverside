@@ -125,7 +125,7 @@ final class RepairRun: Identifiable {
     /// Stops after the read under way. Nothing is written.
     func stop() {
         guard isRunning else { return }
-        add("Stopping after the read under way...")
+        add("Stopping after the read under way…")
         task?.cancel()
     }
 

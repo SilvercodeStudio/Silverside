@@ -207,7 +207,7 @@ private struct AcknowledgmentsSheet: View {
         ),
         (
             "[Adélaïde Casa](https://adelaide.casa/cdeg/) and [Adam Gashlin](https://extended.graphics)",
-            "made CD+EG's graphics public: Adélaïde Casa's notes for the Divacore record, and Adam Gashlin's Compact Disc Extended Graphics page. Silverside's CD+EG rendering code was informed by their work."
+            "documented CD+EG's graphics: Adélaïde Casa's notes for the Divacore record, and Adam Gashlin's Compact Disc Extended Graphics page. Silverside draws CD+EG as their work describes it."
         ),
         (
             "[Claude Code](https://claude.com/claude-code)",

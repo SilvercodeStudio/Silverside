@@ -81,7 +81,7 @@ struct AppCommands: Commands {
                 }
             }
             .disabled(!canAddNewRelease)
-            Button("Save Data Track…") {
+            Button("Save Data Track") {
                 if let (rip, number) = model.dataTrackToSave { model.saveDataTrack(number, of: rip) }
             }
             .disabled(model.dataTrackToSave == nil)
@@ -89,7 +89,7 @@ struct AppCommands: Commands {
                 .keyboardShortcut("l", modifiers: [.command, .shift])
                 .disabled(model.selectedDrive?.rip == nil)
             Divider()
-            Button("Repair Rip…") { if let rip = model.selectedRip { model.startRepair(rip) } }
+            Button("Repair Rip") { if let rip = model.selectedRip { model.startRepair(rip) } }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(!canRepair)
             Button("Search MusicBrainz…") { model.releaseSearchTarget = model.discCandidate }

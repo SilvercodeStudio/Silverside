@@ -58,7 +58,7 @@ See [Verification](help:verification#when-tracks-stay-unverified). In short: cle
 
 ## A drive hangs on a damaged disc
 
-Some drives retry a bad sector for a long time. Stop ends the rip after the read under way, but the drive may take a while to give up on that read. If the drive stops answering, eject the disc from the Finder and insert it again.
+Some drives retry a bad sector for a long time. Stop ends the rip after the read under way, but the drive may take a while to give up on that read. If the drive stops answering, unplug it and plug it in again; an eject may not get through.
 
 ## Report a problem
 
@@ -66,8 +66,8 @@ Help › Report a Problem… opens a new issue for Silverside on GitHub in your 
 
 Attach the files that show the problem:
 
-- For a rip, its `Rip Report.log` or `disc.json`, from the rip's folder. Control-click a rip in the sidebar and choose Show in Finder.
-- For a drive, its report: Settings › Drives › Test Drive…, then Save Report….
+- For a rip, its report: `Rip Report.log` and `disc.json` in the rip's folder, or `Rip Report.json` in the album's folder once the rip is encoded. Control-click the rip in the sidebar and choose Show in Finder.
+- For a drive, its report: Settings › Drives › Test Drive, then Save Report….
 
 ## Send feedback
 
@@ -96,4 +96,4 @@ Your music is in the folders that Settings names: the Music library (`~/Music/Si
 
 To move the library, to a NAS for example, quit Silverside, copy the library folder to its new place, then choose that place for the Music library in Settings › General. Each album's report finds its album where the report is, and a rip's report keeps its album's place relative to the library, so nothing else needs to change. Check that your rips show and play from the new place before you delete the old copy.
 
-To remove Silverside, quit it, move it to the Trash, and delete the folders and the `.plist` file above. Your music folders stay as they are. Keep `Application Support/Silverside` if you may install Silverside again: it has your drives' offsets and your rip history.
+To remove Silverside, first remove the command-line tool if you installed it (Silverside › Install Command Line Tool…, then Remove). Then quit Silverside, move it to the Trash, and delete the folders and the `.plist` file above. Your music folders stay as they are. Keep `Application Support/Silverside` if you may install Silverside again: it has your drives' offsets and your rip history.

@@ -438,7 +438,8 @@ struct HDCDQuestionSheet: View {
                             + (format.isLossless
                                 ? "\(format.wideBits)-bit \(format.name) files" : "\(format.name) files")
                             + (HDCDSizeWarning.growth(for: format).map { ", \($0)" } ?? " of the same size")
-                            + ". They are 6 dB quieter; ReplayGain makes up the level."))
+                            + ". They are 6 dB quieter"
+                            + (model.settings.replayGain ? "; ReplayGain makes up the level." : ".")))
                 Text(
                     .init(
                         format.isLossless
@@ -849,7 +850,7 @@ struct DTSDecodeSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             } else if let encoding {
                 Text(
-                    "The album's \(encoding.format.name) files become the decode, tagged DTS=decoded, with ReplayGain. The DTS stream is gone from the library"
+                    "The album's \(encoding.format.name) files become the decode, tagged DTS=decoded\(model.settings.replayGain ? ", with ReplayGain" : ""). The DTS stream is gone from the library"
                         + (rip.hasAudio
                             ? ", but stays in the rip's WAV files." : "; only a new rip of the disc gets it back.")
                 )
@@ -938,7 +939,7 @@ struct HDCDDecodeSheet: View {
             } else if let encoding {
                 HDCDSizeWarning(format: encoding.format)
                 Text(
-                    "The album's \(encoding.format.name) files become \(encoding.format.isLossless ? "\(encoding.format.wideBits)-bit, " : "")tagged HDCD=decoded, with ReplayGain measured again. The audio as pressed is gone from the library"
+                    "The album's \(encoding.format.name) files become \(encoding.format.isLossless ? "\(encoding.format.wideBits)-bit, " : "")tagged HDCD=decoded\(model.settings.replayGain ? ", with ReplayGain measured again" : ""). The audio as pressed is gone from the library"
                         + (rip.hasAudio
                             ? ", but stays in the rip's WAV files." : "; only a new rip of the disc gets it back.")
                 )

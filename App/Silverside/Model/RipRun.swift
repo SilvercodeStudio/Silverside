@@ -414,7 +414,7 @@ final class RipRun {
         switch error {
         case DiscRipError.unknownOffset(let drive):
             return
-                "The read offset of \(drive) is not known. Silverside looks it up in AccurateRip's drive list when it is online, or set it in Settings › Drives."
+                "The read offset of \(drive) is not known. Silverside looks it up in AccurateRip's drive list when it is online. To set it yourself, use Settings › Drives."
         case EncodingError.notVerified(let track):
             return
                 "Not encoded: track \(track) is not verified by AccurateRip or CTDB. The rip is in the rips folder."
@@ -435,7 +435,7 @@ final class RipRun {
     /// Stops after the read under way. The tracks ripped so far stay in the folder.
     func stop() {
         guard isRunning else { return }
-        add("Stopping after the read under way...")
+        add("Stopping after the read under way…")
         task?.cancel()
         // A rip that waits for the question stops when it hears the answer.
         if overwriteQuestion != nil { answer(replaces: false) }
@@ -454,14 +454,14 @@ final class RipRun {
         dataTrackQuestion = DataTrackQuestion(
             album: disc.title, tracks: tracks.map(\.number),
             bytes: tracks.reduce(0) { $0 + toc.sectorRange(of: $1).count * 2048 }, isEnhanced: toc.isEnhanced)
-        add("A data track. Waiting for an answer: save it, or rip the audio only...")
+        add("A data track. Waiting for an answer: save it, or rip the audio only…")
         onQuestion?()
     }
 
     private func askVideo(extended: Bool, answer: CheckedContinuation<CDGraphicsVideo.Request?, Never>) {
         videoAnswer = answer
         videoQuestion = VideoQuestion(album: disc.title, extended: extended)
-        add("CD+G graphics. Waiting for an answer: a video of them, or none...")
+        add("CD+G graphics. Waiting for an answer: a video of them, or none…")
         onQuestion?()
     }
 
@@ -489,7 +489,7 @@ final class RipRun {
     private func askHDCD(_ report: RipReport, format: AudioFormat, answer: CheckedContinuation<Bool, Never>) {
         hdcdAnswer = answer
         hdcdQuestion = HDCDQuestion(album: disc.title, features: HDCDStatus.features(of: report.tracks), format: format)
-        add("HDCD codes that change the audio. Waiting for an answer: decode them, or keep the audio as pressed...")
+        add("HDCD codes that change the audio. Waiting for an answer: decode them, or keep the audio as pressed…")
         onQuestion?()
     }
 
@@ -509,7 +509,7 @@ final class RipRun {
     ) {
         dtsAnswer = answer
         dtsQuestion = DTSQuestion(album: disc.title, text: report.dtsText, format: format, canDecode: canDecode)
-        add("A DTS stream. Waiting for an answer: decode it, or keep the stream...")
+        add("A DTS stream. Waiting for an answer: decode it, or keep the stream…")
         onQuestion?()
     }
 
@@ -529,7 +529,7 @@ final class RipRun {
     private func askSilentTracks(_ report: RipReport, answer: CheckedContinuation<Bool, Never>) {
         silentTracksAnswer = answer
         silentTracksQuestion = SilentTracksQuestion(album: disc.title, text: report.silentTracksText ?? "")
-        add("Tracks of digital silence. Waiting for an answer: leave them out of the album, or keep them...")
+        add("Tracks of digital silence. Waiting for an answer: leave them out of the album, or keep them…")
         onQuestion?()
     }
 
@@ -547,7 +547,7 @@ final class RipRun {
         preEmphasisQuestion = PreEmphasisQuestion(
             album: disc.title, tracks: report.preEmphasisTracks ?? "",
             everyTrack: report.tracks.allSatisfy(\.preEmphasis), format: format)
-        add("Tracks with pre-emphasis. Waiting for an answer: de-emphasize them, or keep the audio as pressed...")
+        add("Tracks with pre-emphasis. Waiting for an answer: de-emphasize them, or keep the audio as pressed…")
         onQuestion?()
     }
 
@@ -565,7 +565,7 @@ final class RipRun {
         albumNameQuestion = AlbumNameQuestion(shared: shared, album: disc.title)
         add(
             "The album's folder holds another release (\(SharedAlbumFolder.edition(of: shared.other))). "
-                + "Waiting for an answer...")
+                + "Waiting for an answer…")
         onQuestion?()
     }
 
@@ -581,7 +581,7 @@ final class RipRun {
     private func ask(_ existing: [URL], answer: CheckedContinuation<Bool, Never>) {
         overwriteAnswer = answer
         overwriteQuestion = OverwriteQuestion(existing: existing, album: disc.title)
-        add("The library already has \(Format.count(existing.count, "file")) of this disc. Waiting for an answer...")
+        add("The library already has \(Format.count(existing.count, "file")) of this disc. Waiting for an answer…")
         onQuestion?()
     }
 
@@ -698,7 +698,7 @@ final class RipRun {
         if verified == 0, report.tracks.allSatisfy({ $0.accurateRip == .notInDatabase }),
             report.ctdb.status != .notVerified
         {
-            return "\(total) tracks ripped, but no database can check this disc"
+            return Format.count(total, "track") + " ripped, but no database can check this disc"
         }
         return "\(verified) of \(total) tracks verified"
     }
@@ -817,7 +817,7 @@ final class RipRun {
             phase = .checkingCTDB
             currentTrack = nil
             ctdbStarted = Date()
-            add("Checking the disc against CUETools DB...")
+            add("Checking the disc against CUETools DB…")
         case .repairLog(let line):
             add(line)
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -862,7 +862,7 @@ final class RipRun {
             for number in tracksToRip { encodeStates[number] = .queued }
             startNextEncode()
             onProgress?()
-            add("Encoding as \(format.rawValue.uppercased())...")
+            add("Encoding as \(format.rawValue.uppercased())…")
         case .encodedTrack(let line):
             add("  \(line)")
         case .silentTracksLeftOut(let numbers):
@@ -898,7 +898,7 @@ final class RipRun {
             musicResult = "Not added to Music: \(error)"
             add(musicResult!)
         case .writingVideo(let fraction):
-            if videoProgress == nil { add("Making the video of the CD+G graphics...") }
+            if videoProgress == nil { add("Making the video of the CD+G graphics…") }
             videoProgress = fraction
         case .videoWritten(let url):
             videoProgress = nil

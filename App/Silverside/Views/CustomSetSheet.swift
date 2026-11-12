@@ -64,7 +64,7 @@ struct CustomSetSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(current == nil ? "Part of a Set" : "Set").font(.title2.weight(.semibold))
             Text(
-                "MusicBrainz does not know this disc. Put it in a set of your own, as the other discs of its box go in, and they become one album: one folder, the disc numbers in the tags, and the album's names and cover for every disc. The set stays on this Mac; it is not sent to MusicBrainz."
+                "Put this disc in a set of your own with the other discs of its box, and they become one album: one folder, the disc numbers in the tags, and the album's names and cover for every disc. The set stays on this Mac; it is not sent to MusicBrainz."
             )
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)

@@ -745,7 +745,7 @@ final class AppModel {
         return toc.tracks.first { $0.kind == .data && !saved.contains($0.number) }?.number
     }
 
-    /// What Disc › Save Data Track… saves: for a selected drive, the newest rip of its disc,
+    /// What Disc › Save Data Track saves: for a selected drive, the newest rip of its disc,
     /// and for a selected rip, that rip, if it lacks a data track and the disc is in a free drive.
     var dataTrackToSave: (rip: RecentRip, number: Int)? {
         let rip =

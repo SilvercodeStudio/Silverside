@@ -64,10 +64,10 @@ struct HelpView: View {
                         ToolbarItemGroup(placement: .navigation) {
                             Button(action: browser.goBack) { Label("Back", systemImage: "chevron.backward") }
                                 .disabled(!browser.canGoBack)
-                                .help("Show the place you were before (⌘[)")
+                                .help("Show the place you were before (⌘[ or ⌘←)")
                             Button(action: browser.goForward) { Label("Forward", systemImage: "chevron.forward") }
                                 .disabled(!browser.canGoForward)
-                                .help("Show the place you went back from (⌘])")
+                                .help("Show the place you went back from (⌘] or ⌘→)")
                         }
                     }
             } else if topics.isEmpty {

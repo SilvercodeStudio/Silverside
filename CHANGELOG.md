@@ -30,6 +30,9 @@ command-line tool.
 - The video of a CD+G disc's graphics stayed in the rip's folder when the rip
   was not verified and was accepted and encoded later. It now moves into the
   album folder with the music, as a verified rip's video does.
+- A CD+EG disc that sends its display settings split over two symbols, as
+  *Divacore* does, showed only its first picture in 256 colors: the pictures
+  after it never drew. Its video now shows every picture.
 
 ## 0.9.6 (2026-11-11)
 

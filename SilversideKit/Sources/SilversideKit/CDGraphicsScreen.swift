@@ -64,7 +64,12 @@ public struct CDGraphicsScreen: Equatable, Sendable {
     }
 
     /// The memories that the CD+G instructions draw in: PRIMARY only on a CD+G player, and in
-    /// the 1-plane state (where WM 00 draws in none); else as WM says.
+    /// the 1-plane state (where WM 00 draws in none); else as WM says. The CD+EG notes quote
+    /// clause 23.5.1 as saying that WM 11 in the 1-plane state draws in both memories, but the
+    /// Internet Archive's CD+EG video of *Amadeus* (VINY-2) matches PRIMARY only (2026-11-12:
+    /// its background stays brown, where both memories make it black). That video is the output
+    /// of Adam Gashlin's decoder, cdg-decode, not a capture of a player; he has CD+EG players,
+    /// and his decoder clears the SECONDARY on a memory preset and draws the rest in PRIMARY.
     private var targets: (primary: Bool, secondary: Bool) {
         guard extended else { return (true, false) }
         if displayMode == 0 { return (workingMemory != 0, false) }
@@ -115,8 +120,13 @@ public struct CDGraphicsScreen: Equatable, Sendable {
     private mutating func applyExtended(_ instruction: UInt8, _ data: [UInt8]) {
         switch instruction {
         case 3:
-            // DM in bits 3 and 2, WM in 1 and 0, in every data symbol; a Sega Saturn reads symbol 4.
-            let (mode, memory) = (Int(data[0] >> 2) & 3, Int(data[0]) & 3)
+            // DM in bits 3 and 2, WM in 1 and 0, in every data symbol; a Sega Saturn reads
+            // symbol 4. *Divacore* (2026) splits them, DM in symbol 4 and WM in symbol 5, and sends
+            // DM 00, WM 11 as 0 and 3: read alone, symbol 4 says WM 00, where the CD+G instructions
+            // draw in no memory, so every picture after its first stayed on the screen. The two
+            // symbols together read both layouts; a disc with the nibble in each reads the same.
+            let nibble = data[0] | data[1]
+            let (mode, memory) = (Int(nibble >> 2) & 3, Int(nibble) & 3)
             // DM 00 with WM 01 or 10: no operation; the last MEMORY control stays.
             guard mode != 0 || memory == 0 || memory == 3 else { return }
             displayMode = mode

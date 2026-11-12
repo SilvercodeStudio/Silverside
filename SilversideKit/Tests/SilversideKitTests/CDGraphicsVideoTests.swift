@@ -112,6 +112,17 @@ struct CDGraphicsVideoTests {
         #expect(player.displayMode == 3)
     }
 
+    /// *Divacore* sends MEMORY control with DM in symbol 4 and WM in symbol 5, 0 and 3, not
+    /// the nibble in every symbol: it is DM 00 and WM 11, so the CD+G instructions still draw
+    /// in the PRIMARY. Read from symbol 4 alone, it was WM 00, and its later pictures never drew.
+    @Test func readsMemoryControlWithItsFieldsSplit() {
+        var player = CDGraphicsScreen(extended: true)
+        player.apply(Self.extendedPack(3, [0, 3] + [UInt8](repeating: 0, count: 14)))
+        #expect(player.displayMode == 0 && player.workingMemory == 3)
+        player.apply(Self.pack(1, [5, 0]))
+        #expect(player.pixels.allSatisfy { $0 == 5 })
+    }
+
     /// The border shows its color, not the tiles under it, which a scroll can fill with the
     /// picture (the IA's CD+EG videos of *Mashin Hero Wataru 3* show it plain).
     @Test func showsTheBorderInItsColor() {

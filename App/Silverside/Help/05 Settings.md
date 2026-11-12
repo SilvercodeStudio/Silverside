@@ -1,83 +1,175 @@
 # Settings
 
-Silverside and the `silverside` command share one settings file, so a change in either applies to both.
+Silverside and the `silverside` command share one settings file, so a change in either applies to
+both.
+
+<!-- toc -->
 
 ## General
 
 - **Music library** is where encoded albums go, in folders named by the Naming settings.
-- **Rips** is where each rip's WAV files, report, and cover go. Keep it out of the library: music apps would import the WAV files.
-- **After a rip:** encode the disc into the library in the chosen format; keep or delete the rip's WAV files once the album is encoded and verified; add the files to the Music app; eject the disc when every track is verified. MP3 is in the list of formats once the LAME encoder is installed (see Encoding).
-- **Add the files to Apple's Music app** works for every format but FLAC, which Music cannot read. Music adds the files where they are, in the library folder, or copies them into its own folder if "Copy files to Music Media folder when adding to Library" is on in Music's settings. The first time, macOS asks whether Silverside may control Music; the answer is in System Settings › Privacy & Security › Automation. A file renamed later by Update the Library or a name change stays in Music, which follows a moved file on the same disk.
-- **When a disc goes in, rip it at once:** a disc that goes in while Silverside runs is ripped five seconds after its lookup, if MusicBrainz names its release for certain (an exact match, and not one of several releases unless you chose one for the set) and the disc is not ripped yet. The status bar counts down, with Rip Now and Cancel. Otherwise the disc waits for you, and the status bar says why. A disc already in a drive when Silverside starts is never ripped by itself. With eject after the rip on as well, a set rips with no more than a swap of discs.
-- **Artwork:** the front cover only (saved as `cover.jpg` and embedded in the files), every image in the Cover Art Archive, or none.
-- **Personal use:** Silverside is for archival copies of discs that you own, for your personal use, at your own risk. It rips a disc only while this box is checked. The welcome asks for it first; if you uncheck it, the next rip asks again.
-- **Command line tool:** Install Command Line Tool… (also in the Silverside menu) links the `silverside` command inside the app into `/usr/local/bin`, which may ask for your password, or `~/.local/bin`, and its completions for zsh, bash, and fish in the folders beside it. It is a link, so each update of the app updates the command too. If you move the app, install it again. The window says when `~/.local/bin` is not on your shell's PATH, and Remove takes the links away. A copy built from the source code with `make install-app` has the command too; `make install` copies it instead. See [Command Line Tool](help:command-line-tool).
-- **Updates:** check for a new version of Silverside once a day. At its second launch, Silverside asks whether to; this box changes the answer. **Check for Updates…** in the Silverside menu checks at once. An update that arrives during a rip, a repair, or other work waits for the work to end before Silverside installs it and opens again. A copy built from the source code does not check, and has no Check for Updates….
+- **Rips** is where each rip's WAV files, report, and cover go. Keep it out of the library: music
+  apps would import the WAV files.
+- **After a rip:** encode the disc into the library in the chosen format; keep or delete the rip's
+  WAV files once the album is encoded and verified; add the files to the Music app; eject the disc
+  when every track is verified. MP3 is in the list of formats once the LAME encoder is installed
+  (see Encoding).
+- **Add the files to Apple's Music app** works for every format but FLAC, which Music cannot read.
+  Music adds the files where they are, in the library folder, or copies them into its own folder if
+  "Copy files to Music Media folder when adding to Library" is on in Music's settings. The first
+  time, macOS asks whether Silverside may control Music; the answer is in System Settings › Privacy
+  & Security › Automation. A file renamed later by Update the Library or a name change stays in
+  Music, which follows a moved file on the same disk.
+- **When a disc goes in, rip it at once:** a disc that goes in while Silverside runs is ripped five
+  seconds after its lookup, if MusicBrainz names its release for certain (an exact match, and not
+  one of several releases unless you chose one for the set) and the disc is not ripped yet. The
+  status bar counts down, with Rip Now and Cancel. Otherwise the disc waits for you, and the status
+  bar says why. A disc already in a drive when Silverside starts is never ripped by itself. With
+  eject after the rip on as well, a set rips with no more than a swap of discs.
+- **Artwork:** the front cover only (saved as `cover.jpg` and embedded in the files), every image in
+  the Cover Art Archive, or none.
+- **Personal use:** Silverside is for archival copies of discs that you own, for your personal use,
+  at your own risk. It rips a disc only while this box is checked. The welcome asks for it first; if
+  you uncheck it, the next rip asks again.
+- **Command line tool:** Install Command Line Tool… (also in the Silverside menu) links the
+  `silverside` command inside the app into `/usr/local/bin`, which may ask for your password, or
+  `~/.local/bin`, and its completions for zsh, bash, and fish in the folders beside it. It is a
+  link, so each update of the app updates the command too. If you move the app, install it again.
+  The window says when `~/.local/bin` is not on your shell's PATH, and Remove takes the links away.
+  A copy built from the source code with `make install-app` has the command too; `make install`
+  copies it instead. See [Command Line Tool](help:command-line-tool).
+- **Updates:** check for a new version of Silverside once a day. At its second launch, Silverside
+  asks whether to; this box changes the answer. **Check for Updates…** in the Silverside menu checks
+  at once. An update that arrives during a rip, a repair, or other work waits for the work to end
+  before Silverside installs it and opens again. A copy built from the source code does not check,
+  and has no Check for Updates….
 
 ## Ripping
 
-**Ask the drive for C2 error flags:** C2 error flags are a drive's own report of sectors it had trouble with. Silverside re-reads them first. The flags are a hint only; the reads decide. A drive that flags nearly every sector of a track says nothing about where the errors are, so its flags are not used for that track, and the log and the report say so.
+**Ask the drive for C2 error flags:** C2 error flags are a drive's own report of sectors it had
+trouble with. Silverside re-reads them first. The flags are a hint only; the reads decide. A drive
+that flags nearly every sector of a track says nothing about where the errors are, so its flags are
+not used for that track, and the log and the report say so.
 
-**Test and copy** reads each track once more after its rip, and keeps the CRC-32 of both reads in the report, as Exact Audio Copy does. It is off by default: the rip already compares reads of every doubtful sector, and the test read takes as long as another read of the disc. Turn it on for a record that EAC's users will recognize.
+**Test and copy** reads each track once more after its rip, and keeps the CRC-32 of both reads in
+the report, as Exact Audio Copy does. It is off by default: the rip already compares reads of every
+doubtful sector, and the test read takes as long as another read of the disc. Turn it on for a
+record that EAC's users will recognize.
 
-**Write EAC-style log** (on by default) puts `Rip Report.log` beside each rip's report: the same facts in the layout of Exact Audio Copy's logs, for people and tools that read those. See [Where the files go](help:ripping-a-disc#where-the-files-go).
+**Write EAC-style log** (on by default) puts `Rip Report.log` beside each rip's report: the same
+facts in the layout of Exact Audio Copy's logs, for people and tools that read those. See [Where the
+files go](help:ripping-a-disc#where-the-files-go).
 
-**Video of CD+G graphics** says what to do with a disc that has pictures or karaoke lyrics on it: ask (the default, until you keep an answer), make a video of them with Apple Lossless or AAC audio, or make none (see [CD+G graphics](help:ripping-a-disc#cdg-graphics)). The `.cdg` files are saved either way. **CD+EG video picture** says which picture a CD+EG disc's video shows: 256 colors, as a CD+EG player shows it; 16 colors, as a CD+G player does; or both, in two files.
+**Video of CD+G graphics** says what to do with a disc that has pictures or karaoke lyrics on it:
+ask (the default, until you keep an answer), make a video of them with Apple Lossless or AAC audio,
+or make none (see [CD+G graphics](help:ripping-a-disc#cdg-graphics)). The `.cdg` files are saved
+either way. **CD+EG video picture** says which picture a CD+EG disc's video shows: 256 colors, as a
+CD+EG player shows it; 16 colors, as a CD+G player does; or both, in two files.
 
-**Data tracks** says what to do with the extras for a computer that some CDs have after the music: ask (the default, until you keep an answer), save them as `Data track.iso` with their files in a `Data track` folder in the album's folder, or rip the audio only (see [Enhanced CDs](help:ripping-a-disc#enhanced-cds)). Saving costs about a minute and twice the track's size, often 50 to 600 MB each.
+**Data tracks** says what to do with the extras for a computer that some CDs have after the music:
+ask (the default, until you keep an answer), save them as `Data track.iso` with their files in a
+`Data track` folder in the album's folder, or rip the audio only (see [Enhanced
+CDs](help:ripping-a-disc#enhanced-cds)). Saving costs about a minute and twice the track's size,
+often 50 to 600 MB each.
 
 ## Encoding
 
-The format itself is chosen in General. This tab shows that format's options, and what to do with special discs. FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit rate mode, bit rate, and VBR quality.
+The format itself is chosen in General. This tab shows that format's options, and what to do with
+special discs. FLAC, Apple Lossless, AIFF, and WAV are lossless and have no options. AAC takes a bit
+rate mode, bit rate, and VBR quality.
 
-MP3 needs LAME, a free encoder that Silverside runs as a separate program, because Apple's frameworks cannot write MP3. Install it with Homebrew (brew.sh), in Terminal:
+MP3 needs LAME, a free encoder that Silverside runs as a separate program, because Apple's
+frameworks cannot write MP3. Install it with Homebrew (brew.sh), in Terminal:
 
 ```
 brew install lame
 ```
 
-Until LAME is installed, MP3 is missing from the formats in General and dimmed in the welcome, and if MP3 is already the format, its options here are dimmed. Silverside looks for LAME every few seconds while Settings or the welcome is open, so MP3 turns on as soon as the install ends. The options are LAME's: a variable bit rate from a quality (0 is the best, about 245 kbit/s), or a constant or average bit rate.
+Until LAME is installed, MP3 is missing from the formats in General and dimmed in the welcome, and
+if MP3 is already the format, its options here are dimmed. Silverside looks for LAME every few
+seconds while Settings or the welcome is open, so MP3 turns on as soon as the install ends. The
+options are LAME's: a variable bit rate from a quality (0 is the best, about 245 kbit/s), or a
+constant or average bit rate.
 
-Every encoded file is decoded again and compared with the audio it was made from before it goes into the library: the rip, or the rip after HDCD decoding, de-emphasis, or DTS decoding.
+Every encoded file is decoded again and compared with the audio it was made from before it goes into
+the library: the rip, or the rip after HDCD decoding, de-emphasis, or DTS decoding.
 
-**DTS-CD** chooses what to write for a disc whose tracks hold a DTS stream: ask each time, the album and a decoded copy beside it, the decoded album only, or the stream only (see Ripping a Disc). Decoding needs ffmpeg; the section says where Silverside found it, or how to install it (in Terminal: `brew install ffmpeg`).
+**DTS-CD** chooses what to write for a disc whose tracks hold a DTS stream: ask each time, the album
+and a decoded copy beside it, the decoded album only, or the stream only (see Ripping a Disc).
+Decoding needs ffmpeg; the section says where Silverside found it, or how to install it (in
+Terminal: `brew install ffmpeg`).
 
 ### ReplayGain
 
-Albums are mastered at different levels, so one is quiet and the next is loud. ReplayGain tags tell a player how much to turn each one up or down to play them at the same level. Silverside measures each track and the whole album as the broadcast standard EBU R 128 does, and writes the result into the files as five tags: the track's gain and peak, the album's gain and peak, and the reference level (−18 LUFS). The audio itself is not changed, in any format, and the tags can be removed with any tag editor. The rip report lists the values.
+Albums are mastered at different levels, so one is quiet and the next is loud. ReplayGain tags tell
+a player how much to turn each one up or down to play them at the same level. Silverside measures
+each track and the whole album as the broadcast standard EBU R 128 does, and writes the result into
+the files as five tags: the track's gain and peak, the album's gain and peak, and the reference
+level (−18 LUFS). The audio itself is not changed, in any format, and the tags can be removed with
+any tag editor. The rip report lists the values.
 
-For a set of several discs, the album is the whole set, as a player sees it: every disc has the same album name. Until every disc is in the library, each disc's album gain is its own; when the last disc is encoded, the files of every disc get the album gain over all of them, so a show split across discs does not jump in level at a disc change.
+For a set of several discs, the album is the whole set, as a player sees it: every disc has the same
+album name. Until every disc is in the library, each disc's album gain is its own; when the last
+disc is encoded, the files of every disc get the album gain over all of them, so a show split across
+discs does not jump in level at a disc change.
 
 What the tags do depends on the player:
 
-- The Music app and iTunes ignore them. They have their own leveling, Sound Check, which they measure themselves.
-- Most other players read them (foobar2000, VLC, mpv, Plexamp, the Navidrome and Jellyfin apps, most Android players), but most keep the leveling off until you turn it on in their settings. Then they offer two modes: **album** gain keeps an album's own dynamics, so a quiet intro stays quiet next to the loud song after it, and only levels one album against another; **track** gain levels every track, which suits shuffle. Silverside writes both, so the choice is the player's.
+- The Music app and iTunes ignore them. They have their own leveling, Sound Check, which they
+  measure themselves.
+- Most other players read them (foobar2000, VLC, mpv, Plexamp, the Navidrome and Jellyfin apps, most
+  Android players), but most keep the leveling off until you turn it on in their settings. Then they
+  offer two modes: **album** gain keeps an album's own dynamics, so a quiet intro stays quiet next
+  to the loud song after it, and only levels one album against another; **track** gain levels every
+  track, which suits shuffle. Silverside writes both, so the choice is the player's.
 
-The same measurement gives each track's and each disc's dynamic range, which shows how hard the mastering limited the loud parts. **DR** is the DR meter's number, as the Dynamic Range Database lists albums: the loudest peaks over the loudest parts, in dB, so a hard-limited master has a low DR (DR5) and an open one a high DR (DR14). An album's DR is the mean of its tracks'. **Loudness range** (LRA, EBU Tech 3342) is the swing between the quiet and the loud parts, in LU. The rip report lists both, and for a set, both over the whole set; the files get the tags `DYNAMIC RANGE` and `ALBUM DYNAMIC RANGE` (the disc's, as foobar2000's DR meter writes them), and `REPLAYGAIN_TRACK_RANGE` and `REPLAYGAIN_ALBUM_RANGE`. Players ignore these tags; tag editors and library tools show them.
+The same measurement gives each track's and each disc's dynamic range, which shows how hard the
+mastering limited the loud parts. **DR** is the DR meter's number, as the Dynamic Range Database
+lists albums: the loudest peaks over the loudest parts, in dB, so a hard-limited master has a low DR
+(DR5) and an open one a high DR (DR14). An album's DR is the mean of its tracks'. **Loudness range**
+(LRA, EBU Tech 3342) is the swing between the quiet and the loud parts, in LU. The rip report lists
+both, and for a set, both over the whole set; the files get the tags `DYNAMIC RANGE` and `ALBUM
+DYNAMIC RANGE` (the disc's, as foobar2000's DR meter writes them), and `REPLAYGAIN_TRACK_RANGE` and
+`REPLAYGAIN_ALBUM_RANGE`. Players ignore these tags; tag editors and library tools show them.
 
-The setting is on by default because the tags cost nothing until a player uses them, and adding them to a library later means measuring every file again with another program. Turn it off if you would rather have no such tags in your files.
+The setting is on by default because the tags cost nothing until a player uses them, and adding them
+to a library later means measuring every file again with another program. Turn it off if you would
+rather have no such tags in your files.
 
 ### HDCD
 
-What to do with a disc whose HDCD codes ask for peak extend or gain: **Ask each time** (the default), **Decode** (20-bit FLAC and Apple Lossless, 24-bit AIFF and WAV), or **Keep as pressed** (files bit for bit the disc). A disc whose codes ask for nothing is always kept as pressed. See HDCD under Ripping a Disc.
+What to do with a disc whose HDCD codes ask for peak extend or gain: **Ask each time** (the
+default), **Decode** (20-bit FLAC and Apple Lossless, 24-bit AIFF and WAV), or **Keep as pressed**
+(files bit for bit the disc). A disc whose codes ask for nothing is always kept as pressed. See HDCD
+under Ripping a Disc.
 
 ### Pre-emphasis
 
-What to do with tracks mastered with pre-emphasis: **Ask each time** (the default), **De-emphasize** (as a CD player plays them: 20-bit FLAC and Apple Lossless, 24-bit AIFF and WAV), or **Keep as pressed** (files bit for bit the disc). See Pre-emphasis and other flags under Ripping a Disc.
+What to do with tracks mastered with pre-emphasis: **Ask each time** (the default), **De-emphasize**
+(as a CD player plays them: 20-bit FLAC and Apple Lossless, 24-bit AIFF and WAV), or **Keep as
+pressed** (files bit for bit the disc). See Pre-emphasis and other flags under Ripping a Disc.
 
 ### Silent tracks
 
-What to do with tracks that are all digital silence: **Ask each time** (the default), **Leave out**, or **Keep**. See [Silent tracks](help:ripping-a-disc#silent-tracks).
+What to do with tracks that are all digital silence: **Ask each time** (the default), **Leave out**,
+or **Keep**. See [Silent tracks](help:ripping-a-disc#silent-tracks).
 
 ### Disc image
 
-With **Also write a disc image** on, each disc that is encoded is also written as one file, with a CUE sheet: the image. A burner (such as cdrdao) can make the disc again from it, and some players (foobar2000, for one) show its tracks. The image is lossless: in the library's format, or FLAC when the library is AAC or MP3. It goes into the images folder, in folders named as the library's, and the album's tracks are written as usual. Like every file, it is decoded again and compared with the rip. A FLAC image also holds its CUE sheet in its tags.
+With **Also write a disc image** on, each disc that is encoded is also written as one file, with a
+CUE sheet: the image. A burner (such as cdrdao) can make the disc again from it, and some players
+(foobar2000, for one) show its tracks. The image is lossless: in the library's format, or FLAC when
+the library is AAC or MP3. It goes into the images folder, in folders named as the library's, and
+the album's tracks are written as usual. Like every file, it is decoded again and compared with the
+rip. A FLAC image also holds its CUE sheet in its tags.
 
-An image holds the audio only: a data track (on an Enhanced CD or a game disc) and CD+G graphics are not in it. An image is not renamed or retagged when you change an album's names later.
+An image holds the audio only: a data track (on an Enhanced CD or a game disc) and CD+G graphics are
+not in it. An image is not renamed or retagged when you change an album's names later.
 
 ## Naming
 
-Templates name the album folder and the track files in the library, and the rip's folder. The fields:
+Templates name the album folder and the track files in the library, and the rip's folder. The
+fields:
 
 | Field | Value |
 |---|---|
@@ -90,11 +182,17 @@ Templates name the album folder and the track files in the library, and the rip'
 | `{trackArtist}` | The track's artist. |
 | `{otherArtist}` | The track's artist, only when it is not the album's. |
 
-A part in square brackets is left out when its field is empty, so `[{disc:2}-]{track} {title}` gives `03 Title` on a single disc and `02-03 Title` in a set.
+A part in square brackets is left out when its field is empty, so `[{disc:2}-]{track} {title}` gives
+`03 Title` on a single disc and `02-03 Title` in a set.
 
 The styles, each with an example in the window:
 
-- **Live shows** adds `[Venue, date]` to titles when every disc of the release is a dated show, and tags each disc with the show's date.
-- **Segue marks**: MusicBrainz ends a title with `>` when the song runs into the next. The mark can stay in the tags only (the default: `China Cat Sunflower >` in the tag, `04-01 China Cat Sunflower.flac` on disk), in the tags and the file names, or go.
-- **Compilations folder**: a release credited to Various Artists is tagged COMPILATION, and each track's file name carries its own artist. The album folder is named Various Artists unless you give another name here.
+- **Live shows** adds `[Venue, date]` to titles when every disc of the release is a dated show, and
+  tags each disc with the show's date.
+- **Segue marks**: MusicBrainz ends a title with `>` when the song runs into the next. The mark can
+  stay in the tags only (the default: `China Cat Sunflower >` in the tag, `04-01 China Cat
+  Sunflower.flac` on disk), in the tags and the file names, or go.
+- **Compilations folder**: a release credited to Various Artists is tagged COMPILATION, and each
+  track's file name carries its own artist. The album folder is named Various Artists unless you
+  give another name here.
 - **Plain punctuation** turns typographic quotes and dashes into ASCII in names and tags.

@@ -291,6 +291,8 @@ nonisolated enum MarkdownHTML {
         var html = [String]()
         var paragraph = [String]()
         var list: String?
+        /// The list item being read: an indented line after it continues it, so long items can wrap.
+        var item: String?
         var table = [String]()
         var inCode = false
         let anchors = headings(markdown)
@@ -301,7 +303,12 @@ nonisolated enum MarkdownHTML {
             html.append("<p>\(inline(paragraph.joined(separator: " ")))</p>")
             paragraph = []
         }
+        func endItem() {
+            if let item { html.append("<li>\(inline(item))</li>") }
+            item = nil
+        }
         func endList() {
+            endItem()
             if let list { html.append("</\(list)>") }
             list = nil
         }
@@ -379,7 +386,8 @@ nonisolated enum MarkdownHTML {
                     list = "ul"
                     html.append("<ul>")
                 }
-                html.append("<li>\(inline(String(line.dropFirst(2))))</li>")
+                endItem()
+                item = String(line.dropFirst(2))
                 continue
             }
             if let dot = line.firstIndex(of: "."), line[..<dot].allSatisfy(\.isNumber), !line[..<dot].isEmpty,
@@ -391,9 +399,15 @@ nonisolated enum MarkdownHTML {
                     list = "ol"
                     html.append("<ol>")
                 }
-                html.append("<li>\(inline(String(line[line.index(dot, offsetBy: 2)...])))</li>")
+                endItem()
+                item = String(line[line.index(dot, offsetBy: 2)...])
                 continue
             }
+            if let current = item, raw.first?.isWhitespace == true {
+                item = current + " " + line
+                continue
+            }
+            endItem()
             paragraph.append(line)
         }
         endParagraph()

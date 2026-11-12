@@ -21,9 +21,9 @@ it to copy discs that are not yours, or to share copies with other people.
 Follow the copyright law where you live. You use Silverside at your own risk:
 it comes with no warranty (see [LICENSE](LICENSE)).
 
-## Key features 
+## Key features
 
-- Easy to use Mac app and a command-line tool `silverside` that share one engine 
+- Easy to use Mac app and a command-line tool `silverside` that share one engine
   and settings file.
 - Advanced CD audio extraction and verification
 - 20-bit HDCD decoding when applicable for enhanced dynamic range.
@@ -274,19 +274,19 @@ Note that some of these require an external tool (ffmpeg or LAME) for full use.
     from a few early 1990s Japanese and Korean releases - drawn as a CD+EG player
     such as the Sega Saturn shows it.
 - Hidden track one audio (HTOA) identification and extraction
-- Additional technical details of the discs are logged: 
-  - disc IDs, MCN (Media Catalog Number), ISRC (International Standard Recording 
+- Additional technical details of the discs are logged:
+  - disc IDs, MCN (Media Catalog Number), ISRC (International Standard Recording
     Code), media type (CD-R, etc.).
-- HDCD - High Definition Compatible Digital discs - hidden codes can allow expansion 
+- HDCD - High Definition Compatible Digital discs - hidden codes can allow expansion
   of 16-bit data to 20-bit on certain titles for increased dynamic range
 - pre-emphasis handling (de-emphasis) - a rare form of noise reduction on some
   early 1980s CDs. If the ripping app and player combo doesn't reverse it, and most
-  don't, the resulting sound will be harsh and trebly, but Silverside can decode it 
-  to de-emphasized 20-bit FLAC/ALAC to sound as the artist intended. 
+  don't, the resulting sound will be harsh and trebly, but Silverside can decode it
+  to de-emphasized 20-bit FLAC/ALAC to sound as the artist intended.
    - Pre-emphasis is detected in both the TOC and Q subchannel; some tools miss the
-     subchannel codes or keep the flag only in the CUE sheet. 
+     subchannel codes or keep the flag only in the CUE sheet.
 - DTS-CD - multichannel audio (often 5.1) on compact disc.
-  - Decoded with ffmpeg to multichannel FLAC or ALAC (up to 24-bit), or 
+  - Decoded with ffmpeg to multichannel FLAC or ALAC (up to 24-bit), or
     multichannel lossy AAC
   - Detected automatically and supported in track preview playing
 - accurate ReplayGain tags for consistent volume levels on playback
@@ -312,16 +312,17 @@ later, such as from `brew install python`; the one with Xcode is too old.
 The app from `make install-app` has the command-line tool inside it, as the
 released app does: Silverside › Install Command Line Tool… links it. A Debug
 build run from Xcode does not have it. Open `Silverside.xcworkspace` in Xcode
-to work on the app, the engine, and the command-line tool together. At its first launch, the app asks what a rip
-should become (Apple Lossless, FLAC, AAC, or MP3).
+to work on the app, the engine, and the command-line tool together. At its
+first launch, the app asks what a rip should become (Apple Lossless, FLAC,
+AAC, or MP3).
 
 ## The command-line tool
 
 `silverside` rips, repairs, checks, encodes, and looks up names from a
-terminal, with the same engine and the same settings file. It comes inside the app: Silverside › Install Command Line
-Tool… puts it on your PATH, and app updates update it too. See
-[docs/cli.md](docs/cli.md) for its commands, what a rip makes, and the
-settings.
+terminal, with the same engine and the same settings file. It comes inside the
+app: Silverside › Install Command Line Tool… puts it on your PATH, and each
+update of the app brings the command along. See [docs/cli.md](docs/cli.md) for
+its commands, what a rip makes, and the settings.
 
 ## How the audio processing was checked
 

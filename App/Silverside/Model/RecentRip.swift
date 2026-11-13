@@ -205,6 +205,8 @@ nonisolated struct RecentRip: Identifiable, Sendable {
     /// there, and a volume under /Volumes that is not mounted. Each is looked at once.
     struct Places {
         private let roots: [String]
+        /// By the kind of look and the path: a NAS's mount point can be a folder that exists and
+        /// not a mounted volume, so one answer must not stand for the other (review of 988720d).
         private var reachable: [String: Bool] = [:]
 
         init(rips: URL, library: URL) {
@@ -224,13 +226,14 @@ nonisolated struct RecentRip: Identifiable, Sendable {
         /// A folder that exists, or, with `volume`, a folder that is a mounted volume: an empty
         /// folder can stay at a NAS's mount point after it is gone.
         private mutating func isReachable(_ path: String, volume: Bool) -> Bool {
-            if let known = reachable[path] { return known }
+            let key = (volume ? "volume " : "folder ") + path
+            if let known = reachable[key] { return known }
             let url = URL(filePath: path, directoryHint: .isDirectory)
             let found =
                 volume
                 ? (try? url.resourceValues(forKeys: [.isVolumeKey]))?.isVolume == true
                 : FileManager.default.fileExists(atPath: path)
-            reachable[path] = found
+            reachable[key] = found
             return found
         }
     }

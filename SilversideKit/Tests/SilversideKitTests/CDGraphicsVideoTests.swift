@@ -317,6 +317,41 @@ struct CDGraphicsVideoTests {
         #expect(!left.contains { $0.hasSuffix(".m4v") }, "\(left)")
     }
 
+    /// A rip renamed after its video was made still takes the video into its album, by the
+    /// album's new name; a video already there is replaced only when overwrites are allowed,
+    /// as the audio is (review of 18f88a6).
+    @Test func movesARenamedRipsVideoOnlyWhenItMayReplace() throws {
+        let (folder, library) = try EncodingTests().makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        try Data(Self.pack(1, [1, 0])).write(to: folder.appending(path: "Track 01.cdg"))
+        try RipReport.update(reportAt: folder.appending(path: "disc.json")) {
+            $0.tracks[0].graphics = .init(file: "Track 01.cdg")
+        }
+        var video = CDGraphicsVideo()
+        video.scale = 1
+        let made = try video.write(try RippedDisc(folder: folder))
+        try MetadataEdits(album: "Renamed").save(inDiscJSONOf: folder)
+
+        let disc = try RippedDisc(folder: folder)
+        let planned = try DiscEncoder(format: .flac).plannedFiles(disc, into: library)
+        let target = try #require(planned.first { $0.pathExtension == "m4v" })
+        #expect(target.lastPathComponent == "Renamed (Disc 2).m4v")
+        // Another video at that place stops the encoding before anything is written.
+        try FileManager.default.createDirectory(
+            at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let other = Data("another video".utf8)
+        try other.write(to: target)
+        #expect(throws: EncodingError.self) { try DiscEncoder(format: .flac).encodeWithRecord(disc, into: library) }
+        #expect(try Data(contentsOf: target) == other)
+        #expect(FileManager.default.fileExists(atPath: made.path))
+
+        var encoder = DiscEncoder(format: .flac)
+        encoder.overwrites = true
+        let (_, record) = try encoder.encodeWithRecord(disc, into: library)
+        #expect(record?.videos == [.init(file: "Renamed (Disc 2).m4v", picture: .extended)])
+        #expect(try Data(contentsOf: target) != other && !FileManager.default.fileExists(atPath: made.path))
+    }
+
     /// A rip's album folder that now holds another edition's album keeps its video: the rip's
     /// goes beside the rip (review of 6d31199).
     @Test func leavesAnotherEditionsVideoAlone() throws {

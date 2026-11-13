@@ -175,15 +175,16 @@ final class AppModel {
         }
     }
 
-    /// Scans the earlier rips again when a volume that holds the rips folder, the library, or a
-    /// rip not found comes or goes. Several shares of a NAS mount together, and SMB can connect
-    /// again just after, so the scan waits a moment for the last of them.
+    /// Scans the earlier rips again when a volume that holds the rips folder, the library, or
+    /// any rip in the history comes or goes: a disk with albums found elsewhere can be unplugged.
+    /// Several shares of a NAS mount together, and SMB can connect again just after, so the scan
+    /// waits a moment for the last of them.
     private func volumeChanged(_ volume: URL?) {
         if let volume {
             let root = volume.standardizedFileURL.path
             let places =
                 [settings.ripsURL, settings.libraryURL].map(\.standardizedFileURL.path)
-                + (offlineRips + missingRips).map(\.file.path)
+                + (recentRips + offlineRips + missingRips).map(\.file.path)
             guard places.contains(where: { $0 == root || $0.hasPrefix(root.hasSuffix("/") ? root : root + "/") })
             else { return }
         }

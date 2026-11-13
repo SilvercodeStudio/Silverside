@@ -410,12 +410,15 @@ public struct DiscEncoder: Sendable {
         let discPart = release.media.count > 1 ? " (Disc \(medium.position))" : ""
         let data = jobs.first.map { dataTrackCopies(of: disc, into: $0.folder, discPart: discPart) } ?? []
         let graphics = try graphicsCopies(of: disc, files: (jobs + leftOut).map { ($0.ripped.number, $0.file) })
-        // A data track's image, and the folder its files go into; a track's CD+G graphics.
+        let videos = jobs.first.map { videoCopies(of: disc, release: release, into: $0.folder) } ?? []
+        // A data track's image, and the folder its files go into; a track's CD+G graphics; the
+        // videos made beside the rip.
         return jobs.map(\.file)
             + data.filter { !Self.sameFile($0.source, $0.target) }.flatMap {
                 [$0.target, Self.filesFolder(of: $0.target)]
             }
             + graphics.filter { !Self.sameFile($0.source, $0.target) }.map(\.target)
+            + videos.map(\.target)
     }
 
     /// The tracks' CD+G graphics to copy into the album folder, each beside its track's file
@@ -474,36 +477,54 @@ public struct DiscEncoder: Sendable {
         return files
     }
 
-    /// Moves the videos that a rip made in its own folder into the album folder, under the
-    /// album's names, and returns them. A rip that was not encoded gets its video beside it
+    /// The videos that a rip made in its own folder, to move into the album folder under the
+    /// album's names. A rip that was not encoded gets its video beside it
     /// (`CDGraphicsVideo.destination`), as a rip that is not verified does until it is
-    /// accepted; without this, its encoding left the video in the rip's folder, which then
-    /// held nothing else. A video of the same picture in the album folder is replaced.
-    func placeRipVideos(of disc: RippedDisc, release: MusicBrainzRelease, in album: URL) throws
+    /// accepted; without this, its encoding left the video in the rip's folder, which then held
+    /// nothing else. They are found by their files, not by a name worked out from the release:
+    /// the album may have been renamed since the video was made. Only Silverside writes videos
+    /// in a rip's folder; "… (CD+G).m4v" is a CD+EG disc's CD+G picture, and of two of one
+    /// picture, the newer goes.
+    func videoCopies(of disc: RippedDisc, release: MusicBrainzRelease, into album: URL)
+        -> [(picture: CDGraphicsVideo.Picture, source: URL, target: URL)]
+    {
+        guard albumSuffix == nil, !disc.isAlbum, !RippedDisc.overlap(disc.folder, album),
+            disc.report?.tracks.contains(where: { $0.graphics != nil }) == true
+        else { return [] }
+        let keys: [URLResourceKey] = [.contentModificationDateKey]
+        let videos =
+            (try? FileManager.default.contentsOfDirectory(
+                at: disc.folder, includingPropertiesForKeys: keys, options: .skipsHiddenFiles)) ?? []
+        func modified(_ url: URL) -> Date {
+            (try? url.resourceValues(forKeys: Set(keys)).contentModificationDate) ?? .distantPast
+        }
+        return [CDGraphicsVideo.Picture.extended, .standard].compactMap { picture in
+            let source = videos.filter {
+                $0.pathExtension.lowercased() == "m4v"
+                    && $0.lastPathComponent.hasSuffix(" (CD+G).m4v") == (picture == .standard)
+            }
+            .max { modified($0) < modified($1) }
+            return source.map {
+                (
+                    picture, $0,
+                    album.appending(path: CDGraphicsVideo.fileName(release: release, toc: disc.toc, picture: picture))
+                )
+            }
+        }
+    }
+
+    /// Moves the rip's videos (`videoCopies`) into the album folder, replacing a video of the
+    /// same picture there (which `encode` has checked with `overwrites`), and returns them.
+    func placeRipVideos(_ copies: [(picture: CDGraphicsVideo.Picture, source: URL, target: URL)]) throws
         -> [RipReport.Encoding.Video]
     {
-        guard !disc.isAlbum, !RippedDisc.overlap(disc.folder, album) else { return [] }
         let manager = FileManager.default
-        var videos = [RipReport.Encoding.Video]()
-        for picture in [CDGraphicsVideo.Picture.extended, .standard] {
-            // Named as the rip had it when the video was made: its release then, or its folder.
-            let names = [disc.release, release].map {
-                CDGraphicsVideo.fileName(
-                    release: $0, toc: disc.toc, picture: picture, untitled: disc.folder.lastPathComponent)
-            }
-            guard
-                let source = names.map({ disc.folder.appending(path: $0) }).first(where: {
-                    manager.fileExists(atPath: $0.path)
-                })
-            else { continue }
-            let target = album.appending(
-                path: CDGraphicsVideo.fileName(release: release, toc: disc.toc, picture: picture))
+        return try copies.map { picture, source, target in
             if manager.fileExists(atPath: target.path) { try manager.removeItem(at: target) }
             try manager.moveItem(at: source, to: target)
             log(target.lastPathComponent)
-            videos.append(.init(file: target.lastPathComponent, picture: picture))
+            return .init(file: target.lastPathComponent, picture: picture)
         }
-        return videos
     }
 
     /// The folder beside a data track's image that holds its files: "Data track" for "Data track.iso".
@@ -901,11 +922,14 @@ public struct DiscEncoder: Sendable {
         // would have: a CD+G track can draw over silence.
         let graphicsCopies = try graphicsCopies(
             of: disc, files: (jobs + planned.leftOut).map { ($0.ripped.number, $0.file) })
+        // And the videos made beside the rip, which go into the album folder.
+        let videoCopies = jobs.first.map { videoCopies(of: disc, release: release, into: $0.folder) } ?? []
         if !overwrites,
             let existing =
                 (dataTrackCopies.filter({ !Self.sameFile($0.source, $0.target) })
                 .flatMap({ [$0.target, Self.filesFolder(of: $0.target)] })
-                + graphicsCopies.filter({ !Self.sameFile($0.source, $0.target) }).map(\.target))
+                + graphicsCopies.filter({ !Self.sameFile($0.source, $0.target) }).map(\.target)
+                + videoCopies.map(\.target))
                 .first(where: { FileManager.default.fileExists(atPath: $0.path) })
         {
             throw EncodingError.exists(existing)
@@ -1179,12 +1203,7 @@ public struct DiscEncoder: Sendable {
                     encodedFiles.contains { $0.track == copy.track } || silentTracksLeftOut.contains(copy.track)
                 },
                 fromAlbum: disc.isAlbum) : []
-        let ripVideos =
-            if let albumFolder, albumSuffix == nil, !graphicsFiles.isEmpty {
-                try placeRipVideos(of: disc, release: release, in: albumFolder)
-            } else {
-                [RipReport.Encoding.Video]()
-            }
+        let ripVideos = albumFolder != nil && !graphicsFiles.isEmpty ? try placeRipVideos(videoCopies) : []
         let encoding = albumFolder.map {
             // Whole seconds, as the report's JSON keeps dates, so the record returned equals the one saved.
             RipReport.Encoding(

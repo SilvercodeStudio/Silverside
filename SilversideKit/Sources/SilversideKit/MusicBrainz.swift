@@ -159,7 +159,7 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
     /// if two fit equally well (as when their lengths are not known).
     public func medium(for toc: TOC) -> Medium? {
         if let medium = medium(withDiscID: toc.musicBrainzDiscID) { return medium }
-        let lengths = toc.audioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
+        let lengths = toc.sessionAudioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
         var candidates = media.filter { $0.tracks.count == lengths.count }
         // A medium with a length that cannot be the disc's is not the disc, as for `fit(for:)`,
         // so a release that a search found is encoded as the medium the search accepted.
@@ -209,7 +209,7 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
         // The medium that naming and encoding use (`medium(for:)`), so that what is checked
         // here is what the files get.
         guard let medium = medium(for: toc) else { return nil }
-        let lengths = toc.audioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
+        let lengths = toc.sessionAudioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
         let known = zip(medium.tracks, lengths).compactMap { track, length in track.length.map { ($0, length) } }
         if known.isEmpty { return MediumFit(medium: medium, kind: .trackCountOnly) }
         guard known.allSatisfy({ Self.lengthsAgree($0.0, $0.1) }) else { return nil }
@@ -235,7 +235,7 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
         var components = URLComponents(string: "https://musicbrainz.org/cdtoc/attach")!
         components.queryItems = [
             URLQueryItem(name: "id", value: toc.musicBrainzDiscID),
-            URLQueryItem(name: "tracks", value: String(toc.audioTracks.count)),
+            URLQueryItem(name: "tracks", value: String(toc.sessionAudioTracks.count)),
             URLQueryItem(name: "toc", value: toc.musicBrainzTOCString.replacingOccurrences(of: "+", with: " ")),
         ]
         return components.url!
@@ -394,9 +394,9 @@ public enum MusicBrainzError: Error, Equatable {
 extension TOC {
     /// The TOC as MusicBrainz takes it for a fuzzy lookup: the first and last track numbers,
     /// the lead-out, then each track's start, all with the 150-sector lead-in. As for the
-    /// disc ID, the data track of an enhanced CD is left out.
+    /// disc ID, the data session of an enhanced CD is left out.
     public var musicBrainzTOCString: String {
-        let idTracks = isEnhanced ? tracks.dropLast() : tracks[...]
+        let idTracks = audioSessionTracks
         let values =
             [idTracks.first!.number, idTracks.last!.number, audioLeadOutLBA + CDDA.leadInSectors]
             + idTracks.map { $0.startLBA + CDDA.leadInSectors }

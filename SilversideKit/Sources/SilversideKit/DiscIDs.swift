@@ -21,9 +21,9 @@ public struct AccurateRipDiscID: Hashable, Sendable {
 
 extension TOC {
     /// The MusicBrainz disc ID. See https://musicbrainz.org/doc/Disc_ID_Calculation.
-    /// The data track of an enhanced CD is not part of the ID.
+    /// The data session of an enhanced CD is not part of the ID.
     public var musicBrainzDiscID: String {
-        let idTracks = isEnhanced ? tracks.dropLast() : tracks[...]
+        let idTracks = audioSessionTracks
         var offsets = [Int](repeating: 0, count: 100)
         offsets[0] = audioLeadOutLBA + CDDA.leadInSectors
         for track in idTracks {
@@ -88,16 +88,23 @@ extension TOC {
         return AccurateRipDiscID(audioTrackCount: audio.count, id1: id1, id2: id2, freedbID: freedbDiscID)
     }
 
-    /// Makes a TOC from a CTDB TOC string, the reverse of `ctdbTOCString`. A data
-    /// track after the audio is put in a second session, as on an enhanced CD.
+    /// Makes a TOC from a CTDB TOC string, the reverse of `ctdbTOCString`. The string has no
+    /// sessions: a data track after audio is put in a second session, with the tracks after
+    /// it, as on an enhanced CD, if it starts far enough after the track before it for a
+    /// session gap (`dataSessionIndex`).
     public init(ctdbTOCString string: String) throws(TOCError) {
         let parts = string.split(separator: ":").map(String.init)
         guard parts.count >= 2, let leadOut = Int(parts.last!) else { throw .malformed }
         var tracks = [Track]()
+        var session = 1
         for (index, part) in parts.dropLast().enumerated() {
             let isData = part.hasPrefix("-")
             guard let start = Int(isData ? String(part.dropFirst()) : part) else { throw .malformed }
-            let session = isData && index == parts.count - 2 && index > 0 ? 2 : 1
+            if isData, session == 1, let previous = tracks.last, tracks.contains(where: { $0.kind == .audio }),
+                start - CDDA.sessionGapSectors > previous.startLBA
+            {
+                session = 2
+            }
             tracks.append(Track(number: index + 1, startLBA: start, kind: isData ? .data : .audio, session: session))
         }
         try self.init(tracks: tracks, leadOutLBA: leadOut)

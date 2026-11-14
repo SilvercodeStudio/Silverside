@@ -53,7 +53,9 @@ public enum DiscLogo: String, CaseIterable, Sendable {
         if found.cdExtendedGraphics { return .cdExtendedGraphics }
         if found.cdGraphics ?? (format == "CD+G") { return .cdGraphics }
         if format == "COPY CONTROL CD" { return .copyControl }
-        if toc.isEnhanced || format == "ENHANCED CD" { return .compactDiscPlus }
+        // A CD Extra ends with its data session; a copy-protected disc with an audio track after
+        // its data track (`TOC.dataSessionIndex`) is no CD Extra by its label.
+        if (toc.isEnhanced && toc.tracks.last?.kind == .data) || format == "ENHANCED CD" { return .compactDiscPlus }
         if toc.tracks.first?.kind == .data || format == "MIXED MODE CD" { return .mixedMode }
         if media == .recordable || format == "CD-R" { return .recordable }
         if media == .rewritable { return .rewritable }

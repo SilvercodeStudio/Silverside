@@ -19,6 +19,10 @@ command-line tool.
 
 ### Fixed
 
+- On a copy-protected disc with a short audio track after its data track, the
+  last track before the data took in the gap between the disc's sessions:
+  minutes of noise and unreadable sectors, so it was never verified. It now
+  ends with its music, and the release in MusicBrainz can fit the disc.
 - A library on a NAS that was not yet connected when Silverside opened made
   its rips look moved or deleted, and they stayed so. Such rips now show as
   offline and keep their place in Recent Rips, and Silverside looks again when

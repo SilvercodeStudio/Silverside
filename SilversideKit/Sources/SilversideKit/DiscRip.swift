@@ -379,7 +379,8 @@ public struct DiscRip {
                 accurateRipRecords: checkedAccurateRip ? records.count : nil,
                 ctdb: checkedCTDB ? (entries.count, entries.map(\.confidence).max() ?? 0) : nil))
         // CTDB checks the whole disc at once.
-        let checksCTDB = !entries.isEmpty && selected.count == toc.audioTracks.count
+        // An audio track after an enhanced CD's data track is not in it (`TOC.sessionAudioTracks`).
+        let checksCTDB = !entries.isEmpty && toc.sessionAudioTracks.allSatisfy { selected.contains($0) }
         try RipPool.check(options.pool, toc: toc)
         try stop.check()
 

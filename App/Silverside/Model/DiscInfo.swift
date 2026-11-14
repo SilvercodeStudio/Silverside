@@ -431,7 +431,7 @@ struct DiscInfo {
     /// The disc's tracks as they are named now, for putting it in a set: MusicBrainz's names, if
     /// a release has it, else its own.
     var tracksForSet: [MusicBrainzRelease.Track] {
-        if let tracks = medium?.tracks, tracks.count == toc.audioTracks.count { return tracks }
+        if let tracks = medium?.tracks, tracks.count == toc.sessionAudioTracks.count { return tracks }
         return singleRelease.media[0].tracks
     }
 

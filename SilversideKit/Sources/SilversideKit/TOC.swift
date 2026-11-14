@@ -53,13 +53,24 @@ public struct TOC: Equatable, Sendable {
         }
         guard leadOutLBA > last.startLBA else { throw .invalidLeadOut }
         // On an enhanced CD, the audio session must end after its last track starts.
-        if tracks.count >= 2, last.kind == .data, last.session > tracks[tracks.count - 2].session {
-            guard last.startLBA - CDDA.sessionGapSectors > tracks[tracks.count - 2].startLBA else {
-                throw .invalidStart(track: last.number)
+        if let index = Self.dataSessionIndex(of: tracks) {
+            guard tracks[index].startLBA - CDDA.sessionGapSectors > tracks[index - 1].startLBA else {
+                throw .invalidStart(track: tracks[index].number)
             }
         }
         self.tracks = tracks
         self.leadOutLBA = leadOutLBA
+    }
+
+    /// The index of the first track of a later session that starts with data after the audio
+    /// (Blue Book "CD Extra"): usually the last track, but a copy-protected disc can have an
+    /// audio track after it in that session (Switchfoot *Nothing Is Sound*, Sparrow SPD 44952:
+    /// a data track 13, then a track 14 of 31 sectors that no drive here reads).
+    static func dataSessionIndex(of tracks: [Track]) -> Int? {
+        guard let index = tracks.indices.dropFirst().first(where: { tracks[$0].session > tracks[$0 - 1].session }),
+            tracks[index].kind == .data, tracks[..<index].contains(where: { $0.kind == .audio })
+        else { return nil }
+        return index
     }
 
     /// Makes an audio-only TOC from track start LBAs. Tracks are numbered from 1.
@@ -70,16 +81,25 @@ public struct TOC: Equatable, Sendable {
 
     public var audioTracks: [Track] { tracks.filter { $0.kind == .audio } }
 
-    /// True if the last track is data in a later session (Blue Book "CD Extra").
-    public var isEnhanced: Bool {
-        guard tracks.count >= 2, let last = tracks.last else { return false }
-        return last.kind == .data && last.session > tracks[tracks.count - 2].session
-    }
+    /// True if the audio is followed by a later session that starts with data (Blue Book "CD
+    /// Extra"), whatever comes after that data track (`dataSessionIndex`).
+    public var isEnhanced: Bool { Self.dataSessionIndex(of: tracks) != nil }
 
     /// The end of the audio session. On an enhanced CD, this is before the session gap.
     public var audioLeadOutLBA: Int {
-        isEnhanced ? tracks[tracks.count - 1].startLBA - CDDA.sessionGapSectors : leadOutLBA
+        Self.dataSessionIndex(of: tracks).map { tracks[$0].startLBA - CDDA.sessionGapSectors } ?? leadOutLBA
     }
+
+    /// The tracks of the audio session: on an enhanced CD, those before its data session; else
+    /// every track. MusicBrainz's disc ID counts these, and a release's disc lists their audio.
+    public var audioSessionTracks: ArraySlice<Track> {
+        Self.dataSessionIndex(of: tracks).map { tracks[..<$0] } ?? tracks[...]
+    }
+
+    /// The audio tracks of the audio session: the ones a drive reads, and the ones a release's
+    /// disc lists (an audio track after an enhanced CD's data track is in neither). AccurateRip
+    /// counts every audio track (`audioTracks`).
+    public var sessionAudioTracks: [Track] { audioSessionTracks.filter { $0.kind == .audio } }
 
     /// The sectors that hold audio and that a drive reads as audio: the program area up to
     /// the audio lead-out, less any data track. The gap before track 1 is included. On a
@@ -110,7 +130,7 @@ public struct TOC: Equatable, Sendable {
         let end: Int
         if index == tracks.count - 1 {
             end = leadOutLBA
-        } else if isEnhanced && index == tracks.count - 2 {
+        } else if let data = Self.dataSessionIndex(of: tracks), index == data - 1 {
             end = audioLeadOutLBA
         } else {
             end = tracks[index + 1].startLBA

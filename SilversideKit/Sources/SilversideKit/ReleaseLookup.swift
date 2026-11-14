@@ -105,7 +105,7 @@ public enum ReleaseLookup {
         guard MusicBrainzClient.barcodeQuery(for: mcn) != nil,
             let found = try? await client.searchReleases(mcn, limit: 10, useCache: useCache)
         else { return [] }
-        let count = toc.audioTracks.count
+        let count = toc.sessionAudioTracks.count
         var releases = [MusicBrainzRelease]()
         for result in found.filter({
             !($0.positions(withTrackCount: count) + $0.positions(withTrackCount: count + 1)).isEmpty

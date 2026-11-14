@@ -64,7 +64,7 @@ public enum MusicBrainzSeed {
                 fields += credit(release.artistCredit, prefix: "\(prefix).artist_credit")
             }
         }
-        for (audioIndex, (track, tocTrack)) in zip(medium?.tracks ?? [], toc.audioTracks).enumerated() {
+        for (audioIndex, (track, tocTrack)) in zip(medium?.tracks ?? [], toc.sessionAudioTracks).enumerated() {
             let index = dataFirst.count + audioIndex
             let prefix = "mediums.0.track.\(index)"
             if track.title != "Track \(tocTrack.number)" { fields.append(("\(prefix).name", track.title)) }

@@ -96,7 +96,7 @@ final class DriveSlot: Identifiable {
         customDrive = makeDrive
         isDemo = true
         discState = .ready
-        selectedTracks = Set(disc.toc.audioTracks.map(\.number))
+        selectedTracks = Set(disc.toc.sessionAudioTracks.map(\.number))
     }
 
     static func baseID(of device: OpticalDrive) -> String {
@@ -162,7 +162,8 @@ final class DriveSlot: Identifiable {
                 // The lookup changes its own copy, so the one on show says it is under way.
                 if !info.toc.audioTracks.isEmpty { info.lookup = .lookingUp }
                 disc = info
-                selectedTracks = Set(info.toc.audioTracks.map(\.number))
+                // An audio track after an enhanced CD's data track holds no music a drive reads.
+                selectedTracks = Set(info.toc.sessionAudioTracks.map(\.number))
                 discState = .ready
                 startProbe(make, toc: info.toc)
                 let before = info

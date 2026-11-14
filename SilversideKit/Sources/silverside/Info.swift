@@ -23,9 +23,13 @@ struct Info: AsyncParsableCommand {
 
         print("Track  Start LBA  Length    Pregap    ISRC          Type")
         for track in toc.tracks {
-            let isrc = track.kind == .audio ? try SubchannelCodes.isrc(of: track, in: toc, drive: drive) : nil
+            // An audio track after an enhanced CD's data track is past the audio a drive reads
+            // (a copy-protected disc's, of 31 sectors): its Q subchannel is not read.
+            let readable = track.kind == .audio && toc.sessionAudioTracks.contains(track)
+            let isrc = readable ? try SubchannelCodes.isrc(of: track, in: toc, drive: drive) : nil
             let length = toc.sectorRange(of: track).count
             var notes = [track.kind == .audio ? "audio" : "data"]
+            if track.kind == .audio && !readable { notes.append("after the data track, not read") }
             let pregap: String
             do {
                 pregap = try PregapFinder.pregap(of: track, in: toc, drive: drive).map(Self.duration) ?? "-"
@@ -36,7 +40,7 @@ struct Info: AsyncParsableCommand {
             // The control bits from the TOC and from Q frames in the middle of the track: a disc
             // can set pre-emphasis in the Q subchannel only.
             var control = SubchannelControl()
-            if track.kind == .audio {
+            if readable {
                 let range = toc.sectorRange(of: track)
                 control.add(
                     try drive.readQSubchannel(at: range.lowerBound + range.count / 2, count: min(20, range.count / 2)),

@@ -179,12 +179,15 @@ public enum CTDB {
     public static func trackRanges(toc: TOC, layout: CTDBLayout, shift: Int = 0, count: Int) -> [Range<Int>] {
         let audioTracks = toc.audioTracks
         let first = audioTracks[0].startLBA
+        // The audio ends with the audio session's last track; one after the data session (`TOC.
+        // sessionAudioTracks`) is past the audio, and its range is empty.
+        let last = toc.sessionAudioTracks.count - 1
         return audioTracks.indices.map { index in
             let sectors = toc.sectorRange(of: audioTracks[index])
             var start = (sectors.lowerBound - first) * CDDA.samplesPerSector + shift
             var end = (sectors.upperBound - first) * CDDA.samplesPerSector + shift
             if index == 0 { start += layout.prefixSamples }
-            if index == audioTracks.count - 1 { end -= layout.suffixSamples }
+            if index == last { end -= layout.suffixSamples }
             let lower = min(max(start, 0), count)
             return lower..<max(lower, min(end, count))
         }

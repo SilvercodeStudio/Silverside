@@ -61,7 +61,7 @@ public enum ReleaseRanking {
     public static func earlierRelease(
         fitting toc: TOC, found: [MusicBrainzRelease], earlier: [MusicBrainzRelease]
     ) -> (release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium)? {
-        let lengths = toc.audioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
+        let lengths = toc.sessionAudioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
         let foundIDs = Set(found.map(\.id))
         for release in earlier where !release.isManual && !foundIDs.contains(release.id) {
             if let medium = release.media.first(where: { fits($0, lengths: lengths) }) { return (release, medium) }
@@ -71,7 +71,9 @@ public enum ReleaseRanking {
 
     /// True if each track of the medium is within 3 seconds of the disc's.
     public static func fits(_ medium: MusicBrainzRelease.Medium, toc: TOC) -> Bool {
-        fits(medium, lengths: toc.audioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond })
+        fits(
+            medium, lengths: toc.sessionAudioTracks.map { toc.sectorRange(of: $0).count * 1000 / CDDA.sectorsPerSecond }
+        )
     }
 
     /// True if each track of the medium is within 3 seconds of the TOC's: pressings differ a

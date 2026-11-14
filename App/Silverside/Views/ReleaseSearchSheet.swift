@@ -28,7 +28,7 @@ struct ReleaseSearchSheet: View {
     @State private var detailed: MusicBrainzRelease?
     @State private var detailFailure: String?
 
-    private var trackCount: Int { toc.audioTracks.count }
+    private var trackCount: Int { toc.sessionAudioTracks.count }
 
     /// The results whose discs could be this one (as many tracks) first, in MusicBrainz's order.
     private var ordered: [MusicBrainzSearchResult] {

@@ -28,7 +28,9 @@ make run         # build and start the app; ARGS='...' passes launch arguments
 make rip-art     # render the Rip button's pictures after SilversideRipIcon.icon changes
 scripts/commit-id.sh   # the Git commit of a build, "-dirty" with changes not committed (SilversideVersion.commit)
 make format      # swift-format in place (.swift-format: 4 spaces, 120 columns)
-make lint        # swift-format lint --strict, and no trailing whitespace in text files (.editorconfig trims it); must be clean
+make lint        # swift-format lint --strict, no trailing whitespace in text files (.editorconfig trims it), and one version (scripts/version.sh check); must be clean
+scripts/version.sh [set 0.9.8 | next]   # the version, in the app's project and SilversideVersion.string; next starts the version after a release
+scripts/release.sh   # a release to the pushed tag (docs/internal/Releasing.md); the user runs it, never an agent
 ```
 
 To run one suite or one test (Swift Testing):

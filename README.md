@@ -353,8 +353,6 @@ tools and real discs.
 - More filename template options, and per-track pregap adjustments.
 - The app in other languages.
 
-See [docs/internal/Milestones.md](docs/internal/Milestones.md) for the plan.
-
 ## License
 
 Silverside is free software under the GNU General Public License, version 3

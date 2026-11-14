@@ -55,7 +55,7 @@ help:
 	@echo "make hwtest         run the tests that need a drive and an AccurateRip disc (DEVICE=diskN, OFFSET=n to check the drive's offset)"
 	@echo "make core           build the engine package only (swift build)"
 	@echo "make format         reformat the Swift sources with swift-format (settings in .swift-format)"
-	@echo "make lint           report formatting problems and trailing whitespace without changing files"
+	@echo "make lint           report formatting problems, trailing whitespace, and versions that differ, without changing files"
 	@echo "make release        build silverside for release, for Apple silicon and Intel"
 	@echo "make install        install silverside and its zsh, bash, and fish completions under PREFIX ($(PREFIX))"
 	@echo "make install-cli-local  the same, under ~/.local (no sudo)"
@@ -104,6 +104,7 @@ lint:
 	xcrun swift-format lint --strict --recursive $(SWIFT_SOURCES)
 	@if git grep -nI -E '[[:blank:]]+$$' -- . $(WHITESPACE_EXCEPTIONS); then \
 		echo "Spaces or tabs at the end of the lines above: remove them."; exit 1; fi
+	@scripts/version.sh check
 
 release: commit-plist
 	swift build --package-path $(PACKAGE) -c release --arch arm64 --arch x86_64 --product silverside $(COMMIT_FLAGS)

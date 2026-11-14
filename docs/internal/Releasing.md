@@ -10,7 +10,10 @@ the next version; and how to update Sparkle. The plan behind the updates is in
   `App/Silverside.xcodeproj/project.pbxproj` (Debug and Release), and
   `SilversideVersion.string` in `SilversideKit/Sources/SilversideKit/WebClient.swift`
   (the CLI and the User-Agent). `CURRENT_PROJECT_VERSION` is
-  `$(MARKETING_VERSION)`, so `CFBundleVersion` is the same number.
+  `$(MARKETING_VERSION)`, so `CFBundleVersion` is the same number. Neither
+  build can read the other's file, so `scripts/version.sh` prints the
+  version, `scripts/version.sh set 0.9.8` changes all three, and `make lint`
+  fails when they differ.
 - **Each release must be higher.** Sparkle compares `CFBundleVersion` part by
   part (0.9.10 is higher than 0.9.9) and offers only a higher one. A version
   that is in the feed can never be built again with other contents.
@@ -51,10 +54,18 @@ feed's commit) is done by hand, by the maintainer, never by an agent.
 
 ## A release
 
+`scripts/release.sh` does steps 1 to 4 and prints the commands for the rest.
+Run it yourself, in Terminal: it asks before each step that changes the
+repository or sends something away (the commit, `make dist`, the tag, its
+push), and after a stop it goes on from what is done. It proposes the version
+in the code, checks it against CHANGELOG.md, the last tag, and the feed, and
+takes another if you type one. Its check of the feed is `scripts/check_feed.py`
+and `sign_update --verify`. The steps by hand:
+
 1. **Finish the version.** Date the CHANGELOG heading. Change the version in
    `docs/site/index.html` (two lines, "Version 0.9.6 · Free and open
-   source…"). Bring `Milestones.md` up to date. Run `make format`, `make
-   lint`, `make test`, and `make build`, and commit ("Finish 0.9.7: …").
+   source…"). Run `make format`, `make lint`, `make test`, and `make
+   build`, and commit ("Finish 0.9.7: …").
 2. **`make dist`.** It needs a clean tree. It archives, exports with Developer
    ID, checks the signature (and that the `silverside` command inside is
    signed, of this version, with its completions), notarizes the app and
@@ -97,7 +108,8 @@ feed's commit) is done by hand, by the maintainer, never by an agent.
    some sync tools) turns Sparkle.framework's links into folders, and its
    signature no longer holds (`codesign --verify --deep --strict` says "bundle
    format is ambiguous").
-8. **Start the next version:** raise the version in the three places, and add
+8. **Start the next version:** `scripts/version.sh next` raises the version
+   in the three places (0.9.7 to 0.9.8; `next 0.10.0` for another), and adds
    `## 0.9.8 (not released yet)` to CHANGELOG.md. Commit.
 
 ## When something goes wrong

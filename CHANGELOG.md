@@ -3,6 +3,8 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
+## 0.9.8 (not released yet)
+
 ## 0.9.7 (2026-11-15)
 
 First public release.

@@ -63,9 +63,12 @@ takes another if you type one. Its check of the feed is `scripts/check_feed.py`
 and `sign_update --verify`. The steps by hand:
 
 1. **Finish the version.** Date the CHANGELOG heading. Change the version in
-   `docs/site/index.html` (two lines, "Version 0.9.6 · Free and open
-   source…"). Run `make format`, `make lint`, `make test`, and `make
-   build`, and commit ("Finish 0.9.7: …").
+   `docs/site/index.html`: two lines ("Version 0.9.7 · Free and open
+   source…") and the two Download for Mac links
+   (`releases/download/0.9.7/Silverside-0.9.7.dmg`). Run `make format`,
+   `make lint`, `make test`, and `make build`, and commit ("Finish 0.9.7:
+   …"). The site goes out with `main` in step 6, after the disk image is
+   uploaded, so its links never name a missing file.
 2. **`make dist`.** It needs a clean tree. It archives, exports with Developer
    ID, checks the signature (and that the `silverside` command inside is
    signed, of this version, with its completions), notarizes the app and

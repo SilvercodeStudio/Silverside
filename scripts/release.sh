@@ -7,8 +7,9 @@
 #
 #   1. The version: the one in the code (scripts/version.sh), checked against CHANGELOG.md's
 #      newest heading, the last tag, and the update feed. Enter takes it; another one replaces it.
-#   2. Finish it: the CHANGELOG heading dated, the website's version lines, then make format,
-#      lint, test, and build, and the commit "Finish <version>: …" (the editor opens for the rest).
+#   2. Finish it: the CHANGELOG heading dated, the website's version lines and download links,
+#      then make format, lint, test, and build, and the commit "Finish <version>: …" (the editor
+#      opens for the rest).
 #   3. make dist: the notarized disk image, and the feed with the new item.
 #   4. The feed checked: one new item, of this version, with the right download URL and size,
 #      signed, and the whole feed signed; the earlier items unchanged.
@@ -123,6 +124,10 @@ if grep -q "^## $VERSION (not released yet)\$" CHANGELOG.md; then
     sed -i '' -E "s/Version [0-9]+(\.[0-9]+)* · Free and open source/Version $VERSION · Free and open source/" "$SITE"
     [ "$(grep -c "Version $VERSION · Free and open source" "$SITE")" -eq 2 ] ||
         die "$SITE should have two version lines with $VERSION; look at it"
+    # The two Download for Mac buttons link to the disk image, which step 5 uploads before main goes out.
+    sed -i '' -E "s#releases/download/[0-9.]+/Silverside-[0-9.]+\.dmg#releases/download/$VERSION/Silverside-$VERSION.dmg#g" "$SITE"
+    [ "$(grep -c "releases/download/$VERSION/Silverside-$VERSION.dmg" "$SITE")" -eq 2 ] ||
+        die "$SITE should have two download links to Silverside-$VERSION.dmg; look at it"
     finished="CHANGELOG.md $SITE $(git diff --name-only -- App/Silverside.xcodeproj SilversideKit/Sources)"
     make format
     # make format must change nothing else: a change would go out unseen in the release.

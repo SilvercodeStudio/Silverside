@@ -12,7 +12,7 @@ report, and can optionally encode the tracks into your preferred format
 such as FLAC, Apple Lossless, AAC, WAV, or (with a helper app) MP3, as well
 as tag the tracks with accurate metadata (song titles, composers, and so on).
 
-My goal for Silverside is to be the best CD ripping app you can get, whether
+My goal for Silverside is to be the best CD ripping app available, whether
 free or paid.
 
 **For personal use.** Silverside is for archival copies of discs that you
@@ -27,18 +27,18 @@ it comes with no warranty (see [LICENSE](LICENSE)).
   and settings file.
 - Advanced CD audio extraction and verification
 - 20-bit HDCD decoding when applicable for enhanced dynamic range.
-- ReplayGain tags for consistent playback volume
-- Excellent handling of multi-CD sets and online metadata lookup (track titles, etc.)
+- ReplayGain tags for consistent playback volume and dynamic range (DR and LRA) reports
+- Excellent handling of multi-CD sets and online metadata lookup (track titles, etc.) with MusicBrainz
 - Other supported formats for audio extraction:
   - Proper pre-emphasis handling (these discs are rare and from the early/mid 80s.)
-  - DTS-CD - when ffmpeg is installed
+  - DTS-CD surround sound decoded when ffmpeg is installed
   - CD+G and CD+EG (CDs with graphics, mostly karaoke) - the graphics as a
     `.cdg` file for each track, and as a video of the whole disc
   - Super Audio CD (SACD) extraction is not possible with a standard
-    PC CD/DVD/BD drive. The CD layer of hybrid CD/SACD discs can still
+    PC DVD/BD drive. The CD layer of hybrid CD/SACD discs can still
     be ripped as standard CD audio.
   - DVD-Audio (MLP lossless high-resolution surround) - planned for a
-    future 2.0 version.
+    future version.
 
 See also:
 
@@ -46,6 +46,13 @@ See also:
 - [CHANGELOG.md](CHANGELOG.md) changes in each version.
 - [LICENSE](LICENSE) (the GNU General Public License) and [NOTICE](NOTICE)
 - [CONTRIBUTING.md](CONTRIBUTING.md) if you want to send a change.
+
+## Download
+
+Download the disk image from
+[GitHub Releases](https://github.com/SilvercodeStudio/Silverside/releases), or
+from [silverside.app](https://silverside.app). Open it, and drag Silverside to
+the Applications folder. The app updates itself.
 
 ## Requirements
 
@@ -55,8 +62,8 @@ course some audio CDs that you want to rip.
 
 Any drive that macOS sees as a CD drive works, however it is connected.
 No Mac that runs macOS 15 came with a built-in optical drive, so in
-practice the drive is external: USB (tested with six drives),
-Thunderbolt, or a SATA drive in an enclosure.
+practice the drive must be external: USB, Thunderbolt, or a SATA drive
+in an enclosure.
 
 Encoding to MP3 requires an [external CLI encoder app](#encoding-to-mp3)
 to be installed. All other supported formats are handled natively.
@@ -69,13 +76,6 @@ raw audio sectors, the C2 error flags, the subchannel, and the full table of
 contents. So Silverside is distributed outside the App Store, from GitHub.
 Release builds are signed with a Developer ID and notarized by Apple, so
 macOS opens them without warnings.
-
-## Download
-
-Download the disk image from
-[GitHub Releases](https://github.com/SilvercodeStudio/Silverside/releases), or
-from [silverside.app](https://silverside.app). Open it, and drag Silverside to
-the Applications folder. The app updates itself.
 
 ## Silverside features
 

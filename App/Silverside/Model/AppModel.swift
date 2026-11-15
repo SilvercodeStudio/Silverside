@@ -607,10 +607,7 @@ final class AppModel {
             options.pool = earlierRips(of: disc.toc.ctdbTOCString).map(\.folder)
         }
         options.keepsAccurateTracks = !slot.choices.readsEveryTrack
-        let selected = slot.selectedTracks
-        if selected.count != disc.toc.audioTracks.count {
-            options.tracks = disc.toc.audioTracks.map(\.number).filter { selected.contains($0) }
-        }
+        if !slot.ripsWholeDisc { options.tracks = slot.tracksToRip }
         options.releaseID = disc.release?.id
         options.edits = disc.edits.isEmpty ? nil : disc.edits
         options.manualRelease = disc.manual

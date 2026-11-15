@@ -147,11 +147,11 @@ struct DriveDetailView: View {
         }
     }
 
-    private var canRip: Bool { slot.disc != nil && !slot.isBusy && !slot.selectedTracks.isEmpty }
+    private var canRip: Bool { slot.disc != nil && !slot.isBusy && !slot.tracksToRip.isEmpty }
 
     private var ripTitle: String {
-        guard let disc = slot.disc else { return "Rip" }
-        return slot.selectedTracks.count == disc.toc.audioTracks.count ? "Rip Disc" : "Rip Selected"
+        guard slot.disc != nil else { return "Rip" }
+        return slot.ripsWholeDisc ? "Rip Disc" : "Rip Selected"
     }
 }
 
@@ -1105,8 +1105,8 @@ struct StatusBar: View {
         if let rip = slot.rip { return rip.statusText }
         guard let disc = slot.disc else { return "" }
         if disc.lookup == .lookingUp { return "Looking up the disc in MusicBrainz…" }
-        let count = slot.selectedTracks.count
-        let text = "Ready to rip \(count) of " + Format.count(disc.toc.audioTracks.count, "track")
+        let count = slot.tracksToRip.count
+        let text = "Ready to rip \(count) of " + Format.count(disc.toc.sessionAudioTracks.count, "track")
         // The hidden track is read with track 1, so it is named only while track 1 is chosen.
         guard let first = disc.toc.audioTracks.first, slot.selectedTracks.contains(first.number),
             disc.hiddenTrackRow(found: false) != nil
@@ -1121,7 +1121,7 @@ struct StatusBar: View {
     private var timeText: String {
         guard let rip = slot.rip else {
             guard let disc = slot.disc else { return "" }
-            let selected = disc.toc.audioTracks.filter { slot.selectedTracks.contains($0.number) }
+            let selected = disc.toc.sessionAudioTracks.filter { slot.selectedTracks.contains($0.number) }
             let sectors = selected.reduce(0) { $0 + disc.toc.sectorRange(of: $1).count }
             return Format.duration(sectors: sectors)
         }

@@ -554,8 +554,10 @@ private final class RipPrinter: @unchecked Sendable {
                     + " with entry \(entry.id), whose track CRCs then match." + withoutRepairData)
         case .notVerified:
             let matching = repair.trackConfidences.filter { $0 > 0 }.count
+            // An audio track after an enhanced CD's data track has no audio here: it starts at the end.
+            let tracks = repair.trackStarts.filter { $0 < repair.audio.count }.count
             Swift.print(
-                "CTDB: no entry verifies or repairs the rip. \(matching) of \(repair.trackConfidences.count) tracks"
+                "CTDB: no entry verifies or repairs the rip. \(matching) of \(tracks) tracks"
                     + " match an entry." + withoutRepairData)
         }
     }

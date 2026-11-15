@@ -118,8 +118,9 @@ public struct RipCheck {
                 return try disc.audio(of: track)
             }
         }
-        // AccurateRip's other pressings and CTDB need the whole disc.
-        let wholeDisc = before.tracks.map(\.number) == audioTracks.map(\.number)
+        // AccurateRip's other pressings and CTDB need the whole disc: every track of the audio
+        // session (`TOC.sessionAudioTracks`), which is all that a rip reads.
+        let wholeDisc = before.tracks.map(\.number) == toc.sessionAudioTracks.map(\.number)
 
         var after = before
         var starts = [Int]()

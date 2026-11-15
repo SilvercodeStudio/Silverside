@@ -232,7 +232,16 @@ public struct DiscRepairer {
 
     /// Verifies the rip and, if `repairing`, repairs it. Without `repairing`, only CRCs
     /// are checked, at shift 0 and at each shift where column 0 matches an entry exactly.
+    /// `tracks` are the audio session's tracks (`TOC.sessionAudioTracks`), or every audio track.
+    /// An audio track after an enhanced CD's data track is past the audio that CTDB checks: it
+    /// counts as no samples, so the result still has a place for each audio track, and its
+    /// indexes and last track are AccurateRip's.
     public func repair(_ tracks: [TrackAudio], repairing: Bool = true) async throws -> Result {
+        var tracks = tracks
+        let audioTrackCount = toc.audioTracks.count
+        if tracks.count == toc.sessionAudioTracks.count, tracks.count < audioTrackCount {
+            tracks += [TrackAudio](repeating: TrackAudio(samples: []), count: audioTrackCount - tracks.count)
+        }
         var audio = [UInt32]()
         var trackStarts = [Int]()
         var alternatives = [Int: [UInt32]]()
@@ -242,7 +251,7 @@ public struct DiscRepairer {
             audio += track.samples
         }
         let layout = CTDBLayout(toc: toc)
-        guard tracks.count == toc.audioTracks.count, audio.count == layout.sampleCount else {
+        guard tracks.count == audioTrackCount, audio.count == layout.sampleCount else {
             throw DiscRepairError.incompleteAudio
         }
         let suspects = Self.ranges(of: alternatives.keys.sorted())

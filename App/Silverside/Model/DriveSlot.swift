@@ -49,6 +49,16 @@ final class DriveSlot: Identifiable {
     var disc: DiscInfo?
     /// The tracks to rip, by number.
     var selectedTracks: Set<Int> = []
+    /// The selected tracks that a rip reads: an audio track after an enhanced CD's data track
+    /// is past the audio a drive reads (`TOC.sessionAudioTracks`), and never read.
+    var tracksToRip: [Int] {
+        disc?.toc.sessionAudioTracks.map(\.number).filter { selectedTracks.contains($0) } ?? []
+    }
+    /// True if the rip reads every track it can: the whole disc.
+    var ripsWholeDisc: Bool {
+        guard let disc else { return false }
+        return tracksToRip.count == disc.toc.sessionAudioTracks.count
+    }
     /// Read each track once, with no re-reads. Kept between launches.
     var fastMode = UserDefaults.standard.bool(forKey: "fastMode") {
         didSet { UserDefaults.standard.set(fastMode, forKey: "fastMode") }

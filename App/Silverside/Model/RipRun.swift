@@ -270,7 +270,7 @@ final class RipRun {
     ) {
         self.encodes = encodes
         addsToMusic = encodes && options.addsToMusic && MusicApp.reads(settings.format)
-        tracksToRip = options.tracks ?? disc.toc.audioTracks.map(\.number)
+        tracksToRip = options.tracks ?? disc.toc.sessionAudioTracks.map(\.number)
         switch options.dataTracks {
         case _ where options.tracks != nil: savesDataTracks = false
         case .save: savesDataTracks = true

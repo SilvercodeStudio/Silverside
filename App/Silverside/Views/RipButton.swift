@@ -48,15 +48,13 @@ struct RipButton: View {
 
     private var enabled: Bool {
         if let rip = slot.rip, rip.isRunning || rip.phase == .finished { return true }
-        return slot.disc != nil && !slot.isBusy && !slot.selectedTracks.isEmpty
+        return slot.disc != nil && !slot.isBusy && !slot.tracksToRip.isEmpty
     }
 
     private var help: String {
         switch look {
         case .ready:
-            guard let disc = slot.disc, slot.selectedTracks.count != disc.toc.audioTracks.count else {
-                return "Rip the disc (⌘R)"
-            }
+            guard !slot.ripsWholeDisc else { return "Rip the disc (⌘R)" }
             return "Rip the selected tracks (⌘R)"
         case .ripping: return (slot.rip?.statusText ?? "Ripping") + ". Click to stop."
         case .done: return (slot.rip?.statusText ?? "Done") + ". Click to open the results."

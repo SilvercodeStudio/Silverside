@@ -120,7 +120,7 @@ struct AppCommands: Commands {
 
     private var canRip: Bool {
         guard let slot = model.selectedDrive, slot.disc != nil else { return false }
-        return slot.rip?.isRunning != true && !slot.isBusy && !slot.selectedTracks.isEmpty
+        return slot.rip?.isRunning != true && !slot.isBusy && !slot.tracksToRip.isEmpty
     }
 
     private var canRepair: Bool {

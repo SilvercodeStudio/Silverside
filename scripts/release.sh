@@ -100,7 +100,10 @@ if [ -n "$typed" ] && [ "$typed" != "$VERSION" ]; then
 fi
 
 [ "$heading_version" = "$VERSION" ] || die "CHANGELOG.md's newest heading is not $VERSION: $heading"
-[ -z "$last_tag" ] || newer "$VERSION" "$last_tag" || die "$VERSION is not higher than the last tag, $last_tag"
+# The last tag can be this version's, made by a run that stopped before its push: the checks
+# below allow it only on HEAD and only while origin does not have it.
+[ -z "$last_tag" ] || [ "$last_tag" = "$VERSION" ] || newer "$VERSION" "$last_tag" ||
+    die "$VERSION is not higher than the last tag, $last_tag"
 [ -z "$last_feed" ] || [ "$last_feed" = "$VERSION" ] || newer "$VERSION" "$last_feed" ||
     die "$VERSION is not higher than the feed's $last_feed: Sparkle would never offer it"
 [ -z "$(git ls-remote --tags origin "refs/tags/$VERSION")" ] ||

@@ -82,8 +82,11 @@ public struct RipRepair {
     }
 
     private func repair() async throws -> DiscRepairer.Result {
-        let audioTracks = toc.audioTracks
-        guard !audioTracks.isEmpty else { throw RipRepairError.noAudioTracks }
+        // The tracks a rip has: an audio track after an enhanced CD's data track is not read
+        // (`TOC.sessionAudioTracks`). AccurateRip's last track is the disc's last audio track.
+        let sessionTracks = toc.sessionAudioTracks
+        let lastTrackIndex = toc.audioTracks.count - 1
+        guard !sessionTracks.isEmpty else { throw RipRepairError.noAudioTracks }
         let firstFolder = folders[0].standardizedFileURL
         var reader = self.reader
         reader?.stop = stop
@@ -99,7 +102,7 @@ public struct RipRepair {
         let (versions, saved) = try await blocking { [folders, toc, events] in
             var versions = [[[UInt32]]]()
             var saved = [[RipPool.Suspects]]()
-            for track in audioTracks {
+            for track in sessionTracks {
                 let pooled = RipPool.versions(of: track, toc: toc, in: folders, records: records)
                 for file in pooled.skipped { events(.poolFileSkipped(file)) }
                 guard !pooled.versions.isEmpty else { throw RipRepairError.missingTrack(track.number) }
@@ -118,9 +121,9 @@ public struct RipRepair {
         // For each track, use a version that matches AccurateRip, at any offset, if there is
         // one. Otherwise the samples where the versions disagree are suspect.
         var tracks = [TrackAudio]()
-        for (index, track) in audioTracks.enumerated() {
+        for (index, track) in sessionTracks.enumerated() {
             let length = versions[index][0].count
-            let edges = (isFirst: index == 0, isLast: index == audioTracks.count - 1)
+            let edges = (isFirst: index == 0, isLast: index == lastTrackIndex)
             let known = records.entries(forTrackAt: index)
             let accurate = versions[index].first { samples in
                 if case .accurate = RipPool.verification(of: samples, track: track, toc: toc, records: records) {
@@ -230,7 +233,7 @@ public struct RipRepair {
             case .verified, .repaired: nil
             }
         if let proved {
-            for (index, track) in audioTracks.enumerated()
+            for (index, track) in sessionTracks.enumerated()
             where !tracks[index].alternatives.isEmpty && !proved.contains(track.number) {
                 var audio = TrackAudio(samples: result.samples(ofTrack: index))
                 audio.add(result.alternatives(ofTrack: index))
@@ -248,7 +251,7 @@ public struct RipRepair {
         case .verified:
             // CTDB verified the assembled pool, which need not be the first folder's audio.
             let unchanged = try await blocking { [toc] in
-                toc.audioTracks.enumerated().allSatisfy { index, track in
+                toc.sessionAudioTracks.enumerated().allSatisfy { index, track in
                     let file = firstFolder.appending(path: String(format: "Track %02d.wav", track.number))
                     guard let original = try? WAVFile.read(file) else { return false }
                     return original == result.samples(ofTrack: index)
@@ -328,15 +331,16 @@ public struct RipRepair {
 
     /// Writes the repaired tracks, and checks them against AccurateRip, which does not depend on CTDB.
     private func write(_ result: DiscRepairer.Result, records: [AccurateRipRecord]) throws {
-        let audioTracks = toc.audioTracks
+        let sessionTracks = toc.sessionAudioTracks
+        let lastTrackIndex = toc.audioTracks.count - 1
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-        let total = audioTracks.indices.reduce(0) { $0 + result.changedSamples(inTrack: $1) }
+        let total = sessionTracks.indices.reduce(0) { $0 + result.changedSamples(inTrack: $1) }
         events(.writing(output, repairedSamples: total))
-        for (index, track) in audioTracks.enumerated() {
+        for (index, track) in sessionTracks.enumerated() {
             let samples = result.samples(ofTrack: index)
             try WAVFile.write(samples, to: output.appending(path: String(format: "Track %02d.wav", track.number)))
             let checksum = AccurateRipAccumulator.checksum(
-                of: samples[...], isFirstTrack: index == 0, isLastTrack: index == audioTracks.count - 1)
+                of: samples[...], isFirstTrack: index == 0, isLastTrack: index == lastTrackIndex)
             let known = records.entries(forTrackAt: index)
             events(
                 .trackWritten(

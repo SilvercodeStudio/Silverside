@@ -1123,9 +1123,13 @@ public struct DiscRip {
         return settings.ripsURL.appending(path: name, directoryHint: .isDirectory)
     }
 
+    /// The audio tracks to read: every one, or the ones in `options.tracks`, of the audio
+    /// session. An audio track after an enhanced CD's data track is past the audio that a drive
+    /// reads (`TOC.sessionAudioTracks`), so it is never read, as a data track is never read
+    /// as audio.
     private func selectedTracks(of toc: TOC) throws -> [TOC.Track] {
-        guard let numbers = options.tracks else { return toc.audioTracks }
-        let tracks = toc.audioTracks.filter { numbers.contains($0.number) }
+        guard let numbers = options.tracks else { return toc.sessionAudioTracks }
+        let tracks = toc.sessionAudioTracks.filter { numbers.contains($0.number) }
         let missing = numbers.filter { number in !toc.tracks.contains { $0.number == number } }
         guard missing.isEmpty else { throw DiscRipError.noSuchTracks(missing) }
         return tracks
@@ -1334,8 +1338,9 @@ public struct DiscRip {
                 let samples = repair.samples(ofTrack: index)
                 try WAVFile.write(samples, to: folder.appending(path: reports[index].file))
                 reports[index].repairedSamples = repair.changedSamples(inTrack: index)
+                // AccurateRip's last track, which can be after the audio session (`DiscRepairer.repair`).
                 reports[index].recordChecksums(
-                    of: samples, isFirstTrack: index == 0, isLastTrack: index == reports.count - 1)
+                    of: samples, isFirstTrack: index == 0, isLastTrack: index == repair.trackStarts.count - 1)
                 reports[index].recordDTS(in: samples)
                 reports[index].checkAccurateRip(in: repair, trackAt: index, records: records, readOffset: readOffset)
                 events(.trackRepaired(reports[index]))

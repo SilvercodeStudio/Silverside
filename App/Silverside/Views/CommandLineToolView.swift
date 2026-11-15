@@ -83,7 +83,7 @@ struct CommandLineToolView: View {
                 : "\(folder)/silverside points to another copy of Silverside, at \(path). Install links it to this one."
         case .other:
             return
-                "\(folder)/silverside is another file, such as a copy from make install. Install puts a link in its place."
+                "\(folder)/silverside is another file, such as a copy built from source. Install puts a link in its place."
         }
     }
 

@@ -129,19 +129,19 @@ Decided 2026-11-11:
   and adds about 19 MB to the app.
 - **Install Command Line Tool…** (the app menu, and Settings › General), in a
   window of its own (`CommandLineToolView`, `CommandLineTool`): symbolic links
-  in `make install`'s layout (`CommandLineInstall` in the engine, with tests),
+  in `make install-cli-local`'s layout (`CommandLineInstall` in the engine, with tests),
   so each app update brings a new CLI. `/usr/local/bin` runs the links as the
   user first, then through `osascript … with administrator privileges`, which
   asks for the password; `~/.local/bin` needs none. The window reads the PATH
   of the user's login shell, says when `~/.local/bin` is not on it, and
   chooses that folder when it is. It knows a link to another copy of the app
-  (moved, or deleted) and a copy from `make install`, which Install replaces;
+  (moved, or deleted) and a copy from `make install` (now `make install-cli-local`), which Install replaces;
   Remove takes away only links to a Silverside app. An app that macOS runs
   from a hidden copy (App Translocation) or a read-only disk image is told to
   move to Applications first.
 - `make dist` checks the command: there, signed with Developer ID and the
   hardened runtime, of the app's version, with the three completions.
-- `make install` stays for people who build from source.
+- `make install-cli-local` stays for people who build from source (into `~/.local`; `make install` into `/usr/local` was taken out on 2026-11-15, as `sudo make install` left root's files in `.build`).
 - Not tried yet: the administrator's path on a Mac where `/usr/local` is not
   the user's, and the notarization of a build with the command (both at the
   0.9.7 release).

@@ -3,7 +3,7 @@ import Foundation
 /// The `silverside` command inside the app (`Contents/Helpers/silverside`) and its shell completions
 /// (`Contents/Resources/Completions`), linked into a folder on the PATH: the app's Install Command
 /// Line Tool…. Links, not copies, so that an update of the app (Sparkle replaces it in place)
-/// updates the command too. The layout under the prefix is `make install`'s.
+/// updates the command too. The layout under the prefix is `make install-cli-local`'s.
 public struct CommandLineInstall: Sendable, Equatable {
     public struct Link: Sendable, Equatable {
         /// The file in the app.
@@ -22,7 +22,7 @@ public struct CommandLineInstall: Sendable, Equatable {
         case linked
         /// A link to the same file in another copy of the app, or in one that was moved or deleted.
         case linkedToOtherApp(String)
-        /// A file, a folder, or a link to something else: such as `make install`'s copy.
+        /// A file, a folder, or a link to something else: such as a copy from `make install-cli-local`, or from the `make install` of older versions.
         case other
     }
 

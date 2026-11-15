@@ -5,6 +5,14 @@ command-line tool.
 
 ## 0.9.8 (not released yet)
 
+### Changed
+
+- Building from source: `make install-cli-local` installs the command in
+  `~/.local`, and `make install` is gone. `make` now stops when it runs as
+  root: `sudo make install` left build files that only root could replace, and
+  the next build failed. The app's Install Command Line Tool… puts the command
+  in `/usr/local`.
+
 ## 0.9.7 (2026-11-15)
 
 First public release.

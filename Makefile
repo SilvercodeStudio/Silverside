@@ -34,12 +34,16 @@ COMMIT := $(shell scripts/commit-id.sh)
 COMMIT_PLIST = $(PACKAGE)/.build/commit/Info-$(COMMIT).plist
 COMMIT_FLAGS = $(if $(COMMIT),-Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker $(abspath $(COMMIT_PLIST)))
 
-.PHONY: help build run app cli test hwtest core format lint release commit-plist install install-cli-local install-app open-app dist uninstall site rip-art
+.PHONY: help build run app cli test hwtest core format lint release commit-plist install-cli-local install-app open-app dist uninstall-cli-local site rip-art
 
-# Where make install puts silverside and its shell completions. /usr/local may need sudo; PREFIX=~/.local does not.
-PREFIX ?= /usr/local
-# A ~ that the shell did not expand (zsh leaves the one in PREFIX=~/.local) means the home folder.
-override PREFIX := $(patsubst ~%,$(HOME)%,$(PREFIX))
+# Never as root: a build with sudo leaves files in .build that only root can replace, and every
+# build after it fails to link. /usr/local gets the command from the app's Install Command Line Tool.
+ifeq ($(shell id -u),0)
+$(error Do not run make as root (sudo): it leaves build files that only root can replace. Run it as yourself; make install-cli-local needs no sudo, and the app's Install Command Line Tool... puts the command in /usr/local)
+endif
+
+# Where make install-cli-local puts silverside and its shell completions.
+CLI_PREFIX = $(HOME)/.local
 RELEASE_BIN = $(PACKAGE)/.build/out/Products/Release/silverside
 # Where make install-app puts the app.
 APP_DIR ?= $(HOME)/Applications
@@ -57,12 +61,11 @@ help:
 	@echo "make format         reformat the Swift sources with swift-format (settings in .swift-format)"
 	@echo "make lint           report formatting problems, trailing whitespace, and versions that differ, without changing files"
 	@echo "make release        build silverside for release, for Apple silicon and Intel"
-	@echo "make install        install silverside and its zsh, bash, and fish completions under PREFIX ($(PREFIX))"
-	@echo "make install-cli-local  the same, under ~/.local (no sudo)"
+	@echo "make install-cli-local  install silverside and its zsh, bash, and fish completions under ~/.local"
 	@echo "make install-app    build the app for release (Apple silicon and Intel) and copy it to APP_DIR ($(APP_DIR))"
 	@echo "make open-app       make install-app, open the app, and install the CLI under ~/.local"
 	@echo "make dist           the app for others: Developer ID, notarized, stapled, in a disk image in build/dist (NOTARIZE=0 stops before Apple)"
-	@echo "make uninstall      remove what make install put under PREFIX"
+	@echo "make uninstall-cli-local  remove what make install-cli-local put under ~/.local"
 	@echo "make site           serve the website (docs/site) at http://localhost:8000"
 	@echo "make rip-art        render the Rip button's pictures from SilversideRipIcon.icon (after the icon changes)"
 	@echo "Set CONFIG=Release for a release build (Apple silicon and Intel)."
@@ -116,17 +119,14 @@ commit-plist:
 		'<plist version="1.0"><dict><key>SilversideCommit</key><string>$(COMMIT)</string></dict></plist>' \
 		> "$(COMMIT_PLIST)"
 
-install: release
-	install -d "$(PREFIX)/bin" "$(PREFIX)/share/zsh/site-functions" "$(PREFIX)/etc/bash_completion.d" \
-		"$(PREFIX)/share/fish/vendor_completions.d"
-	install -m 755 "$(RELEASE_BIN)" "$(PREFIX)/bin/silverside"
-	"$(RELEASE_BIN)" --generate-completion-script zsh > "$(PREFIX)/share/zsh/site-functions/_silverside"
-	"$(RELEASE_BIN)" --generate-completion-script bash > "$(PREFIX)/etc/bash_completion.d/silverside"
-	"$(RELEASE_BIN)" --generate-completion-script fish > "$(PREFIX)/share/fish/vendor_completions.d/silverside.fish"
-	@echo "Installed $(PREFIX)/bin/silverside $$("$(PREFIX)/bin/silverside" --version), and its shell completions."
-
-install-cli-local:
-	@$(MAKE) install PREFIX=$(HOME)/.local
+install-cli-local: release
+	install -d "$(CLI_PREFIX)/bin" "$(CLI_PREFIX)/share/zsh/site-functions" "$(CLI_PREFIX)/etc/bash_completion.d" \
+		"$(CLI_PREFIX)/share/fish/vendor_completions.d"
+	install -m 755 "$(RELEASE_BIN)" "$(CLI_PREFIX)/bin/silverside"
+	"$(RELEASE_BIN)" --generate-completion-script zsh > "$(CLI_PREFIX)/share/zsh/site-functions/_silverside"
+	"$(RELEASE_BIN)" --generate-completion-script bash > "$(CLI_PREFIX)/etc/bash_completion.d/silverside"
+	"$(RELEASE_BIN)" --generate-completion-script fish > "$(CLI_PREFIX)/share/fish/vendor_completions.d/silverside.fish"
+	@echo "Installed $(CLI_PREFIX)/bin/silverside $$("$(CLI_PREFIX)/bin/silverside" --version), and its shell completions."
 
 # A universal release build of the app, copied whole; an older copy is replaced. The path is
 # checked before anything is removed: make -n still runs a line with $(MAKE) in it, and then
@@ -160,9 +160,9 @@ open-app:
 dist:
 	@scripts/dist.sh
 
-uninstall:
-	rm -f "$(PREFIX)/bin/silverside" "$(PREFIX)/share/zsh/site-functions/_silverside" "$(PREFIX)/etc/bash_completion.d/silverside" \
-		"$(PREFIX)/share/fish/vendor_completions.d/silverside.fish"
+uninstall-cli-local:
+	rm -f "$(CLI_PREFIX)/bin/silverside" "$(CLI_PREFIX)/share/zsh/site-functions/_silverside" \
+		"$(CLI_PREFIX)/etc/bash_completion.d/silverside" "$(CLI_PREFIX)/share/fish/vendor_completions.d/silverside.fish"
 
 # The website, as GitHub Pages serves it.
 site:

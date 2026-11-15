@@ -72,7 +72,7 @@ struct CommandLineInstallTests {
         try FileManager.default.removeItem(at: other)
         #expect(install.commandState == .linkedToOtherApp(other.appending(path: "Contents/Helpers/silverside").path))
 
-        // A copy from make install is not Silverside's link, and removing leaves it.
+        // A copy from make install-cli-local is not Silverside's link, and removing leaves it.
         let command = install.command.destination
         try FileManager.default.removeItem(at: command)
         try Data("copy".utf8).write(to: command)

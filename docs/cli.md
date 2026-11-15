@@ -16,12 +16,12 @@ the command again; Remove in the same window takes the links away.
 Or, from a copy of this repository, with Xcode installed:
 
 ```sh
-make install                    # silverside in /usr/local/bin (may need sudo)
-make install PREFIX=~/.local    # or in ~/.local/bin
+make install-cli-local          # silverside in ~/.local/bin
 ```
 
-`make install` builds `silverside` for Apple silicon and Intel, and installs shell
-completions for zsh, bash, and fish. `make uninstall` takes them away.
+It builds `silverside` for Apple silicon and Intel, and installs shell
+completions for zsh, bash, and fish. `make uninstall-cli-local` takes them
+away. Run `make` as yourself, never with `sudo`: it stops when it runs as root.
 
 ## Quick start
 

@@ -335,9 +335,29 @@ Done (0.9.8):
 - The cover in each FLAC and MP4 file (`FLACTags.replacingFrontCover`, `MP4Tags.replacingCover`: every other tag, picture, and item kept), checked by `AudioPayload` before and after the write; `cover.jpg` at full size; `Artwork/` from `--artwork all` or numbers and IDs; `--list`, `--sheet`, `--front`, `--dry-run`, `--yes`.
 - Tried on *Abbey Road (2009 Stereo Remaster)* in `Original Library` (dry runs only, 2026-11-15): the search found the 2009 remaster first (lengths within 0.1 s), once a search's Enhanced CD counted its data track; the covers that the user's Pillow script had embedded count as the same picture.
 
+Tags, the plan (2026-11-15, before any code):
+
+- **What it does.** `silverside album <folder>` writes the release's tags into each file (with the cover, by default; `--no-tags` and `--no-cover` leave either alone), as an encoding from a rip would: `TrackMetadata.vorbisComments` for the file's track (the fit pairs file *n* with a medium's track), with the user's settings (`liveShowStyle`, `plainPunctuation`, `segueMarks`, `compilationFolder`), so the tags match the library's style. Tags need a fit: a release that does not fit the files (or fits by count only, with no lengths) gets no tags without `--force-fit` (artwork still works).
+- **Merge.** A file's own tags are the start. Each key that Silverside writes replaces every value of that key (keys compared without case, as Vorbis comments are): one COMPOSER list for another, not added to it. A key that Silverside writes but has no value for here (no GENRE in MusicBrainz) keeps the file's. Every other key stays as it is (COMMENT, ENCODER, a rating, iTunes's items). Other programs' names for the same field go when Silverside writes the field: TOTALTRACKS and TOTALDISCS for TRACKTOTAL and DISCTOTAL, ALBUM ARTIST for ALBUMARTIST, YEAR for DATE, and "3/12" in TRACKNUMBER becomes 3 with TRACKTOTAL 12.
+- **Writers.** `FLACTags.merging(_:in:)`: the Vorbis comments as above, Silverside's keys first in the library's order, then the kept ones in their order; the vendor, the pictures, and the other blocks stay. `MP4Tags.merging(_:in:)`: the items for Silverside's keys replaced (text atoms, `trkn`/`disk`, Silverside's freeform names), every other item kept, and the rest of `meta` as for the cover; `mdir` tags only. With `--tags` and a cover change, each file is written once. The same safety as the cover: contents made in memory, `AudioPayload` checked, written beside, checked again, `replaceItemAt`.
+- **The report**, before the question: the album's tags once (the keys that every file shares), old → new, then each file's own changes (TITLE, ARTIST, TRACKNUMBER, ISRC, the recording's ID), only what changes; the other names that go (TOTALTRACKS → TRACKTOTAL); and a line for the keys kept. "Nothing to change" when the tags are already the release's.
+- **The choice file** records the medium (or media) the files are, so a later run pairs them the same way.
+- **MP3, AIFF, WAV**: left alone, as for the cover; next after this.
+- **Tests:** the merge for FLAC and MP4 (kept keys, replaced lists, other programs' names, a MusicBrainz key with no value), the pairing of files and tracks over two discs, the report's diff, and a second run with nothing to change. Then dry runs on *Duelling Banjos* (no tags now) and *Abbey Road* (Picard-like tags, a cover already), and one write, compared before and after (tags dumped, audio decoded).
+
+Expected outcome: an album folder from before Silverside, after one run with `--tags` (and the cover), has the same tags and cover as the album an encoding from a rip makes, plus whatever tags it had that Silverside does not write, with its audio unchanged.
+
+Decided with the user (2026-11-15):
+
+1. Tags and the cover both by default; `--no-tags` and `--no-cover` leave either alone.
+2. Tags that belong to another release (Picard's MUSICBRAINZ_RELEASETRACKID, MUSICBRAINZ_DISCID, RELEASETYPE, RELEASESTATUS, SCRIPT, ASIN, and so on, which Silverside does not write) go only when the files' MUSICBRAINZ_ALBUMID names another release than the one chosen; a file with no release ID keeps them. The report lists them.
+3. Name edits (`--set album=...`, `--set track3.title=...`: changed tag values, kept in the choice file) wait until the tags work as MusicBrainz has them. Renaming files and folders waits too.
+4. A read-only summary of a folder's files and tags, with no network (a "MediaInfo"-lite): see below.
+
+A summary of a folder (done, 2026-11-15; tried on *Abbey Road*, *Duelling Banjos*, *GRRR!* at 24/88.2, two ID3v2.3 MP3s from the Archive Collection, and `--recursive` over The Beatles, 29 folders in 46 s over the NAS): `silverside tags <folder or file>`, read-only and offline. For each folder: the files with their format (FLAC, ALAC, AAC, MP3, ...), sample rate, bits, channels, length, and size; the tags that every file shares, once, then each file's own (title, track number, and the rest); the embedded cover of each (or "the same in all"), the cover file, Artwork's count, and the choice file. `--full` shows long values and players' own items (iTunSMPB and the like, else left out with a count), `--json` everything as JSON, `--recursive` each folder under the folders. It reads through `LibraryAlbum` (the format from AudioToolbox), MP3 tags through `ID3Tags.read` (ID3v2.3 and 2.4; v2.2 and other files through AudioToolbox's info dictionary). Seen on the way: tag keys in mixed case from other programs (*GRRR!*: "Album", "Artist", "Title"), which the merge must match without case; ID3v1 genre references such as "(8)" in TCON, shown as they are.
+
 Next:
 
-- Tags from MusicBrainz (`TrackMetadata`, in the library's style), merged over the files' own; the report shows each tag's old and new value.
 - Covers in MP3 (`ID3Tags`), AIFF, and WAV files without losing their other frames and chunks; today they are listed and left alone.
 - Very large scans (the user's script made 100 MB PNGs into 6000-pixel JPEGs): an option to shrink Artwork images over a size.
 - A set whose discs are in subfolders (`Disc 1/`, `CD2/`): today, one folder at a time.

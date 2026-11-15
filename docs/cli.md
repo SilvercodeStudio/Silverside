@@ -61,6 +61,7 @@ shares. Without a terminal, as in a script, `rip` does not run until you agree w
 | `video` | Makes a video of a CD+G disc's rip: the graphics drawn as a CD+G player draws them, over the rip's audio (Apple Lossless, exactly as ripped, or `--audio aac`), the whole disc in one `.m4v` with a chapter for each track, named by its title. A CD+EG disc's video shows its 256 colors, as a CD+EG player does; `--picture g` shows it as a CD+G player does, in 16 colors, as "… (CD+G).m4v", and `--picture both` makes the two. It goes into the album folder when the rip was encoded, named after the album, else into the rip's folder; an album whose rip is gone works too (give its `Rip Report.json`), if it is lossless. `--codec hevc` makes smaller files; `--scale` sets the size (4: 1200 × 864). |
 | `hdcd` | Looks for HDCD codes in audio files and folders (WAV, AIFF, FLAC, Apple Lossless), such as rips and albums from before. |
 | `album` | Puts a release's cover art into an album folder that Silverside did not rip: finds the release, shows every change, and asks first. See [Albums from elsewhere](#albums-from-elsewhere). |
+| `tags` | Summarizes album folders, or some files, with no network and no changes: each file's format, length, and size; the tags that every file has, once, then each file's own; the covers, Artwork, and the choice that `album` keeps. `--recursive` takes each folder under the folders; `--full` shows long values and players' own items (such as iTunes's gapless data); `--json` prints JSON. |
 | `config` | Shows and changes the settings. |
 | `eject` | Ejects the disc from a drive (`-d`), or from every drive (`--all`: CDs, DVDs, and Blu-ray discs). A drive named with `-d` ejects a disc that macOS never recognized, through Disc Recording as `drutil eject` does, or opens its empty tray. A drive that hangs in a read is safer to unplug than to eject. |
 | `license` | Shows the notice and the license (the GNU GPL, version 3 or later), and the code from others that the CLI includes. |
@@ -237,8 +238,9 @@ It finds the release in this order:
 3. The files' MusicBrainz Album Id tag, as Picard writes it, if the release
    fits the files.
 4. A search: the barcode in the tags, then the files' album and artist (or the
-   folder's names, as `Artist/Album`). Words in brackets, such as "(2009 Stereo
-   Remaster)", are looked for in the release's disambiguation. The releases
+   folder's names, as `Artist/Album`). Words in brackets in the album tag, such
+   as "(2009 Stereo Remaster)", are looked for in the release's
+   disambiguation; in a folder's name, such as "(1986)", they are left out. The releases
    with as many tracks as files, each within a few seconds of its file, are
    listed with their image counts and links. Many releases of an album fit, and
    their covers differ, so you choose one, at a terminal, even when only one
@@ -279,6 +281,11 @@ Other options:
 
 Silverside asks MusicBrainz for one release at a time, as for a disc, and keeps
 the answers in its cache, so run it on one album or set at a time.
+
+`silverside tags <folder>` shows what a folder has before and after: the
+files' formats, their tags (those that every file shares once, then each
+file's own), and the covers. It reads FLAC, `.m4a`, and MP3 tags itself
+(ID3v2.3 and 2.4), and other files' tags through macOS.
 
 ## Settings
 

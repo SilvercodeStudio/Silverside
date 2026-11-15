@@ -97,8 +97,19 @@ public enum MP4Tags {
         return output.reduce(Data(), +)
     }
 
-    /// The file's tags, as Vorbis comment keys and values, and the cover's data.
-    public static func read(_ url: URL) throws -> (comments: [(key: String, value: String)], cover: Data?) {
+    /// Other programs' items, by the Vorbis comment key a summary shows them as.
+    static let otherAtoms: [String: String] = [
+        "©cmt": "COMMENT", "©too": "ENCODER", "©grp": "GROUPING", "©lyr": "LYRICS", "cpil": "COMPILATION",
+        "tmpo": "BPM", "cprt": "COPYRIGHT", "desc": "DESCRIPTION", "sonm": "TITLESORT", "soal": "ALBUMSORT",
+        "soco": "COMPOSERSORT", "©wrk": "WORK", "©mvn": "MOVEMENTNAME", "pgap": "GAPLESS", "rtng": "RATING",
+    ]
+
+    /// The file's tags, as Vorbis comment keys and values, and the cover's data. With `every`,
+    /// the items Silverside does not write too: other programs' (`otherAtoms`), or an item's own
+    /// type ("©xyz") or freeform name; a value that is not text is its number, or its size.
+    public static func read(_ url: URL, every: Bool = false) throws -> (
+        comments: [(key: String, value: String)], cover: Data?
+    ) {
         // Mapped: only the atoms' headers and moov are read, not the audio.
         let data = try Data(contentsOf: url, options: .alwaysMapped)
         let top = try atoms(in: data, data.startIndex..<data.endIndex)
@@ -124,14 +135,36 @@ public enum MP4Tags {
             case "covr":
                 cover = values.first.map { Data($0) }
             case "----":
-                guard let name = try freeformName(of: item, in: data), let key = freeformKeys[name] else { continue }
+                guard let name = try freeformName(of: item, in: data),
+                    let key = freeformKeys[name] ?? (every ? name : nil)
+                else { continue }
                 comments += values.map { (key, String(decoding: $0, as: UTF8.self)) }
             default:
-                guard let key = textKeys[item.type] else { continue }
-                comments += values.map { (key, String(decoding: $0, as: UTF8.self)) }
+                if let key = textKeys[item.type] {
+                    comments += values.map { (key, String(decoding: $0, as: UTF8.self)) }
+                } else if every {
+                    let key = otherAtoms[item.type] ?? item.type
+                    let typed = children.filter { $0.type == "data" && $0.body.count >= 8 }
+                    for atom in typed {
+                        let type = uint32(data, atom.body.lowerBound)
+                        let value = data[(atom.body.lowerBound + 8)..<atom.body.upperBound]
+                        comments.append((key, Self.text(of: value, type: type)))
+                    }
+                }
             }
         }
         return (comments, cover)
+    }
+
+    /// A data atom's value as text: UTF-8 (1), a big-endian integer (0, 21), else its size.
+    static func text(of value: Data, type: UInt32) -> String {
+        switch type {
+        case 1: return String(decoding: value, as: UTF8.self)
+        case 0,
+            21 where (1...8).contains(value.count):
+            return String(value.reduce(0) { $0 << 8 | Int($1) })
+        default: return "(\(value.count) bytes)"
+        }
     }
 
     // MARK: - Atoms

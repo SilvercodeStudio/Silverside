@@ -55,8 +55,9 @@ public enum AudioPayload {
         for offset in try chunkOffsets(in: data, moov.body) {
             guard let index = mdats.firstIndex(where: { $0.body.contains(offset) })
             else { throw AudioPayloadError.offsetOutsideAudio }
-            var place = [Int64(index), Int64(offset - mdats[index].body.lowerBound)]
-            withUnsafeBytes(of: &place) { hash.update(bufferPointer: $0) }
+            // The two numbers' bytes, not the array's: withUnsafeBytes(of:) on an array gives its pointer.
+            let place = [Int64(index), Int64(offset - mdats[index].body.lowerBound)]
+            place.withUnsafeBytes { hash.update(bufferPointer: $0) }
         }
         return Data(hash.finalize())
     }

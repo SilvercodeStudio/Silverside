@@ -109,7 +109,7 @@ struct Album: AsyncParsableCommand {
             case .downloadingArtwork(let count): print("Downloading \(count) images for Artwork...")
             case .wroteFile(let file): print("  \(file.lastPathComponent)")
             case .wroteCover(let file): print("Cover: \(file.path)")
-            case .wroteArtwork(let count): print("Artwork: \(count) images")
+            case .wroteArtwork(let count): print("Artwork: " + Self.images(count))
             case .keptChoice(let file): print("Kept the choice in \(file.lastPathComponent).")
             }
         }
@@ -132,7 +132,7 @@ struct Album: AsyncParsableCommand {
         for (index, candidate) in found.candidates.enumerated() {
             print(String(format: "%3d. ", index + 1) + Self.summary(of: candidate.release))
             let count = candidate.release.artworkCount ?? (candidate.release.hasFrontCover ? 1 : 0)
-            let images = count == 0 ? "no images" : count == 1 ? "1 image" : "\(count) images"
+            let images = count == 0 ? "no images" : Self.images(count)
             print(
                 "     " + Self.fitText(candidate.fit) + "; \(images)  "
                     + (candidate.release.pageURL?.absoluteString ?? ""))
@@ -223,7 +223,7 @@ struct Album: AsyncParsableCommand {
         print(
             "  Cover file: "
                 + (album.coverFile.map { "\($0.lastPathComponent), \(album.coverPicture?.summary ?? "")" } ?? "none"))
-        print("  Artwork: " + (album.artworkCount == 0 ? "none" : "\(album.artworkCount) images"))
+        print("  Artwork: " + images(album.artworkCount))
         if let choice = album.choice {
             print("  Kept choice: release \(choice.releaseID), \(choice.program)")
         }
@@ -366,6 +366,11 @@ struct Album: AsyncParsableCommand {
         if image.isFront { text += " (main front)" }
         if !image.comment.isEmpty { text += " - \(image.comment)" }
         return number.map { "\($0)  \(text)" } ?? text
+    }
+
+    /// "none", "1 image", "12 images".
+    static func images(_ count: Int) -> String {
+        count == 0 ? "none" : count == 1 ? "1 image" : "\(count) images"
     }
 
     static func duration(_ milliseconds: Int?) -> String {

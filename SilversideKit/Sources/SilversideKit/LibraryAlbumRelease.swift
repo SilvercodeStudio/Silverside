@@ -172,11 +172,13 @@ public struct AlbumReleaseFinder: Sendable {
 
     /// The queries to search with, the narrowest first: the album and its artist, from the tags,
     /// else the folder's name and its parent's (Artist/Album). Words in brackets ("Abbey Road
-    /// (2009 Stereo Remaster)") are no part of a title on MusicBrainz, but often of a release's
-    /// disambiguation (`comment:`): the first query asks for one of them there, the second does
-    /// without. Empty if there is no album name.
+    /// (2009 Stereo Remaster)") are no part of a title on MusicBrainz. In an album tag they are
+    /// often a release's disambiguation (`comment:`): the first query asks for one of them there,
+    /// the second does without. In a folder's name they are more often a year or a source
+    /// ("(1986)", "[24-96 FLAC]"), so they are left out. Empty if there is no album name.
     static func searchQueries(for album: LibraryAlbum) -> [String] {
-        let name = album.commonTag("ALBUM") ?? album.folder.lastPathComponent
+        let tagged = album.commonTag("ALBUM")
+        let name = tagged ?? album.folder.lastPathComponent
         let artist =
             album.commonTag("ALBUMARTIST") ?? album.commonTag("ARTIST")
             ?? album.folder.deletingLastPathComponent().lastPathComponent
@@ -194,7 +196,7 @@ public struct AlbumReleaseFinder: Sendable {
         var query = "release:(\(titleWords))"
         let artistWords = words(artist)
         if !artistWords.isEmpty { query += " AND artist:(\(artistWords))" }
-        let extraWords = words(extras)
+        let extraWords = tagged == nil ? "" : words(extras)
         return extraWords.isEmpty ? [query] : [query + " AND comment:(\(extraWords))", query]
     }
 

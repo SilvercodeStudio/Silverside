@@ -177,6 +177,17 @@ struct LibraryAlbumTests {
             $0.type == "moov" ? try MP4Tags.newMoov(mp4, moov, ilst: bigger, shift: 0) : Data(mp4[$0.range])
         }.reduce(Data(), +)
         #expect((try? AudioPayload.fingerprint(of: unshifted, kind: .mp4)) != fingerprint)
+
+        // Two chunk offsets swapped, both still in the audio: the same bytes, read in another order.
+        var swapped = mp4
+        let stco = try #require(mp4.firstRange(of: Data("stco".utf8)))
+        let first = stco.upperBound + 8
+        #expect(MP4Tags.uint32(mp4, first - 4) >= 2)
+        let a = mp4[first..<(first + 4)]
+        swapped.replaceSubrange(first..<(first + 4), with: mp4[(first + 4)..<(first + 8)])
+        swapped.replaceSubrange((first + 4)..<(first + 8), with: a)
+        #expect(try AudioPayload.fingerprint(of: swapped, kind: .mp4) != fingerprint)
+        #expect(try AudioPayload.fingerprint(of: Data(mp4), kind: .mp4) == fingerprint)
     }
 
     @Test func writesAFileOnlyWhenItsAudioStaysTheSame() throws {
@@ -271,10 +282,13 @@ struct LibraryAlbumTests {
                 "release:(Abbey Road) AND artist:(The Beatles) AND comment:(2009 Stereo Remaster)",
                 "release:(Abbey Road) AND artist:(The Beatles)",
             ])
-        // With no tags, the folder's names: Artist/Album.
+        // With no tags, the folder's names: Artist/Album. Brackets in a folder's name are left
+        // out, and not looked for in the disambiguation.
         var untagged = album
         untagged.files[0].tags = []
         #expect(AlbumReleaseFinder.searchQueries(for: untagged) == ["release:(Abbey Road) AND artist:(The Beatles)"])
+        untagged.folder = URL(filePath: "/Music/Bob Dylan/Duelling Banjos (1986) [FLAC]")
+        #expect(AlbumReleaseFinder.searchQueries(for: untagged) == ["release:(Duelling Banjos) AND artist:(Bob Dylan)"])
     }
 
     @Test func findsTheReleaseIDInAPageURL() {

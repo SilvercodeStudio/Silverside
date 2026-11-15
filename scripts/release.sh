@@ -8,7 +8,7 @@
 #   1. The version: the one in the code (scripts/version.sh), checked against CHANGELOG.md's
 #      newest heading, the last tag, and the update feed. Enter takes it; another one replaces it.
 #   2. Finish it: the CHANGELOG heading dated, the website's version lines and download links,
-#      then make format, lint, test, and build, and the commit "Finish <version>: …" (the editor
+#      then make format, lint, test, and build, and the commit "Finish <version>: ..." (the editor
 #      opens for the rest).
 #   3. make dist: the notarized disk image, and the feed with the new item.
 #   4. The feed checked: one new item, of this version, with the right download URL and size,
@@ -143,7 +143,7 @@ $others"
     make build
     git --no-pager diff --stat
     git --no-pager diff -- CHANGELOG.md "$SITE" | grep '^[-+][^-+]' || true
-    ask "Commit these as \"Finish $VERSION: …\" (the editor opens for the rest of the message)?" ||
+    ask "Commit these as \"Finish $VERSION: ...\" (the editor opens for the rest of the message)?" ||
         die "stopped; the changes are not committed"
     # shellcheck disable=SC2086 # one argument for each file
     git commit -e -m "Finish $VERSION: " -- $finished
@@ -214,7 +214,7 @@ cat <<END
      git push origin main
    then, after the Pages workflow (a minute or two):
      curl -s https://silverside.app/appcast.xml | grep -c '<sparkle:version>$VERSION<'
-7. Check for Updates… on a Mac with the release before $VERSION.
+7. Check for Updates... on a Mac with the release before $VERSION.
 8. Start the next version:
      scripts/version.sh next
 END

@@ -55,11 +55,11 @@ fi
 rm -rf "$DIST"
 mkdir -p "$DIST"
 
-echo "Archiving (Release, Apple silicon and Intel)…"
+echo "Archiving (Release, Apple silicon and Intel)..."
 xcodebuild -workspace Silverside.xcworkspace -scheme Silverside -configuration Release \
     -destination 'generic/platform=macOS' -archivePath "$ARCHIVE" -quiet archive
 
-echo "Exporting with Developer ID…"
+echo "Exporting with Developer ID..."
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
     -exportOptionsPlist App/ExportOptions.plist -allowProvisioningUpdates -quiet
 
@@ -77,7 +77,7 @@ codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "get-task-allow"
 # The build phase "Remove Sparkle's XPC services" removes nothing if a new Sparkle moves them.
 [ ! -e "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" ] ||
     { echo "Sparkle's XPC services are still in the app: check the build phase that removes them."; exit 1; }
-# The silverside command inside, for Install Command Line Tool…: signed as the app is, and this version.
+# The silverside command inside, for Install Command Line Tool...: signed as the app is, and this version.
 HELPER="$APP/Contents/Helpers/silverside"
 [ -x "$HELPER" ] || { echo "No silverside command in the app: check the build phase that puts it there."; exit 1; }
 helper_info=$(codesign -dvv "$HELPER" 2>&1)
@@ -98,7 +98,7 @@ if [ "${NOTARIZE:-1}" = 0 ]; then
 fi
 
 if [ ! -x "$DMGBUILD_ENV/bin/dmgbuild" ]; then
-    echo "Installing dmgbuild in $DMGBUILD_ENV…"
+    echo "Installing dmgbuild in ${DMGBUILD_ENV}..."
     rm -rf "$DMGBUILD_ENV"
     "$PYTHON" -m venv "$DMGBUILD_ENV"
     # shellcheck disable=SC2086 # one argument for each package
@@ -124,7 +124,7 @@ notarize() {
 # The app gets its own ticket, so that a copy dragged out of the disk image opens without a
 # network connection. The upload leaves out extended attributes (--norsrc): ditto would store
 # each file's com.apple.provenance as a "._" file beside it.
-echo "Sending the app to Apple for notarization (usually a few minutes; a first submission can take longer)…"
+echo "Sending the app to Apple for notarization (usually a few minutes; a first submission can take longer)..."
 UPLOAD="$DIST/upload.zip"
 ditto -c -k --norsrc --keepParent "$APP" "$UPLOAD"
 notarize "$UPLOAD"
@@ -134,13 +134,13 @@ spctl --assess --type execute -vv "$APP" 2>&1 | grep -q "source=Notarized Develo
     { echo "Gatekeeper does not accept the stapled app."; spctl --assess --type execute -vv "$APP"; exit 1; }
 
 # The disk image, signed with the app's certificate. App/DMG/dmg_settings.py has its window.
-echo "Making the disk image…"
+echo "Making the disk image..."
 DMG="$DIST/Silverside-$VERSION.dmg"
 IDENTITY=$(echo "$info" | sed -n 's/^Authority=\(Developer ID Application: .*\)$/\1/p' | head -n 1)
 "$DMGBUILD_ENV/bin/dmgbuild" -s App/DMG/dmg_settings.py -D app="$APP" Silverside "$DMG" >"$DIST/dmgbuild.log" 2>&1 ||
     { cat "$DIST/dmgbuild.log"; echo "dmgbuild failed."; exit 1; }
 codesign --sign "$IDENTITY" --timestamp "$DMG"
-echo "Sending the disk image to Apple for notarization…"
+echo "Sending the disk image to Apple for notarization..."
 notarize "$DMG"
 xcrun stapler staple -q "$DMG"
 spctl --assess --type open --context context:primary-signature -vv "$DMG" 2>&1 | grep -q "source=Notarized Developer ID" ||
@@ -195,7 +195,7 @@ cp "$DMG" "$FEED_DIR/"
 NOTES="$FEED_DIR/Silverside-$VERSION.md"
 awk -v heading="## $VERSION " 'index($0, heading) == 1 {on = 1; next} on && /^## / {exit} on' CHANGELOG.md >"$NOTES"
 if [ -f "$FEED_FILE" ]; then cp "$FEED_FILE" "$FEED_DIR/appcast.xml"; fi
-echo "Signing the feed (the Keychain may ask to let generate_appcast use the key)…"
+echo "Signing the feed (the Keychain may ask to let generate_appcast use the key)..."
 "$SPARKLE_BIN/generate_appcast" --account "$KEY_ACCOUNT" --maximum-deltas 0 --embed-release-notes \
     --download-url-prefix "$RELEASES/$VERSION/" --link https://silverside.app "$FEED_DIR"
 grep "$RELEASES/$VERSION/Silverside-$VERSION.dmg\"" "$FEED_DIR/appcast.xml" | grep -q "sparkle:edSignature=" ||

@@ -1,0 +1,56 @@
+<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Silverside</title>
+        <item>
+            <title>0.9.7</title>
+            <pubDate>Sun, 15 Nov 2026 11:52:34 -0600</pubDate>
+            <link>https://silverside.app</link>
+            <sparkle:version>0.9.7</sparkle:version>
+            <sparkle:shortVersionString>0.9.7</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[
+First public release.
+
+### Added
+
+- The `silverside` command-line tool comes inside the app. Silverside ›
+  Install Command Line Tool… (or Settings › General) links it into
+  `/usr/local/bin` or `~/.local/bin`, with its zsh, bash, and fish
+  completions, so each update of the app updates the command too.
+
+### Changed
+
+- Silverside downloads as a disk image: open it, and drag Silverside to the
+  Applications folder.
+
+### Fixed
+
+- On a copy-protected disc with a short audio track after its data track, the
+  last track before the data took in the gap between the disc's sessions:
+  minutes of noise and unreadable sectors, so it was never verified. It now
+  ends with its music, and the release in MusicBrainz can fit the disc.
+- A library on a NAS that was not yet connected when Silverside opened made
+  its rips look moved or deleted, and they stayed so. Such rips now show as
+  offline and keep their place in Recent Rips, and Silverside looks again when
+  a disk or network share is connected or disconnected.
+- Rip History could show one rip twice, and leave out another, when a disc
+  was ripped again into the same folder; opening the earlier rip showed the
+  later one. Each rip now has a row of its own and opens as itself, marked
+  "Replaced" when a later rip of the disc took its place.
+- The video of a CD+G disc's graphics stayed in the rip's folder when the rip
+  was not verified and was accepted and encoded later. It now moves into the
+  album folder with the music, as a verified rip's video does.
+- A CD+EG disc that sends its display settings split over two symbols, as
+  *Divacore* does, showed only its first picture in 256 colors: the pictures
+  after it never drew. Its video now shows every picture.
+
+]]></description>
+            <enclosure url="https://github.com/SilvercodeStudio/Silverside/releases/download/0.9.7/Silverside-0.9.7.dmg" length="19616694" type="application/octet-stream" sparkle:edSignature="Px9g8oKRWIdAqk76nJHfyTOFU1iDsJu14dZRUQ5+8UEkmKA5LPFzO6lTYH6bGyfHCpxrizcynnMhvgx3VmA/Cg=="></enclosure>
+        </item>
+    </channel>
+</rss><!-- sparkle-signatures:
+edSignature: mG2JGcPFeGs31CZUZiEVYDKqvFsxrGncv7JCR3C7fLsoydJbKxYXiZxVtcX5oBMgA2uZPoqsQgon9RxkXeBkBw==
+length: 2922
+-->

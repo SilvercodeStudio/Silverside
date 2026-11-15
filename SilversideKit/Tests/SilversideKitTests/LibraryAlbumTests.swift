@@ -398,6 +398,12 @@ struct LibraryAlbumTests {
         var album = try album(in: folder)
         // A file Silverside does not write yet.
         try WAVFile.write(Self.twoSeconds, to: folder.appending(path: "03.wav"))
+        // The user's own cover file and Artwork, from before Silverside.
+        let mine = try makeJPEG(width: 300, height: 300)
+        try mine.data.write(to: folder.appending(path: "cover.jpg"))
+        let artworkFolder = folder.appending(path: "Artwork", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: artworkFolder, withIntermediateDirectories: true)
+        try mine.data.write(to: artworkFolder.appending(path: "scan.jpg"))
         album = try LibraryAlbum.read(folder)
         let front = try makeJPEG(width: 1400, height: 1400)
         let back = try makeJPEG(width: 800, height: 800)
@@ -417,7 +423,9 @@ struct LibraryAlbumTests {
             plan.files.map(\.change) == [
                 .embed(replacing: album.files[0].cover), .embed(replacing: album.files[1].cover), .unsupported,
             ])
-        #expect(plan.coverFile == .write)
+        #expect(plan.coverFile == .replace(album.coverPicture))
+        #expect(plan.keptCoverFile?.lastPathComponent == "cover_original.jpg")
+        #expect(plan.keptArtwork?.lastPathComponent == "Artwork (original)")
         // Every image but the cover and the raw scan.
         guard case .replace(let artwork) = plan.artwork else {
             Issue.record("Expected Artwork to be replaced")
@@ -434,6 +442,9 @@ struct LibraryAlbumTests {
         #expect(written.choice?.releaseID == Self.first && written.choice?.frontImageID == "101")
         #expect(written.choice?.artworkImageIDs == ["102", "103"])
         #expect(try AudioEncoder.decode(folder.appending(path: "02.flac")) == Self.threeSeconds)
+        #expect(try Data(contentsOf: folder.appending(path: "cover_original.jpg")) == mine.data)
+        let originals = folder.appending(path: "Artwork (original)")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: originals.path) == ["scan.jpg"])
 
         // The same choice again, kept in the folder: nothing to change.
         let again = try await AlbumArtworkPlan.make(album: written, release: release, client: client)
@@ -449,6 +460,8 @@ struct LibraryAlbumTests {
         // Another image as the cover: the files and the cover file change, Artwork stays.
         let other = try await AlbumArtworkPlan.make(album: written, release: release, front: "102", client: client)
         #expect(other.hasChanges && other.coverFile == .replace(written.coverPicture))
+        // Silverside wrote this cover file, so it is not kept.
+        #expect(other.keptCoverFile == nil)
         if case .unchanged = other.artwork {} else { Issue.record("Expected Artwork to stay") }
     }
 

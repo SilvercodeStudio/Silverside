@@ -72,8 +72,18 @@ public struct AlbumArtworkPlan: Sendable {
     public var embeddedPicture: LibraryAlbum.Picture
     public var files: [FilePlan]
     public var coverFile: CoverFileChange
+    /// Where the folder's cover file goes before the new one takes its place
+    /// (`cover_original.jpg`): only the user's own, the first time, and never over one kept before.
+    public var keptCoverFile: URL?
     public var artwork: ArtworkChange
+    /// Where the folder's Artwork goes when the release's images replace it (`Artwork (original)`),
+    /// on the same terms.
+    public var keptArtwork: URL?
     public var choice: AlbumChoice
+
+    /// The name that a replaced cover file of the user's keeps: `cover_original` and its extension.
+    public static let originalCoverName = "cover_original"
+    public static let originalArtworkName = "Artwork (original)"
 
     /// True if writing would change anything.
     public var hasChanges: Bool {
@@ -135,6 +145,17 @@ public struct AlbumArtworkPlan: Sendable {
             : album.coverPicture?.isSamePicture(as: coverPicture) == true
                 ? .unchanged : .replace(album.coverPicture)
 
+        // A choice kept with a front or Artwork means Silverside wrote them: not the user's own.
+        let manager = FileManager.default
+        var keptCoverFile: URL?
+        if case .replace = coverFile, let old = album.coverFile, album.choice?.frontImageID == nil,
+            !CoverFiles.extensions.contains(where: {
+                manager.fileExists(atPath: album.folder.appending(path: "\(originalCoverName).\($0)").path)
+            })
+        {
+            keptCoverFile = album.folder.appending(path: "\(originalCoverName).\(old.pathExtension.lowercased())")
+        }
+
         let chosen: [CoverArtImage]?
         var otherDiscsImages = 0
         switch selection ?? kept?.artworkImageIDs.map(ArtworkSelection.images) {
@@ -163,6 +184,13 @@ public struct AlbumArtworkPlan: Sendable {
         } else {
             artwork = .leave
         }
+        var keptArtwork: URL?
+        let originalArtwork = album.folder.appending(path: originalArtworkName, directoryHint: .isDirectory)
+        if case .replace = artwork, album.artworkCount > 0, album.choice?.artworkImageIDs == nil,
+            !manager.fileExists(atPath: originalArtwork.path)
+        {
+            keptArtwork = originalArtwork
+        }
         var choice = AlbumChoice(
             releaseID: release.id, release: "\(release.artist) - \(release.title)", frontImageID: front.id,
             artworkImageIDs: chosen.map { $0.map(\.id) } ?? kept?.artworkImageIDs)
@@ -173,7 +201,7 @@ public struct AlbumArtworkPlan: Sendable {
             album: album, release: release, images: images, front: front, frontIsSleeve: front.id == sleeve?.id,
             otherDiscsImages: otherDiscsImages, cover: cover, coverPicture: coverPicture,
             embedded: embedded, embeddedPicture: embeddedPicture, files: files, coverFile: coverFile,
-            artwork: artwork, choice: choice)
+            keptCoverFile: keptCoverFile, artwork: artwork, keptArtwork: keptArtwork, choice: choice)
     }
 
     /// One step of `apply`, for the user to follow.
@@ -225,6 +253,8 @@ public struct AlbumPlan: Sendable {
         case wroteFile(URL)
         case wroteCover(URL)
         case wroteArtwork(count: Int)
+        /// The folder's own cover file or Artwork, kept under this name before it was replaced.
+        case keptOriginal(URL)
         case keptChoice(URL)
     }
 
@@ -258,15 +288,24 @@ public struct AlbumPlan: Sendable {
             step(.wroteFile(file.url))
         }
         if let artwork, artwork.coverFile != .unchanged {
+            // The user's own cover file is moved aside first, so a failed write leaves it whole.
+            if let kept = artwork.keptCoverFile, let old = album.coverFile {
+                try manager.moveItem(at: old, to: kept)
+                step(.keptOriginal(kept))
+            }
             let written = try artwork.cover.write(to: album.folder)
             // A cover file of the other format would be found first.
-            if let old = album.coverFile, old.standardizedFileURL != written.standardizedFileURL {
+            if artwork.keptCoverFile == nil, let old = album.coverFile,
+                old.standardizedFileURL != written.standardizedFileURL
+            {
                 try manager.removeItem(at: old)
             }
             step(.wroteCover(written))
         }
         if let staged {
-            try ArtworkFolder.replace(in: album.folder, with: staged.folder, files: staged.files)
+            try ArtworkFolder.replace(
+                in: album.folder, with: staged.folder, files: staged.files, keepingOldAs: artwork?.keptArtwork)
+            if let kept = artwork?.keptArtwork { step(.keptOriginal(kept)) }
             step(.wroteArtwork(count: staged.files.count))
         }
         if hasChanges {

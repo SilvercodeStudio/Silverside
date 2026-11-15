@@ -337,9 +337,10 @@ public enum ArtworkFolder {
 
     /// Copies `staged` into `folder` as its Artwork, in place of the one there. The copy goes
     /// in under another name first; the old folder is moved aside, the copy takes its name,
-    /// and only then is the old one removed (put back if the rename fails). A disc.json in
-    /// `folder` with a list of files gets `files` (in `staged`) as Artwork/... in place of its old ones.
-    static func replace(in folder: URL, with staged: URL, files: [URL]) throws {
+    /// and only then is the old one removed (put back if the rename fails), or with `keepingOldAs`,
+    /// moved there. A disc.json in `folder` with a list of files gets `files` (in `staged`) as
+    /// Artwork/... in place of its old ones.
+    static func replace(in folder: URL, with staged: URL, files: [URL], keepingOldAs kept: URL? = nil) throws {
         let manager = FileManager.default
         let artwork = folder.appending(path: "Artwork", directoryHint: .isDirectory)
         let copy = folder.appending(path: ".silverside-artwork-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -362,7 +363,11 @@ public enum ArtworkFolder {
             try? manager.removeItem(at: copy)
             throw error
         }
-        try? manager.removeItem(at: aside)
+        if let kept, hadArtwork {
+            try manager.moveItem(at: aside, to: kept)
+        } else {
+            try? manager.removeItem(at: aside)
+        }
         if files.isEmpty { try? manager.removeItem(at: artwork) }
 
         let reportFile = folder.appending(path: "disc.json")

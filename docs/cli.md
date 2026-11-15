@@ -277,12 +277,18 @@ cover with its link, and every change, and asks before it writes:
   program) is left alone. The new file is made beside the old one, its audio
   checked against the old one's, then checked again as written, and only then
   does it take the old file's place, with the old file's attributes.
-- The folder gets the cover at full size, as `cover.jpg` (or `.png`).
+- The folder gets the cover at full size, as `cover.jpg` (or `.png`). A cover
+  file of your own that it replaces is kept as `cover_original.jpg`.
 - With `--artwork`, the folder gets the release's other images in `Artwork/`,
   named as a rip's are (`back`, `booklet-01`, ...), in place of what is there:
   `all` takes every image but the cover and raw scans; `4-10,12` takes those
   images by their numbers in `--list`, or give their IDs. A booklet that the
-  archive keeps as a PDF stays a PDF.
+  archive keeps as a PDF stays a PDF. An `Artwork/` of your own that it replaces
+  is kept as `Artwork (original)/`.
+- Your own files are kept only once, so a later run never puts Silverside's
+  cover over the original. A cover file or Artwork that an earlier run wrote
+  is simply replaced. Embedded covers are not kept: the report warns about
+  them just before it asks.
 - A folder of one disc of a box set takes that disc's own sleeve as its cover,
   when an image's comment names the disc ("CD 3"), and `--artwork all` leaves
   out the images that name other discs.

@@ -153,6 +153,7 @@ struct Album: AsyncParsableCommand {
             print("Nothing to change.")
             return
         }
+        if let artworkPlan { Self.printEmbedWarning(artworkPlan) }
         print("The choice goes in \(AlbumChoice.fileName).")
         if dryRun {
             print("Dry run: nothing written.")
@@ -168,6 +169,7 @@ struct Album: AsyncParsableCommand {
             case .wroteFile(let file): print("  \(file.lastPathComponent)")
             case .wroteCover(let file): print("Cover: \(file.path)")
             case .wroteArtwork(let count): print("Artwork: " + Self.images(count))
+            case .keptOriginal(let file): print("Kept the old one as \(file.lastPathComponent).")
             case .keptChoice(let file): print("Kept the choice in \(file.lastPathComponent).")
             }
         }
@@ -392,7 +394,8 @@ struct Album: AsyncParsableCommand {
         case .replace(let old):
             print(
                 "  Replace \(plan.album.coverFile?.lastPathComponent ?? "the cover file")"
-                    + (old.map { " (\($0.summary))" } ?? "") + " with the full-size cover.")
+                    + (old.map { " (\($0.summary))" } ?? "") + " with the full-size cover"
+                    + (plan.keptCoverFile.map { "; the old one is kept as \($0.lastPathComponent)." } ?? "."))
         case .unchanged: print("  The cover file is this cover already.")
         }
         switch plan.artwork {
@@ -407,7 +410,8 @@ struct Album: AsyncParsableCommand {
             print(
                 "  Artwork: "
                     + (plan.album.artworkCount > 0 ? "replace its \(plan.album.artworkCount) images with" : "save")
-                    + " \(chosen.count) images:")
+                    + " \(chosen.count) images"
+                    + (plan.keptArtwork.map { " (the old ones are kept in \($0.lastPathComponent))" } ?? "") + ":")
             for item in chosen {
                 let number = (images.firstIndex { $0.id == item.image.id } ?? 0) + 1
                 print(
@@ -420,6 +424,19 @@ struct Album: AsyncParsableCommand {
                         + "(give their numbers to --artwork to add them).")
             }
         }
+    }
+
+    /// A warning, just before the question, that the files' own embedded covers are replaced and not kept.
+    static func printEmbedWarning(_ plan: AlbumArtworkPlan) {
+        let replaced = plan.files.compactMap { file -> LibraryAlbum.Picture? in
+            if case .embed(let old) = file.change { old } else { nil }
+        }
+        guard !replaced.isEmpty else { return }
+        let sizes = Set(replaced.map(\.summary))
+        let files = replaced.count == 1 ? "1 file's embedded cover" : "\(replaced.count) files' embedded covers"
+        print(
+            "Warning: \(files) (" + (sizes.count == 1 ? sizes.first! : "of \(sizes.count) sizes")
+                + ") will be replaced, and not kept.")
     }
 
     /// The tags' changes: the album's once, then each file's, then what goes and what stays.

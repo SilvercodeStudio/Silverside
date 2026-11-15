@@ -60,7 +60,7 @@ shares. Without a terminal, as in a script, `rip` does not run until you agree w
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
 | `video` | Makes a video of a CD+G disc's rip: the graphics drawn as a CD+G player draws them, over the rip's audio (Apple Lossless, exactly as ripped, or `--audio aac`), the whole disc in one `.m4v` with a chapter for each track, named by its title. A CD+EG disc's video shows its 256 colors, as a CD+EG player does; `--picture g` shows it as a CD+G player does, in 16 colors, as "… (CD+G).m4v", and `--picture both` makes the two. It goes into the album folder when the rip was encoded, named after the album, else into the rip's folder; an album whose rip is gone works too (give its `Rip Report.json`), if it is lossless. `--codec hevc` makes smaller files; `--scale` sets the size (4: 1200 × 864). |
 | `hdcd` | Looks for HDCD codes in audio files and folders (WAV, AIFF, FLAC, Apple Lossless), such as rips and albums from before. |
-| `album` | Puts a release's cover art into an album folder that Silverside did not rip: finds the release, shows every change, and asks first. See [Albums from elsewhere](#albums-from-elsewhere). |
+| `album` | Puts a release's tags and cover art into an album folder that Silverside did not rip: finds the release, shows every change, and asks first. See [Albums from elsewhere](#albums-from-elsewhere). |
 | `tags` | Summarizes album folders, or some files, with no network and no changes: each file's format, length, and size; the tags that every file has, once, then each file's own; the covers, Artwork, and the choice that `album` keeps. `--recursive` takes each folder under the folders; `--full` shows long values and players' own items (such as iTunes's gapless data); `--json` prints JSON. |
 | `config` | Shows and changes the settings. |
 | `eject` | Ejects the disc from a drive (`-d`), or from every drive (`--all`: CDs, DVDs, and Blu-ray discs). A drive named with `-d` ejects a disc that macOS never recognized, through Disc Recording as `drutil eject` does, or opens its empty tray. A drive that hangs in a read is safer to unplug than to eject. |
@@ -225,11 +225,11 @@ found before is never lost, and the disc is not needed.
 
 ## Albums from elsewhere
 
-`silverside album <folder>` gives an album that Silverside did not rip the
-cover art of its MusicBrainz release. The folder holds one release: a disc, or
-every disc of a set (in disc and track order, from the tags). Silverside writes
-FLAC and Apple Lossless or AAC (`.m4a`) files; it lists other files, such as
-MP3, and leaves them alone.
+`silverside album <folder>` gives an album that Silverside did not rip the tags
+and the cover art of its MusicBrainz release. The folder holds one release: a
+disc, or every disc of a set (in disc and track order, from the tags).
+Silverside writes FLAC and Apple Lossless or AAC (`.m4a`) files; it lists other
+files, such as MP3, and leaves them alone.
 
 It finds the release in this order:
 
@@ -250,6 +250,26 @@ It finds the release in this order:
 It then shows each file beside its track, with the difference in length, the
 cover with its link, and every change, and asks before it writes:
 
+- Each file gets the release's tags, as an encoding from a rip writes them,
+  with your naming settings (live-show style, punctuation, segue marks), over
+  its own. Each tag that Silverside writes replaces every value the file has
+  for it, whatever its case (`album` and `ALBUM` are one tag), and other
+  programs' names for it go (TOTALTRACKS for TRACKTOTAL, YEAR for DATE). A tag
+  that Silverside has no value for on this release (no genre in MusicBrainz)
+  keeps the file's. Every other tag stays: comments, ratings, ReplayGain, iTunes's
+  items. When the files' MusicBrainz Album Id names another release, that
+  release's own tags go too (Picard's release type, disc ID, and so on, and a
+  barcode or label the new release does not have). The report shows the album's
+  changes once, each file's after, as old → new, and the tags kept.
+- Before the report, it asks for the album name: it lists the files' album
+  name and MusicBrainz's, then gives you a line to edit, filled in with
+  MusicBrainz's name (or the one you gave last time). Press Return to keep it,
+  or edit it first: ↑ and ↓ put each listed name in the line, and the usual
+  keys work (←, →, Control-A, Control-E, Control-U, Control-W). A name of your
+  own is kept in `.silverside-album.json` for the next run. It asks even with
+  `--yes`; without a terminal, it takes the line as filled in.
+- Tags need the files paired with the release's tracks by their lengths. When
+  MusicBrainz has no lengths, `--force-fit` pairs them by their order.
 - Each file gets the cover, at most 1000 pixels on a side, in place of its
   front cover. Every other tag stays, and so do other pictures, such as a back
   cover. An `.m4a` file whose tags are not iTunes tags (QuickTime's) is left
@@ -276,6 +296,8 @@ Other options:
   with its number and types, and stops: for choosing by eye among a box set's
   scans.
 - `--front <number or ID>` takes another image as the cover.
+- `--no-tags` leaves the tags as they are; `--no-cover` leaves the covers and
+  Artwork as they are.
 - `--dry-run` shows the changes and writes nothing; `--yes` writes without
   asking.
 

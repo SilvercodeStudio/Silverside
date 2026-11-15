@@ -256,6 +256,10 @@ public struct AlbumChoice: Codable, Equatable, Sendable {
     public var frontImageID: String?
     /// The images saved in Artwork, in order; nil if none were chosen.
     public var artworkImageIDs: [String]?
+    /// The release's media that the files are, in order (`AlbumFit.media`), when tags were written.
+    public var media: [Int]?
+    /// The album name that the user gave the tags, where it differs from the release's.
+    public var album: String?
     public var updated: Date
     /// "Silverside 0.9.8 (abc1234)".
     public var program: String
@@ -282,7 +286,9 @@ public struct AlbumChoice: Codable, Equatable, Sendable {
         let file = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]) ?? [:]
         var object = try JSONSerialization.jsonObject(with: Self.encoder.encode(self)) as? [String: Any] ?? [:]
         // Optional values as null, so that clearing one clears it in the file too.
-        for key in ["release", "frontImageID", "artworkImageIDs"] where object[key] == nil { object[key] = NSNull() }
+        for key in ["release", "frontImageID", "artworkImageIDs", "media", "album"] where object[key] == nil {
+            object[key] = NSNull()
+        }
         let merged = JSONMerge.overlay(object, on: file)
         try JSONSerialization.data(
             withJSONObject: merged, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]

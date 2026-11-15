@@ -163,14 +163,60 @@ public struct AlbumArtworkPlan: Sendable {
         } else {
             artwork = .leave
         }
-        let choice = AlbumChoice(
+        var choice = AlbumChoice(
             releaseID: release.id, release: "\(release.artist) - \(release.title)", frontImageID: front.id,
             artworkImageIDs: chosen.map { $0.map(\.id) } ?? kept?.artworkImageIDs)
+        // What the tags chose stays, so the cover alone is no change to the choice.
+        choice.media = kept?.media
+        choice.album = kept?.album
         return AlbumArtworkPlan(
             album: album, release: release, images: images, front: front, frontIsSleeve: front.id == sleeve?.id,
             otherDiscsImages: otherDiscsImages, cover: cover, coverPicture: coverPicture,
             embedded: embedded, embeddedPicture: embeddedPicture, files: files, coverFile: coverFile,
             artwork: artwork, choice: choice)
+    }
+
+    /// One step of `apply`, for the user to follow.
+    public typealias Step = AlbumPlan.Step
+
+    /// Writes the plan, as `AlbumPlan` does with no tags.
+    public func apply(client: CoverArtClient = CoverArtClient(), step: @Sendable (Step) -> Void = { _ in })
+        async throws
+    {
+        try await AlbumPlan(album: album, release: release, artwork: self, tags: nil).apply(client: client, step: step)
+    }
+}
+
+/// Everything `silverside album` changes in an album folder: the artwork (`AlbumArtworkPlan`)
+/// and the tags (`AlbumTagsPlan`), either of which may be left out, and the choice kept in
+/// the folder. Each file is written once, with its cover and its tags.
+public struct AlbumPlan: Sendable {
+    public var album: LibraryAlbum
+    public var release: MusicBrainzRelease
+    public var artwork: AlbumArtworkPlan?
+    public var tags: AlbumTagsPlan?
+    public var choice: AlbumChoice
+
+    public init(album: LibraryAlbum, release: MusicBrainzRelease, artwork: AlbumArtworkPlan?, tags: AlbumTagsPlan?) {
+        self.album = album
+        self.release = release
+        self.artwork = artwork
+        self.tags = tags
+        // Without the artwork, the images kept for this release stay chosen.
+        let kept = album.choice?.releaseID == release.id ? album.choice : nil
+        var choice =
+            artwork?.choice
+            ?? AlbumChoice(
+                releaseID: release.id, release: "\(release.artist) - \(release.title)",
+                frontImageID: kept?.frontImageID, artworkImageIDs: kept?.artworkImageIDs)
+        choice.media = tags?.fit.media ?? kept?.media
+        if let tags { choice.album = tags.editedAlbumTitle } else { choice.album = kept?.album }
+        self.choice = choice
+    }
+
+    /// True if writing would change anything.
+    public var hasChanges: Bool {
+        (artwork?.hasChanges ?? false) || (tags?.hasChanges ?? false) || !choice.sameChoice(as: album.choice)
     }
 
     /// One step of `apply`, for the user to follow.
@@ -183,31 +229,36 @@ public struct AlbumArtworkPlan: Sendable {
     }
 
     /// Writes the plan: the Artwork images are downloaded first, so a failed download changes
-    /// nothing; then each file gets the cover (its audio checked, `LibraryAlbumWriter`), then
-    /// the cover file, Artwork, and the choice.
+    /// nothing; then each file gets its cover and its tags, in one write (its audio checked,
+    /// `LibraryAlbumWriter`); then the cover file, Artwork, and the choice.
     public func apply(client: CoverArtClient = CoverArtClient(), step: @Sendable (Step) -> Void = { _ in })
         async throws
     {
         let manager = FileManager.default
         var staged: (folder: URL, files: [URL])?
-        if case .replace(let images) = artwork {
+        if let artwork, case .replace(let images) = artwork.artwork {
             step(.downloadingArtwork(count: images.count))
             let folder = manager.temporaryDirectory.appending(
                 path: "silverside-artwork-\(UUID().uuidString)", directoryHint: .isDirectory)
             staged = (folder, try await client.save(images.map { ($0.image, $0.name) }, in: folder))
         }
         defer { if let staged { try? manager.removeItem(at: staged.folder) } }
-        let embedded = self.embedded
-        for plan in files {
-            guard case .embed = plan.change else { continue }
+        for (index, file) in album.files.enumerated() {
+            var cover: EmbeddedCover?
+            if let artwork, index < artwork.files.count, case .embed = artwork.files[index].change {
+                cover = artwork.embedded
+            }
+            let fileTags = tags.flatMap { index < $0.files.count ? $0.files[index] : nil }
+                .flatMap { $0.canWrite && !$0.changes.isEmpty ? $0 : nil }
+            guard cover != nil || fileTags != nil else { continue }
             try Task.checkCancellation()
             try await blocking {
-                try LibraryAlbumWriter.replaceCover(in: plan.file.url, kind: plan.file.kind, with: embedded)
+                try LibraryAlbumWriter.update(file.url, kind: file.kind, cover: cover, tags: fileTags)
             }
-            step(.wroteFile(plan.file.url))
+            step(.wroteFile(file.url))
         }
-        if coverFile != .unchanged {
-            let written = try cover.write(to: album.folder)
+        if let artwork, artwork.coverFile != .unchanged {
+            let written = try artwork.cover.write(to: album.folder)
             // A cover file of the other format would be found first.
             if let old = album.coverFile, old.standardizedFileURL != written.standardizedFileURL {
                 try manager.removeItem(at: old)
@@ -226,11 +277,12 @@ public struct AlbumArtworkPlan: Sendable {
 }
 
 extension AlbumChoice {
-    /// True if `other` chose the same release and images, whenever and by whichever version.
+    /// True if `other` chose the same release, images, and album name, whenever and by whichever version.
     func sameChoice(as other: AlbumChoice?) -> Bool {
         guard let other else { return false }
         return releaseID == other.releaseID && frontImageID == other.frontImageID
-            && artworkImageIDs == other.artworkImageIDs
+            && artworkImageIDs == other.artworkImageIDs && (media == nil || media == other.media)
+            && album == other.album
     }
 }
 
@@ -241,10 +293,19 @@ extension AlbumChoice {
 public enum LibraryAlbumWriter {
     /// Gives the file `cover` as its front cover, keeping every other tag.
     public static func replaceCover(in url: URL, kind: AudioFileKind, with cover: EmbeddedCover) throws {
+        try update(url, kind: kind, cover: cover, tags: nil)
+    }
+
+    /// Gives the file `cover` as its front cover (nil keeps it) and `tags`' merge of its tags
+    /// (nil keeps them), in one write.
+    public static func update(
+        _ url: URL, kind: AudioFileKind, cover: EmbeddedCover?, tags: AlbumTagsPlan.FilePlan?
+    ) throws {
         try rewrite(url, kind: kind) { data in
             switch kind {
-            case .flac: try FLACTags.replacingFrontCover(with: cover, in: data)
-            case .mp4: try MP4Tags.replacingCover(with: cover, in: data)
+            case .flac: try FLACTags.updating(data, comments: tags?.merged, cover: cover)
+            case .mp4:
+                try MP4Tags.updating(data, removing: tags?.removed ?? [], adding: tags?.written ?? [], cover: cover)
             case .other: throw AudioPayloadError.unsupported
             }
         }

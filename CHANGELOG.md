@@ -7,12 +7,15 @@ command-line tool.
 
 ### Added
 
-- `silverside album` gives an album that Silverside did not rip the cover art
-  of its MusicBrainz release: the cover in each file and as `cover.jpg`, and
-  the release's other images in `Artwork/`. It finds the release from the
-  files' tags and track lengths, lets you choose when several fit, shows every
-  change with links to the images, and asks before it writes. Every other tag
-  stays as it is, and each file's audio is checked to be unchanged.
+- `silverside album` gives an album that Silverside did not rip the tags and
+  the cover art of its MusicBrainz release: the tags as Silverside writes them
+  for a rip, the cover in each file and as `cover.jpg`, and the release's other
+  images in `Artwork/`. It finds the release from the files' tags and track
+  lengths, lets you choose when several fit, shows every change, tag by tag and
+  with links to the images, and asks before it writes. You can edit the album
+  name it writes, and your name is kept for the next run. Tags that Silverside
+  does not write stay as they are, and each file's audio is checked to be
+  unchanged.
 - `silverside tags` summarizes album folders or files without changing them:
   each file's format, length, and size, the tags that every file shares and
   each file's own, and the covers. It reads FLAC, Apple Lossless, AAC, and MP3

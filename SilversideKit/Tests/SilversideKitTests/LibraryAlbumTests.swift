@@ -438,6 +438,14 @@ struct LibraryAlbumTests {
         // The same choice again, kept in the folder: nothing to change.
         let again = try await AlbumArtworkPlan.make(album: written, release: release, client: client)
         #expect(!again.hasChanges)
+        // An album name and media that the tags kept are no change for the cover either.
+        var named = try #require(written.choice)
+        (named.album, named.media) = ("Mine", [1])
+        try named.save(in: folder)
+        let withName = try LibraryAlbum.read(folder)
+        let cover = try await AlbumArtworkPlan.make(album: withName, release: release, client: client)
+        #expect(!cover.hasChanges && cover.choice.album == "Mine")
+        #expect(!AlbumPlan(album: withName, release: release, artwork: cover, tags: nil).hasChanges)
         // Another image as the cover: the files and the cover file change, Artwork stays.
         let other = try await AlbumArtworkPlan.make(album: written, release: release, front: "102", client: client)
         #expect(other.hasChanges && other.coverFile == .replace(written.coverPicture))

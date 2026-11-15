@@ -54,15 +54,56 @@ public enum MP4Tags {
     /// A `meta` whose handler is not iTunes's (`mdir`), such as QuickTime's `mdta`, whose items
     /// are named by its `keys`, is refused: a `covr` item means nothing there.
     public static func replacingCover(with cover: EmbeddedCover, in data: Data) throws -> Data {
+        try updating(data, removing: [], adding: [], cover: cover)
+    }
+
+    /// The file's contents with its items for `keys` (Vorbis comment keys in capitals, as
+    /// `keys(of:in:)` names an item) taken out, `comments` added as items, and `cover` as its
+    /// cover (nil keeps it). Every other item stays, whoever wrote it, and so does the rest of
+    /// meta, as for `replacingCover`. COMPILATION goes in `cpil`, as iTunes and Picard keep it.
+    /// No `©too`: the file's encoder stays.
+    public static func updating(
+        _ data: Data, removing keys: Set<String>, adding comments: [(key: String, value: String)],
+        cover: EmbeddedCover?
+    ) throws -> Data {
         let top = try atoms(in: data, data.startIndex..<data.endIndex)
         guard let moov = top.first(where: { $0.type == "moov" }), let mdat = top.first(where: { $0.type == "mdat" })
         else { throw MP4Error.malformed }
-        guard let fileExtension = cover.image.fileExtension else { throw CoverArtError.unknownFormat }
+        if let cover, cover.image.fileExtension == nil { throw CoverArtError.unknownFormat }
         if let handler = try metaHandler(in: data, moov: moov), handler != "mdir" { throw MP4Error.otherTags(handler) }
-        let kept = try existingItems(in: data, moov: moov).filter { $0.type != "covr" }.map { Data(data[$0.range]) }
-        let covr = atom("covr", [dataAtom(fileExtension == "png" ? 14 : 13, cover.image.data)])
+        let kept = try existingItems(in: data, moov: moov).filter { item in
+            if item.type == "covr" { return cover == nil }
+            return try !Self.keys(of: item, in: data).contains(where: keys.contains)
+        }.map { Data(data[$0.range]) }
+        var added = items(comments.filter { $0.key != "COMPILATION" }, cover: cover, vendor: false)
+        if comments.contains(where: { $0.key == "COMPILATION" && $0.value == "1" }) {
+            added.append(atom("cpil", [dataAtom(21, Data([1]))]))
+        }
         return try rewritten(
-            data, top: top, moov: moov, mdat: mdat, ilst: atom("ilst", kept + [covr]), keepingMeta: true)
+            data, top: top, moov: moov, mdat: mdat, ilst: atom("ilst", kept + added), keepingMeta: true)
+    }
+
+    /// Picard's freeform names for tags that Silverside does not write, by the Vorbis comment key.
+    static let otherFreeformKeys: [String: String] = [
+        "MusicBrainz Album Type": "RELEASETYPE", "MusicBrainz Album Status": "RELEASESTATUS",
+        "MusicBrainz Release Track Id": "MUSICBRAINZ_RELEASETRACKID", "MusicBrainz Disc Id": "MUSICBRAINZ_DISCID",
+        "MusicBrainz Work Id": "MUSICBRAINZ_WORKID", "MusicBrainz Album Comment": "MUSICBRAINZ_ALBUMCOMMENT",
+        "Acoustid Id": "ACOUSTID_ID", "ASIN": "ASIN", "SCRIPT": "SCRIPT", "LANGUAGE": "LANGUAGE",
+    ]
+
+    /// The Vorbis comment keys, in capitals, that an item holds: trkn holds TRACKNUMBER and
+    /// TRACKTOTAL, a freeform item its name's key, another item its type's.
+    static func keys(of item: Atom, in data: Data) throws -> [String] {
+        let textKeys = Dictionary(uniqueKeysWithValues: textAtoms.map { ($0.value, $0.key) })
+        let freeformKeys = Dictionary(uniqueKeysWithValues: freeformNames.map { ($0.value, $0.key) })
+        switch item.type {
+        case "trkn": return ["TRACKNUMBER", "TRACKTOTAL"]
+        case "disk": return ["DISCNUMBER", "DISCTOTAL"]
+        case "----":
+            guard let name = try freeformName(of: item, in: data) else { return [] }
+            return [(freeformKeys[name] ?? otherFreeformKeys[name] ?? name).uppercased()]
+        default: return [(textKeys[item.type] ?? otherAtoms[item.type] ?? item.type).uppercased()]
+        }
     }
 
     /// The handler type of moov/udta/meta ("mdir" for iTunes's tags), or nil if there is no meta.
@@ -136,7 +177,7 @@ public enum MP4Tags {
                 cover = values.first.map { Data($0) }
             case "----":
                 guard let name = try freeformName(of: item, in: data),
-                    let key = freeformKeys[name] ?? (every ? name : nil)
+                    let key = freeformKeys[name] ?? (every ? Self.otherFreeformKeys[name] ?? name : nil)
                 else { continue }
                 comments += values.map { (key, String(decoding: $0, as: UTF8.self)) }
             default:
@@ -290,7 +331,8 @@ public enum MP4Tags {
 
     // MARK: - Writing items
 
-    static func items(_ comments: [(key: String, value: String)], cover: EmbeddedCover?) -> [Data] {
+    static func items(_ comments: [(key: String, value: String)], cover: EmbeddedCover?, vendor: Bool = true) -> [Data]
+    {
         var items = [Data]()
         var values = [String: [String]]()
         var order = [String]()
@@ -322,7 +364,7 @@ public enum MP4Tags {
         if let disc = pair(values["DISCNUMBER"]?.first, values["DISCTOTAL"]?.first, trailing: 0) {
             items.append(atom("disk", [dataAtom(0, disc)]))
         }
-        items.append(atom("©too", [dataAtom(1, Data(FLACTags.vendor.utf8))]))
+        if vendor { items.append(atom("©too", [dataAtom(1, Data(FLACTags.vendor.utf8))])) }
         if let cover, let fileExtension = cover.image.fileExtension {
             items.append(atom("covr", [dataAtom(fileExtension == "png" ? 14 : 13, cover.image.data)]))
         }

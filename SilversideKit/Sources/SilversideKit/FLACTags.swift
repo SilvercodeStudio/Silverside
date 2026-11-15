@@ -42,17 +42,46 @@ public enum FLACTags {
     /// a back cover), and every other block. Padding is written again. The audio frames are
     /// copied unchanged (`AudioPayload` checks them).
     public static func replacingFrontCover(with cover: EmbeddedCover, in data: Data) throws -> Data {
+        try updating(data, comments: nil, cover: cover)
+    }
+
+    /// The file's contents with `comments` as its Vorbis comments (nil keeps them) and `cover`
+    /// as its front cover (nil keeps it). The comments' vendor stays the file's, and so do the
+    /// other pictures and blocks; padding is written again. `LibraryAlbum` gives the comments
+    /// already merged (`TagMerge`).
+    public static func updating(
+        _ data: Data, comments: [(key: String, value: String)]?, cover: EmbeddedCover?
+    ) throws -> Data {
         let (blocks, audioStart) = try parseBlocks(data)
         guard let streamInfo = blocks.first, streamInfo.type == BlockType.streamInfo.rawValue else {
             throw FLACError.malformed
         }
-        var kept = blocks.filter { block in
-            if block.type == BlockType.padding.rawValue { return false }
-            return block.type != BlockType.picture.rawValue || (try? pictureType(block.body)) != 3
+        var kept = [(type: UInt8, body: Data)]()
+        var wroteComments = false
+        for block in blocks where block.type != BlockType.padding.rawValue {
+            if block.type == BlockType.picture.rawValue, cover != nil, (try? pictureType(block.body)) == 3 { continue }
+            if block.type == BlockType.vorbisComment.rawValue, let comments {
+                if !wroteComments {
+                    kept.append((block.type, vorbisComment(comments, vendor: try vendor(of: block.body))))
+                    wroteComments = true
+                }
+                continue
+            }
+            kept.append(block)
         }
-        kept.append((BlockType.picture.rawValue, try picture(cover)))
+        if let comments, !wroteComments { kept.append((BlockType.vorbisComment.rawValue, vorbisComment(comments))) }
+        if let cover { kept.append((BlockType.picture.rawValue, try picture(cover))) }
         kept.append((BlockType.padding.rawValue, Data(count: paddingBytes)))
         return try assemble(kept, audio: data[audioStart...])
+    }
+
+    /// The vendor string at the start of a VORBIS_COMMENT block.
+    static func vendor(of body: Data) throws -> String {
+        guard body.count >= 4 else { throw FLACError.malformed }
+        let start = body.startIndex
+        let length = (0..<4).reduce(0) { $0 | Int(body[start + $1]) << (8 * $1) }
+        guard body.count >= 4 + length else { throw FLACError.malformed }
+        return String(decoding: body[(start + 4)..<(start + 4 + length)], as: UTF8.self)
     }
 
     /// A PICTURE block's picture type (3: the front cover).
@@ -147,7 +176,7 @@ public enum FLACTags {
         }
     }
 
-    static func vorbisComment(_ comments: [(key: String, value: String)]) -> Data {
+    static func vorbisComment(_ comments: [(key: String, value: String)], vendor: String = FLACTags.vendor) -> Data {
         var body = Data()
         func append(_ text: String) {
             let bytes = Array(text.utf8)

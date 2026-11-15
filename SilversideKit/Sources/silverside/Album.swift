@@ -4,7 +4,7 @@ import SilversideKit
 
 struct Album: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Put a release's cover art into an album folder that Silverside did not rip.",
+        abstract: "Put a release's tags and cover art into an album folder that Silverside did not rip.",
         discussion: """
             The folder holds one release: a disc, or every disc of a set, as FLAC or Apple Lossless and AAC (.m4a) \
             files. Silverside finds the release: the one named with --release, else the one kept in the folder by an \
@@ -12,10 +12,12 @@ struct Album: AsyncParsableCommand {
             artist (or the folder's names), with their track lengths deciding. When a search finds more than one \
             release that fits, you choose.
 
-            It shows every change first, with links to the images, and asks before it writes. Each file gets the \
-            cover (1000 pixels at most), and keeps every other tag; its audio is checked, and stays as it was. The \
-            folder gets the cover at full size (cover.jpg), and with --artwork the release's other images in \
-            Artwork/. The choice is kept in the folder, in .silverside-album.json.
+            It shows every change first, tag by tag, with links to the images, and asks before it writes. Each file \
+            gets the release's tags, as an encoding from a rip writes them (with your naming settings), over its \
+            own: each tag that Silverside writes replaces the file's, and every other tag stays. It gets the cover \
+            too (1000 pixels at most). Its audio is checked, and stays as it was. The folder gets the cover at full \
+            size (cover.jpg), and with --artwork the release's other images in Artwork/. The choice is kept in the \
+            folder, in .silverside-album.json.
 
             Examples:
               silverside album "~/Music/The Beatles/Abbey Road"
@@ -23,6 +25,7 @@ struct Album: AsyncParsableCommand {
               silverside album <folder> --sheet ~/Desktop/sheet.jpg
               silverside album <folder> --front 3 --artwork all
               silverside album <folder> --artwork 4-10,12 --dry-run
+              silverside album <folder> --no-cover
             """)
 
     @Argument(help: "The album folder.", completion: .directory)
@@ -52,6 +55,18 @@ struct Album: AsyncParsableCommand {
     @Option(help: "Write a contact sheet of the release's images to this file (JPEG), and stop.", completion: .file())
     var sheet: String?
 
+    @Flag(help: "Leave the tags as they are: the cover and the artwork only.")
+    var noTags = false
+
+    @Flag(help: "Leave the covers and Artwork as they are: the tags only.")
+    var noCover = false
+
+    @Flag(
+        help:
+            "Write the tags even when MusicBrainz has no track lengths to compare: the files pair with the tracks by their order."
+    )
+    var forceFit = false
+
     @Flag(help: "Show what would change, and write nothing.")
     var dryRun = false
 
@@ -72,8 +87,9 @@ struct Album: AsyncParsableCommand {
         Self.printRelease(candidate, album: album)
 
         let client = CoverArtClient()
-        let images = try await client.images(releaseID: candidate.release.id)
-        guard !images.isEmpty else {
+        let looksAtImages = !noCover || list || sheet != nil
+        let images = looksAtImages ? try await client.images(releaseID: candidate.release.id) : []
+        if looksAtImages, images.isEmpty, noTags || list || sheet != nil {
             throw CommandError(
                 "The Cover Art Archive has no images for this release. Try another release of the album with --release."
             )
@@ -85,17 +101,59 @@ struct Album: AsyncParsableCommand {
             return
         }
 
-        let plan = try await AlbumArtworkPlan.make(
-            album: album, release: candidate.release, media: candidate.fit?.media,
-            front: try front.map { try Self.imageID($0, in: images) },
-            artwork: try artwork.map { try Self.selection($0, in: images) }, client: client)
-        print()
-        Self.printPlan(plan, images: images)
+        var artworkPlan: AlbumArtworkPlan?
+        if !noCover, !images.isEmpty {
+            artworkPlan = try await AlbumArtworkPlan.make(
+                album: album, release: candidate.release, media: candidate.fit?.media,
+                front: try front.map { try Self.imageID($0, in: images) },
+                artwork: try artwork.map { try Self.selection($0, in: images) }, client: client)
+        }
+        var tagsPlan: AlbumTagsPlan?
+        if !noTags {
+            // Tags need each file paired with its track: by the lengths, or with --force-fit by the order.
+            let fit =
+                candidate.fit.flatMap { $0.kind == .lengths || forceFit ? $0 : nil }
+                ?? (forceFit ? candidate.release.fit(lengths: album.files.map { _ in nil }) : nil)
+            if let fit {
+                let settings = try Settings.load()
+                var made = AlbumTagsPlan.make(album: album, release: candidate.release, fit: fit, settings: settings)
+                let title = try Self.askAlbumTitle(made)
+                if title != made.albumTitle {
+                    made = AlbumTagsPlan.make(
+                        album: album, release: candidate.release, fit: fit, settings: settings, albumTitle: title)
+                }
+                tagsPlan = made
+            } else {
+                print()
+                print(
+                    candidate.fit == nil
+                        ? "Tags: not written. The release does not fit the files, so which file is which track is not known."
+                        : "Tags: not written. MusicBrainz has no track lengths to compare; --force-fit pairs the files with the tracks by their order."
+                )
+            }
+        }
+        let plan = AlbumPlan(album: album, release: candidate.release, artwork: artworkPlan, tags: tagsPlan)
+        if let artworkPlan {
+            print()
+            Self.printPlan(artworkPlan, images: images)
+        } else if !noCover {
+            print()
+            print("Cover: the Cover Art Archive has no images for this release, so the covers stay as they are.")
+        }
+        if let tagsPlan {
+            print()
+            Self.printTags(tagsPlan)
+        }
+        if noTags {
+            print()
+            print("Tags: left as they are (--no-tags).")
+        }
         print()
         guard plan.hasChanges else {
             print("Nothing to change.")
             return
         }
+        print("The choice goes in \(AlbumChoice.fileName).")
         if dryRun {
             print("Dry run: nothing written.")
             return
@@ -150,6 +208,37 @@ struct Album: AsyncParsableCommand {
             }
             print("Give a number from 1 to \(found.candidates.count).")
         }
+    }
+
+    /// The album name for the tags: the files' names now, and the release's, then a line to
+    /// edit with the name the tags would get (one kept from an earlier run, else the release's).
+    static func askAlbumTitle(_ plan: AlbumTagsPlan) throws -> String {
+        let writable = plan.files.filter(\.canWrite)
+        guard !writable.isEmpty else { return plan.albumTitle }
+        var now = [String]()
+        for file in writable {
+            if let value = file.file.tag("ALBUM"), !value.isEmpty, !now.contains(value) { now.append(value) }
+        }
+        print()
+        print("Album name in the tags (edit it and press Return; ↑ and ↓ go through these names):")
+        let width = 13
+        if now.isEmpty { print("  " + "Now".padding(toLength: width, withPad: " ", startingAt: 0) + "(none)") }
+        for (index, value) in now.enumerated() {
+            print("  " + (index == 0 ? "Now" : "").padding(toLength: width, withPad: " ", startingAt: 0) + value)
+        }
+        print("  " + "MusicBrainz".padding(toLength: width, withPad: " ", startingAt: 0) + plan.releaseAlbumTitle)
+        var choices = [plan.albumTitle]
+        for name in now + [plan.releaseAlbumTitle] where !choices.contains(name) { choices.append(name) }
+        let edited: String
+        do {
+            edited = try LineEditor.read(
+                prompt: "  " + "New".padding(toLength: width, withPad: " ", startingAt: 0), text: plan.albumTitle,
+                choices: choices)
+        } catch is LineEditor.Stopped {
+            throw CommandError("Stopped: nothing written.")
+        }
+        let trimmed = edited.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? plan.albumTitle : trimmed
     }
 
     static func ask(_ question: String) -> Bool {
@@ -280,7 +369,7 @@ struct Album: AsyncParsableCommand {
                 + (plan.frontIsSleeve ? " (this disc's own sleeve in the set)" : ""))
         print("  \(plan.front.url.absoluteString)")
         print()
-        print("Changes:")
+        print("Cover changes:")
         let embeds = plan.files.filter { if case .embed = $0.change { true } else { false } }
         if !embeds.isEmpty {
             print("  Embed the cover (\(plan.embeddedPicture.summary)) in \(embeds.count) files:")
@@ -331,8 +420,67 @@ struct Album: AsyncParsableCommand {
                         + "(give their numbers to --artwork to add them).")
             }
         }
-        print("  Keep the choice in \(AlbumChoice.fileName).")
-        print("  Every other tag stays as it is.")
+    }
+
+    /// The tags' changes: the album's once, then each file's, then what goes and what stays.
+    static func printTags(_ plan: AlbumTagsPlan) {
+        let writable = plan.files.filter(\.canWrite)
+        print(
+            "Tags: the release's, over the files' own" + (writable.isEmpty ? "" : ", in \(writable.count) files") + ":")
+        guard plan.hasChanges else {
+            print("  The files have the release's tags already.")
+            printLeftAlone(plan)
+            return
+        }
+        let shared = plan.sharedChanges
+        let width =
+            (writable.flatMap(\.changes).map(\.key.count).max() ?? 0) + 2
+        if !shared.isEmpty {
+            print("  In every file:")
+            for change in shared { printChange(change, indent: 4, width: width) }
+        }
+        let own = writable.map { file in (file, file.changes.filter { !shared.contains($0) }) }
+        if own.contains(where: { !$0.1.isEmpty }) {
+            print(writable.count == 1 ? "  The file:" : "  Each file:")
+            for (file, changes) in own where !changes.isEmpty {
+                print("    \(file.file.url.lastPathComponent)")
+                for change in changes { printChange(change, indent: 6, width: width) }
+            }
+        }
+        if writable.contains(where: \.otherRelease) {
+            print("  The files named another release in MusicBrainz: its own tags go (above, as removed).")
+        }
+        let kept = plan.keptKeys
+        if !kept.isEmpty { print("  Kept as they are: " + kept.joined(separator: ", ")) }
+        printLeftAlone(plan)
+    }
+
+    static func printLeftAlone(_ plan: AlbumTagsPlan) {
+        let left = plan.files.filter { !$0.canWrite }
+        guard !left.isEmpty else { return }
+        let kinds = Set(left.map { $0.file.url.pathExtension.uppercased() }).sorted().joined(separator: ", ")
+        print("  Left alone: \(left.count) files (\(kinds)), whose tags Silverside cannot write yet.")
+    }
+
+    /// "ALBUM  They Want My Soul (180g Clear Vinyl) → They Want My Soul  (was album)".
+    static func printChange(_ change: TagMerge.Change, indent: Int, width: Int) {
+        func values(_ list: [String]) -> String {
+            list.isEmpty
+                ? "(none)" : list.map { $0.count > 80 ? String($0.prefix(80)) + "..." : $0 }.joined(separator: "; ")
+        }
+        let was = change.oldNames.isEmpty ? "" : "  (was " + change.oldNames.joined(separator: ", ") + ")"
+        let text: String
+        if change.isRemoved {
+            text = values(change.old) + " → (removed)"
+        } else if change.isRenamedOnly {
+            text = values(change.new)
+        } else {
+            text = values(change.old) + " → " + values(change.new)
+        }
+        print(
+            String(repeating: " ", count: indent) + change.key.padding(toLength: width, withPad: " ", startingAt: 0)
+                + text
+                + was)
     }
 
     /// "Artist - Title (1969, GB; Apple PCS 7088; barcode 0094638246817; CD)".

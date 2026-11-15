@@ -60,6 +60,7 @@ shares. Without a terminal, as in a script, `rip` does not run until you agree w
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
 | `video` | Makes a video of a CD+G disc's rip: the graphics drawn as a CD+G player draws them, over the rip's audio (Apple Lossless, exactly as ripped, or `--audio aac`), the whole disc in one `.m4v` with a chapter for each track, named by its title. A CD+EG disc's video shows its 256 colors, as a CD+EG player does; `--picture g` shows it as a CD+G player does, in 16 colors, as "… (CD+G).m4v", and `--picture both` makes the two. It goes into the album folder when the rip was encoded, named after the album, else into the rip's folder; an album whose rip is gone works too (give its `Rip Report.json`), if it is lossless. `--codec hevc` makes smaller files; `--scale` sets the size (4: 1200 × 864). |
 | `hdcd` | Looks for HDCD codes in audio files and folders (WAV, AIFF, FLAC, Apple Lossless), such as rips and albums from before. |
+| `album` | Puts a release's cover art into an album folder that Silverside did not rip: finds the release, shows every change, and asks first. See [Albums from elsewhere](#albums-from-elsewhere). |
 | `config` | Shows and changes the settings. |
 | `eject` | Ejects the disc from a drive (`-d`), or from every drive (`--all`: CDs, DVDs, and Blu-ray discs). A drive named with `-d` ejects a disc that macOS never recognized, through Disc Recording as `drutil eject` does, or opens its empty tray. A drive that hangs in a read is safer to unplug than to eject. |
 | `license` | Shows the notice and the license (the GNU GPL, version 3 or later), and the code from others that the CLI includes. |
@@ -220,6 +221,64 @@ A new release is often in neither AccurateRip nor CTDB at first, and both
 fill in over weeks. `silverside check` with a rip folder, or an album folder
 in the library, looks each disc up again and updates its report. A match
 found before is never lost, and the disc is not needed.
+
+## Albums from elsewhere
+
+`silverside album <folder>` gives an album that Silverside did not rip the
+cover art of its MusicBrainz release. The folder holds one release: a disc, or
+every disc of a set (in disc and track order, from the tags). Silverside writes
+FLAC and Apple Lossless or AAC (`.m4a`) files; it lists other files, such as
+MP3, and leaves them alone.
+
+It finds the release in this order:
+
+1. `--release`, an ID or the release's page on MusicBrainz.
+2. The release kept in the folder by an earlier run (`.silverside-album.json`).
+3. The files' MusicBrainz Album Id tag, as Picard writes it, if the release
+   fits the files.
+4. A search: the barcode in the tags, then the files' album and artist (or the
+   folder's names, as `Artist/Album`). Words in brackets, such as "(2009 Stereo
+   Remaster)", are looked for in the release's disambiguation. The releases
+   with as many tracks as files, each within a few seconds of its file, are
+   listed with their image counts and links. Many releases of an album fit, and
+   their covers differ, so you choose one, at a terminal, even when only one
+   fits; elsewhere, give it with `--release`. `--yes` does not choose for you.
+   `--search` searches for other words.
+
+It then shows each file beside its track, with the difference in length, the
+cover with its link, and every change, and asks before it writes:
+
+- Each file gets the cover, at most 1000 pixels on a side, in place of its
+  front cover. Every other tag stays, and so do other pictures, such as a back
+  cover. An `.m4a` file whose tags are not iTunes tags (QuickTime's) is left
+  alone. A file that has the same picture already (even saved by another
+  program) is left alone. The new file is made beside the old one, its audio
+  checked against the old one's, then checked again as written, and only then
+  does it take the old file's place, with the old file's attributes.
+- The folder gets the cover at full size, as `cover.jpg` (or `.png`).
+- With `--artwork`, the folder gets the release's other images in `Artwork/`,
+  named as a rip's are (`back`, `booklet-01`, ...), in place of what is there:
+  `all` takes every image but the cover and raw scans; `4-10,12` takes those
+  images by their numbers in `--list`, or give their IDs. A booklet that the
+  archive keeps as a PDF stays a PDF.
+- A folder of one disc of a box set takes that disc's own sleeve as its cover,
+  when an image's comment names the disc ("CD 3"), and `--artwork all` leaves
+  out the images that name other discs.
+- The choice is kept in `.silverside-album.json`, so the next run finds the
+  same release and images, and says when nothing would change.
+
+Other options:
+
+- `--list` lists the release's images, with numbers and links, and stops.
+- `--sheet <file.jpg>` writes a contact sheet of the release's images, each
+  with its number and types, and stops: for choosing by eye among a box set's
+  scans.
+- `--front <number or ID>` takes another image as the cover.
+- `--dry-run` shows the changes and writes nothing; `--yes` writes without
+  asking.
+
+Silverside asks MusicBrainz for one release at a time, as for a disc, and keeps
+the answers in its cache, so run it on one album or set at a time.
 
 ## Settings
 

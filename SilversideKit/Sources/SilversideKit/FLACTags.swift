@@ -34,11 +34,40 @@ public enum FLACTags {
         kept.append((BlockType.vorbisComment.rawValue, vorbisComment(comments)))
         if let cover { kept.append((BlockType.picture.rawValue, try picture(cover))) }
         kept.append((BlockType.padding.rawValue, Data(count: paddingBytes)))
+        try assemble(kept, audio: data[audioStart...]).write(to: url, options: .atomic)
+    }
 
+    /// The file's contents with `cover` as its front cover, in place of any front cover it has.
+    /// Everything else stays: the Vorbis comments (with their vendor), other pictures (such as
+    /// a back cover), and every other block. Padding is written again. The audio frames are
+    /// copied unchanged (`AudioPayload` checks them).
+    public static func replacingFrontCover(with cover: EmbeddedCover, in data: Data) throws -> Data {
+        let (blocks, audioStart) = try parseBlocks(data)
+        guard let streamInfo = blocks.first, streamInfo.type == BlockType.streamInfo.rawValue else {
+            throw FLACError.malformed
+        }
+        var kept = blocks.filter { block in
+            if block.type == BlockType.padding.rawValue { return false }
+            return block.type != BlockType.picture.rawValue || (try? pictureType(block.body)) != 3
+        }
+        kept.append((BlockType.picture.rawValue, try picture(cover)))
+        kept.append((BlockType.padding.rawValue, Data(count: paddingBytes)))
+        return try assemble(kept, audio: data[audioStart...])
+    }
+
+    /// A PICTURE block's picture type (3: the front cover).
+    static func pictureType(_ body: Data) throws -> Int {
+        guard body.count >= 4 else { throw FLACError.malformed }
+        let start = body.startIndex
+        return (0..<4).reduce(0) { $0 << 8 | Int(body[start + $1]) }
+    }
+
+    /// The file: its marker, the blocks in order (the last one marked), then the audio frames.
+    static func assemble(_ blocks: [(type: UInt8, body: Data)], audio: Data) throws -> Data {
         var output = Data("fLaC".utf8)
-        for (index, block) in kept.enumerated() {
+        for (index, block) in blocks.enumerated() {
             guard block.body.count < 1 << 24 else { throw FLACError.blockTooLarge }
-            let last: UInt8 = index == kept.count - 1 ? 0x80 : 0
+            let last: UInt8 = index == blocks.count - 1 ? 0x80 : 0
             output.append(last | block.type)
             output.append(contentsOf: [
                 UInt8(block.body.count >> 16 & 0xFF), UInt8(block.body.count >> 8 & 0xFF),
@@ -46,8 +75,8 @@ public enum FLACTags {
             ])
             output.append(block.body)
         }
-        output.append(data[audioStart...])
-        try output.write(to: url, options: .atomic)
+        output.append(audio)
+        return output
     }
 
     /// The file's Vorbis comments, in order.

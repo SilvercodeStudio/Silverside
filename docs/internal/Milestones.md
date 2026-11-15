@@ -315,6 +315,7 @@ Deferred:
 
 - CTDB entry order. `DiscRepairer` tries entries by their submissions, and up to three shifts for each. On *Reckoning* (2026-10-21), the 31-submission entry, which is another pressing's, was tried at three shifts first, each a repair that stopped after 200 columns, before the 19-submission entry repaired the disc at shift 0 with no errors in column 0. Ordering every (entry, shift) pair by the errors in column 0 first (an exact match before any with errors), then by submissions, would try the right one first and save a minute or two on such discs.
 - The drive report's check of an unreadable sector (it needs a damaged disc).
+- `make dist` (0.9.7, 2026-11-15) printed `hdiutil: WARNING: 'hdiutil attach -mountpoint -nobrowse ...' is deprecated` from Sparkle's `generate_appcast`, which mounts the disk image to read the app's version; a Sparkle update may stop it. `scripts/dist.sh` mounts the image the same way (with `-quiet`) to check the app inside it: move that to `diskutil image attach`, once its macOS versions are known.
 - Done: Developer ID signing and notarization (`make dist`, 2026-11-04), then updates through Sparkle with the CLI inside the app (2026-11-11) and a DMG (2026-11-12): `docs/internal/Sparkle.md`. Left: the test of a real update, from 0.9.6 to 0.9.7, at that release.
 - The C2 fallback (review item 16b), for 2.0 (decided 2026-10-27): `TrackRipper` asks for C2 flags with `try?`, so any error from that read, even an ejected disc, becomes a plain read. A C2 probe for each drive, kept in its profile, would be better. It needs a drive that refuses C2 to test against (all four test drives give C2 flags), and `SimulatedDrive` cannot refuse C2 yet.
 - A `DiscRip` test with `--pool`, and its cleanup of the alternatives; only `RipPool` itself is tested.
@@ -323,6 +324,25 @@ Deferred:
   - When the measurement gets no result (Q refused, no valid frame, a read error, no audio area of 480 sectors), nothing is kept, so every rip measures again (about 2 s). Keep that it failed.
   - The C2/Q order that `IOKitDrive` finds (`SectorRead.Layout`) starts as MMC's for each new `IOKitDrive`. On a drive that sends Q first (GUC0N, DS8A5SH), a chunk with no valid Q frame either way is split in MMC's order, so its sectors get false C2 flags and no Q. Keep the order in the drive's profile.
   - Rips made before 0.9.4 on the GUC0N or DS8A5SH have `.suspects` files that mark almost every sample as a C2 error. A repair that pools them gets too many erasures. Ignore C2 suspects in a pooled rip whose flags cover 90% or more of a track (`SecureRipper.c2FlagsMeanNothing`), as a new rip does.
+
+## Albums from elsewhere (`silverside album`), started 2026-11-15
+
+For the user's library from before Silverside (`/Volumes/storage/planders/media/Music/Archive Collection`, being moved into `Original Library`): artwork and tags from MusicBrainz for albums Silverside did not rip, one album or set at a time. Agreed with the user: artwork first, tags right after; other programs' tags are kept, and Silverside's go on top; a detailed report of every change, with links to the images, before any write; a search that finds more than one release always asks; the choice kept in the folder (`.silverside-album.json`); renaming files and folders later, if at all.
+
+Done (0.9.8):
+
+- The release: `--release`, the kept choice, the MUSICBRAINZ_ALBUMID tag, or a search (barcode, then title and artist with bracketed words asked of the disambiguation, then without them), ranked by how the track lengths fit (`MusicBrainzRelease.fit(lengths:)`, any run of whole media).
+- The cover in each FLAC and MP4 file (`FLACTags.replacingFrontCover`, `MP4Tags.replacingCover`: every other tag, picture, and item kept), checked by `AudioPayload` before and after the write; `cover.jpg` at full size; `Artwork/` from `--artwork all` or numbers and IDs; `--list`, `--sheet`, `--front`, `--dry-run`, `--yes`.
+- Tried on *Abbey Road (2009 Stereo Remaster)* in `Original Library` (dry runs only, 2026-11-15): the search found the 2009 remaster first (lengths within 0.1 s), once a search's Enhanced CD counted its data track; the covers that the user's Pillow script had embedded count as the same picture.
+
+Next:
+
+- Tags from MusicBrainz (`TrackMetadata`, in the library's style), merged over the files' own; the report shows each tag's old and new value.
+- Covers in MP3 (`ID3Tags`), AIFF, and WAV files without losing their other frames and chunks; today they are listed and left alone.
+- Very large scans (the user's script made 100 MB PNGs into 6000-pixel JPEGs): an option to shrink Artwork images over a size.
+- A set whose discs are in subfolders (`Disc 1/`, `CD2/`): today, one folder at a time.
+- ReplayGain over the album; renaming with the naming styles.
+- Not yet tried with writes on the user's library: start with one album, and compare its files before and after.
 
 ## 9. Multi-disc releases and naming styles
 

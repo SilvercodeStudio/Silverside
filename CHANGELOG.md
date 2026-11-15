@@ -5,19 +5,14 @@ command-line tool.
 
 ## 0.9.8 (not released yet)
 
-### Fixed
+### Added
 
-- A rip slowed to a crawl, or stopped, while the display slept, until the Mac
-  was woken. While a rip, an encoding, or a repair runs, the Mac now stays
-  awake and the display can sleep. The command line tool does the same.
-- A drive that AccurateRip's list of drives does not have, such as Apple's USB
-  SuperDrive, no longer stops the rip and asks for its read offset. The rip
-  finds the offset from the disc's tracks in AccurateRip, and rips of later
-  discs confirm it. Settings › Drives says when rips confirm an offset other
-  than one set by hand.
-- A rip that fails before it reads, such as for a drive whose offset is not
-  known, now shows the whole message above the tracks, with a button to the
-  drive's settings where it helps. Before, the status bar cut it to one line.
+- `silverside album` gives an album that Silverside did not rip the cover art
+  of its MusicBrainz release: the cover in each file and as `cover.jpg`, and
+  the release's other images in `Artwork/`. It finds the release from the
+  files' tags and track lengths, lets you choose when several fit, shows every
+  change with links to the images, and asks before it writes. Every other tag
+  stays as it is, and each file's audio is checked to be unchanged.
 
 ### Changed
 
@@ -34,6 +29,22 @@ command-line tool.
   root: `sudo make install` left build files that only root could replace, and
   the next build failed. The app's Install Command Line Tool… puts the command
   in `/usr/local`.
+
+### Fixed
+
+- A rip slowed to a crawl, or stopped, while the display slept, until the Mac
+  was woken. While a rip, an encoding, or a repair runs, the Mac now stays
+  awake and the display can sleep. The command line tool does the same.
+- A drive that AccurateRip's list of drives does not have, such as Apple's USB
+  SuperDrive, no longer stops the rip and asks for its read offset. The rip
+  finds the offset from the disc's tracks in AccurateRip, and rips of later
+  discs confirm it. Settings › Drives says when rips confirm an offset other
+  than one set by hand.
+- A rip that fails before it reads, such as for a drive whose offset is not
+  known, now shows the whole message above the tracks, with a button to the
+  drive's settings where it helps. Before, the status bar cut it to one line.
+- Saving a release's artwork no longer fails on an image that the Cover Art
+  Archive keeps as a PDF or GIF, such as a booklet: it is saved as it is.
 
 ## 0.9.7 (2026-11-15)
 

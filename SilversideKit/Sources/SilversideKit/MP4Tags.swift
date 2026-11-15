@@ -44,24 +44,63 @@ public enum MP4Tags {
             return !ours.contains(name)
         }
         let ilst = atom("ilst", keptItems.map { Data(data[$0.range]) } + items(comments, cover: cover))
+        try rewritten(data, top: top, moov: moov, mdat: mdat, ilst: ilst).write(to: url, options: .atomic)
+    }
 
-        // The new layout: the same atoms, with no free space before the audio, and the new moov.
+    /// The file's contents with `cover` as its cover (`covr`), in place of any it has. Every
+    /// other item stays as it is, whoever wrote it, and so does the rest of `meta` (its
+    /// handler, and atoms such as `keys`, `ID32`, or `free`); the audio and the other atoms are
+    /// copied, and only the chunk offsets move with the audio (`AudioPayload` checks them).
+    /// A `meta` whose handler is not iTunes's (`mdir`), such as QuickTime's `mdta`, whose items
+    /// are named by its `keys`, is refused: a `covr` item means nothing there.
+    public static func replacingCover(with cover: EmbeddedCover, in data: Data) throws -> Data {
+        let top = try atoms(in: data, data.startIndex..<data.endIndex)
+        guard let moov = top.first(where: { $0.type == "moov" }), let mdat = top.first(where: { $0.type == "mdat" })
+        else { throw MP4Error.malformed }
+        guard let fileExtension = cover.image.fileExtension else { throw CoverArtError.unknownFormat }
+        if let handler = try metaHandler(in: data, moov: moov), handler != "mdir" { throw MP4Error.otherTags(handler) }
+        let kept = try existingItems(in: data, moov: moov).filter { $0.type != "covr" }.map { Data(data[$0.range]) }
+        let covr = atom("covr", [dataAtom(fileExtension == "png" ? 14 : 13, cover.image.data)])
+        return try rewritten(
+            data, top: top, moov: moov, mdat: mdat, ilst: atom("ilst", kept + [covr]), keepingMeta: true)
+    }
+
+    /// The handler type of moov/udta/meta ("mdir" for iTunes's tags), or nil if there is no meta.
+    static func metaHandler(in data: Data, moov: Atom) throws -> String? {
+        guard let udta = try atoms(in: data, moov.body).first(where: { $0.type == "udta" }),
+            let meta = try atoms(in: data, udta.body).first(where: { $0.type == "meta" })
+        else { return nil }
+        guard meta.body.count >= 4 else { throw MP4Error.malformed }
+        let children = try atoms(in: data, (meta.body.lowerBound + 4)..<meta.body.upperBound)
+        guard let hdlr = children.first(where: { $0.type == "hdlr" }), hdlr.body.count >= 12 else { return "" }
+        return String(decoding: data[(hdlr.body.lowerBound + 8)..<(hdlr.body.lowerBound + 12)], as: UTF8.self)
+    }
+
+    /// The file with `ilst` in place of its items: the same top-level atoms, with no free space
+    /// before the audio, a new moov, and every chunk offset moved by as much as the audio moved.
+    /// With `keepingMeta`, the rest of an existing meta stays (`newMoov`).
+    static func rewritten(
+        _ data: Data, top: [Atom], moov: Atom, mdat: Atom, ilst: Data, keepingMeta: Bool = false
+    ) throws -> Data {
         let order = top.filter { !(["free", "skip"].contains($0.type) && $0.range.lowerBound < mdat.range.lowerBound) }
         func layout(shift: Int) throws -> [Data] {
             try order.map {
-                $0.type == "moov" ? try newMoov(data, moov, ilst: ilst, shift: shift) : Data(data[$0.range])
+                $0.type == "moov"
+                    ? try newMoov(data, moov, ilst: ilst, shift: shift, keepingMeta: keepingMeta)
+                    : Data(data[$0.range])
             }
         }
         let draft = try layout(shift: 0)
         let newMdatStart = zip(order, draft).prefix { $0.0.type != "mdat" }.reduce(0) { $0 + $1.1.count }
         let shift = newMdatStart - (mdat.range.lowerBound - data.startIndex)
         let output = shift == 0 ? draft : try layout(shift: shift)
-        try output.reduce(Data(), +).write(to: url, options: .atomic)
+        return output.reduce(Data(), +)
     }
 
     /// The file's tags, as Vorbis comment keys and values, and the cover's data.
     public static func read(_ url: URL) throws -> (comments: [(key: String, value: String)], cover: Data?) {
-        let data = try Data(contentsOf: url)
+        // Mapped: only the atoms' headers and moov are read, not the audio.
+        let data = try Data(contentsOf: url, options: .alwaysMapped)
         let top = try atoms(in: data, data.startIndex..<data.endIndex)
         guard let moov = top.first(where: { $0.type == "moov" }) else { throw MP4Error.malformed }
         let textKeys = Dictionary(uniqueKeysWithValues: textAtoms.map { ($0.value, $0.key) })
@@ -147,14 +186,27 @@ public enum MP4Tags {
     }
 
     /// moov with a new udta (ilst in it, and any other udta contents kept), and every
-    /// chunk offset moved by `shift`.
-    static func newMoov(_ data: Data, _ moov: Atom, ilst: Data, shift: Int) throws -> Data {
+    /// chunk offset moved by `shift`. Without `keepingMeta`, meta is new (an iTunes handler and
+    /// `ilst`); with it, an existing meta keeps its version, flags, and every child but `ilst`,
+    /// in their order.
+    static func newMoov(_ data: Data, _ moov: Atom, ilst: Data, shift: Int, keepingMeta: Bool = false) throws -> Data {
         var children = [Data]()
         var hasUserData = false
         for child in try atoms(in: data, moov.body) {
             if child.type == "udta" {
                 hasUserData = true
-                let others = try atoms(in: data, child.body).filter { $0.type != "meta" }.map { Data(data[$0.range]) }
+                let contents = try atoms(in: data, child.body)
+                if keepingMeta, let old = contents.first(where: { $0.type == "meta" }) {
+                    guard old.body.count >= 4 else { throw MP4Error.malformed }
+                    let header = Data(data[old.body.lowerBound..<(old.body.lowerBound + 4)])
+                    let oldChildren = try atoms(in: data, (old.body.lowerBound + 4)..<old.body.upperBound)
+                    var metaChildren = oldChildren.map { $0.type == "ilst" ? ilst : Data(data[$0.range]) }
+                    if !oldChildren.contains(where: { $0.type == "ilst" }) { metaChildren.append(ilst) }
+                    let newMeta = atom("meta", [header] + metaChildren)
+                    children.append(atom("udta", contents.map { $0.type == "meta" ? newMeta : Data(data[$0.range]) }))
+                    continue
+                }
+                let others = contents.filter { $0.type != "meta" }.map { Data(data[$0.range]) }
                 children.append(atom("udta", [meta(ilst)] + others))
             } else if child.type == "trak" {
                 children.append(try shifted(data, child, by: shift))
@@ -286,11 +338,15 @@ public enum MP4Tags {
 public enum MP4Error: Error, Equatable, CustomStringConvertible {
     case malformed
     case tooLarge
+    /// The tags are not iTunes's: their handler (such as "mdta").
+    case otherTags(String)
 
     public var description: String {
         switch self {
         case .malformed: "The file is not an MP4 file that Silverside can read."
         case .tooLarge: "The file is too large for its 32-bit chunk offsets."
+        case .otherTags(let handler):
+            "The file's tags are not iTunes tags (their handler is \"\(handler)\"), so Silverside leaves it alone."
         }
     }
 }

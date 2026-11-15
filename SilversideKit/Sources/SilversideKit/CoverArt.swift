@@ -261,8 +261,14 @@ public struct CoverArtClient: Sendable {
     /// three at a time: full-size scans are many megabytes each, and the web client still
     /// spaces the requests as the archive asks. The files keep the archive's order.
     func saveOthers(_ images: [CoverArtImage], in artwork: URL) async throws -> [URL] {
-        let others = Array(
-            zip(images.filter { !$0.isFront }, CoverArtImage.fileNames(for: images.filter { !$0.isFront })))
+        let others = images.filter { !$0.isFront }
+        return try await save(Array(zip(others, CoverArtImage.fileNames(for: others))), in: artwork)
+    }
+
+    /// Saves each image in `artwork` under its name (with its format's extension), three at a
+    /// time, as `saveOthers` does. The files keep the order of `images`; an image the archive
+    /// no longer has is left out.
+    func save(_ others: [(image: CoverArtImage, name: String)], in artwork: URL) async throws -> [URL] {
         let saved = try await withThrowingTaskGroup(of: (Int, URL?).self) { group -> [URL?] in
             var results = [URL?](repeating: nil, count: others.count)
             var next = 0
@@ -270,7 +276,11 @@ public struct CoverArtClient: Sendable {
                 guard next < others.count else { return }
                 let (index, (image, name)) = (next, others[next])
                 next += 1
-                group.addTask { (index, try await download(image).map { try $0.write(to: artwork, name: name) }) }
+                // The archive's file as it is: a PDF or GIF booklet too, not only JPEG and PNG.
+                group.addTask {
+                    let data = try await client.data(from: image.url)
+                    return (index, try data.map { try ArtworkFile.write($0, name: name, in: artwork, from: image.url) })
+                }
             }
             for _ in 0..<3 { add() }
             while let (index, file) = try await group.next() {

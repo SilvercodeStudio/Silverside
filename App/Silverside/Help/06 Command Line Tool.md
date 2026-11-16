@@ -63,6 +63,8 @@ the tracks done so far for the next rip of the disc.
 | `encode` | Encodes rips into the library |
 | `video` | A video of a CD+G disc's graphics |
 | `hdcd` | Looks for HDCD codes in audio files |
+| `tags` | Shows the tags and covers of album folders, without changing them |
+| `album` | Gives an album that Silverside did not rip the tags and cover art of its MusicBrainz release |
 | `config` | Shows and changes the settings |
 | `eject` | Ejects a disc |
 | `cdtext`, `license` | A disc's CD-Text in full; the license |

@@ -10,7 +10,8 @@ command-line tool.
 - The `silverside` command line tool has two new commands for albums that
   Silverside did not rip: `tags` shows an album folder's tags and covers, and
   `album` gives it the tags and cover art of its MusicBrainz release. For
-  more, see Help › Command Line Tool, or `docs/cli.md`.
+  more, see Help › Command Line Tool, or
+  [docs/cli.md](https://github.com/SilvercodeStudio/Silverside/blob/main/docs/cli.md).
 
 ### Changed
 

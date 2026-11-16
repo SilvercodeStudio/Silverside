@@ -15,6 +15,28 @@ final class DiscRipEvents: @unchecked Sendable {
     var list: [DiscRipEvent] { lock.withLock { events } }
 }
 
+/// A rip's task, which the rip's own events can cancel.
+final class RipTask: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var task: Task<DiscRipResult, any Error>?
+
+    func keep(_ task: Task<DiscRipResult, any Error>) {
+        condition.withLock {
+            self.task = task
+            condition.broadcast()
+        }
+    }
+
+    /// Cancels the task once `keep` has it, since an event can come before `Task` returns.
+    func cancel() {
+        condition.withLock {
+            let deadline = Date(timeIntervalSinceNow: 60)
+            while task == nil, condition.wait(until: deadline) {}
+            task?.cancel()
+        }
+    }
+}
+
 struct DiscRipTests {
     /// A rip of a simulated disc into a temporary folder, and the events it sent. Offline,
     /// unless `web` answers the lookups. With `hidesFirstTrack`, the first of `trackSectors`
@@ -82,24 +104,17 @@ struct DiscRipTests {
             profiles: try DriveProfileStore(url: root.appending(path: "DriveProfiles.json")))
         let events = DiscRipEvents()
         let stop = rip.stop
+        let ripTask = RipTask()
+        // Both stop from the first track's event, so the stop cannot come after the rip ends,
+        // however busy the Mac is.
         rip.events = { event in
             events.append(event)
-            if case .trackFinished(let report, _, _) = event, report.number == 1, !byCancellingTheTask {
-                stop.stop()
+            if case .trackFinished(let report, _, _) = event, report.number == 1 {
+                if byCancellingTheTask { ripTask.cancel() } else { stop.stop() }
             }
         }
         let task = Task { [rip] in try await rip.run() }
-        if byCancellingTheTask {
-            // After the first track's file is there.
-            let folder = root.appending(path: "Silverside \(toc.musicBrainzDiscID)")
-            let deadline = ContinuousClock.now + .seconds(60)
-            while !FileManager.default.fileExists(atPath: folder.appending(path: "Track 01.wav").path) {
-                // A wrong folder name fails the test instead of hanging it.
-                try #require(ContinuousClock.now < deadline, "Track 01.wav never appeared in \(folder.path)")
-                try await Task.sleep(for: .milliseconds(5))
-            }
-            task.cancel()
-        }
+        ripTask.keep(task)
         await #expect(throws: CancellationError.self) { try await task.value }
         let folder = root.appending(path: "Silverside \(toc.musicBrainzDiscID)")
         #expect(FileManager.default.fileExists(atPath: folder.appending(path: "Track 01.wav").path))

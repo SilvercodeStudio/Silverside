@@ -280,6 +280,9 @@ public struct AlbumChoice: Codable, Equatable, Sendable {
     public var album: String?
     /// The files' names, in the order that was paired with the release's tracks, when tags were written.
     public var files: [String]?
+    /// True when the cover is an image file of the user's (`--front` with a file), not an
+    /// image of the Cover Art Archive: the folder's cover file stays the cover.
+    public var ownCover: Bool?
     public var updated: Date
     /// "Silverside 0.9.8 (abc1234)".
     public var program: String
@@ -306,7 +309,8 @@ public struct AlbumChoice: Codable, Equatable, Sendable {
         let file = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]) ?? [:]
         var object = try JSONSerialization.jsonObject(with: Self.encoder.encode(self)) as? [String: Any] ?? [:]
         // Optional values as null, so that clearing one clears it in the file too.
-        for key in ["release", "frontImageID", "artworkImageIDs", "media", "album", "files"] where object[key] == nil {
+        for key in ["release", "frontImageID", "artworkImageIDs", "media", "album", "files", "ownCover"]
+        where object[key] == nil {
             object[key] = NSNull()
         }
         let merged = JSONMerge.overlay(object, on: file)

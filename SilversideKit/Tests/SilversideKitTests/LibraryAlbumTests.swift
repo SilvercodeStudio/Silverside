@@ -418,7 +418,7 @@ struct LibraryAlbumTests {
             fromJSON: Self.releaseJSON(id: Self.first, title: "Abbey Road", lengths: [2000, 3000]))
 
         let plan = try await AlbumArtworkPlan.make(album: album, release: release, artwork: .all, client: client)
-        #expect(plan.front.id == "101" && plan.embedded.width == 1000 && plan.hasChanges)
+        #expect(plan.front?.id == "101" && plan.embedded.width == 1000 && plan.hasChanges)
         #expect(
             plan.files.map(\.change) == [
                 .embed(replacing: album.files[0].cover), .embed(replacing: album.files[1].cover), .unsupported,
@@ -492,6 +492,44 @@ struct LibraryAlbumTests {
         #expect(try LibraryAlbum.read(folder).coverFile?.lastPathComponent == "cover.jpg")
     }
 
+    /// An image file of the user's as the cover (`--front` with a path): it goes into the
+    /// files and the cover file, and later runs keep the folder's cover file as the cover.
+    @Test func usesAnImageFileAsTheCover() async throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        _ = try album(in: folder)
+        try makeJPEG(width: 300, height: 300).data.write(to: folder.appending(path: "folder.jpg"))
+        let scan = try makeJPEG(width: 1200, height: 1200)
+        let scanFile = try temporaryFolder().appending(path: "scan.jpg")
+        defer { try? FileManager.default.removeItem(at: scanFile.deletingLastPathComponent()) }
+        try scan.data.write(to: scanFile)
+        let web = FakeWeb([
+            ("https://coverartarchive.org/release/\(Self.first)/102", try makeJPEG(width: 800, height: 800).data),
+            ("https://coverartarchive.org/release/\(Self.first)", Self.listingJSON(release: Self.first)),
+        ])
+        let client = CoverArtClient(client: await web.client(in: folder.appending(path: ".cache")))
+        let release = try MusicBrainzClient.release(
+            fromJSON: Self.releaseJSON(id: Self.first, title: "Abbey Road", lengths: [2000, 3000]))
+        let album = try LibraryAlbum.read(folder)
+
+        let plan = try await AlbumArtworkPlan.make(album: album, release: release, frontFile: scanFile, client: client)
+        #expect(plan.front == nil && plan.frontFile == scanFile && plan.coverPicture.width == 1200)
+        #expect(plan.keptCoverFile?.lastPathComponent == "folder_original.jpg" && plan.choice.ownCover == true)
+        #expect(plan.choice.frontImageID == nil && plan.embedded.width == 1000)
+        try await plan.apply(client: client)
+        #expect(try Data(contentsOf: folder.appending(path: "cover.jpg")) == scan.data)
+
+        // The next run keeps the folder's cover file as the cover: nothing to change.
+        let written = try LibraryAlbum.read(folder)
+        #expect(written.choice?.ownCover == true)
+        let again = try await AlbumArtworkPlan.make(album: written, release: release, client: client)
+        #expect(again.frontFile?.lastPathComponent == "cover.jpg" && again.front == nil && !again.hasChanges)
+        #expect(!AlbumPlan(album: written, release: release, artwork: nil, tags: nil).hasChanges)
+        // An archive image named with --front takes over from it.
+        let archive = try await AlbumArtworkPlan.make(album: written, release: release, front: "102", client: client)
+        #expect(archive.front?.id == "102" && archive.choice.ownCover == nil && archive.hasChanges)
+    }
+
     /// The same picture saved by another program, at another JPEG quality, is the same cover;
     /// another picture of the same size is not.
     @Test func knowsTheSamePictureInAnotherEncoding() throws {
@@ -543,7 +581,7 @@ struct LibraryAlbumTests {
         #expect(media == [2])
         let plan = try await AlbumArtworkPlan.make(
             album: album, release: release, media: media, artwork: .all, client: client)
-        #expect(plan.front.id == "2" && plan.frontIsSleeve)
+        #expect(plan.front?.id == "2" && plan.frontIsSleeve)
         guard case .replace(let artwork) = plan.artwork else {
             Issue.record("Expected Artwork to be replaced")
             return

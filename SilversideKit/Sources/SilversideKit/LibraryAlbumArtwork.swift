@@ -57,7 +57,11 @@ public struct AlbumArtworkPlan: Sendable {
     public var release: MusicBrainzRelease
     /// Every image the archive has for the release, in its order.
     public var images: [CoverArtImage]
-    public var front: CoverArtImage
+    /// The archive's image used as the cover; nil when the cover is an image file (`frontFile`).
+    public var front: CoverArtImage?
+    /// The image file used as the cover: one given with `--front`, or the folder's own cover
+    /// file, chosen that way in an earlier run.
+    public var frontFile: URL?
     /// True if the cover is the disc's own sleeve in a box set (`CoverArtImage.sleeve`), which
     /// a folder of one disc of the set takes by default.
     public var frontIsSleeve: Bool
@@ -103,38 +107,34 @@ public struct AlbumArtworkPlan: Sendable {
     }
 
     /// Works out the plan: the release's images from the Cover Art Archive, and its cover at
-    /// full size, which the plan shows by its size. `front` is an image ID; nil takes the one
-    /// kept in the folder for this release, else the disc's own sleeve when the folder is one
-    /// disc of a set, else the release's main front. `artwork` nil keeps what an earlier run
-    /// chose for this release, else leaves Artwork alone. `media` are the release's discs
-    /// that the folder holds (`AlbumFit.media`), if known.
+    /// full size, which the plan shows by its size. `frontFile` is an image file of the
+    /// user's to use as the cover; `front` is an image ID; with neither, the folder's own
+    /// cover file if an earlier run chose it that way, else the image kept in the folder for
+    /// this release, else the disc's own sleeve when the folder is one disc of a set, else the
+    /// release's main front. `artwork` nil keeps what an earlier run chose for this release,
+    /// else leaves Artwork alone. `media` are the release's discs that the folder holds
+    /// (`AlbumFit.media`), if known.
     public static func make(
         album: LibraryAlbum, release: MusicBrainzRelease, media: [Int]? = nil, front frontID: String? = nil,
-        artwork selection: ArtworkSelection? = nil, client: CoverArtClient = CoverArtClient()
+        frontFile: URL? = nil, artwork selection: ArtworkSelection? = nil, client: CoverArtClient = CoverArtClient()
     ) async throws -> AlbumArtworkPlan {
         let images = try await client.images(releaseID: release.id)
-        guard !images.isEmpty else { throw AlbumArtworkError.noImages(release.id) }
         let kept = album.choice?.releaseID == release.id ? album.choice : nil
+        let ownFile = frontFile ?? (frontID == nil && kept?.ownCover == true ? album.coverFile : nil)
+        guard !images.isEmpty || ownFile != nil else { throw AlbumArtworkError.noImages(release.id) }
         // Some discs of a set: the images that name other discs are theirs.
         let discs = media.flatMap { $0.count < release.media.count ? Set($0) : nil }
         let sleeve = discs.flatMap { $0.count == 1 ? CoverArtImage.sleeve(forDisc: $0.first!, in: images) : nil }
-        let front: CoverArtImage
-        if let frontID {
-            guard let image = images.first(where: { $0.id == frontID }) else {
-                throw AlbumArtworkError.noSuchImage(frontID)
-            }
-            front = image
-        } else if let id = kept?.frontImageID, let image = images.first(where: { $0.id == id }) {
-            front = image
-        } else if let sleeve {
-            front = sleeve
-        } else if let image = images.first(where: \.isFront) {
-            front = image
+        var front: CoverArtImage?
+        let data: Data
+        if let ownFile {
+            data = try Data(contentsOf: ownFile)
         } else {
-            throw AlbumArtworkError.noFront(release.id)
-        }
-        guard let data = try await client.client.data(from: front.url) else {
-            throw AlbumArtworkError.noSuchImage(front.id)
+            let image = try archiveFront(images: images, id: frontID, kept: kept, sleeve: sleeve, release: release)
+            guard let downloaded = try await client.client.data(from: image.url) else {
+                throw AlbumArtworkError.noSuchImage(image.id)
+            }
+            (front, data) = (image, downloaded)
         }
         let cover = try CoverImage(converting: data)
         let embedded = try EmbeddedCover(cover)
@@ -176,7 +176,7 @@ public struct AlbumArtworkPlan: Sendable {
         case nil:
             chosen = nil
         case .all:
-            let all = images.filter { $0.id != front.id && !$0.types.contains("Raw/Unedited") }
+            let all = images.filter { $0.id != front?.id && !$0.types.contains("Raw/Unedited") }
             chosen = all.filter { image in
                 guard let discs, let named = image.mediums else { return true }
                 return discs.contains(where: named.contains)
@@ -206,17 +206,34 @@ public struct AlbumArtworkPlan: Sendable {
             keptArtwork = originalArtwork
         }
         var choice = AlbumChoice(
-            releaseID: release.id, release: "\(release.artist) - \(release.title)", frontImageID: front.id,
+            releaseID: release.id, release: "\(release.artist) - \(release.title)", frontImageID: front?.id,
             artworkImageIDs: chosen.map { $0.map(\.id) } ?? kept?.artworkImageIDs)
+        choice.ownCover = ownFile == nil ? nil : true
         // What the tags chose stays, so the cover alone is no change to the choice.
         choice.media = kept?.media
         choice.album = kept?.album
         choice.files = kept?.files
         return AlbumArtworkPlan(
-            album: album, release: release, images: images, front: front, frontIsSleeve: front.id == sleeve?.id,
+            album: album, release: release, images: images, front: front, frontFile: ownFile,
+            frontIsSleeve: front != nil && front?.id == sleeve?.id,
             otherDiscsImages: otherDiscsImages, cover: cover, coverPicture: coverPicture,
             embedded: embedded, embeddedPicture: embeddedPicture, files: files, coverFile: coverFile,
             keptCoverFile: keptCoverFile, artwork: artwork, keptArtwork: keptArtwork, choice: choice)
+    }
+
+    /// The archive's image to use as the cover: `id`, else the one kept, else the disc's
+    /// sleeve, else the release's main front.
+    static func archiveFront(
+        images: [CoverArtImage], id: String?, kept: AlbumChoice?, sleeve: CoverArtImage?, release: MusicBrainzRelease
+    ) throws -> CoverArtImage {
+        if let id {
+            guard let image = images.first(where: { $0.id == id }) else { throw AlbumArtworkError.noSuchImage(id) }
+            return image
+        }
+        if let id = kept?.frontImageID, let image = images.first(where: { $0.id == id }) { return image }
+        if let sleeve { return sleeve }
+        if let image = images.first(where: \.isFront) { return image }
+        throw AlbumArtworkError.noFront(release.id)
     }
 
     /// One step of `apply`, for the user to follow.
@@ -252,6 +269,7 @@ public struct AlbumPlan: Sendable {
             ?? AlbumChoice(
                 releaseID: release.id, release: "\(release.artist) - \(release.title)",
                 frontImageID: kept?.frontImageID, artworkImageIDs: kept?.artworkImageIDs)
+        if artwork == nil { choice.ownCover = kept?.ownCover }
         choice.media = tags?.fit.media ?? kept?.media
         if let tags {
             choice.album = tags.editedAlbumTitle
@@ -355,7 +373,7 @@ extension AlbumChoice {
         guard let other else { return false }
         return releaseID == other.releaseID && frontImageID == other.frontImageID
             && artworkImageIDs == other.artworkImageIDs && (media == nil || media == other.media)
-            && album == other.album
+            && album == other.album && ownCover == other.ownCover
             // A choice kept before the order was is the same while its files are.
             && (files == nil || other.files == nil || files == other.files)
     }
@@ -458,7 +476,8 @@ public enum AlbumArtworkError: Error, Equatable, CustomStringConvertible {
     public var description: String {
         switch self {
         case .noImages(let id): "The Cover Art Archive has no images for release \(id)."
-        case .noFront(let id): "The Cover Art Archive has no front cover for release \(id): choose one with --front."
+        case .noFront(let id):
+            "The Cover Art Archive has no front cover for release \(id): choose one of its images, or an image file, with --front."
         case .noSuchImage(let id): "The release has no image \(id) in the Cover Art Archive."
         }
     }

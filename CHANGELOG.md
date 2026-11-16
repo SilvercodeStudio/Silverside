@@ -16,7 +16,8 @@ command-line tool.
   name it writes, and your name is kept for the next run. A cover file
   (`cover.jpg` or `folder.jpg`) or Artwork folder of your own that it replaces
   is kept as `cover_original.jpg`, `folder_original.jpg`, or
-  `Artwork (original)`. Tags that Silverside
+  `Artwork (original)`. `--front` takes an image file of your own as the
+  cover. Tags that Silverside
   does not write stay as they are, and each file's audio is checked to be
   unchanged.
 - `silverside tags` summarizes album folders or files without changing them:

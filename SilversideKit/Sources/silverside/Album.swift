@@ -24,6 +24,7 @@ struct Album: AsyncParsableCommand {
               silverside album <folder> --release c93e1d4c-89fa-3139-9c65-8542a39f07d1 --list
               silverside album <folder> --sheet ~/Desktop/sheet.jpg
               silverside album <folder> --front 3 --artwork all
+              silverside album <folder> --front ~/Downloads/scan.jpg
               silverside album <folder> --artwork 4-10,12 --dry-run
               silverside album <folder> --no-cover
             """)
@@ -39,7 +40,7 @@ struct Album: AsyncParsableCommand {
 
     @Option(
         help:
-            "The image to use as the cover: its number in --list, or its Cover Art Archive ID. By default, the release's front."
+            "The image to use as the cover: its number in --list, its Cover Art Archive ID, or an image file. By default, the release's front."
     )
     var front: String?
 
@@ -80,6 +81,8 @@ struct Album: AsyncParsableCommand {
             throw CommandError("\(url.path) has no audio files. A set's discs in subfolders go one folder at a time.")
         }
         Self.printAlbum(album)
+        // An image file is checked before the search, so a wrong path costs no lookup.
+        let frontFile = try front.flatMap(Self.frontFile)
 
         let found = try await AlbumReleaseFinder().find(for: album, releaseID: release, search: search)
         let candidate = try choose(found, album: album)
@@ -89,7 +92,12 @@ struct Album: AsyncParsableCommand {
         let client = CoverArtClient()
         let looksAtImages = !noCover || list || sheet != nil
         let images = looksAtImages ? try await client.images(releaseID: candidate.release.id) : []
-        if looksAtImages, images.isEmpty, noTags || list || sheet != nil {
+        // The folder's own cover: given now, or chosen with a file in an earlier run.
+        let ownCover =
+            frontFile != nil
+            || (front == nil && album.choice?.releaseID == candidate.release.id && album.choice?.ownCover == true
+                && album.coverFile != nil)
+        if looksAtImages, images.isEmpty, list || sheet != nil || (noTags && !ownCover) {
             throw CommandError(
                 "The Cover Art Archive has no images for this release. Try another release of the album with --release."
             )
@@ -102,10 +110,11 @@ struct Album: AsyncParsableCommand {
         }
 
         var artworkPlan: AlbumArtworkPlan?
-        if !noCover, !images.isEmpty {
+        if !noCover, !images.isEmpty || ownCover {
             artworkPlan = try await AlbumArtworkPlan.make(
                 album: album, release: candidate.release, media: candidate.fit?.media,
-                front: try front.map { try Self.imageID($0, in: images) },
+                front: try frontFile == nil ? front.map { try Self.imageID($0, in: images) } : nil,
+                frontFile: frontFile,
                 artwork: try artwork.map { try Self.selection($0, in: images) }, client: client)
         }
         var tagsPlan: AlbumTagsPlan?
@@ -274,7 +283,27 @@ struct Album: AsyncParsableCommand {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         if let image = images.first(where: { $0.id == trimmed }) { return image.id }
         if let number = Int(trimmed), images.indices.contains(number - 1) { return images[number - 1].id }
-        throw ValidationError("The release has no image \(trimmed): use a number from 1 to \(images.count) or an ID.")
+        throw CommandError(
+            images.isEmpty
+                ? "The Cover Art Archive has no images for this release, so there is no image \(trimmed). Give an image file."
+                : "The release has no image \(trimmed): use a number from 1 to \(images.count), an ID, or an image file."
+        )
+    }
+
+    /// The image file that `--front` names, if it names one: a path (with a slash, or a file
+    /// that exists here), not an image's number or ID. Checked to be an image now.
+    static func frontFile(_ text: String) throws -> URL? {
+        let path = (text as NSString).expandingTildeInPath
+        let looksLikePath = text.contains("/") || (Int(text) == nil && FileManager.default.fileExists(atPath: path))
+        guard looksLikePath else { return nil }
+        let url = URL(filePath: path).standardizedFileURL
+        guard let data = try? Data(contentsOf: url) else {
+            throw CommandError("--front: \(url.path) cannot be read.")
+        }
+        guard (try? CoverImage(converting: data)) != nil else {
+            throw CommandError("--front: \(url.path) is not an image that macOS reads.")
+        }
+        return url
     }
 
     /// "all", or numbers, ranges, and IDs: "4-10,12".
@@ -342,21 +371,27 @@ struct Album: AsyncParsableCommand {
         let positions = fit.media.flatMap { position in
             (candidate.release.media.first { $0.position == position }?.tracks ?? []).map { (position, $0.position) }
         }
-        let width = min(44, album.files.map(\.url.lastPathComponent.count).max() ?? 0)
+        // File names as macOS keeps them have "é" as two code points; precomposed, each is one column.
+        let names = album.files.map { $0.url.lastPathComponent.precomposedStringWithCanonicalMapping }
+        let width = min(44, names.map(\.count).max() ?? 0)
         for (index, file) in album.files.enumerated() {
             let track = fit.tracks[index]
             let place = fit.media.count > 1 ? "\(positions[index].0)-\(positions[index].1)" : "\(positions[index].1)"
-            let name = String(file.url.lastPathComponent.prefix(width)).padding(
-                toLength: width, withPad: " ", startingAt: 0)
+            let name = padded(String(names[index].prefix(width)), width)
             let difference =
                 track.length.flatMap { listed in
                     file.milliseconds.map { String(format: "%+.1f s", Double($0 - listed) / 1000) }
                 } ?? ""
             print(
-                "  " + place.padding(toLength: 5, withPad: " ", startingAt: 0) + name + "  "
-                    + duration(file.milliseconds).padding(toLength: 6, withPad: " ", startingAt: 0) + "  "
+                "  " + padded(place, 5) + name + "  " + padded(duration(file.milliseconds), 6) + "  "
                     + track.title + "  " + duration(track.length) + (difference.isEmpty ? "" : "  (\(difference))"))
         }
+    }
+
+    /// Text and spaces after it to `width` characters. `padding(toLength:)` counts UTF-16
+    /// units, so a name with a decomposed "é" came out one column short.
+    static func padded(_ text: String, _ width: Int) -> String {
+        text + String(repeating: " ", count: max(0, width - text.count))
     }
 
     static func printImages(_ images: [CoverArtImage]) {
@@ -367,11 +402,19 @@ struct Album: AsyncParsableCommand {
     }
 
     static func printPlan(_ plan: AlbumArtworkPlan, images: [CoverArtImage]) {
-        let number = (images.firstIndex { $0.id == plan.front.id } ?? 0) + 1
-        print(
-            "Cover: image \(number), " + label(plan.front, number: nil) + ", \(plan.coverPicture.summary)"
-                + (plan.frontIsSleeve ? " (this disc's own sleeve in the set)" : ""))
-        print("  \(plan.front.url.absoluteString)")
+        if let front = plan.front {
+            let number = (images.firstIndex { $0.id == front.id } ?? 0) + 1
+            print(
+                "Cover: image \(number), " + label(front, number: nil) + ", \(plan.coverPicture.summary)"
+                    + (plan.frontIsSleeve ? " (this disc's own sleeve in the set)" : ""))
+            print("  \(front.url.absoluteString)")
+        } else if let file = plan.frontFile {
+            let inFolder = file.deletingLastPathComponent().standardizedFileURL == plan.album.folder.standardizedFileURL
+            print(
+                "Cover: " + (inFolder ? "the folder's own, \(file.lastPathComponent)" : file.path)
+                    + ", \(plan.coverPicture.summary)")
+            print("  \(file.absoluteString)")
+        }
         print()
         print("Cover changes:")
         let embeds = plan.files.filter { if case .embed = $0.change { true } else { false } }
@@ -409,10 +452,13 @@ struct Album: AsyncParsableCommand {
         }
         switch plan.artwork {
         case .leave:
-            let others = plan.images.filter { $0.id != plan.front.id }.count
+            let others = plan.images.filter { $0.id != plan.front?.id }.count
             print(
                 "  Artwork: left as it is"
-                    + (others > 0 ? " (--artwork all saves the release's \(others) other images)." : "."))
+                    + (others == 0
+                        ? "."
+                        : " (--artwork all saves the release's "
+                            + (others == 1 ? "other image)." : "\(others) other images).")))
         case .unchanged:
             print("  Artwork: these images already.")
         case .replace(let chosen):

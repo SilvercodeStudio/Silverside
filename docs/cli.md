@@ -306,7 +306,11 @@ Other options:
 - `--sheet <file.jpg>` writes a contact sheet of the release's images, each
   with its number and types, and stops: for choosing by eye among a box set's
   scans.
-- `--front <number or ID>` takes another image as the cover.
+- `--front <number or ID>` takes another of the release's images as the cover.
+  `--front <file>` takes an image file of your own, such as a scan, even for a
+  release with no images in the Cover Art Archive. It becomes `cover.jpg` (any
+  image macOS reads; JPEG and PNG stay as they are), and later runs keep the
+  folder's cover file as the cover until `--front` names another.
 - `--no-tags` leaves the tags as they are; `--no-cover` leaves the covers and
   Artwork as they are.
 - `--dry-run` shows the changes and writes nothing; `--yes` writes without

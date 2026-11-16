@@ -276,9 +276,14 @@ cover with its link, and every change, and asks before it writes:
   alone. A file that has the same picture already (even saved by another
   program) is left alone. The new file is made beside the old one, its audio
   checked against the old one's, then checked again as written, and only then
-  does it take the old file's place, with the old file's attributes.
+  does it take the old file's place, with the old file's attributes. A network
+  share does not let a file that another program has open (a player) be
+  replaced: such a file is left as it is, the rest are written, and the
+  command names it at the end. Close it and run the command again.
 - The folder gets the cover at full size, as `cover.jpg` (or `.png`). A cover
-  file of your own that it replaces is kept as `cover_original.jpg`.
+  file of your own that it replaces is kept as `cover_original.jpg`. A
+  `folder.jpg`, as many players and Windows name the cover, counts as the
+  cover file when there is no `cover.jpg`: it is kept as `folder_original.jpg`.
 - With `--artwork`, the folder gets the release's other images in `Artwork/`,
   named as a rip's are (`back`, `booklet-01`, ...), in place of what is there:
   `all` takes every image but the cover and raw scans; `4-10,12` takes those

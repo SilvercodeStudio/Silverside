@@ -174,4 +174,45 @@ struct AlbumTagsTests {
         #expect(
             AlbumPlan(album: written, release: release, artwork: nil, tags: nil).choice.album == "Theirs [Remaster]")
     }
+
+    /// A network share's EBUSY, however deep under Foundation's errors, means the file is in use.
+    @Test func knowsAFileInUse() {
+        let busy = NSError(domain: NSPOSIXErrorDomain, code: Int(EBUSY))
+        let inner = NSError(domain: NSCocoaErrorDomain, code: 512, userInfo: [NSUnderlyingErrorKey: busy])
+        let outer = NSError(domain: NSCocoaErrorDomain, code: 512, userInfo: [NSUnderlyingErrorKey: inner])
+        #expect(LibraryAlbumWriter.isInUse(outer))
+        #expect(!LibraryAlbumWriter.isInUse(NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))))
+        let message = AlbumWriteError.filesInUse([URL(filePath: "/a/01 Song.m4a")]).description
+        #expect(message.hasPrefix("“01 Song.m4a” is open in another program") && message.contains("was not changed"))
+    }
+
+    /// A run that wrote one file's track number and not another's (it was in use) leaves the
+    /// pairing as it was: the next run reads the files in the kept order, not the tags'.
+    @Test func keepsThePairingAfterAFileWasSkipped() async throws {
+        let folder = try LibraryAlbumTests().temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // No tags: the files pair with the tracks by their names.
+        try AudioEncoder.encode(LibraryAlbumTests.twoSeconds, format: .flac, to: folder.appending(path: "a.flac"))
+        try AudioEncoder.encode(LibraryAlbumTests.threeSeconds, format: .flac, to: folder.appending(path: "b.flac"))
+        let album = try LibraryAlbum.read(folder)
+        let release = LibraryAlbumTests.release([[2000, 3000]])
+        let fit = try #require(release.fit(lengths: album.lengths))
+        var tags = AlbumTagsPlan.make(album: album, release: release, fit: fit)
+        // a.flac was in use: only b.flac gets its tags (TRACKNUMBER 2).
+        tags.files[0].changes = []
+        let plan = AlbumPlan(album: album, release: release, artwork: nil, tags: tags)
+        #expect(plan.choice.files == ["a.flac", "b.flac"])
+        try await plan.apply()
+
+        let again = try LibraryAlbum.read(folder)
+        #expect(again.files[1].trackNumber == 2 && again.files[0].trackNumber == nil)
+        #expect(again.files.map(\.url.lastPathComponent) == ["a.flac", "b.flac"])
+        let refit = try #require(release.fit(lengths: again.lengths))
+        let rest = AlbumTagsPlan.make(album: again, release: release, fit: refit)
+        #expect(rest.files[0].track.position == 1 && !rest.files[0].changes.isEmpty && rest.files[1].changes.isEmpty)
+
+        // Without the kept order, the tags' order would put a.flac last.
+        try FileManager.default.removeItem(at: folder.appending(path: AlbumChoice.fileName))
+        #expect(try LibraryAlbum.read(folder).files.map(\.url.lastPathComponent) == ["b.flac", "a.flac"])
+    }
 }

@@ -73,7 +73,8 @@ public struct AlbumArtworkPlan: Sendable {
     public var files: [FilePlan]
     public var coverFile: CoverFileChange
     /// Where the folder's cover file goes before the new one takes its place
-    /// (`cover_original.jpg`): only the user's own, the first time, and never over one kept before.
+    /// (`cover_original.jpg`, `folder_original.jpg`): only the user's own, the first time, and
+    /// never over one kept before.
     public var keptCoverFile: URL?
     public var artwork: ArtworkChange
     /// Where the folder's Artwork goes when the release's images replace it (`Artwork (original)`),
@@ -81,8 +82,16 @@ public struct AlbumArtworkPlan: Sendable {
     public var keptArtwork: URL?
     public var choice: AlbumChoice
 
-    /// The name that a replaced cover file of the user's keeps: `cover_original` and its extension.
-    public static let originalCoverName = "cover_original"
+    /// The name that a replaced cover file of the user's keeps: `cover_original.jpg` for
+    /// cover.jpg, `folder_original.jpg` for folder.jpg.
+    public static func originalName(of file: URL) -> String {
+        file.deletingPathExtension().lastPathComponent.lowercased() + "_original"
+    }
+
+    /// True for cover.jpg and cover.png, the names Silverside writes; false for folder.jpg.
+    public static func isCoverName(_ file: URL) -> Bool {
+        file.deletingPathExtension().lastPathComponent.lowercased() == "cover"
+    }
     public static let originalArtworkName = "Artwork (original)"
 
     /// True if writing would change anything.
@@ -146,14 +155,19 @@ public struct AlbumArtworkPlan: Sendable {
                 ? .unchanged : .replace(album.coverPicture)
 
         // A choice kept with a front or Artwork means Silverside wrote them: not the user's own.
+        // Silverside never writes folder.jpg, so that one is always the user's.
         let manager = FileManager.default
         var keptCoverFile: URL?
-        if case .replace = coverFile, let old = album.coverFile, album.choice?.frontImageID == nil,
-            !CoverFiles.extensions.contains(where: {
-                manager.fileExists(atPath: album.folder.appending(path: "\(originalCoverName).\($0)").path)
-            })
+        if case .replace = coverFile, let old = album.coverFile,
+            album.choice?.frontImageID == nil || !isCoverName(old)
         {
-            keptCoverFile = album.folder.appending(path: "\(originalCoverName).\(old.pathExtension.lowercased())")
+            let name = originalName(of: old)
+            let keptBefore = ["jpg", "jpeg", "png"].contains {
+                manager.fileExists(atPath: album.folder.appending(path: "\(name).\($0)").path)
+            }
+            if !keptBefore {
+                keptCoverFile = album.folder.appending(path: "\(name).\(old.pathExtension.lowercased())")
+            }
         }
 
         let chosen: [CoverArtImage]?
@@ -197,6 +211,7 @@ public struct AlbumArtworkPlan: Sendable {
         // What the tags chose stays, so the cover alone is no change to the choice.
         choice.media = kept?.media
         choice.album = kept?.album
+        choice.files = kept?.files
         return AlbumArtworkPlan(
             album: album, release: release, images: images, front: front, frontIsSleeve: front.id == sleeve?.id,
             otherDiscsImages: otherDiscsImages, cover: cover, coverPicture: coverPicture,
@@ -238,7 +253,13 @@ public struct AlbumPlan: Sendable {
                 releaseID: release.id, release: "\(release.artist) - \(release.title)",
                 frontImageID: kept?.frontImageID, artworkImageIDs: kept?.artworkImageIDs)
         choice.media = tags?.fit.media ?? kept?.media
-        if let tags { choice.album = tags.editedAlbumTitle } else { choice.album = kept?.album }
+        if let tags {
+            choice.album = tags.editedAlbumTitle
+            choice.files = tags.files.map(\.file.url.lastPathComponent)
+        } else {
+            choice.album = kept?.album
+            choice.files = kept?.files
+        }
         self.choice = choice
     }
 
@@ -251,6 +272,8 @@ public struct AlbumPlan: Sendable {
     public enum Step: Sendable {
         case downloadingArtwork(count: Int)
         case wroteFile(URL)
+        /// A file that another program holds open, left as it was (`LibraryAlbumWriter.isInUse`).
+        case skippedFileInUse(URL)
         case wroteCover(URL)
         case wroteArtwork(count: Int)
         /// The folder's own cover file or Artwork, kept under this name before it was replaced.
@@ -260,7 +283,9 @@ public struct AlbumPlan: Sendable {
 
     /// Writes the plan: the Artwork images are downloaded first, so a failed download changes
     /// nothing; then each file gets its cover and its tags, in one write (its audio checked,
-    /// `LibraryAlbumWriter`); then the cover file, Artwork, and the choice.
+    /// `LibraryAlbumWriter`); then the cover file, Artwork, and the choice. A file that another
+    /// program holds open (a player, on a network share) is left as it was and the rest go on;
+    /// then `AlbumWriteError.filesInUse` names them, and a second run writes only those.
     public func apply(client: CoverArtClient = CoverArtClient(), step: @Sendable (Step) -> Void = { _ in })
         async throws
     {
@@ -273,6 +298,7 @@ public struct AlbumPlan: Sendable {
             staged = (folder, try await client.save(images.map { ($0.image, $0.name) }, in: folder))
         }
         defer { if let staged { try? manager.removeItem(at: staged.folder) } }
+        var inUse = [URL]()
         for (index, file) in album.files.enumerated() {
             var cover: EmbeddedCover?
             if let artwork, index < artwork.files.count, case .embed = artwork.files[index].change {
@@ -282,8 +308,14 @@ public struct AlbumPlan: Sendable {
                 .flatMap { $0.canWrite && !$0.changes.isEmpty ? $0 : nil }
             guard cover != nil || fileTags != nil else { continue }
             try Task.checkCancellation()
-            try await blocking {
-                try LibraryAlbumWriter.update(file.url, kind: file.kind, cover: cover, tags: fileTags)
+            do {
+                try await blocking {
+                    try LibraryAlbumWriter.update(file.url, kind: file.kind, cover: cover, tags: fileTags)
+                }
+            } catch  where LibraryAlbumWriter.isInUse(error) {
+                inUse.append(file.url)
+                step(.skippedFileInUse(file.url))
+                continue
             }
             step(.wroteFile(file.url))
         }
@@ -294,8 +326,9 @@ public struct AlbumPlan: Sendable {
                 step(.keptOriginal(kept))
             }
             let written = try artwork.cover.write(to: album.folder)
-            // A cover file of the other format would be found first.
-            if artwork.keptCoverFile == nil, let old = album.coverFile,
+            // A cover file of the other format would be found first. A folder.jpg not kept
+            // (one was kept before) stays: only cover files go.
+            if artwork.keptCoverFile == nil, let old = album.coverFile, AlbumArtworkPlan.isCoverName(old),
                 old.standardizedFileURL != written.standardizedFileURL
             {
                 try manager.removeItem(at: old)
@@ -312,6 +345,7 @@ public struct AlbumPlan: Sendable {
             try choice.save(in: album.folder)
             step(.keptChoice(album.folder.appending(path: AlbumChoice.fileName)))
         }
+        if !inUse.isEmpty { throw AlbumWriteError.filesInUse(inUse) }
     }
 }
 
@@ -322,6 +356,8 @@ extension AlbumChoice {
         return releaseID == other.releaseID && frontImageID == other.frontImageID
             && artworkImageIDs == other.artworkImageIDs && (media == nil || media == other.media)
             && album == other.album
+            // A choice kept before the order was is the same while its files are.
+            && (files == nil || other.files == nil || files == other.files)
     }
 }
 
@@ -363,10 +399,53 @@ public enum LibraryAlbumWriter {
             guard try AudioPayload.fingerprint(of: Data(contentsOf: temporary), kind: kind) == before else {
                 throw AudioPayloadError.changed(url)
             }
-            _ = try manager.replaceItemAt(url, withItemAt: temporary)
+            // A network share refuses to replace a file that another program has open. Spotlight
+            // or Quick Look let go within a moment; a player does not, and the file is skipped.
+            var tries = 0
+            while true {
+                do {
+                    _ = try manager.replaceItemAt(url, withItemAt: temporary)
+                    break
+                } catch  where isInUse(error) && tries < replaceTries - 1 {
+                    tries += 1
+                    Thread.sleep(forTimeInterval: 1)
+                }
+            }
         } catch {
             try? manager.removeItem(at: temporary)
             throw error
+        }
+    }
+}
+
+extension LibraryAlbumWriter {
+    /// How often a replace that finds the file in use is tried, a second apart.
+    static let replaceTries = 3
+
+    /// True if `error`, or an error under it, is EBUSY: on a network share, another program
+    /// (a player, Spotlight) has the file open.
+    public static func isInUse(_ error: Error) -> Bool {
+        var errors = [error as NSError]
+        while let next = errors.popLast() {
+            if next.domain == NSPOSIXErrorDomain, next.code == Int(EBUSY) { return true }
+            errors += next.underlyingErrors.map { $0 as NSError }
+        }
+        return false
+    }
+}
+
+public enum AlbumWriteError: Error, Equatable, CustomStringConvertible {
+    /// Files that another program held open, left as they were.
+    case filesInUse([URL])
+
+    public var description: String {
+        switch self {
+        case .filesInUse(let files):
+            let names = files.map { "“\($0.lastPathComponent)”" }.joined(separator: ", ")
+            let one = files.count == 1
+            return "\(names) \(one ? "is" : "are") open in another program, such as a player, and "
+                + "\(one ? "was" : "were") not changed. Close \(one ? "it" : "them") and run the command again: "
+                + "it changes only what is left."
         }
     }
 }

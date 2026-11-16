@@ -13,9 +13,10 @@ command-line tool.
   images in `Artwork/`. It finds the release from the files' tags and track
   lengths, lets you choose when several fit, shows every change, tag by tag and
   with links to the images, and asks before it writes. You can edit the album
-  name it writes, and your name is kept for the next run. A cover file or
-  Artwork folder of your own that it replaces is kept as `cover_original.jpg`
-  or `Artwork (original)`. Tags that Silverside
+  name it writes, and your name is kept for the next run. A cover file
+  (`cover.jpg` or `folder.jpg`) or Artwork folder of your own that it replaces
+  is kept as `cover_original.jpg`, `folder_original.jpg`, or
+  `Artwork (original)`. Tags that Silverside
   does not write stay as they are, and each file's audio is checked to be
   unchanged.
 - `silverside tags` summarizes album folders or files without changing them:

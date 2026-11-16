@@ -167,6 +167,8 @@ struct Album: AsyncParsableCommand {
             switch step {
             case .downloadingArtwork(let count): print("Downloading \(count) images for Artwork...")
             case .wroteFile(let file): print("  \(file.lastPathComponent)")
+            case .skippedFileInUse(let file):
+                print("  \(file.lastPathComponent): open in another program, left as it is")
             case .wroteCover(let file): print("Cover: \(file.path)")
             case .wroteArtwork(let count): print("Artwork: " + Self.images(count))
             case .keptOriginal(let file): print("Kept the old one as \(file.lastPathComponent).")
@@ -392,10 +394,17 @@ struct Album: AsyncParsableCommand {
         switch plan.coverFile {
         case .write: print("  Write cover.\(plan.cover.fileExtension ?? "jpg") (\(plan.coverPicture.summary)).")
         case .replace(let old):
-            print(
-                "  Replace \(plan.album.coverFile?.lastPathComponent ?? "the cover file")"
-                    + (old.map { " (\($0.summary))" } ?? "") + " with the full-size cover"
-                    + (plan.keptCoverFile.map { "; the old one is kept as \($0.lastPathComponent)." } ?? "."))
+            let name = plan.album.coverFile?.lastPathComponent ?? "the cover file"
+            let summary = old.map { " (\($0.summary))" } ?? ""
+            if plan.album.coverFile.map(AlbumArtworkPlan.isCoverName) ?? true {
+                print(
+                    "  Replace \(name)\(summary) with the full-size cover"
+                        + (plan.keptCoverFile.map { "; the old one is kept as \($0.lastPathComponent)." } ?? "."))
+            } else {
+                print(
+                    "  Write cover.\(plan.cover.fileExtension ?? "jpg") (\(plan.coverPicture.summary)); \(name)\(summary) "
+                        + (plan.keptCoverFile.map { "is kept as \($0.lastPathComponent)." } ?? "stays as it is."))
+            }
         case .unchanged: print("  The cover file is this cover already.")
         }
         switch plan.artwork {

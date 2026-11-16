@@ -465,6 +465,33 @@ struct LibraryAlbumTests {
         if case .unchanged = other.artwork {} else { Issue.record("Expected Artwork to stay") }
     }
 
+    /// A folder.jpg is the user's cover file: it is kept as folder_original.jpg, and cover.jpg written.
+    @Test func keepsTheUsersFolderImage() async throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        _ = try album(in: folder)
+        let mine = try makeJPEG(width: 300, height: 300)
+        try mine.data.write(to: folder.appending(path: "Folder.jpg"))
+        let album = try LibraryAlbum.read(folder)
+        #expect(album.coverFile?.lastPathComponent == "Folder.jpg" && album.coverPicture?.width == 300)
+        let front = try makeJPEG(width: 1400, height: 1400)
+        let web = FakeWeb([
+            ("https://coverartarchive.org/release/\(Self.first)/101", front.data),
+            ("https://coverartarchive.org/release/\(Self.first)", Self.listingJSON(release: Self.first)),
+        ])
+        let client = CoverArtClient(client: await web.client(in: folder.appending(path: ".cache")))
+        let release = try MusicBrainzClient.release(
+            fromJSON: Self.releaseJSON(id: Self.first, title: "Abbey Road", lengths: [2000, 3000]))
+        let plan = try await AlbumArtworkPlan.make(album: album, release: release, client: client)
+        #expect(plan.coverFile == .replace(album.coverPicture))
+        #expect(plan.keptCoverFile?.lastPathComponent == "folder_original.jpg")
+        try await plan.apply(client: client)
+        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        #expect(names.contains("cover.jpg") && names.contains("folder_original.jpg") && !names.contains("Folder.jpg"))
+        #expect(try Data(contentsOf: folder.appending(path: "folder_original.jpg")) == mine.data)
+        #expect(try LibraryAlbum.read(folder).coverFile?.lastPathComponent == "cover.jpg")
+    }
+
     /// The same picture saved by another program, at another JPEG quality, is the same cover;
     /// another picture of the same size is not.
     @Test func knowsTheSamePictureInAnotherEncoding() throws {

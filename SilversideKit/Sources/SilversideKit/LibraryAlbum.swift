@@ -153,7 +153,8 @@ public struct LibraryAlbum: Sendable {
     public var folder: URL
     /// The audio files, in disc and track order (from the tags), then by name.
     public var files: [File]
-    /// cover.jpg or cover.png, if the folder has one.
+    /// cover.jpg or cover.png, if the folder has one, else folder.jpg (or .png), as many
+    /// players and Windows name it.
     public var coverFile: URL?
     public var coverPicture: Picture?
     /// The images in the folder's Artwork.
@@ -179,11 +180,28 @@ public struct LibraryAlbum: Sendable {
             if left != right { return left < right }
             return a.url.lastPathComponent.localizedStandardCompare(b.url.lastPathComponent) == .orderedAscending
         }
-        let coverFile = CoverFiles.album(in: folder)
+        // The order that an earlier run paired with the release's tracks, while the folder has
+        // the same files: a run that wrote some files' track numbers and not others' (one was
+        // in use) would sort them otherwise, and pair them with the wrong tracks.
+        let choice = AlbumChoice.read(in: folder)
+        if let order = choice?.files, order.count == files.count,
+            Set(order) == Set(files.map(\.url.lastPathComponent))
+        {
+            let place = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
+            files.sort { place[$0.url.lastPathComponent, default: 0] < place[$1.url.lastPathComponent, default: 0] }
+        }
+        let coverFile = CoverFiles.album(in: folder) ?? folderImage(in: folder)
         return LibraryAlbum(
             folder: folder, files: files, coverFile: coverFile,
             coverPicture: coverFile.flatMap { try? Data(contentsOf: $0) }.map(Picture.init),
-            artworkCount: ArtworkFolder.count(in: folder), choice: AlbumChoice.read(in: folder))
+            artworkCount: ArtworkFolder.count(in: folder), choice: choice)
+    }
+
+    /// The folder's folder.jpg, Folder.jpg, or folder.png, by its name on disk.
+    static func folderImage(in folder: URL) -> URL? {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        let image = names.sorted().first { ["folder.jpg", "folder.jpeg", "folder.png"].contains($0.lowercased()) }
+        return image.map { folder.appending(path: $0) }
     }
 
     static func readFile(_ url: URL) -> File {
@@ -260,6 +278,8 @@ public struct AlbumChoice: Codable, Equatable, Sendable {
     public var media: [Int]?
     /// The album name that the user gave the tags, where it differs from the release's.
     public var album: String?
+    /// The files' names, in the order that was paired with the release's tracks, when tags were written.
+    public var files: [String]?
     public var updated: Date
     /// "Silverside 0.9.8 (abc1234)".
     public var program: String
@@ -286,7 +306,7 @@ public struct AlbumChoice: Codable, Equatable, Sendable {
         let file = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]) ?? [:]
         var object = try JSONSerialization.jsonObject(with: Self.encoder.encode(self)) as? [String: Any] ?? [:]
         // Optional values as null, so that clearing one clears it in the file too.
-        for key in ["release", "frontImageID", "artworkImageIDs", "media", "album"] where object[key] == nil {
+        for key in ["release", "frontImageID", "artworkImageIDs", "media", "album", "files"] where object[key] == nil {
             object[key] = NSNull()
         }
         let merged = JSONMerge.overlay(object, on: file)

@@ -6,6 +6,7 @@ import SwiftUI
 /// The settings window. Every setting is in the file that `silverside config` shares.
 struct SettingsView: View {
     enum Tab: String { case general, drives, ripping, encoding, naming }
+    @Environment(AppModel.self) private var model
     /// Debug builds can start on a tab with `-settingsTab drives`.
     @State private var tab = Tab(rawValue: UserDefaults.standard.string(forKey: "settingsTab") ?? "") ?? .general
 
@@ -18,6 +19,9 @@ struct SettingsView: View {
             NamingSettings().tabItem { Label("Naming", systemImage: "textformat") }.tag(Tab.naming)
         }
         .frame(width: 640, height: 520)
+        // A button elsewhere asked for a drive's profile (`AppModel.settingsDrive`).
+        .onAppear { if model.settingsDrive != nil { tab = .drives } }
+        .onChange(of: model.settingsDrive) { _, drive in if drive != nil { tab = .drives } }
         // No field takes focus by itself: a blinking cursor in the library path invites a slip.
         .onAppear { DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) } }
     }
@@ -203,6 +207,7 @@ struct DriveSettings: View {
             }
         }
         .onAppear {
+            showRequestedDrive()
             if selectedKey == nil { selectedKey = profiles.first?.key }
             #if DEBUG
                 // `-driveTest test` or `-driveTest cache` runs a check of the demo drive at once, for screenshots.
@@ -215,10 +220,20 @@ struct DriveSettings: View {
                 }
             #endif
         }
+        .onChange(of: model.settingsDrive) { showRequestedDrive() }
         .onChange(of: selectedKey) { _, key in
             manualOffset = profiles.first { $0.key == key }?.manualOffset.map(String.init) ?? ""
         }
         .sheet(item: $testRun, onDismiss: { store = try? DriveProfileStore() }, content: { DriveTestSheet(run: $0) })
+    }
+
+    /// Selects the drive that a button asked for (`AppModel.settingsDrive`), with its profile
+    /// read again: the rip that sent the user here may have changed it.
+    private func showRequestedDrive() {
+        guard let drive = model.settingsDrive else { return }
+        store = try? DriveProfileStore()
+        selectedKey = DriveProfile(vendor: drive.vendor, product: drive.product, revision: drive.revision).key
+        model.settingsDrive = nil
     }
 
     private func matches(_ slot: DriveSlot, _ profile: DriveProfile) -> Bool {
@@ -260,13 +275,32 @@ struct DriveSettings: View {
                 LabeledContent("In use") {
                     Text(
                         profile.offset.map { "\($0.value.signedDescription) samples, \($0.source.description)" }
-                            ?? "Not known: the first online rip looks it up")
+                            ?? "Not known: the first rip finds it, from AccurateRip's list of drives or from the disc")
                 }
                 if let listed = profile.listedOffset {
                     LabeledContent("AccurateRip's drive list", value: listed.signedDescription)
                 }
+                if let found = profile.foundOffset {
+                    LabeledContent("Found from a disc", value: found.signedDescription)
+                }
                 if let confirmed = profile.confirmedOffset {
                     LabeledContent("Confirmed by rips", value: confirmed.signedDescription)
+                }
+                if let (manual, confirmed) = profile.offsetRipsDisagreeWith {
+                    HStack(alignment: .firstTextBaseline) {
+                        Label(
+                            "Rips of several discs confirm \(confirmed.signedDescription), not the \(manual.signedDescription) set by hand.",
+                            systemImage: "exclamationmark.triangle"
+                        )
+                        .foregroundStyle(Theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button("Use \(confirmed.signedDescription)") {
+                            manualOffset = ""
+                            save(profile) { $0.manualOffset = nil }
+                        }
+                        .help("Clear the offset set by hand, so that rips use the one they confirm")
+                    }
                 }
                 LabeledContent("Set by hand") {
                     HStack {
@@ -285,7 +319,7 @@ struct DriveSettings: View {
                     }
                 }
                 Text(
-                    "An offset set by hand overrides the others. Find a drive's offset from the offsets that several discs share, or from AccurateRip's list."
+                    "An offset set by hand overrides the others, so set one only when you know it. A drive that AccurateRip's list does not have gets its offset from the first disc it rips that AccurateRip has, and rips of later discs confirm it."
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }

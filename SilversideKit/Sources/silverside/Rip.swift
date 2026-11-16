@@ -388,6 +388,8 @@ private final class RipPrinter: @unchecked Sendable {
             Swift.print(
                 "Drive: \(drive.name) (firmware \(drive.revision)), read offset \(offset.signedDescription) (\(source))"
             )
+        case .offsetFound(let found):
+            Swift.print(found.summary)
         case .lookupFailed(let lookup, let error):
             Swift.print("\(lookup.rawValue): the lookup failed (\(error)). The rip goes on without it.")
         case .lookups(let records, let ctdb):

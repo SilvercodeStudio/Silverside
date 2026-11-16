@@ -110,6 +110,8 @@ final class AppModel {
     var alert: AppAlert?
     /// True while a sheet or panel shows the rip's log.
     var logShown = false
+    /// The drive whose profile Settings › Drives shows next: a button sets it, then opens Settings.
+    var settingsDrive: DriveIdentity?
     /// The repair under way, or the last one, shown in a sheet.
     private(set) var repair: RepairRun?
     var repairShown = false
@@ -617,7 +619,13 @@ final class AppModel {
         if slot.isDemo {
             options.offline = true
             options.addsToMusic = false
-            options.readOffset = 6
+            // `-demoNoOffset 1` leaves the demo drive without one, so the rip stops as for a drive
+            // that AccurateRip's list lacks (offline, it cannot find one from the disc).
+            #if DEBUG
+                if !UserDefaults.standard.bool(forKey: "demoNoOffset") { options.readOffset = 6 }
+            #else
+                options.readOffset = 6
+            #endif
             options.folder = URL.temporaryDirectory.appending(path: "Silverside Demo \(UUID().uuidString)")
         }
         let run = RipRun(disc: disc)

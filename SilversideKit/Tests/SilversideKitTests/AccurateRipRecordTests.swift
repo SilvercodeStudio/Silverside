@@ -85,6 +85,50 @@ struct AccurateRipOffsetFinderTests {
         #expect(found == [offset])
     }
 
+    /// A disc in AccurateRip shows a drive's offset from a few tracks' sector 450: the one
+    /// that most tracks and submissions share, or one that earlier discs matched at.
+    @Test(arguments: [-1164, 0, 6, 103, 1776])
+    func findsTheOffsetFromADisc(offset: Int) throws {
+        let (toc, samples) = try makeDisc(trackSectors: [500, 460, 470, 300])
+        let drive = SimulatedDrive(toc: toc, samples: samples, readOffset: offset)
+        func sector450(of index: Int, shiftedBy shift: Int = 0) -> UInt32 {
+            let start = (toc.audioTracks[index].startLBA + 450) * CDDA.samplesPerSector + shift
+            return AccurateRipAccumulator.checksum(
+                of: samples[start..<(start + CDDA.samplesPerSector)], isFirstTrack: false, isLastTrack: false
+            ).v1
+        }
+        // Two pressings: the second, with more submissions, 30 samples later.
+        // The last track is too short for a sector 450.
+        let tracks = (0..<4).map { index in
+            [0, 30].map { shift in
+                AccurateRipRecord.Track(
+                    confidence: shift == 0 ? 5 : 9, checksum: 1,
+                    frame450Checksum: index < 3 ? sector450(of: index, shiftedBy: shift) : 7)
+            }
+        }
+        let records = [0, 1].map { pressing in
+            AccurateRipRecord(discID: toc.accurateRipDiscID, tracks: tracks.map { $0[pressing] })
+        }
+        let found = try #require(try DiscOffsetSearch.find(drive: drive, toc: toc, records: records))
+        #expect(found.searchedTracks == 3 && found.matchingTracks == 3)
+        #expect(found.offset == offset + 30 && found.otherOffsets == [offset])
+        let earlier = try #require(
+            try DiscOffsetSearch.find(drive: drive, toc: toc, records: records, earlier: [offset, 500]))
+        #expect(earlier.offset == offset)
+        #expect(
+            try DiscOffsetSearch.find(
+                drive: drive, toc: toc,
+                records: [records[0]].map { record in
+                    var other = record
+                    other.tracks = record.tracks.map {
+                        var track = $0
+                        track.frame450Checksum &+= 1
+                        return track
+                    }
+                    return other
+                }) == nil)
+    }
+
     @Test func findsNothingForAnUnknownChecksum() throws {
         let (_, samples) = try makeDisc(trackSectors: [10])
         #expect(AccurateRipOffsetFinder.offsets(matching: [1], in: samples, trackLength: 588 * 8, margin: 588).isEmpty)

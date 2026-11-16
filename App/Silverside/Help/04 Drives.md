@@ -7,10 +7,14 @@ Silverside lists them in the sidebar with the disc in each.
 
 Each drive Silverside has seen has a profile:
 
-- **Read offset.** The offset in use and where it came from: set by hand, confirmed by rips, or from
-  AccurateRip's list of drives. A drive with no offset gets it from the list at its first online
-  rip. An offset set by hand overrides the others; use it only when you know the drive's offset, for
-  example from another ripper.
+- **Read offset.** The offset in use and where it came from: set by hand, confirmed by rips, from
+  AccurateRip's list of drives, or found from a disc. A drive with no offset gets it from the list at
+  its first online rip. A drive that the list does not have, such as Apple's USB SuperDrive, gets it
+  from the disc: the rip reads a little of a few tracks and finds the offset at which they match
+  AccurateRip. This needs a disc that AccurateRip has (most commercial CDs), and rips of later discs
+  confirm it. An offset set by hand overrides the others; use it only when you know the drive's
+  offset, for example from another ripper. When rips of several discs confirm another offset,
+  Settings says so, and Use clears the one set by hand.
 - **Rips.** The discs that checked the drive against AccurateRip, and the offsets they matched. Two
   or more discs that agree confirm the offset.
 - **Cache.** Drives keep the last read in memory and return it again for a re-read, which would hide

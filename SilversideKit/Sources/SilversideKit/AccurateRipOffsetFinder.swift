@@ -63,3 +63,90 @@ public enum AccurateRipOffsetFinder {
         return matches
     }
 }
+
+extension AccurateRipOffsetFinder {
+    /// Returns each offset in `-margin...margin` at which the checksum of one sector, read
+    /// with `margin` more samples before and after it, is a sector 450 checksum in `known`,
+    /// with that entry's confidence.
+    static func sectorOffsets(
+        matching known: [AccurateRipRecord.Track], in samples: [UInt32], margin: Int
+    ) -> [(offset: Int, confidence: Int)] {
+        precondition(samples.count == CDDA.samplesPerSector + 2 * margin)
+        var confidences = [UInt32: Int]()
+        for entry in known { confidences[entry.frame450Checksum, default: 0] += entry.confidence }
+        let length = UInt32(CDDA.samplesPerSector)
+        var checksum: UInt32 = 0
+        var sum: UInt32 = 0
+        for index in 0..<CDDA.samplesPerSector {
+            checksum &+= samples[index] &* UInt32(index + 1)
+            sum &+= samples[index]
+        }
+        var matches = [(offset: Int, confidence: Int)]()
+        for step in 0...(2 * margin) {
+            if let confidence = confidences[checksum] { matches.append((step - margin, confidence)) }
+            guard step < 2 * margin else { break }
+            let first = samples[step]
+            let next = samples[step + CDDA.samplesPerSector]
+            checksum = checksum &- sum &+ next &* length
+            sum = sum &- first &+ next
+        }
+        return matches
+    }
+}
+
+/// A drive's read offset, found from a disc that AccurateRip has, as EAC finds it with a key
+/// disc: sector 450 of a few tracks, read with no offset correction, matches the database's
+/// sector 450 checksums at the drive's offset. Each pressing in the database matches at an
+/// offset of its own, so one disc can give several; the one that most tracks and the most
+/// submissions share is the likeliest, and the rips of later discs confirm it
+/// (`DriveProfile.confirmedOffset`). Only a drive that AccurateRip's list does not have needs it.
+public struct DiscOffsetSearch: Equatable, Sendable {
+    /// The offset to rip with.
+    public var offset: Int
+    /// The tracks whose sector 450 matches at `offset`, of the tracks searched.
+    public var matchingTracks: Int
+    public var searchedTracks: Int
+    /// Other offsets that as many tracks match at: other pressings, the best supported first.
+    public var otherOffsets: [Int] = []
+
+    /// Samples searched on each side of 0: 5 sectors, wider than any offset in AccurateRip's list.
+    static let margin = 5 * CDDA.samplesPerSector
+    /// Tracks to read, at most: a few seconds of seeks.
+    static let tracksToSearch = 6
+
+    /// Searches the disc in `drive`, or nil if no offset matches on enough tracks: on two, or
+    /// on the only one there is to search. An offset in `earlier` (offsets that earlier discs
+    /// matched at, `DriveProfile.observations`) wins a tie.
+    public static func find(
+        drive: any CDDrive, toc: TOC, records: [AccurateRipRecord], earlier: Set<Int> = [], stop: StopToken? = nil
+    ) throws -> DiscOffsetSearch? {
+        var reader = AudioReader(drive: drive, toc: toc, readOffset: 0, canOverread: false)
+        reader.unreadableRetries = 1
+        reader.stop = stop
+        var tracks = [Int: Int]()
+        var confidences = [Int: Int]()
+        var searched = 0
+        for (index, track) in toc.audioTracks.enumerated() where searched < tracksToSearch {
+            let sectors = toc.sectorRange(of: track)
+            let known = records.entries(forTrackAt: index)
+            guard sectors.count >= 451, !known.isEmpty else { continue }
+            let start = (sectors.lowerBound + 450) * CDDA.samplesPerSector
+            let read = try reader.read((start - margin)..<(start + CDDA.samplesPerSector + margin), withC2: false)
+            guard read.unreadable.isEmpty else { continue }
+            let matches = AccurateRipOffsetFinder.sectorOffsets(matching: known, in: read.samples, margin: margin)
+            // A silent sector matches almost everywhere, and says nothing.
+            guard matches.count <= TrackRipper.maximumFrame450Matches else { continue }
+            searched += 1
+            for offset in Set(matches.map(\.offset)) { tracks[offset, default: 0] += 1 }
+            for match in matches { confidences[match.offset, default: 0] += match.confidence }
+        }
+        let ranked = tracks.keys.sorted {
+            (tracks[$0]!, earlier.contains($0) ? 1 : 0, confidences[$0]!, -abs($0))
+                > (tracks[$1]!, earlier.contains($1) ? 1 : 0, confidences[$1]!, -abs($1))
+        }
+        guard let best = ranked.first, tracks[best]! >= min(2, searched) else { return nil }
+        return DiscOffsetSearch(
+            offset: best, matchingTracks: tracks[best]!, searchedTracks: searched,
+            otherOffsets: ranked.dropFirst().filter { tracks[$0] == tracks[best] })
+    }
+}

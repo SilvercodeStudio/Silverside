@@ -5,6 +5,17 @@ command-line tool.
 
 ## 0.9.8 (not released yet)
 
+### Fixed
+
+- A drive that AccurateRip's list of drives does not have, such as Apple's USB
+  SuperDrive, no longer stops the rip and asks for its read offset. The rip
+  finds the offset from the disc's tracks in AccurateRip, and rips of later
+  discs confirm it. Settings › Drives says when rips confirm an offset other
+  than one set by hand.
+- A rip that fails before it reads, such as for a drive whose offset is not
+  known, now shows the whole message above the tracks, with a button to the
+  drive's settings where it helps. Before, the status bar cut it to one line.
+
 ### Changed
 
 - A DTS-CD's album that keeps the stream is now named for it, such as

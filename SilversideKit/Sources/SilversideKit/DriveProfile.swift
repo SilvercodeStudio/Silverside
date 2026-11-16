@@ -10,6 +10,9 @@ public struct DriveProfile: Codable, Equatable, Sendable {
         case confirmed
         /// From AccurateRip's drive offset list.
         case accurateRipList
+        /// Found from one disc in AccurateRip (`DiscOffsetSearch`), for a drive that the list
+        /// does not have, until rips of two discs confirm an offset.
+        case foundOnDisc
     }
 
     /// The offsets that matched AccurateRip on one disc. A disc can match at
@@ -28,6 +31,8 @@ public struct DriveProfile: Codable, Equatable, Sendable {
     public var revision: String
     public var manualOffset: Int?
     public var listedOffset: Int?
+    /// The offset that `DiscOffsetSearch` found from a disc, for a drive with no other.
+    public var foundOffset: Int?
     public var observations: [Observation] = []
     /// The drive's cache, in sectors, as `CacheProbe` measured it.
     public var cacheSectors: Int?
@@ -54,6 +59,7 @@ public struct DriveProfile: Codable, Equatable, Sendable {
         try container.encode(revision, forKey: .revision)
         try container.encode(manualOffset, forKey: .manualOffset)
         try container.encode(listedOffset, forKey: .listedOffset)
+        try container.encode(foundOffset, forKey: .foundOffset)
         try container.encode(observations, forKey: .observations)
         try container.encode(cacheSectors, forKey: .cacheSectors)
         try container.encode(qReadCost, forKey: .qReadCost)
@@ -76,12 +82,21 @@ public struct DriveProfile: Codable, Equatable, Sendable {
         return best.key
     }
 
-    /// The offset to rip with: a manual offset, else a confirmed one, else the list's.
+    /// The offset to rip with: a manual offset, else a confirmed one, else the list's, else
+    /// the one found from a disc.
     public var offset: (value: Int, source: OffsetSource)? {
         if let manualOffset { return (manualOffset, .manual) }
         if let confirmedOffset { return (confirmedOffset, .confirmed) }
         if let listedOffset { return (listedOffset, .accurateRipList) }
+        if let foundOffset { return (foundOffset, .foundOnDisc) }
         return nil
+    }
+
+    /// The offset that rips of two or more discs confirm, when an offset set by hand differs
+    /// from it: the hand-set one may be a guess.
+    public var offsetRipsDisagreeWith: (manual: Int, confirmed: Int)? {
+        guard let manualOffset, let confirmedOffset, manualOffset != confirmedOffset else { return nil }
+        return (manualOffset, confirmedOffset)
     }
 
     /// Records the offsets that matched on a disc. A new rip of the same disc replaces the old one.

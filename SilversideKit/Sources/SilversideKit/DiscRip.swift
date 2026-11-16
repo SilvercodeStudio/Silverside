@@ -109,6 +109,10 @@ public enum DiscRipEvent: Sendable {
     /// The disc's TOC, read before anything else.
     case disc(TOC)
     case drive(DriveIdentity, readOffset: Int, source: String)
+    /// The drive had no read offset, not even in AccurateRip's list, so the rip found it from
+    /// a few tracks of the disc (`DiscOffsetSearch`); this rip and later ones use it until rips
+    /// of two discs confirm one. After `drive`.
+    case offsetFound(DiscOffsetSearch)
     /// A lookup failed, and the rip goes on without it: AccurateRip, CTDB, or the drive
     /// offset list. (A failed MusicBrainz lookup is `releaseLookupFailed`.)
     case lookupFailed(Lookup, any Error)
@@ -201,13 +205,52 @@ public enum DiscRipEvent: Sendable {
 
 public enum DiscRipError: Error, Equatable, CustomStringConvertible {
     case noAudioTracks
-    case unknownOffset(String)
+    /// The drive's read offset is not known, and the disc could not show it.
+    case unknownOffset(String, OffsetProblem)
     case noSuchTracks([Int])
+
+    /// Why a rip could not find the drive's read offset from the disc.
+    public enum OffsetProblem: Equatable, Sendable {
+        /// The rip is offline.
+        case offline
+        /// AccurateRip could not be reached.
+        case lookupFailed
+        /// AccurateRip does not have the disc.
+        case discNotInAccurateRip
+        /// No offset matched on enough tracks: a pressing AccurateRip lacks, or damage.
+        case noMatch
+    }
+
+    /// "The read offset of … is not known.", then why and what finds it (`unknownOffsetReason`),
+    /// for people; the CLI and the app add how to set it by hand.
+    public static func unknownOffsetText(_ drive: String, _ problem: OffsetProblem) -> String {
+        "The read offset of \(drive) is not known. " + unknownOffsetReason(problem)
+    }
+
+    /// Why a drive's offset is not known, and what finds it, for a place that already says it is not.
+    public static func unknownOffsetReason(_ problem: OffsetProblem) -> String {
+        let advice = " Most commercial CDs are in AccurateRip's database."
+        return switch problem {
+        case .offline:
+            "AccurateRip's list of drives does not have it, and an offline rip cannot find it."
+                + " To find your drive's offset, rip a CD online first." + advice
+        case .lookupFailed:
+            "AccurateRip's list of drives does not have it, and AccurateRip could not be reached to find it."
+                + " Try again later."
+        case .discNotInAccurateRip:
+            "AccurateRip's list of drives does not have it, and this disc is not in AccurateRip's database."
+                + " To find your drive's offset, rip another CD first." + advice
+        case .noMatch:
+            "AccurateRip's list of drives does not have it, and this disc's tracks match AccurateRip at no"
+                + " offset (another pressing, or damage). To find your drive's offset, rip another CD first." + advice
+        }
+    }
 
     public var description: String {
         switch self {
         case .noAudioTracks: "This disc has no audio tracks."
-        case .unknownOffset(let drive): "The read offset of \(drive) is not known. Give it with --offset."
+        case .unknownOffset(let drive, let problem):
+            Self.unknownOffsetText(drive, problem) + " If you know the offset, give it with --offset."
         case .noSuchTracks(let numbers):
             "The disc has no audio track \(numbers.map(String.init).joined(separator: ", "))."
         }
@@ -333,9 +376,12 @@ public struct DiscRip {
         }
 
         // The drive's profile gives the offset, unless the options do. A drive with no offset
-        // at all is looked up in AccurateRip's list; if that fails, the rip cannot go on.
+        // at all is looked up in AccurateRip's list, else found from the disc (below).
+        // SILVERSIDE_DRIVE_LIST=none skips the list, to try a drive as if the list lacked it.
         var profile = profiles.profile(vendor: identity.vendor, product: identity.product, revision: identity.revision)
-        if profile.offset == nil && options.readOffset == nil && !options.offline {
+        if profile.offset == nil && options.readOffset == nil && !options.offline
+            && ProcessInfo.processInfo.environment["SILVERSIDE_DRIVE_LIST"]?.lowercased() != "none"
+        {
             do {
                 profile.listedOffset = try await DriveOffsetList.download(client: webClient).entry(
                     vendor: identity.vendor, product: identity.product)?.offset
@@ -344,36 +390,52 @@ public struct DiscRip {
                 events(.lookupFailed(.driveOffsetList, error))
             }
         }
-        let readOffset: Int
-        let source: String
-        if let offset = options.readOffset {
-            (readOffset, source) = (offset, "--offset")
-        } else if let (value, profileSource) = profile.offset {
-            (readOffset, source) = (value, profileSource.description)
-        } else {
-            throw DiscRipError.unknownOffset(identity.name)
-        }
-        events(.drive(identity, readOffset: readOffset, source: source))
-
+        // AccurateRip's records verify the rip, and find the drive's offset if nothing else gives it.
         // A lookup that fails leaves its check out; the rip goes on, and a repair can check later.
         var records = [AccurateRipRecord]()
         var entries = [CTDBEntry]()
         var checkedAccurateRip = false
         var checkedCTDB = false
+        var failedLookups = [DiscRipEvent]()
         if !options.offline {
             do {
                 records = try await AccurateRipRecord.download(for: toc.accurateRipDiscID, client: webClient)
                 checkedAccurateRip = true
             } catch {
-                events(.lookupFailed(.accurateRip, error))
+                failedLookups.append(.lookupFailed(.accurateRip, error))
             }
             do {
                 entries = try await CTDBEntry.lookup(toc, client: webClient)
                 checkedCTDB = true
             } catch {
-                events(.lookupFailed(.ctdb, error))
+                failedLookups.append(.lookupFailed(.ctdb, error))
             }
         }
+        let readOffset: Int
+        let source: String
+        var found: DiscOffsetSearch?
+        if let offset = options.readOffset {
+            (readOffset, source) = (offset, "--offset")
+        } else if let (value, profileSource) = profile.offset {
+            (readOffset, source) = (value, profileSource.description)
+        } else {
+            // A drive that AccurateRip's list does not have: the disc's tracks show its offset.
+            guard !options.offline else { throw DiscRipError.unknownOffset(identity.name, .offline) }
+            guard checkedAccurateRip else { throw DiscRipError.unknownOffset(identity.name, .lookupFailed) }
+            guard !records.isEmpty else { throw DiscRipError.unknownOffset(identity.name, .discNotInAccurateRip) }
+            let drive = self.drive
+            let earlier = Set(profile.observations.flatMap(\.offsets))
+            found = try await blocking { [records, stop] in
+                try DiscOffsetSearch.find(drive: drive, toc: toc, records: records, earlier: earlier, stop: stop)
+            }
+            guard let found else { throw DiscRipError.unknownOffset(identity.name, .noMatch) }
+            profile.foundOffset = found.offset
+            try? profiles.save(profile)
+            (readOffset, source) = (found.offset, DriveProfile.OffsetSource.foundOnDisc.description)
+        }
+        events(.drive(identity, readOffset: readOffset, source: source))
+        if let found { events(.offsetFound(found)) }
+        for event in failedLookups { events(event) }
         events(
             .lookups(
                 accurateRipRecords: checkedAccurateRip ? records.count : nil,

@@ -134,6 +134,9 @@ final class RipRun {
     }
 
     private(set) var phase = Phase.starting
+    /// Why the rip stopped before it read, when the drive's read offset is not known.
+    var offsetProblem: DiscRipError.OffsetProblem?
+    var failedForOffset: Bool { offsetProblem != nil }
     /// Nil while the rip does not read the gap before track 1: there is none, or track 1 is not ripped.
     private(set) var hidden: HiddenState?
     private(set) var trackStates: [Int: TrackState] = [:]
@@ -398,8 +401,11 @@ final class RipRun {
                 }
             } catch {
                 let message = RipRun.message(for: error)
+                let offsetProblem: DiscRipError.OffsetProblem? =
+                    if case DiscRipError.unknownOffset(_, let problem) = error { problem } else { nil }
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
+                        run.offsetProblem = offsetProblem
                         run.add("Failed: \(message)")
                         run.end(.failed(message))
                         onFinish()
@@ -412,9 +418,9 @@ final class RipRun {
     /// The engine's errors, worded for the app where they name the CLI.
     nonisolated static func message(for error: any Error) -> String {
         switch error {
-        case DiscRipError.unknownOffset(let drive):
-            return
-                "The read offset of \(drive) is not known. Silverside looks it up in AccurateRip's drive list when it is online. To set it yourself, use Settings › Drives."
+        case DiscRipError.unknownOffset(let drive, let problem):
+            return DiscRipError.unknownOffsetText(drive, problem)
+                + " If you know the offset, set it in Settings › Drives."
         case EncodingError.notVerified(let track):
             return
                 "Not encoded: track \(track) is not verified by AccurateRip or CTDB. The rip is in the rips folder."
@@ -680,7 +686,9 @@ final class RipRun {
             if let report { return RipRun.headline(for: report) }
             return "Done"
         case .stopped: return "Stopped"
-        case .failed(let message): return "Failed: \(message)"
+        case .failed(let message):
+            // The banner above the tracks has the whole message.
+            return failedForOffset ? "Failed: the drive's read offset is not known" : "Failed: \(message)"
         }
     }
 
@@ -716,6 +724,8 @@ final class RipRun {
             add(
                 "Drive: \(drive.name) (firmware \(drive.revision)), read offset \(offset.signedDescription) (\(source))"
             )
+        case .offsetFound(let found):
+            add(found.summary)
         case .lookupFailed(let lookup, let error):
             add("\(lookup.rawValue): the lookup failed (\(error)). The rip goes on without it.")
         case .lookups(let records, let ctdb):

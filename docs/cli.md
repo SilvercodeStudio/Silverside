@@ -282,7 +282,13 @@ all its fields have values, so `[{disc:2}-]` is left out for a single disc, and
 
 Every drive reads audio a few samples early or late: its read offset. Silverside
 finds it in AccurateRip's list of drives, then confirms it from your own rips
-(two discs that agree). `silverside drives -d <drive> --set-offset N` sets it by hand, with or without a disc.
+(two discs that agree). A drive that the list does not have gets its offset
+from the first disc it rips that AccurateRip has: the rip reads sector 450 of a
+few tracks and finds the offset where they match AccurateRip, as EAC does with
+a key disc, and later rips use it until two discs confirm one. A disc that
+AccurateRip does not have, or an offline rip, cannot find it, and the rip says
+so. `silverside drives -d <drive> --set-offset N` sets it by hand, with or without a disc;
+set one only when you know it, since it overrides the offset that rips confirm.
 `silverside drives -d <drive> --measure-cache` measures, with a disc in the drive, how much the drive caches, so
 re-reads empty the cache with fewer reads.
 

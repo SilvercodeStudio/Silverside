@@ -24,7 +24,7 @@ struct DiscRipTests {
     func rip(
         trackSectors: [Int] = [800, 900], hidesFirstTrack: Bool = false, tracks: [Int]? = nil, web: FakeWeb? = nil,
         cover: CoverImage? = nil, coverStore: ReleaseCoverStore? = nil, customSets: CustomSetStore? = nil,
-        qReadCost: Double? = 1,
+        qReadCost: Double? = 1, knowsOffset: Bool = true,
         prepare: (SimulatedDrive) -> Void = { _ in },
         configure: (inout DiscRipOptions) -> Void = { _ in }
     ) async throws -> (DiscRipResult, [DiscRipEvent], samples: [UInt32], root: URL) {
@@ -56,7 +56,7 @@ struct DiscRipTests {
         if let coverStore { rip.coverStore = coverStore }
         if let customSets { rip.customSets = customSets }
         // The offset comes from the options, since the drive is not in AccurateRip's list.
-        rip.options.readOffset = 6
+        if knowsOffset { rip.options.readOffset = 6 }
         let events = DiscRipEvents()
         rip.events = { events.append($0) }
         return (try await rip.run(), events.list, samples, root)
@@ -341,6 +341,36 @@ struct DiscRipTests {
             #expect(offsets == [6] && profile.observations.count == 1)
         } else {
             Issue.record("No finished event")
+        }
+    }
+
+    /// A drive that neither the options, its profile, nor AccurateRip's list gives an offset:
+    /// the disc's tracks in AccurateRip show it, and the profile keeps it for later rips.
+    @Test func findsTheOffsetOfADriveNotInTheList() async throws {
+        let (toc, samples) = try makeDisc(trackSectors: [800, 900])
+        let (result, events, _, root) = try await rip(web: Self.web(toc: toc, samples: samples), knowsOffset: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(result.report.drive.readOffset == 6)
+        #expect(result.report.drive.offsetSource == DriveProfile.OffsetSource.foundOnDisc.description)
+        #expect(result.report.tracks.map(\.accurateRip) == [.accurate, .accurate])
+        let found = events.compactMap { event -> DiscOffsetSearch? in
+            if case .offsetFound(let found) = event { return found }
+            return nil
+        }
+        #expect(found.map(\.offset) == [6] && found.first?.matchingTracks == 2)
+        let profile = try DriveProfileStore(url: root.appending(path: "DriveProfiles.json"))
+            .profile(vendor: "SIM", product: "DRIVE", revision: "1.0")
+        #expect(profile.foundOffset == 6 && profile.offset?.source == .foundOnDisc)
+    }
+
+    /// Without an offset, a disc that AccurateRip does not have cannot show it, nor can an
+    /// offline rip: the rip stops before it reads, and says why.
+    @Test func saysWhyTheOffsetIsNotKnown() async throws {
+        await #expect(throws: DiscRipError.unknownOffset("SIM DRIVE", .offline)) {
+            _ = try await rip(knowsOffset: false)
+        }
+        await #expect(throws: DiscRipError.unknownOffset("SIM DRIVE", .discNotInAccurateRip)) {
+            _ = try await rip(web: FakeWeb([]), knowsOffset: false)
         }
     }
 

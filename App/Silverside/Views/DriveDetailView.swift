@@ -171,6 +171,10 @@ struct DiscView: View {
                 ResultBanner(rip: rip, report: report, folder: rip.folder)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
+            } else if let rip = slot.rip, case .failed(let message) = rip.phase {
+                FailureBanner(rip: rip, message: message, drive: slot.identity)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
             }
             Divider()
             // The Rip button floats over the table's lower right. As a safe area inset (the
@@ -1137,6 +1141,49 @@ struct StatusBar: View {
             }
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// A rip that failed before it made a report: the whole message, which the status bar cuts
+/// to one line, and for a drive whose offset is not known, a way to its settings.
+struct FailureBanner: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openSettings) private var openSettings
+    var rip: RipRun
+    var message: String
+    var drive: DriveIdentity
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title)
+                .foregroundStyle(Theme.bad)
+                .accessibilityLabel("Failed")
+            VStack(alignment: .leading, spacing: 4) {
+                if let problem = rip.offsetProblem {
+                    Text("The read offset of \(drive.name) is not known").font(.headline)
+                    Text(
+                        DiscRipError.unknownOffsetReason(problem)
+                            + " If you know the offset, you can set it in Drive Settings."
+                    )
+                    .font(.callout).foregroundStyle(.secondary)
+                } else {
+                    Text("The rip failed").font(.headline)
+                    Text(message).font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if rip.failedForOffset {
+                Button("Drive Settings…") {
+                    model.settingsDrive = drive
+                    openSettings()
+                }
+                .help("Settings › Drives, with this drive's read offset")
+            }
+            Button("Show Log") { model.logShown = true }
+        }
+        .padding(12)
+        .background(Theme.bad.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 

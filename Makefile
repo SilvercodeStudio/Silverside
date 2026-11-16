@@ -45,8 +45,10 @@ endif
 # Where make install-cli-local puts silverside and its shell completions.
 CLI_PREFIX = $(HOME)/.local
 RELEASE_BIN = $(PACKAGE)/.build/out/Products/Release/silverside
-# Where make install-app puts the app.
+# Where make install-app puts the app. A leading ~ becomes the home folder: zsh leaves it
+# alone in APP_DIR=~/..., and make once made a folder named ~ in the repository.
 APP_DIR ?= $(HOME)/Applications
+override APP_DIR := $(patsubst ~%,$(HOME)%,$(APP_DIR))
 # Registers a copied app with Launch Services, so that the Dock and Finder show its new icon.
 LSREGISTER = /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 

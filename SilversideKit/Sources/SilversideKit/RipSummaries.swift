@@ -11,6 +11,7 @@ extension DriveProfile.OffsetSource {
         case .manual: "set by hand"
         case .confirmed: "confirmed by rips"
         case .accurateRipList: "from AccurateRip's drive list"
+        case .foundOnDisc: "found from a disc in AccurateRip"
         }
     }
 }
@@ -294,5 +295,17 @@ extension TrackRipper {
             format: "Q subchannel: this drive reads %.1f times as long with it, so each track's first read"
                 + " takes it from one chunk in %d, and reads it in full where an index point shows",
             readCost, every)
+    }
+}
+
+extension DiscOffsetSearch {
+    /// "AccurateRip's list of drives does not have this drive, ... This disc's tracks match AccurateRip at +6 (4 of 4 tracks searched). The rip uses it, and so
+    /// do later rips, until the rips of two discs confirm an offset."
+    public var summary: String {
+        "AccurateRip's list of drives does not have this drive, so its read offset comes from the disc. This disc's tracks match AccurateRip at \(offset.signedDescription) (\(matchingTracks) of \(searchedTracks)"
+            + " tracks searched). The rip uses it, and so do later rips, until the rips of two discs confirm an offset."
+            + (otherOffsets.isEmpty
+                ? ""
+                : " Other pressings match at \(otherOffsets.map(\.signedDescription).joined(separator: ", ")).")
     }
 }

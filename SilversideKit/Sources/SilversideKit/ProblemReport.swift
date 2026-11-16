@@ -28,6 +28,7 @@ public enum ProblemReport {
                         case .manual: "set by hand"
                         case .confirmed: "confirmed by rips"
                         case .accurateRipList: "from AccurateRip's list"
+                        case .foundOnDisc: "found from a disc"
                         }
                     return "read offset \(offset.value > 0 ? "+" : "")\(offset.value) (\(source))"
                 } ?? "read offset not known"

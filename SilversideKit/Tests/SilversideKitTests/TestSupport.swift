@@ -42,18 +42,22 @@ extension TOC {
 actor FakeWeb: HTTPTransport {
     var answers: [(prefix: String, data: Data)]
     var failsEverything = false
+    /// URL prefixes answered with 503, as a busy MusicBrainz does.
+    var busy: [String] = []
     private(set) var requests: [String] = []
 
-    init(_ answers: [(prefix: String, data: Data)] = [], failsEverything: Bool = false) {
+    init(_ answers: [(prefix: String, data: Data)] = [], failsEverything: Bool = false, busy: [String] = []) {
         self.answers = answers
         self.failsEverything = failsEverything
+        self.busy = busy
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         let url = request.url!.absoluteString
         requests.append(url)
         if failsEverything { throw URLError(.cannotConnectToHost) }
-        let status = answers.contains { url.hasPrefix($0.prefix) } ? 200 : 404
+        let status =
+            busy.contains { url.hasPrefix($0) } ? 503 : answers.contains { url.hasPrefix($0.prefix) } ? 200 : 404
         let body = answers.first { url.hasPrefix($0.prefix) }?.data ?? Data()
         return (body, HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: [:])!)
     }

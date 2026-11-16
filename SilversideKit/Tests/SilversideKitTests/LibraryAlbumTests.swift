@@ -375,6 +375,44 @@ struct LibraryAlbumTests {
         #expect(given.chosen?.source == .given)
     }
 
+    /// A search compares tracklists only, the small lookups; the release chosen is looked up in
+    /// full. A release that MusicBrainz is too busy to give is left out, not fatal.
+    @Test func searchesWithTracklistsAndLeavesOutABusyRelease() async throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let web = FakeWeb(
+            [
+                (
+                    "https://musicbrainz.org/ws/2/release/\(Self.first)",
+                    Self.releaseJSON(id: Self.first, title: "Abbey Road", lengths: [2000, 3000])
+                ),
+                ("https://musicbrainz.org/ws/2/release?", Self.searchJSON()),
+            ], busy: ["https://musicbrainz.org/ws/2/release/\(Self.second)"])
+        let finder = AlbumReleaseFinder(
+            client: MusicBrainzClient(client: await web.client(in: folder.appending(path: ".cache"))))
+
+        let searched = try await finder.find(for: try album(in: folder))
+        #expect(searched.candidates.map(\.release.id) == [Self.first] && searched.unavailable == [Self.second])
+        let lookups = await web.requests.filter { $0.contains("/release/") }
+        #expect(
+            !lookups.isEmpty
+                && lookups.allSatisfy { $0.contains("inc=artist-credits+labels+recordings+release-groups&") })
+
+        let chosen = try await finder.complete(searched.candidates[0])
+        #expect(chosen.release.id == Self.first && chosen.fit == searched.candidates[0].fit)
+        let full = await web.requests.last ?? ""
+        #expect(full.contains("release/\(Self.first)") && full.contains("work-level-rels"))
+
+        // The chosen release's full lookup is asked more patiently, then fails with the ID to rerun.
+        let busy = AlbumReleaseCandidate(
+            release: try MusicBrainzClient.release(
+                fromJSON: Self.releaseJSON(id: Self.second, title: "Abbey Road", lengths: [2000, 3000])),
+            fit: searched.candidates[0].fit, source: .search(score: 90))
+        let before = await web.requests.count
+        await #expect(throws: AlbumReleaseError.busy(Self.second)) { try await finder.complete(busy) }
+        #expect(await web.requests.count - before == finder.fullAttempts)
+    }
+
     static func listingJSON(release: String) -> Data {
         Data(
             #"""

@@ -102,11 +102,18 @@ public struct AlbumReleaseFinder: Sendable {
         public var candidates: [AlbumReleaseCandidate]
         /// The words searched for, if there was a search.
         public var searched: String?
+        /// The search's releases that may fit but could not be looked up (MusicBrainz busy, or
+        /// another failure after the retries), by ID: left out of `candidates`.
+        public var unavailable: [String] = []
     }
 
     public var client: MusicBrainzClient
-    /// The most releases a search looks up, for their track lengths: one request each.
+    /// The most releases a search looks up, for their track lengths: one small request each.
     public var lookups = 8
+    /// How often a full lookup of one release is asked while MusicBrainz answers 503: the
+    /// waits double from 2 s, about a minute in all. A big release with every relationship
+    /// (*1967–1970*'s 28 tracks, about 800 KB) was refused past the usual 4 tries.
+    public var fullAttempts = 6
 
     public init(client: MusicBrainzClient = MusicBrainzClient()) {
         self.client = client
@@ -117,7 +124,9 @@ public struct AlbumReleaseFinder: Sendable {
     public func find(for album: LibraryAlbum, releaseID: String? = nil, search: String? = nil) async throws -> Result {
         let lengths = album.lengths
         func candidate(_ id: String, _ source: AlbumReleaseCandidate.Source) async throws -> AlbumReleaseCandidate {
-            guard let release = try await client.release(id: id) else { throw AlbumReleaseError.noSuchRelease(id) }
+            guard let release = try await client.release(id: id, attempts: fullAttempts) else {
+                throw AlbumReleaseError.noSuchRelease(id)
+            }
             return AlbumReleaseCandidate(release: release, fit: release.fit(lengths: lengths), source: source)
         }
         if let releaseID {
@@ -142,6 +151,7 @@ public struct AlbumReleaseFinder: Sendable {
             searched.append(barcode)
         }
         var candidates = [AlbumReleaseCandidate]()
+        var unavailable = [String]()
         var lookedUp = Set<String>()
         // Each query until one finds releases that fit: the narrower one first.
         for query in search.map({ [$0] }) ?? Self.searchQueries(for: album) {
@@ -154,7 +164,18 @@ public struct AlbumReleaseFinder: Sendable {
             }
             for result in fitting.prefix(lookups) {
                 lookedUp.insert(result.id)
-                guard let release = try await client.release(id: result.id) else { continue }
+                // The tracklist only: the release chosen is looked up in full (`complete`). One
+                // that fails is left out, so a busy MusicBrainz does not stop the others.
+                let release: MusicBrainzRelease
+                do {
+                    guard let found = try await client.tracklist(id: result.id) else { continue }
+                    release = found
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    unavailable.append(result.id)
+                    continue
+                }
                 guard let fit = release.fit(lengths: lengths) else { continue }
                 candidates.append(
                     AlbumReleaseCandidate(release: release, fit: fit, source: .search(score: result.score)))
@@ -167,7 +188,25 @@ public struct AlbumReleaseFinder: Sendable {
             if MusicBrainzRelease.ranks(right, before: left) { return false }
             return a.score > b.score
         }
-        return Result(candidates: candidates, searched: searched.isEmpty ? nil : searched.joined(separator: ", then "))
+        return Result(
+            candidates: candidates, searched: searched.isEmpty ? nil : searched.joined(separator: ", then "),
+            unavailable: unavailable)
+    }
+
+    /// The candidate with its release in full (credits, composers, genres, disc IDs), for
+    /// the tags: a search's candidates have only their tracklists. Others are full already.
+    public func complete(_ candidate: AlbumReleaseCandidate) async throws -> AlbumReleaseCandidate {
+        guard case .search = candidate.source else { return candidate }
+        let release: MusicBrainzRelease?
+        do {
+            release = try await client.release(id: candidate.release.id, attempts: fullAttempts)
+        } catch OnlineLookupError.httpStatus(let status, _) where status == 503 || status == 429 {
+            throw AlbumReleaseError.busy(candidate.release.id)
+        }
+        guard let release else { throw AlbumReleaseError.noSuchRelease(candidate.release.id) }
+        var full = candidate
+        full.release = release
+        return full
     }
 
     /// The queries to search with, the narrowest first: the album and its artist, from the tags,
@@ -217,11 +256,16 @@ extension AlbumReleaseCandidate {
 public enum AlbumReleaseError: Error, Equatable, CustomStringConvertible {
     case notAReleaseID(String)
     case noSuchRelease(String)
+    /// MusicBrainz kept answering 503 for the chosen release's full lookup.
+    case busy(String)
 
     public var description: String {
         switch self {
         case .notAReleaseID(let text): "\"\(text)\" is not a MusicBrainz release ID or a release's page."
         case .noSuchRelease(let id): "MusicBrainz has no release \(id)."
+        case .busy(let id):
+            "MusicBrainz is busy and did not give the release's credits and composers, so nothing was written. "
+                + "Run the command again later; --release \(id) skips the search and the choice."
         }
     }
 }

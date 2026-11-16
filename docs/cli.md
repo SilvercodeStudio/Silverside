@@ -317,7 +317,13 @@ Other options:
   asking.
 
 Silverside asks MusicBrainz for one release at a time, as for a disc, and keeps
-the answers in its cache, so run it on one album or set at a time.
+the answers in its cache, so run it on one album or set at a time. A search
+compares each release's tracklist, a small request, and looks up only the
+release you choose in full. When MusicBrainz is too busy to give a release, the
+others are listed without it, with a note; run the command again later to
+include it. The release you choose is asked for more patiently, for about a
+minute; if MusicBrainz is still busy, nothing is written, and `--release` with
+its ID skips the search next time.
 
 `silverside tags <folder>` shows what a folder has before and after: the
 files' formats, their tags (those that every file shares once, then each

@@ -93,8 +93,9 @@ public actor WebClient {
 
     /// The response body for `url`, or nil if the server answers 404.
     /// `useCache: false` sends a new request, and keeps its answer in the cache. If the
-    /// request fails, the answer in the cache is used, however old it is.
-    public func data(from url: URL, useCache: Bool = true) async throws -> Data? {
+    /// request fails, the answer in the cache is used, however old it is. `attempts` is how
+    /// often a busy server is asked, the wait doubling each time.
+    public func data(from url: URL, useCache: Bool = true, attempts: Int = maximumAttempts) async throws -> Data? {
         let key = Insecure.SHA1.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
         let body = directory.appending(path: "web/\(key).data")
         let meta = directory.appending(path: "web/\(key).json")
@@ -113,7 +114,7 @@ public actor WebClient {
         let data: Data
         let status: Int
         do {
-            (data, status) = try await fetch(url, policy: policy)
+            (data, status) = try await fetch(url, policy: policy, attempts: max(1, attempts))
         } catch {
             if let cached { return cached.data }
             throw error
@@ -132,24 +133,24 @@ public actor WebClient {
     }
 
     /// Sends the request, waiting for the host's rate limit, and tries again when the server is busy.
-    private func fetch(_ url: URL, policy: HostPolicy) async throws -> (Data, Int) {
+    private func fetch(_ url: URL, policy: HostPolicy, attempts: Int) async throws -> (Data, Int) {
         var request = URLRequest(url: url)
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         var delay = firstRetryDelay
-        for attempt in 1...Self.maximumAttempts {
+        for attempt in 1...attempts {
             try await waitForTurn(host: url.host() ?? "", interval: policy.interval)
             requestsSent += 1
             do {
                 let (data, response) = try await transport.data(for: request)
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                 if status == 200 || status == 404 { return (data, status) }
-                guard status == 503 || status == 429, attempt < Self.maximumAttempts else {
+                guard status == 503 || status == 429, attempt < attempts else {
                     throw OnlineLookupError.httpStatus(status, url)
                 }
                 let retryAfter = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")
                     .flatMap { Double($0) }
                 try await Task.sleep(for: retryAfter.map { .seconds($0) } ?? delay)
-            } catch let error as URLError where error.code == .timedOut && attempt < Self.maximumAttempts {
+            } catch let error as URLError where error.code == .timedOut && attempt < attempts {
                 try await Task.sleep(for: delay)
             }
             delay *= 2

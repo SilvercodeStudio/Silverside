@@ -84,8 +84,13 @@ struct Album: AsyncParsableCommand {
         // An image file is checked before the search, so a wrong path costs no lookup.
         let frontFile = try front.flatMap(Self.frontFile)
 
-        let found = try await AlbumReleaseFinder().find(for: album, releaseID: release, search: search)
-        let candidate = try choose(found, album: album)
+        let finder = AlbumReleaseFinder()
+        let found = try await finder.find(for: album, releaseID: release, search: search)
+        let chosen = try choose(found, album: album)
+        if case .search = chosen.source {
+            print("Looking up the release's credits and composers...")
+        }
+        let candidate = try await finder.complete(chosen)
         print()
         Self.printRelease(candidate, album: album)
 
@@ -191,7 +196,13 @@ struct Album: AsyncParsableCommand {
     func choose(_ found: AlbumReleaseFinder.Result, album: LibraryAlbum) throws -> AlbumReleaseCandidate {
         if let chosen = found.chosen { return chosen }
         let searched = found.searched.map { " (searched for \($0))" } ?? ""
+        let busy =
+            found.unavailable.isEmpty
+            ? ""
+            : (found.unavailable.count == 1 ? "1 release" : "\(found.unavailable.count) releases")
+                + " that may fit could not be looked up: MusicBrainz is busy. Run the command again later"
         guard !found.candidates.isEmpty else {
+            if !busy.isEmpty { throw CommandError(busy + ".") }
             throw CommandError(
                 "MusicBrainz found no release with \(album.files.count) tracks of these lengths\(searched). "
                     + "Name one with --release, or search for other words with --search.")
@@ -208,6 +219,7 @@ struct Album: AsyncParsableCommand {
                 "     " + Self.fitText(candidate.fit) + "; \(images)  "
                     + (candidate.release.pageURL?.absoluteString ?? ""))
         }
+        if !busy.isEmpty { print("  " + busy + " to include them.") }
         guard isatty(STDIN_FILENO) != 0 else {
             throw CommandError("A search found the release: choose it at a terminal, or name it with --release.")
         }

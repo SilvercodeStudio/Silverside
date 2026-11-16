@@ -317,6 +317,11 @@ public struct MusicBrainzClient: Sendable {
     static let releaseIncludes =
         discIncludes + "+discids+aliases+artist-rels+work-rels+recording-level-rels+work-level-rels"
 
+    /// What a release lookup for its tracklist includes: enough to show the release and compare
+    /// its track lengths, without the relationships, which made a full lookup of a 28-track
+    /// release about 800 KB, slow enough for MusicBrainz to answer 503 at a busy time.
+    static let tracklistIncludes = "artist-credits+labels+recordings+release-groups"
+
     public let client: WebClient
 
     public init(client: WebClient = .shared) {
@@ -341,16 +346,29 @@ public struct MusicBrainzClient: Sendable {
     }
 
     /// One release, by its MusicBrainz ID, with its recordings' relationships: the composers.
-    public func release(id: String, useCache: Bool = true) async throws -> MusicBrainzRelease? {
-        guard let data = try await client.data(from: Self.releaseURL(id: id), useCache: useCache) else { return nil }
+    public func release(id: String, useCache: Bool = true, attempts: Int = WebClient.maximumAttempts) async throws
+        -> MusicBrainzRelease?
+    {
+        guard let data = try await client.data(from: Self.releaseURL(id: id), useCache: useCache, attempts: attempts)
+        else { return nil }
         return try Self.release(fromJSON: data)
     }
 
-    static func releaseURL(id: String) -> URL {
+    /// One release with its tracks and lengths but no relationships (no composers, no
+    /// genres): for comparing a search's releases with an album's files. `release(id:)` gives
+    /// the one chosen in full.
+    public func tracklist(id: String) async throws -> MusicBrainzRelease? {
+        guard let data = try await client.data(from: Self.releaseURL(id: id, includes: Self.tracklistIncludes)) else {
+            return nil
+        }
+        return try Self.release(fromJSON: data)
+    }
+
+    static func releaseURL(id: String, includes: String = releaseIncludes) -> URL {
         var components = URLComponents(
             url: baseURL.appending(path: "release/\(id)"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
-            URLQueryItem(name: "inc", value: releaseIncludes), URLQueryItem(name: "fmt", value: "json"),
+            URLQueryItem(name: "inc", value: includes), URLQueryItem(name: "fmt", value: "json"),
         ]
         return components.url!
     }

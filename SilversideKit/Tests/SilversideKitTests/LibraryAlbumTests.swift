@@ -229,7 +229,10 @@ struct LibraryAlbumTests {
         #expect(
             album.commonTag("ALBUM") == "Abbey Road" && album.coverFile == nil
                 && album.files.allSatisfy { $0.cover == nil })
-        #expect(AlbumReleaseFinder.searchQueries(for: album) == ["release:(Abbey Road) AND artist:(The Beatles)"])
+        #expect(
+            AlbumReleaseFinder.searchQueries(for: album) == [
+                "release:(Abbey Road) AND artist:(The Beatles)", #"release:"Abbey Road""#,
+            ])
     }
 
     static func track(_ position: Int, _ length: Int?) -> MusicBrainzRelease.Track {
@@ -280,15 +283,28 @@ struct LibraryAlbumTests {
         #expect(
             AlbumReleaseFinder.searchQueries(for: album) == [
                 "release:(Abbey Road) AND artist:(The Beatles) AND comment:(2009 Stereo Remaster)",
-                "release:(Abbey Road) AND artist:(The Beatles)",
+                "release:(Abbey Road) AND artist:(The Beatles)", #"release:"Abbey Road""#,
             ])
         // With no tags, the folder's names: Artist/Album. Brackets in a folder's name are left
         // out, and not looked for in the disambiguation.
         var untagged = album
         untagged.files[0].tags = []
-        #expect(AlbumReleaseFinder.searchQueries(for: untagged) == ["release:(Abbey Road) AND artist:(The Beatles)"])
+        #expect(
+            AlbumReleaseFinder.searchQueries(for: untagged).first == "release:(Abbey Road) AND artist:(The Beatles)")
         untagged.folder = URL(filePath: "/Music/Bob Dylan/Duelling Banjos (1986) [FLAC]")
-        #expect(AlbumReleaseFinder.searchQueries(for: untagged) == ["release:(Duelling Banjos) AND artist:(Bob Dylan)"])
+        #expect(
+            AlbumReleaseFinder.searchQueries(for: untagged) == [
+                "release:(Duelling Banjos) AND artist:(Bob Dylan)", #"release:"Duelling Banjos""#,
+            ])
+        // Last, the title as a phrase with no artist: the band in the tags, its leaders on MusicBrainz.
+        var band = album
+        band.files[0].tags = [
+            ("ALBUM", #"The Quintessential Django Reinhardt & Stéphane "Le Hot" Grappelli"#),
+            ("ARTIST", "Le Quintette du Hot Club de France"),
+        ]
+        #expect(
+            AlbumReleaseFinder.searchQueries(for: band).last
+                == #"release:"The Quintessential Django Reinhardt & Stéphane \"Le Hot\" Grappelli""#)
     }
 
     @Test func findsTheReleaseIDInAPageURL() {

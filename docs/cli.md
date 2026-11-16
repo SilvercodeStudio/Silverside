@@ -240,7 +240,10 @@ It finds the release in this order:
 4. A search: the barcode in the tags, then the files' album and artist (or the
    folder's names, as `Artist/Album`). Words in brackets in the album tag, such
    as "(2009 Stereo Remaster)", are looked for in the release's
-   disambiguation; in a folder's name, such as "(1986)", they are left out. The releases
+   disambiguation; in a folder's name, such as "(1986)", they are left out. If
+   none of those fits, the whole title is searched for alone, since the files'
+   artist can differ from the release's (a band, where MusicBrainz names its
+   leaders). The releases
    with as many tracks as files, each within a few seconds of its file, are
    listed with their image counts and links. Many releases of an album fit, and
    their covers differ, so you choose one, at a terminal, even when only one

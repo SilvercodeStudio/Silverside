@@ -214,7 +214,10 @@ public struct AlbumReleaseFinder: Sendable {
     /// (2009 Stereo Remaster)") are no part of a title on MusicBrainz. In an album tag they are
     /// often a release's disambiguation (`comment:`): the first query asks for one of them there,
     /// the second does without. In a folder's name they are more often a year or a source
-    /// ("(1986)", "[24-96 FLAC]"), so they are left out. Empty if there is no album name.
+    /// ("(1986)", "[24-96 FLAC]"), so they are left out. Last, the title as a phrase with no
+    /// artist: the files' artist can differ from the release's (the band in the tags, its
+    /// leaders on MusicBrainz), and the words of a long title ranked other releases first.
+    /// Empty if there is no album name.
     static func searchQueries(for album: LibraryAlbum) -> [String] {
         let tagged = album.commonTag("ALBUM")
         let name = tagged ?? album.folder.lastPathComponent
@@ -236,7 +239,11 @@ public struct AlbumReleaseFinder: Sendable {
         let artistWords = words(artist)
         if !artistWords.isEmpty { query += " AND artist:(\(artistWords))" }
         let extraWords = tagged == nil ? "" : words(extras)
-        return extraWords.isEmpty ? [query] : [query + " AND comment:(\(extraWords))", query]
+        var queries = extraWords.isEmpty ? [query] : [query + " AND comment:(\(extraWords))", query]
+        let phrase = title.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            .replacing("\\", with: "\\\\").replacing("\"", with: "\\\"")
+        queries.append("release:\"\(phrase)\"")
+        return queries
     }
 
     /// The release ID in `text`: an ID, or a MusicBrainz release page's URL.

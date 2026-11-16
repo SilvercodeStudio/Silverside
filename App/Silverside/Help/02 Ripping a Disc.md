@@ -370,6 +370,8 @@ decode alone, or keeps the rip and encodes nothing.
 
 **Decode DTS…** in an earlier rip's toolbar decodes it later: a copy beside the album, in any format
 that holds surround sound, or in place of the album's files, which then takes the album's own title.
+If a folder in the library already has that title, such as the stereo edition of the album, nothing
+changes, and Silverside says so.
 
 ## A hidden track before track 1
 

@@ -301,6 +301,25 @@ public struct AlbumPlan: Sendable {
         return (cover, fileTags)
     }
 
+    /// The choice to keep while the files' tags are written: the release and the pairing of
+    /// files with tracks (`media`, `files`, `byOrder`, and the album name), with the artwork's
+    /// part as it was. Covers not yet written must not be taken as chosen: with `ownCover`, the
+    /// folder's old cover file would become the cover. Nil without tags.
+    var pairingChoice: AlbumChoice? {
+        guard tags != nil else { return nil }
+        let kept = album.choice?.releaseID == release.id ? album.choice : nil
+        var pairing =
+            kept
+            ?? AlbumChoice(releaseID: release.id, release: "\(release.artist) - \(release.title)")
+        pairing.media = choice.media
+        pairing.album = choice.album
+        pairing.files = choice.files
+        pairing.byOrder = choice.byOrder
+        pairing.updated = choice.updated
+        pairing.program = choice.program
+        return pairing
+    }
+
     /// The files that `apply` writes again.
     public var rewrittenFiles: [LibraryAlbum.File] {
         album.files.indices.filter { writes(at: $0).cover != nil || writes(at: $0).tags != nil }.map { album.files[$0] }
@@ -323,7 +342,10 @@ public struct AlbumPlan: Sendable {
     /// nothing; then each file gets its cover and its tags, in one write (its audio checked,
     /// `LibraryAlbumWriter`); then the cover file, Artwork, and the choice. A file that another
     /// program holds open (a player, on a network share) is left as it was and the rest go on;
-    /// then `AlbumWriteError.filesInUse` names them, and a second run writes only those.
+    /// then `AlbumWriteError.filesInUse` names them, and a second run writes only those. Before
+    /// the first file's tags, the pairing goes in the choice (`pairingChoice`): a run that stops
+    /// partway, for any reason, leaves some files with new disc and track numbers and others
+    /// without, which would sort them otherwise, and a run after would pair them wrongly.
     public func apply(client: CoverArtClient = CoverArtClient(), step: @Sendable (Step) -> Void = { _ in })
         async throws
     {
@@ -336,6 +358,9 @@ public struct AlbumPlan: Sendable {
             staged = (folder, try await client.save(images.map { ($0.image, $0.name) }, in: folder))
         }
         defer { if let staged { try? manager.removeItem(at: staged.folder) } }
+        if let pairing = pairingChoice, !rewrittenFiles.isEmpty, !pairing.sameChoice(as: album.choice) {
+            try pairing.save(in: album.folder)
+        }
         var inUse = [URL]()
         for (index, file) in album.files.enumerated() {
             let (cover, fileTags) = writes(at: index)

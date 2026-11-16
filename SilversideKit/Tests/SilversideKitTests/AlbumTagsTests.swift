@@ -207,6 +207,34 @@ struct AlbumTagsTests {
         #expect(lengthsPlan.choice.byOrder == nil)
     }
 
+    /// A write that stops partway (here, a file that is no FLAC file by then) has already given
+    /// the first file its disc number, 2, while the second has none, which sorts as disc 1. The
+    /// pairing was kept before the first write, so the next read has the files in their order.
+    /// The artwork's part of the choice is not kept yet: no cover was written.
+    @Test func keepsThePairingWhenAWriteStopsPartway() async throws {
+        let folder = try LibraryAlbumTests().temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        for name in ["1.flac", "2.flac"] {
+            try AudioEncoder.encode(LibraryAlbumTests.twoSeconds, format: .flac, to: folder.appending(path: name))
+        }
+        // The files are the second disc of a set.
+        let release = LibraryAlbumTests.release([[60_000], [2000, 2000]])
+        let album = try LibraryAlbum.read(folder)
+        let fit = try #require(release.fit(lengths: album.lengths))
+        #expect(fit.media == [2])
+        let plan = AlbumPlan(
+            album: album, release: release, artwork: nil,
+            tags: AlbumTagsPlan.make(album: album, release: release, fit: fit))
+        try Data("no longer FLAC".utf8).write(to: folder.appending(path: "2.flac"))
+        await #expect(throws: FLACError.malformed) { try await plan.apply() }
+
+        let after = try LibraryAlbum.read(folder)
+        #expect(after.files[0].discNumber == 2 && after.files[1].discNumber == nil)
+        #expect(after.files.map(\.url.lastPathComponent) == ["1.flac", "2.flac"])
+        #expect(after.choice?.releaseID == release.id && after.choice?.media == [2])
+        #expect(after.choice?.frontImageID == nil && after.choice?.ownCover == nil)
+    }
+
     /// A network share's EBUSY, however deep under Foundation's errors, means the file is in use.
     @Test func knowsAFileInUse() {
         let busy = NSError(domain: NSPOSIXErrorDomain, code: Int(EBUSY))

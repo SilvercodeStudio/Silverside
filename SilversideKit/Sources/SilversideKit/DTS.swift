@@ -467,6 +467,8 @@ public enum DTSError: Error, Equatable, CustomStringConvertible {
     case noSurround(AudioFormat)
     /// The format's encoder has no layout with a place for each of these speakers.
     case noLayout(AudioFormat, layout: SurroundPCM)
+    /// A decode in place would take the album's plain title, but a folder in the library has it.
+    case folderTaken(URL)
 
     public var description: String {
         switch self {
@@ -478,6 +480,10 @@ public enum DTSError: Error, Equatable, CustomStringConvertible {
                 + " format, or decode the DTS (with ffmpeg)."
         case .noSurround(let format):
             "\(format.name) files cannot hold surround sound here. Decode DTS into FLAC, Apple Lossless, AAC, or AIFF."
+        case .folderTaken(let folder):
+            "The decode takes the album's own title, but the library already has a folder with that name,"
+                + " \(folder.path), which may be another edition of the album. Nothing was changed. Decode a copy"
+                + " beside the album instead, or rename one of the two."
         case .noLayout(let format, let layout):
             "\(format.name) files have no channel layout for this \(layout.layoutName) decode (channel mask "
                 + "0x\(String(layout.channelMask, radix: 16, uppercase: true))). Decode it into AIFF."
@@ -606,24 +612,32 @@ extension DiscEncoder {
         return FileManager.default.fileExists(atPath: folder.path) ? folder : nil
     }
 
-    /// Decodes the stream of an album that keeps it, in place of its files, as `encodeWithRecord`
-    /// does with `overwrites` and `sharesAlbumFolder`. The decode has no " (DTS 5.1)" in its
-    /// title, so the album's folder, with whatever else is in it, first takes the title's plain
-    /// name, when no other folder has it; it goes back if the decode fails.
+    /// Decodes the stream of an album that keeps it, in place of its files. The decode has no
+    /// " (DTS 5.1)" in its title, so the album's folder, with whatever else is in it, first takes
+    /// the title's plain name; it goes back if the decode fails. Only the album's own folder is
+    /// written over (`overwrites`, `sharesAlbumFolder`): a folder that already has the plain name
+    /// may be another edition of the album, such as the stereo CD, so the decode stops there
+    /// (`DTSError.folderTaken`).
     public func decodeDTSInPlace(
         _ disc: RippedDisc, into library: URL
     ) throws -> (files: [URL], encoding: RipReport.Encoding?) {
         var decoder = self
         decoder.decodesDTS = true
-        decoder.overwrites = true
-        decoder.sharesAlbumFolder = true
         let manager = FileManager.default
-        guard let suffix = disc.report?.encoding?.titleSuffix, !suffix.isEmpty,
-            let folder = disc.report?.encoding.map({ URL(filePath: $0.folder, directoryHint: .isDirectory) }),
-            let planned = try decoder.plannedAlbumFolder(disc, into: library),
-            !Self.sameFile(folder, planned), manager.fileExists(atPath: folder.path),
-            !manager.fileExists(atPath: planned.path)
-        else { return try decoder.encodeWithRecord(disc, into: library) }
+        let folder = disc.report?.encoding.map { URL(filePath: $0.folder, directoryHint: .isDirectory) }
+        let planned = try decoder.plannedAlbumFolder(disc, into: library)
+        func intoOwnFolder(_ source: RippedDisc) throws -> (files: [URL], encoding: RipReport.Encoding?) {
+            var own = decoder
+            own.overwrites = true
+            own.sharesAlbumFolder = true
+            return try own.encodeWithRecord(source, into: library)
+        }
+        guard let folder, let planned, manager.fileExists(atPath: folder.path) else {
+            // No album folder to replace: a new one, with the encoder's usual checks.
+            return try decoder.encodeWithRecord(disc, into: library)
+        }
+        if Self.sameFile(folder, planned) { return try intoOwnFolder(disc) }
+        guard !manager.fileExists(atPath: planned.path) else { throw DTSError.folderTaken(planned) }
         log("DTS: the album's folder becomes \(planned.lastPathComponent).")
         try manager.moveItem(at: folder, to: planned)
         do {
@@ -631,7 +645,7 @@ extension DiscEncoder {
             let source =
                 disc.isAlbum
                 ? try RippedDisc(albumReportAt: planned.appending(path: disc.reportFile.lastPathComponent)) : disc
-            return try decoder.encodeWithRecord(source, into: library)
+            return try intoOwnFolder(source)
         } catch {
             try? manager.moveItem(at: planned, to: folder)
             throw error

@@ -401,6 +401,28 @@ extension DTSTests {
         #expect(try FLACTags.read(files[0]).contains { $0.key == "ALBUM" && $0.value == "Forever Yours" })
     }
 
+    /// Decoded in place, the album takes its plain title only if no folder has it: there may be
+    /// another edition of the album, such as the stereo CD, whose files must stay as they are.
+    @Test(.enabled(if: FFmpeg.program() != nil)) func leavesAnotherEditionAlone() throws {
+        let (stream, _) = try Self.ffmpegStream(seconds: 2)
+        let (folder, library) = try makeRip(stream: stream)
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let kept = try DiscEncoder(format: .flac).encodeWithRecord(
+            try RippedDisc(folder: folder), into: library, dts: .keep)
+        try kept.encoding?.save(inReportAt: folder.appending(path: "disc.json"))
+        let album = try #require(kept.files.first).deletingLastPathComponent()
+        // The stereo edition, with a file of the same name.
+        let stereo = album.deletingLastPathComponent().appending(path: "Forever Yours", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: stereo, withIntermediateDirectories: true)
+        let file = stereo.appending(path: kept.files[0].lastPathComponent)
+        try Data("stereo".utf8).write(to: file)
+        #expect(throws: DTSError.folderTaken(stereo)) {
+            try DiscEncoder(format: .flac).decodeDTSInPlace(try RippedDisc(folder: folder), into: library)
+        }
+        #expect(try Data(contentsOf: file) == Data("stereo".utf8))
+        #expect(kept.files.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+    }
+
     /// An album encoded before 0.9.8 kept the stream under the album's own title. While it is
     /// in the library, an encoding of the rip again keeps that name, and the copy's old one.
     @Test(.enabled(if: FFmpeg.program() != nil)) func keepsTheNamesOfAnEarlierAlbum() throws {

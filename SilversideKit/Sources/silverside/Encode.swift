@@ -49,6 +49,8 @@ struct Encode: ParsableCommand {
     }
 
     func run() throws {
+        let awake = KeepAwake("Encoding rips")
+        defer { withExtendedLifetime(awake) {} }
         let settings = try Settings.load()
         var (encoder, libraryURL) = encoding.encoder(settings)
         let format = encoder.format

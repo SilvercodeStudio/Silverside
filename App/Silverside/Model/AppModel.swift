@@ -160,6 +160,7 @@ final class AppModel {
         _ = updater
         if selection == nil { selection = drives.first.map { .drive($0.id) } }
         watcher = DiskWatcher { [weak self] in self?.discsChanged() }
+        keepAwakeWhileWorking()
         observers.append(
             NotificationCenter.default.addObserver(
                 forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
@@ -679,7 +680,10 @@ final class AppModel {
     /// ends: changes to earlier rips' covers, artwork, releases, and names (a lookup, a download,
     /// files and reports rewritten), and the scans that update the history. Each such task adds
     /// one as it is started, and takes it away when it ends, also while it waits for other work.
-    @ObservationIgnored private var workCount = 0
+    /// Observed, so that `keepAwakeWhileWorking` sees it change.
+    private var workCount = 0
+    /// Held while work is under way, so the Mac does not sleep or nap through it.
+    @ObservationIgnored private var keepAwake: KeepAwake?
 
     /// True while the app does work that quitting would cut short: a rip or its encoding, a
     /// drive's test or data track, a repair, library work, the counted work above, new names in
@@ -688,6 +692,22 @@ final class AppModel {
         drives.contains { $0.rip?.isRunning == true || $0.isBusy } || repair?.isRunning == true
             || library?.isRunning == true || workCount > 0 || !updatingNames.isEmpty || !checking.isEmpty
             || !makingVideo.isEmpty || commandLineTool.isWorking
+    }
+
+    /// Keeps the Mac awake while `hasWorkUnderWay`, and lets it sleep again after. With the
+    /// display asleep, App Nap would slow a rip's reads, an encoding, or a repair to a crawl.
+    /// The engine's rips, repairs, and checks keep it awake by themselves too, for the CLI.
+    private func keepAwakeWhileWorking() {
+        withObservationTracking {
+            if hasWorkUnderWay {
+                if keepAwake == nil { keepAwake = KeepAwake("Silverside is ripping, encoding, or changing files") }
+            } else {
+                keepAwake = nil
+            }
+        } onChange: { [weak self] in
+            // The change has not happened yet: look again once it has.
+            Task { @MainActor in self?.keepAwakeWhileWorking() }
+        }
     }
 
     /// An update that is ready relaunches the app at once, unless work is under way: then it

@@ -74,6 +74,8 @@ public struct RipRepair {
 
     public func run() async throws -> DiscRepairer.Result {
         let stop = self.stop
+        let awake = KeepAwake("Repairing a rip")
+        defer { withExtendedLifetime(awake) {} }
         return try await withTaskCancellationHandler {
             try await repair()
         } onCancel: {

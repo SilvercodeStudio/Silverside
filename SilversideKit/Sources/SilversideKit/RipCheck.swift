@@ -77,6 +77,8 @@ public struct RipCheck {
     }
 
     public func run() async throws -> Result {
+        let awake = KeepAwake("Checking a rip")
+        defer { withExtendedLifetime(awake) {} }
         let disc: RippedDisc
         do {
             disc =

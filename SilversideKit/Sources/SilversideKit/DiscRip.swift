@@ -348,6 +348,9 @@ public struct DiscRip {
 
     public func run() async throws -> DiscRipResult {
         let stop = self.stop
+        // The Mac stays awake: a display asleep would put the app in App Nap, and slow the reads.
+        let awake = KeepAwake("Ripping a CD")
+        defer { withExtendedLifetime(awake) {} }
         return try await withTaskCancellationHandler {
             try await ripDisc()
         } onCancel: {

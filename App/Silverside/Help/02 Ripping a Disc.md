@@ -219,6 +219,10 @@ be read. The line is the read under way. Hold the pointer over a track for its n
 Behind another app, the Dock icon shows a progress bar, and when the rip is done, the icon bounces
 and a notification says how it went (macOS asks once whether Silverside may send notifications).
 
+While a rip, an encoding, or a repair runs, the Mac does not go to sleep by itself, and the display
+can sleep without slowing the rip. A laptop whose lid you close still sleeps, unless it is on power
+with an external display.
+
 Stop ends the rip after the read under way. The tracks ripped so far stay in the folder. When the
 folder already holds a finished rip of the disc, that rip stays as it was until the new rip has read
 every track, so a rip stopped part way leaves the earlier one ready to encode or repair; the stopped

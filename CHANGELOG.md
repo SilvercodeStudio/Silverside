@@ -7,6 +7,9 @@ command-line tool.
 
 ### Fixed
 
+- A rip slowed to a crawl, or stopped, while the display slept, until the Mac
+  was woken. While a rip, an encoding, or a repair runs, the Mac now stays
+  awake and the display can sleep. The command line tool does the same.
 - A drive that AccurateRip's list of drives does not have, such as Apple's USB
   SuperDrive, no longer stops the rip and asks for its read offset. The rip
   finds the offset from the disc's tracks in AccurateRip, and rips of later

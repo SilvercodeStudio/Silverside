@@ -53,6 +53,8 @@ struct VideoCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
+        let awake = KeepAwake("Making a video")
+        defer { withExtendedLifetime(awake) {} }
         let url = URL(filePath: (folder as NSString).expandingTildeInPath)
         let disc =
             url.pathExtension == "json" ? try RippedDisc(albumReportAt: url) : try RippedDisc(folder: url)

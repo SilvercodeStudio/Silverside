@@ -175,6 +175,38 @@ struct AlbumTagsTests {
             AlbumPlan(album: written, release: release, artwork: nil, tags: nil).choice.album == "Theirs [Remaster]")
     }
 
+    /// Files paired with the tracks by their order (--force-fit), where MusicBrainz's lengths do
+    /// not agree: the choice keeps it, so that a second run pairs them so again and finds nothing
+    /// to change; a fit by the lengths clears it.
+    @Test func keepsAPairingByOrder() async throws {
+        let folder = try LibraryAlbumTests().temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try AudioEncoder.encode(LibraryAlbumTests.twoSeconds, format: .flac, to: folder.appending(path: "01.flac"))
+        // MusicBrainz says 30 seconds; the file has 2.
+        let release = LibraryAlbumTests.release([[30_000]])
+        let album = try LibraryAlbum.read(folder)
+        #expect(release.fit(lengths: album.lengths) == nil)
+        let fit = try #require(release.fit(lengths: album.lengths, byOrder: true))
+        #expect(fit.kind == .order && fit.disagreeing == [0])
+        let plan = AlbumPlan(
+            album: album, release: release, artwork: nil,
+            tags: AlbumTagsPlan.make(album: album, release: release, fit: fit))
+        #expect(plan.choice.byOrder == true)
+        try await plan.apply()
+
+        let written = try LibraryAlbum.read(folder)
+        #expect(written.choice?.byOrder == true)
+        let again = AlbumTagsPlan.make(album: written, release: release, fit: fit)
+        #expect(!AlbumPlan(album: written, release: release, artwork: nil, tags: again).hasChanges)
+        #expect(AlbumPlan(album: written, release: release, artwork: nil, tags: nil).choice.byOrder == true)
+        let agreeing = LibraryAlbumTests.release([[2000]])
+        let byLengths = try #require(agreeing.fit(lengths: written.lengths))
+        let lengthsPlan = AlbumPlan(
+            album: written, release: agreeing, artwork: nil,
+            tags: AlbumTagsPlan.make(album: written, release: agreeing, fit: byLengths))
+        #expect(lengthsPlan.choice.byOrder == nil)
+    }
+
     /// A network share's EBUSY, however deep under Foundation's errors, means the file is in use.
     @Test func knowsAFileInUse() {
         let busy = NSError(domain: NSPOSIXErrorDomain, code: Int(EBUSY))

@@ -79,6 +79,13 @@ struct Tags: AsyncParsableCommand {
         let formats = Set(album.files.map { $0.format?.summary ?? "not read" })
         let sameFormat = formats.count == 1
         if sameFormat { print("  Format: \(formats.first!)" + (album.files.count > 1 ? " (every file)" : "")) }
+        let id3 = album.files.filter(\.hasLeadingID3).count
+        if id3 > 0 {
+            print(
+                "  ID3 tag before the FLAC data: "
+                    + (id3 == album.files.count && id3 > 1 ? "every file" : "\(id3) of \(album.files.count) files")
+                    + " (FLAC players read the Vorbis comments; silverside album leaves it out)")
+        }
         let covers = album.files.compactMap(\.cover)
         let sameCover =
             covers.isEmpty || (covers.count == album.files.count && Set(covers.map(\.fingerprint)).count == 1)
@@ -190,6 +197,8 @@ private struct FolderReport: Encodable {
         /// Each tag as [key, value], in the file's order.
         var tags: [[String]]
         var cover: Picture?
+        /// True for a FLAC file with an ID3v2 tag before its FLAC data; left out otherwise.
+        var leadingID3: Bool?
     }
 
     var folder: String
@@ -208,7 +217,8 @@ private struct FolderReport: Encodable {
                     Format(
                         name: $0.name, sampleRate: $0.sampleRate, channels: $0.channels, bits: $0.bits,
                         bitRate: $0.bitRate)
-                }, tags: file.tags.map { [$0.key, $0.value] }, cover: file.cover.map(Picture.init))
+                }, tags: file.tags.map { [$0.key, $0.value] }, cover: file.cover.map(Picture.init),
+                leadingID3: file.hasLeadingID3 ? true : nil)
         }
         coverFile = album.coverFile?.lastPathComponent
         coverPicture = album.coverPicture.map(Picture.init)

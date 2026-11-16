@@ -216,6 +216,9 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
         return MediumFit(medium: medium, kind: .lengths)
     }
 
+    /// `lengthsAgree`'s tolerance, for people.
+    public static let lengthTolerance = "5 seconds (3% of a long track)"
+
     /// True if MusicBrainz's length of a track (milliseconds) can be the disc's: within 5
     /// seconds, or 3% of a long track. Pressings of one master differ by a frame or two, and a
     /// length typed from a sleeve by a second or two; another recording differs by more.

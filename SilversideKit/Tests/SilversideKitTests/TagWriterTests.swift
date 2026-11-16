@@ -63,6 +63,40 @@ struct TagWriterTests {
         #expect(try AudioEncoder.decode(url) == AudioEncoderTests.samples)
     }
 
+    /// An ID3v2 tag before the FLAC data, as Exact Audio Copy writes one: the Vorbis comments
+    /// and the cover are read past it, the audio's fingerprint is the same, and a write leaves
+    /// the ID3 tag out. With a footer (flag 0x10), the tag is 10 bytes longer.
+    @Test(arguments: [false, true])
+    func readsPastAnID3TagBeforeTheFLACData(footer: Bool) throws {
+        let url = temporaryFile("track.flac")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try AudioEncoder.encode(AudioEncoderTests.samples, format: .flac, to: url)
+        let cover = try EmbeddedCover(try makeJPEG(width: 300, height: 300))
+        try FLACTags.write(Self.comments, cover: cover, to: url)
+        let flac = try Data(contentsOf: url)
+        // TIT2 "Old", in a tag of 300 bytes (synchsafe 0x00 0x00 0x02 0x2C), the rest padding.
+        let frame = Data("TIT2".utf8) + Data([0, 0, 0, 4, 0, 0, 0]) + Data("Old".utf8)
+        let body = frame + Data(count: 300 - frame.count)
+        var id3 = Data("ID3".utf8) + Data([3, 0, footer ? 0x10 : 0, 0, 0, 0x02, 0x2C]) + body
+        if footer { id3 += Data("3DI".utf8) + Data([3, 0, 0x10, 0, 0, 0x02, 0x2C]) }
+        #expect(FLACTags.leadingID3Size(of: id3 + flac) == id3.count)
+        try (id3 + flac).write(to: url)
+        #expect(FLACTags.hasLeadingID3(url))
+        #expect(try FLACTags.read(url).map(\.value) == Self.comments.map(\.value))
+        #expect(try FLACTags.readFrontCover(url) == cover.image.data)
+        #expect(LibraryAlbum.readFile(url).hasLeadingID3)
+        let before = try AudioPayload.fingerprint(of: url, kind: .flac)
+        let updated = try FLACTags.updating(try Data(contentsOf: url), comments: [("TITLE", "New")], cover: nil)
+        #expect(updated.prefix(4) == Data("fLaC".utf8))
+        #expect(try AudioPayload.fingerprint(of: updated, kind: .flac) == before)
+        try updated.write(to: url)
+        #expect(!FLACTags.hasLeadingID3(url))
+        #expect(try FLACTags.read(url).map(\.value) == ["New"])
+        #expect(try AudioEncoder.decode(url) == AudioEncoderTests.samples)
+        // A file that starts with neither is no FLAC file.
+        #expect(throws: FLACError.malformed) { try FLACTags.parseBlocks(Data("ID3".utf8) + Data(count: 20)) }
+    }
+
     func comparable(_ comments: [(key: String, value: String)]) -> [String] {
         comments.map { "\($0.key)=\($0.value)" }.sorted()
     }

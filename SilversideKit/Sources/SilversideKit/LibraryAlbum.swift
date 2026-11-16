@@ -25,6 +25,9 @@ public struct LibraryAlbum: Sendable {
         public var format: Format?
         /// The file's size.
         public var bytes = 0
+        /// True for a FLAC file with an ID3v2 tag before its FLAC data, as Exact Audio Copy
+        /// writes one (`FLACTags.leadingID3Size`). A write of the file leaves it out.
+        public var hasLeadingID3 = false
 
         /// The first value of a tag.
         public func tag(_ key: String) -> String? {
@@ -240,7 +243,8 @@ public struct LibraryAlbum: Sendable {
         let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
         return File(
             url: url, kind: kind, milliseconds: details?.milliseconds, tags: tags, cover: cover.map(Picture.init),
-            canWriteCover: canWriteCover, format: details?.format, bytes: bytes)
+            canWriteCover: canWriteCover, format: details?.format, bytes: bytes,
+            hasLeadingID3: kind == .flac && FLACTags.hasLeadingID3(url))
     }
 
     /// The files' lengths, in order.
@@ -280,6 +284,9 @@ public struct AlbumChoice: Codable, Equatable, Sendable {
     public var album: String?
     /// The files' names, in the order that was paired with the release's tracks, when tags were written.
     public var files: [String]?
+    /// True when the files were paired with the release's tracks by their order (`--force-fit`),
+    /// because MusicBrainz has no lengths or some do not agree: a later run pairs them so again.
+    public var byOrder: Bool?
     /// True when the cover is an image file of the user's (`--front` with a file), not an
     /// image of the Cover Art Archive: the folder's cover file stays the cover.
     public var ownCover: Bool?
@@ -309,7 +316,7 @@ public struct AlbumChoice: Codable, Equatable, Sendable {
         let file = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]) ?? [:]
         var object = try JSONSerialization.jsonObject(with: Self.encoder.encode(self)) as? [String: Any] ?? [:]
         // Optional values as null, so that clearing one clears it in the file too.
-        for key in ["release", "frontImageID", "artworkImageIDs", "media", "album", "files", "ownCover"]
+        for key in ["release", "frontImageID", "artworkImageIDs", "media", "album", "files", "byOrder", "ownCover"]
         where object[key] == nil {
             object[key] = NSNull()
         }

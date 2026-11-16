@@ -7,7 +7,8 @@ struct Album: AsyncParsableCommand {
         abstract: "Put a release's tags and cover art into an album folder that Silverside did not rip.",
         discussion: """
             The folder holds one release: a disc, or every disc of a set, as FLAC or Apple Lossless and AAC (.m4a) \
-            files. Silverside finds the release: the one named with --release, else the one kept in the folder by an \
+            files. Keep one format in the folder: every audio file counts as a track, so FLAC and MP3 copies side by \
+            side fit no release. Silverside finds the release: the one named with --release, else the one kept in the folder by an \
             earlier run, else the files' MusicBrainz Album Id tag, else a MusicBrainz search by the files' album and \
             artist (or the folder's names), with their track lengths deciding. When a search finds more than one \
             release that fits, you choose.
@@ -63,9 +64,10 @@ struct Album: AsyncParsableCommand {
     var noCover = false
 
     @Flag(
-        help:
-            "Write the tags even when MusicBrainz has no track lengths to compare: the files pair with the tracks by their order."
-    )
+        help: """
+            Write the tags even when the track lengths do not agree with the files', or MusicBrainz has none: the \
+            files pair with the tracks by their order, when there are as many. The choice keeps it for later runs.
+            """)
     var forceFit = false
 
     @Flag(help: "Show what would change, and write nothing.")
@@ -91,8 +93,11 @@ struct Album: AsyncParsableCommand {
             print("Looking up the release's credits and composers...")
         }
         let candidate = try await finder.complete(chosen)
+        // The files pair with the tracks by their order: asked for now, or kept from a run that was.
+        let byOrder =
+            forceFit || (album.choice?.releaseID == candidate.release.id && album.choice?.byOrder == true)
         print()
-        Self.printRelease(candidate, album: album)
+        Self.printRelease(candidate, album: album, byOrder: byOrder)
 
         let client = CoverArtClient()
         let looksAtImages = !noCover || list || sheet != nil
@@ -126,8 +131,8 @@ struct Album: AsyncParsableCommand {
         if !noTags {
             // Tags need each file paired with its track: by the lengths, or with --force-fit by the order.
             let fit =
-                candidate.fit.flatMap { $0.kind == .lengths || forceFit ? $0 : nil }
-                ?? (forceFit ? candidate.release.fit(lengths: album.files.map { _ in nil }) : nil)
+                candidate.fit.flatMap { $0.kind == .lengths || byOrder ? $0 : nil }
+                ?? (byOrder ? candidate.release.fit(lengths: album.lengths, byOrder: true) : nil)
             if let fit {
                 let settings = try Settings.load()
                 var made = AlbumTagsPlan.make(album: album, release: candidate.release, fit: fit, settings: settings)
@@ -140,9 +145,11 @@ struct Album: AsyncParsableCommand {
             } else {
                 print()
                 print(
-                    candidate.fit == nil
-                        ? "Tags: not written. The release does not fit the files, so which file is which track is not known."
-                        : "Tags: not written. MusicBrainz has no track lengths to compare; --force-fit pairs the files with the tracks by their order."
+                    candidate.fit != nil
+                        ? "Tags: not written. MusicBrainz has no track lengths to compare; --force-fit pairs the files with the tracks by their order."
+                        : candidate.release.fit(lengths: album.lengths, byOrder: true) != nil
+                            ? "Tags: not written. Some track lengths do not agree with the files' (marked above); --force-fit pairs the files with the tracks by their order."
+                            : "Tags: not written. The release does not fit the files, so which file is which track is not known."
                 )
             }
         }
@@ -168,6 +175,7 @@ struct Album: AsyncParsableCommand {
             return
         }
         if let artworkPlan { Self.printEmbedWarning(artworkPlan) }
+        Self.printID3Note(plan)
         print("The choice goes in \(AlbumChoice.fileName).")
         if dryRun {
             print("Dry run: nothing written.")
@@ -363,7 +371,7 @@ struct Album: AsyncParsableCommand {
         }
     }
 
-    static func printRelease(_ candidate: AlbumReleaseCandidate, album: LibraryAlbum) {
+    static func printRelease(_ candidate: AlbumReleaseCandidate, album: LibraryAlbum, byOrder: Bool) {
         let source =
             switch candidate.source {
             case .given: "named with --release"
@@ -374,12 +382,23 @@ struct Album: AsyncParsableCommand {
         print("Release (\(source)):")
         print("  " + summary(of: candidate.release))
         if let page = candidate.release.pageURL { print("  \(page.absoluteString)") }
-        guard let fit = candidate.fit else {
+        // As many tracks as files, but lengths that do not agree: the pairing by order, to judge by.
+        guard let fit = candidate.fit ?? candidate.release.fit(lengths: album.lengths, byOrder: true) else {
             let counts = candidate.release.media.map { String($0.tracks.count) }.joined(separator: " + ")
             print("  Warning: it does not fit the files: \(album.files.count) files; its discs have \(counts) tracks.")
             return
         }
+        if fit.kind == .order {
+            let known = zip(fit.tracks, album.files).filter { $0.0.length != nil && $0.1.milliseconds != nil }.count
+            print(
+                "  Warning: \(fit.disagreeing.count) of the \(known) track lengths that MusicBrainz has differ from the"
+                    + " files' by more than \(MusicBrainzRelease.lengthTolerance), marked below"
+                    + (byOrder
+                        ? ". The files pair with the tracks in this order (--force-fit)."
+                        : ", so this may not be the files' release. --force-fit pairs them in this order."))
+        }
         print("  " + fitText(fit))
+        let disagreeing = Set(fit.disagreeing)
         let positions = fit.media.flatMap { position in
             (candidate.release.media.first { $0.position == position }?.tracks ?? []).map { (position, $0.position) }
         }
@@ -394,9 +413,11 @@ struct Album: AsyncParsableCommand {
                 track.length.flatMap { listed in
                     file.milliseconds.map { String(format: "%+.1f s", Double($0 - listed) / 1000) }
                 } ?? ""
+            let note = disagreeing.contains(index) ? ", does not agree" : ""
             print(
                 "  " + padded(place, 5) + name + "  " + padded(duration(file.milliseconds), 6) + "  "
-                    + track.title + "  " + duration(track.length) + (difference.isEmpty ? "" : "  (\(difference))"))
+                    + track.title + "  " + duration(track.length)
+                    + (difference.isEmpty ? "" : "  (\(difference)\(note))"))
         }
     }
 
@@ -506,6 +527,16 @@ struct Album: AsyncParsableCommand {
                 + ") will be replaced, and not kept.")
     }
 
+    /// The ID3 tags before the FLAC data that the write leaves out, as Exact Audio Copy writes them.
+    static func printID3Note(_ plan: AlbumPlan) {
+        let count = plan.rewrittenFiles.filter(\.hasLeadingID3).count
+        guard count > 0 else { return }
+        print(
+            (count == 1 ? "1 FLAC file has" : "\(count) FLAC files have")
+                + " an ID3 tag before the FLAC data, as Exact Audio Copy writes one. FLAC players read the Vorbis"
+                + " comments, and its old names would disagree with the new tags, so the write leaves it out.")
+    }
+
     /// The tags' changes: the album's once, then each file's, then what goes and what stays.
     static func printTags(_ plan: AlbumTagsPlan) {
         let writable = plan.files.filter(\.canWrite)
@@ -589,6 +620,9 @@ struct Album: AsyncParsableCommand {
             return "Fits: \(fit.tracks.count) tracks of \(discs), lengths within \(largest) s"
         case .trackCountOnly:
             return "Fits: \(fit.tracks.count) tracks of \(discs), no lengths to compare"
+        case .order:
+            return
+                "By order: \(fit.tracks.count) tracks of \(discs), \(fit.disagreeing.count) lengths that do not agree"
         }
     }
 

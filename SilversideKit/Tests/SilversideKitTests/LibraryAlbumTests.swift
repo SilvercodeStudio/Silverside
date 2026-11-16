@@ -259,8 +259,15 @@ struct LibraryAlbumTests {
         #expect(disc?.media == [2] && disc?.kind == .lengths && disc?.largestDifference == 1000)
         // The first two discs in one folder.
         #expect(set.fit(lengths: [120_000, 200_000, 90_000, 60_000, 30_000])?.media == [1, 2])
-        // Lengths that differ by more than MusicBrainz's tolerance do not fit.
+        // Lengths that differ by more than MusicBrainz's tolerance do not fit, unless by order
+        // (--force-fit): then the tracks that disagree are named.
         #expect(set.fit(lengths: [130_000, 200_000]) == nil)
+        let order = set.fit(lengths: [130_000, 200_000], byOrder: true)
+        #expect(order?.media == [1] && order?.kind == .order && order?.disagreeing == [0])
+        #expect(order?.largestDifference == 10_000)
+        // By order, a run whose lengths agree still comes first.
+        #expect(set.fit(lengths: [46_000, 50_000], byOrder: true)?.media == [3])
+        #expect(set.fit(lengths: [46_000, 50_000], byOrder: true)?.kind == .lengths)
         // A file whose length is not known fits any track.
         #expect(set.fit(lengths: [nil, 50_000])?.media == [3])
         // No lengths in MusicBrainz: the count alone.

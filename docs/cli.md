@@ -231,6 +231,17 @@ disc, or every disc of a set (in disc and track order, from the tags).
 Silverside writes FLAC and Apple Lossless or AAC (`.m4a`) files; it lists other
 files, such as MP3, and leaves them alone.
 
+Keep one format in the folder. Every audio file in it counts as a track, so a
+folder with the album twice, such as FLAC and MP3 copies side by side, has
+twice as many tracks as the release, and the search finds nothing that fits.
+Put each format in a folder of its own, and run the command on each.
+
+A FLAC file can have an ID3 tag before its FLAC data, as Exact Audio Copy
+writes one when it is set to add ID3 tags. Silverside reads past it, and a
+write leaves it out: FLAC players read the Vorbis comments, and the ID3 tag's
+old names would disagree with the new tags. The report says so before it
+asks. An ID3v1 tag at the end of the file stays.
+
 It finds the release in this order:
 
 1. `--release`, an ID or the release's page on MusicBrainz.
@@ -272,7 +283,11 @@ cover with its link, and every change, and asks before it writes:
   own is kept in `.silverside-album.json` for the next run. It asks even with
   `--yes`; without a terminal, it takes the line as filled in.
 - Tags need the files paired with the release's tracks by their lengths. When
-  MusicBrainz has no lengths, `--force-fit` pairs them by their order.
+  MusicBrainz has no lengths, or some do not agree with the files' (a bootleg
+  whose lengths in MusicBrainz are another copy's, say), `--force-fit` pairs
+  them by their order, when there are as many. The report shows each file
+  beside its track either way, with the lengths that do not agree marked, so
+  you can judge. The choice keeps the pairing by order for later runs.
 - Each file gets the cover, at most 1000 pixels on a side, in place of its
   front cover. Every other tag stays, and so do other pictures, such as a back
   cover. An `.m4a` file whose tags are not iTunes tags (QuickTime's) is left

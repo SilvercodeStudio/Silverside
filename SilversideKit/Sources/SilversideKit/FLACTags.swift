@@ -5,7 +5,9 @@ import Foundation
 /// Apple's encoder writes STREAMINFO and a small VORBIS_COMMENT block, with no padding.
 /// The writer keeps STREAMINFO and any other blocks (such as SEEKTABLE), puts in its own
 /// VORBIS_COMMENT and PICTURE, adds padding so that tags can change later without a new
-/// file, and copies the audio frames unchanged.
+/// file, and copies the audio frames unchanged. An ID3v2 tag before the FLAC data, as Exact
+/// Audio Copy writes one, is read past and left out of the file written (`leadingID3Size`); an
+/// ID3v1 tag at the end stays, since only the audio frames' own lengths would tell it apart.
 public enum FLACTags {
     public static let vendor = "Silverside \(SilversideVersion.string)"
 
@@ -159,12 +161,37 @@ public enum FLACTags {
         return nil
     }
 
-    /// The metadata blocks (type and body), and where the audio frames start.
+    /// The size of an ID3v2 tag before the FLAC data, with its header and any footer, or 0 if
+    /// there is none. FLAC has no place for one, but Exact Audio Copy writes one when it is set
+    /// to add ID3 tags, and FLAC's decoders pass over it. The FLAC data starts after it; a write
+    /// (`write`, `updating`) leaves it out, so that its old names cannot disagree with the
+    /// Vorbis comments.
+    public static func leadingID3Size(of data: Data) -> Int {
+        let start = data.startIndex
+        guard data.count >= 10, data[start..<(start + 3)].elementsEqual("ID3".utf8), data[start + 3] < 0xFF,
+            data[start + 4] < 0xFF, (6..<10).allSatisfy({ data[start + $0] < 0x80 })
+        else { return 0 }
+        // The size is "synchsafe": 7 bits a byte. A footer (flag 0x10) is 10 bytes more.
+        let size = (6..<10).reduce(0) { $0 << 7 | Int(data[start + $1]) }
+        return 10 + size + (data[start + 5] & 0x10 != 0 ? 10 : 0)
+    }
+
+    /// True if the file has an ID3v2 tag before its FLAC data (`leadingID3Size`).
+    public static func hasLeadingID3(_ url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        return (try? handle.read(upToCount: 10)).map { leadingID3Size(of: $0) > 0 } ?? false
+    }
+
+    /// The metadata blocks (type and body), and where the audio frames start. An ID3v2 tag
+    /// before the FLAC data is passed over (`leadingID3Size`).
     static func parseBlocks(_ data: Data) throws -> (blocks: [(type: UInt8, body: Data)], audioStart: Int) {
-        let bytes = [UInt8](data.prefix(4))
-        guard bytes == Array("fLaC".utf8) else { throw FLACError.malformed }
+        let marker = data.startIndex + leadingID3Size(of: data)
+        guard marker + 4 <= data.endIndex, data[marker..<(marker + 4)].elementsEqual("fLaC".utf8) else {
+            throw FLACError.malformed
+        }
         var blocks = [(type: UInt8, body: Data)]()
-        var index = data.startIndex + 4
+        var index = marker + 4
         while true {
             guard index + 4 <= data.endIndex else { throw FLACError.malformed }
             let header = data[index]

@@ -9,6 +9,9 @@ public struct AlbumFit: Equatable, Sendable {
         case lengths
         /// As many tracks, but no length to compare.
         case trackCountOnly
+        /// As many tracks, paired by their order although some lengths do not agree
+        /// (`disagreeing`): only when asked for (`fit(lengths:byOrder:)`, `--force-fit`).
+        case order
     }
 
     /// The positions of the media that the files are, in order.
@@ -21,12 +24,16 @@ public struct AlbumFit: Equatable, Sendable {
     public var largestDifference: Int?
     /// The sum of the differences, to rank fits.
     public var totalDifference: Int
+    /// The indexes of the tracks whose lengths do not agree with their files' (`order` only).
+    public var disagreeing: [Int] = []
 }
 
 extension MusicBrainzRelease {
     /// The best run of whole media for files of these lengths (nil where a file's is not
-    /// known), or nil if none fits.
-    public func fit(lengths: [Int?]) -> AlbumFit? {
+    /// known), or nil if none fits. With `byOrder`, a run with as many tracks as files fits
+    /// even when some lengths do not agree (`AlbumFit.Kind.order`), for a release the user
+    /// knows is the files' though MusicBrainz's lengths are wrong or another edit's.
+    public func fit(lengths: [Int?], byOrder: Bool = false) -> AlbumFit? {
         var best: AlbumFit?
         for first in media.indices {
             var tracks = [Track]()
@@ -34,23 +41,35 @@ extension MusicBrainzRelease {
                 tracks += media[last].tracks
                 if tracks.count > lengths.count { break }
                 guard tracks.count == lengths.count else { continue }
-                let pairs = zip(tracks, lengths).compactMap { track, length in
-                    track.length.flatMap { listed in length.map { (listed, $0) } }
+                let pairs = zip(tracks, lengths).enumerated().compactMap { index, pair in
+                    pair.0.length.flatMap { listed in pair.1.map { (index, listed, $0) } }
                 }
-                guard pairs.allSatisfy({ Self.lengthsAgree($0.0, $0.1) }) else { continue }
-                let differences = pairs.map { abs($0.0 - $0.1) }
+                let disagreeing = pairs.filter { !Self.lengthsAgree($0.1, $0.2) }.map(\.0)
+                guard disagreeing.isEmpty || byOrder else { continue }
+                let differences = pairs.map { abs($0.1 - $0.2) }
                 let fit = AlbumFit(
-                    media: media[first...last].map(\.position), kind: pairs.isEmpty ? .trackCountOnly : .lengths,
-                    tracks: tracks, largestDifference: differences.max(), totalDifference: differences.reduce(0, +))
+                    media: media[first...last].map(\.position),
+                    kind: !disagreeing.isEmpty ? .order : pairs.isEmpty ? .trackCountOnly : .lengths,
+                    tracks: tracks, largestDifference: differences.max(), totalDifference: differences.reduce(0, +),
+                    disagreeing: disagreeing)
                 if best.map({ Self.ranks(fit, before: $0) }) ?? true { best = fit }
             }
         }
         return best
     }
 
-    /// True if `fit` is better: lengths before a count alone, then the smaller differences.
+    /// True if `fit` is better: lengths that agree, then a count alone, then an order with the
+    /// fewest lengths that disagree; then the smaller differences.
     static func ranks(_ fit: AlbumFit, before other: AlbumFit) -> Bool {
-        if (fit.kind == .lengths) != (other.kind == .lengths) { return fit.kind == .lengths }
+        func rank(_ kind: AlbumFit.Kind) -> Int {
+            switch kind {
+            case .lengths: 0
+            case .trackCountOnly: 1
+            case .order: 2
+            }
+        }
+        if rank(fit.kind) != rank(other.kind) { return rank(fit.kind) < rank(other.kind) }
+        if fit.disagreeing.count != other.disagreeing.count { return fit.disagreeing.count < other.disagreeing.count }
         return fit.totalDifference < other.totalDifference
     }
 

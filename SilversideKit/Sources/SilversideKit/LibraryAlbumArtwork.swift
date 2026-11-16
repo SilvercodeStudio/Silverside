@@ -213,6 +213,7 @@ public struct AlbumArtworkPlan: Sendable {
         choice.media = kept?.media
         choice.album = kept?.album
         choice.files = kept?.files
+        choice.byOrder = kept?.byOrder
         return AlbumArtworkPlan(
             album: album, release: release, images: images, front: front, frontFile: ownFile,
             frontIsSleeve: front != nil && front?.id == sleeve?.id,
@@ -274,9 +275,11 @@ public struct AlbumPlan: Sendable {
         if let tags {
             choice.album = tags.editedAlbumTitle
             choice.files = tags.files.map(\.file.url.lastPathComponent)
+            choice.byOrder = tags.fit.kind == .lengths ? nil : true
         } else {
             choice.album = kept?.album
             choice.files = kept?.files
+            choice.byOrder = kept?.byOrder
         }
         self.choice = choice
     }
@@ -284,6 +287,23 @@ public struct AlbumPlan: Sendable {
     /// True if writing would change anything.
     public var hasChanges: Bool {
         (artwork?.hasChanges ?? false) || (tags?.hasChanges ?? false) || !choice.sameChoice(as: album.choice)
+    }
+
+    /// What `apply` writes into each file, by the file's index: the cover, the tags, or both.
+    /// A file with neither is not written.
+    func writes(at index: Int) -> (cover: EmbeddedCover?, tags: AlbumTagsPlan.FilePlan?) {
+        var cover: EmbeddedCover?
+        if let artwork, index < artwork.files.count, case .embed = artwork.files[index].change {
+            cover = artwork.embedded
+        }
+        let fileTags = tags.flatMap { index < $0.files.count ? $0.files[index] : nil }
+            .flatMap { $0.canWrite && !$0.changes.isEmpty ? $0 : nil }
+        return (cover, fileTags)
+    }
+
+    /// The files that `apply` writes again.
+    public var rewrittenFiles: [LibraryAlbum.File] {
+        album.files.indices.filter { writes(at: $0).cover != nil || writes(at: $0).tags != nil }.map { album.files[$0] }
     }
 
     /// One step of `apply`, for the user to follow.
@@ -318,12 +338,7 @@ public struct AlbumPlan: Sendable {
         defer { if let staged { try? manager.removeItem(at: staged.folder) } }
         var inUse = [URL]()
         for (index, file) in album.files.enumerated() {
-            var cover: EmbeddedCover?
-            if let artwork, index < artwork.files.count, case .embed = artwork.files[index].change {
-                cover = artwork.embedded
-            }
-            let fileTags = tags.flatMap { index < $0.files.count ? $0.files[index] : nil }
-                .flatMap { $0.canWrite && !$0.changes.isEmpty ? $0 : nil }
+            let (cover, fileTags) = writes(at: index)
             guard cover != nil || fileTags != nil else { continue }
             try Task.checkCancellation()
             do {
@@ -373,7 +388,7 @@ extension AlbumChoice {
         guard let other else { return false }
         return releaseID == other.releaseID && frontImageID == other.frontImageID
             && artworkImageIDs == other.artworkImageIDs && (media == nil || media == other.media)
-            && album == other.album && ownCover == other.ownCover
+            && album == other.album && ownCover == other.ownCover && byOrder == other.byOrder
             // A choice kept before the order was is the same while its files are.
             && (files == nil || other.files == nil || files == other.files)
     }

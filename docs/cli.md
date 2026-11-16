@@ -157,10 +157,14 @@ always reads and verifies every track.
 
 A DTS-CD's tracks hold a DTS stream (surround sound that plays as static
 without a DTS decoder), which the report names. `--dts decode` (or the `dts`
-setting) encodes the album as the disc has it, the stream bit for bit, and a
-decoded copy beside it, `<Album> (DTS 5.1)`; `--dts decode-only` writes the
-decode alone; `--dts keep` the stream alone. With `ask`, the default, `rip`
-asks at a terminal (decode by default), and `encode` keeps the stream.
+setting) encodes the album as the disc has it, the stream bit for bit, as
+`<Album> (DTS 5.1)`, and a decoded copy beside it, `<Album> (5.1)`;
+`--dts decode-only` writes the decode alone, as `<Album>`; `--dts keep` the
+stream alone, as `<Album> (DTS 5.1)` (`<Album> (DTS)` without ffmpeg, which
+finds the layout). With `ask`, the default, `rip` asks at a terminal (decode
+by default), and `encode` keeps the stream. An album encoded before 0.9.8 kept
+the stream as `<Album>` and its copy as `<Album> (DTS 5.1)`; while it is in
+the library, an encoding of the rip keeps those names.
 Decoding needs `ffmpeg` (`brew install ffmpeg`), which Silverside runs as a
 separate program (`SILVERSIDE_FFMPEG` names another, or `none`); without it,
 the stream is kept. The decoded files have every channel, 20-bit in FLAC and

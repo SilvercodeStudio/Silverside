@@ -745,6 +745,9 @@ struct DTSQuestionSheet: View {
                 Picker("Encode", selection: $choice) {
                     if format.isLossless {
                         Text("The album as the disc has it, and a decoded copy beside it").tag(DTSChoice.decode)
+                            .help(
+                                "“\(question.album) (DTS 5.1)” keeps the stream, and “\(question.album) (5.1)” holds the decode."
+                            )
                     }
                     Text("The decoded album only").tag(DTSChoice.decodeOnly)
                     Text(format.isLossless ? "The DTS stream only" : "Nothing: keep the rip").tag(DTSChoice.keep)
@@ -799,7 +802,7 @@ struct DTSDecodeSheet: View {
     @State private var beside = true
     @State private var format = AudioFormat.flac
     /// What the copy's album title ends with, after a space.
-    @State private var suffix = "(DTS 5.1)"
+    @State private var suffix = "(5.1)"
     @State private var ffmpeg = FFmpeg.program()
 
     private var album: String { rip.report.release?.title ?? rip.title }
@@ -829,7 +832,7 @@ struct DTSDecodeSheet: View {
                 HStack(spacing: 6) {
                     Text("Title").frame(width: 50, alignment: .leading)
                     Text(album).lineLimit(1).foregroundStyle(.secondary)
-                    TextField("(DTS 5.1)", text: $suffix).frame(width: 140)
+                    TextField("(5.1)", text: $suffix).frame(width: 140)
                 }
                 .help(
                     "The copy's album title is the album's with this added, and so is its folder's name. It must not be empty: the copy needs a name of its own."
@@ -850,7 +853,7 @@ struct DTSDecodeSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             } else if let encoding {
                 Text(
-                    "The album's \(encoding.format.name) files become the decode, tagged DTS=decoded\(model.settings.replayGain ? ", with ReplayGain" : ""). The DTS stream is gone from the library"
+                    "The album's \(encoding.format.name) files become the decode, tagged DTS=decoded\(model.settings.replayGain ? ", with ReplayGain" : "")\(encoding.titleSuffix.map { ", and the album's title loses “\($0.trimmingCharacters(in: .whitespaces))”" } ?? ""). The DTS stream is gone from the library"
                         + (rip.hasAudio
                             ? ", but stays in the rip's WAV files." : "; only a new rip of the disc gets it back.")
                 )

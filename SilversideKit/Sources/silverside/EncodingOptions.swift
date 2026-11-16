@@ -91,9 +91,10 @@ struct EncodingOptions: ParsableArguments {
     @Option(
         help: """
             For a DTS-CD, whose tracks hold a DTS stream (surround sound that plays as static without a DTS \
-            decoder): decode writes the album as the disc has it and a decoded copy beside it, "… (DTS 5.1)"; \
-            decode-only writes the decode alone; keep writes the stream only. Decoding needs ffmpeg. ask (the \
-            setting's default) asks in rip at a terminal, and keeps the stream otherwise.
+            decoder): decode writes the album as the disc has it, "… (DTS 5.1)", and a decoded copy beside it, \
+            "… (5.1)"; decode-only writes the decode alone, under the album's own title; keep writes the stream \
+            only, "… (DTS 5.1)". Decoding needs ffmpeg. ask (the setting's default) asks in rip at a terminal, \
+            and keeps the stream otherwise.
             """)
     var dts: DTSChoice?
 

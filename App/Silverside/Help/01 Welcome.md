@@ -46,11 +46,12 @@ and the result is a folder of WAV files with a report, or a tagged album in your
 
 ## A rip, step by step
 
-1. Insert a disc. Apple Music may open too; you can close it, or leave it open. However, you should
-   set “When a CD is inserted” to Show CD in the Music app's settings, so that Music does not play
-   or import the disc while Silverside reads it.
-   [Troubleshooting](help:troubleshooting#apple-music-opens-when-i-insert-a-disc) has a hidden macOS
-   setting that keeps Music from opening at all.
+1. Insert a disc. Apple Music may open too. To stop it, open System Settings › CDs & DVDs and set
+   “When you insert a music CD” to Ignore, so that Music does not play or import the disc while
+   Silverside reads it. If you want Music to open, set “When a CD is inserted” to Show CD in the
+   Music app's settings instead.
+   [Troubleshooting](help:troubleshooting#apple-music-opens-when-i-insert-a-disc) has more, and the
+   same setting from Terminal.
 2. Check the album and the tracks. If several releases match, click Choose Release… and choose one.
 3. Click Rip Disc, or uncheck tracks and click Rip Selected. With "Rip it at once" on in Settings ›
    General, a disc whose release is certain rips by itself a few seconds after it goes in.

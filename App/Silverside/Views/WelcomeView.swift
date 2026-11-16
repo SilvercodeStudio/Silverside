@@ -85,7 +85,7 @@ struct WelcomeView: View {
                 // The likeliest snag at the first rip: Music plays or imports the disc while Silverside reads it.
                 Label {
                     Text(
-                        "Before the first rip, open the Music app's settings and set “When a CD is inserted” to Show CD, so that Music does not play or import the disc while Silverside reads it."
+                        "Before the first rip, open System Settings › CDs & DVDs and set “When you insert a music CD” to Ignore, so that Music does not open, play, or import the disc while Silverside reads it. (To keep Music opening, set “When a CD is inserted” to Show CD in Music's settings instead.)"
                     )
                     .fixedSize(horizontal: false, vertical: true)
                 } icon: {

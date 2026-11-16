@@ -190,8 +190,9 @@ extension DiscEncoder {
                 }
         }
         var albumFolder = report.encoding.map { URL(filePath: $0.folder, directoryHint: .isDirectory) }
-        // A decoded copy beside the album keeps its title's suffix, and so its own folder.
-        if let suffix = report.encoding?.albumSuffix { release.title += suffix }
+        // A decoded copy beside the album keeps its title's suffix, and so its own folder; so
+        // does an album that keeps a DTS stream, " (DTS 5.1)".
+        release.title += (report.encoding?.titleSuffix ?? "") + (report.encoding?.albumSuffix ?? "")
 
         var renamed = 0
         var movedFolder: (from: URL, to: URL)?

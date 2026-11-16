@@ -95,7 +95,8 @@ Every encoded file is decoded again and compared with the audio it was made from
 the library: the rip, or the rip after HDCD decoding, de-emphasis, or DTS decoding.
 
 **DTS-CD** chooses what to write for a disc whose tracks hold a DTS stream: ask each time, the album
-and a decoded copy beside it, the decoded album only, or the stream only (see Ripping a Disc).
+("… (DTS 5.1)") and a decoded copy beside it ("… (5.1)"), the decoded album only, or the stream only
+(see Ripping a Disc).
 Decoding needs ffmpeg; the section says where Silverside found it, or how to install it (in
 Terminal: `brew install ffmpeg`).
 

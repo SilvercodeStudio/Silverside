@@ -348,9 +348,12 @@ struct DTSTests {
         // Music gets the decoded copy, not the stream (Apple Lossless or FLAC alike).
         #expect(result.musicFiles.files == result.copyFiles && result.musicFiles.format == .flac)
         #expect(result.copyEncoding?.dtsDecoded == "5.1")
-        #expect(result.copyEncoding?.albumSuffix == " (DTS 5.1)")
+        #expect(result.copyEncoding?.albumSuffix == " (5.1)")
         #expect(result.copyEncoding?.replayGain?.album != nil)
-        #expect(result.copyFiles[0].deletingLastPathComponent().lastPathComponent == "Forever Yours (DTS 5.1)")
+        #expect(result.copyFiles[0].deletingLastPathComponent().lastPathComponent == "Forever Yours (5.1)")
+        // The album that keeps the stream is the one named for it.
+        #expect(result.files[0].deletingLastPathComponent().lastPathComponent == "Forever Yours (DTS 5.1)")
+        #expect(result.encoding?.titleSuffix == " (DTS 5.1)" && result.encoding?.albumSuffix == nil)
         let tags = try FLACTags.read(result.copyFiles[0])
         #expect(tags.contains { $0.key == "DTS" && $0.value == "decoded" })
         // The tracks one after another are the whole stream's decode, after the silence before it.
@@ -366,6 +369,59 @@ struct DTSTests {
         let wrong = zip(values[lead..<(lead + expected.count)], expected).filter { $0 != $1 }.count
         #expect(wrong == 0)
         #expect(values[(lead + expected.count)...].allSatisfy { $0 == 0 })
+    }
+}
+
+extension DTSTests {
+    /// Kept, the stream's album is named for it, in its folder and its tags, and keeps the name
+    /// when the library is brought up to date. Decoded in place, the album takes its own title,
+    /// and its folder the plain name.
+    @Test(.enabled(if: FFmpeg.program() != nil)) func namesTheAlbumThatKeepsTheStream() throws {
+        let (stream, _) = try Self.ffmpegStream(seconds: 2)
+        let (folder, library) = try makeRip(stream: stream)
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let kept = try DiscEncoder(format: .flac).encodeWithRecord(
+            try RippedDisc(folder: folder), into: library, dts: .keep)
+        let album = try #require(kept.files.first).deletingLastPathComponent()
+        #expect(album.lastPathComponent == "Forever Yours (DTS 5.1)")
+        #expect(kept.encoding?.titleSuffix == " (DTS 5.1)" && kept.encoding?.albumSuffix == nil)
+        #expect(
+            try FLACTags.read(kept.files[0]).contains { $0.key == "ALBUM" && $0.value == "Forever Yours (DTS 5.1)" })
+        try kept.encoding?.save(inReportAt: folder.appending(path: "disc.json"))
+        let update = try DiscEncoder(format: .flac).updateLibrary(
+            reportAt: folder.appending(path: "disc.json"), library: library)
+        #expect(update.movedFolder == nil)
+        #expect(FileManager.default.fileExists(atPath: kept.files[0].path))
+
+        let (files, record) = try DiscEncoder(format: .flac).decodeDTSInPlace(
+            try RippedDisc(folder: folder), into: library)
+        #expect(files.first?.deletingLastPathComponent().lastPathComponent == "Forever Yours")
+        #expect(record?.dtsDecoded == "5.1" && record?.titleSuffix == nil)
+        #expect(!FileManager.default.fileExists(atPath: album.path))
+        #expect(try FLACTags.read(files[0]).contains { $0.key == "ALBUM" && $0.value == "Forever Yours" })
+    }
+
+    /// An album encoded before 0.9.8 kept the stream under the album's own title. While it is
+    /// in the library, an encoding of the rip again keeps that name, and the copy's old one.
+    @Test(.enabled(if: FFmpeg.program() != nil)) func keepsTheNamesOfAnEarlierAlbum() throws {
+        let (stream, _) = try Self.ffmpegStream(seconds: 2)
+        let (folder, library) = try makeRip(stream: stream)
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let (files, record) = try DiscEncoder(format: .flac).encodeWithRecord(
+            try RippedDisc(folder: folder), into: library)
+        #expect(files.first?.deletingLastPathComponent().lastPathComponent == "Forever Yours")
+        try record?.save(inReportAt: folder.appending(path: "disc.json"))
+        var again = DiscEncoder(format: .flac)
+        again.overwrites = true
+        let result = try again.encodeWithRecord(try RippedDisc(folder: folder), into: library, dts: .decode)
+        #expect(result.files == files)
+        #expect(result.encoding?.titleSuffix == nil)
+        #expect(result.copyFiles.first?.deletingLastPathComponent().lastPathComponent == "Forever Yours (DTS 5.1)")
+    }
+
+    @Test func namesTheStreamsLayout() {
+        #expect(DiscEncoder.streamSuffix(layout: "5.1") == " (DTS 5.1)")
+        #expect(DiscEncoder.streamSuffix(layout: nil) == " (DTS)")
     }
 }
 

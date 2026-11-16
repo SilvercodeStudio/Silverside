@@ -354,6 +354,10 @@ public struct DiscEncoder: Sendable {
     /// Added to the album's title in names and tags, as " (HDCD)" for a decoded copy beside
     /// the album: the copy gets a folder of its own, and players list it apart.
     public var albumSuffix: String?
+    /// Added to the album's own title in names and tags, as " (DTS 5.1)" for an album that
+    /// keeps a DTS-CD's stream, so that nobody takes it for audio that any player plays. Unlike
+    /// `albumSuffix`, the album is still the album: its cover, data tracks, video, and image.
+    public var titleSuffix: String?
     /// Leave out the tracks that are all digital silence (`RipReport.silentTracks`), such as the
     /// short silent tracks before a disc's hidden songs: no file and no line in the album's CUE
     /// sheet. The other tracks keep the disc's numbers, and a disc image keeps every track.
@@ -730,7 +734,7 @@ public struct DiscEncoder: Sendable {
         release: MusicBrainzRelease, medium: MusicBrainzRelease.Medium, jobs: [Job], leftOut: [Job]
     ) {
         guard var release = disc.release else { throw EncodingError.noRelease(disc.folder) }
-        if let albumSuffix { release.title += albumSuffix }
+        release.title += (titleSuffix ?? "") + (albumSuffix ?? "")
         guard let medium = release.medium(for: disc.toc) else { throw EncodingError.unknownMedium(disc.folder) }
         try checkVerified(disc)
         let audioTracks = disc.toc.audioTracks
@@ -785,6 +789,11 @@ public struct DiscEncoder: Sendable {
             jobs[position - 1].next = jobs[position].ripped
         }
         return (release, medium, jobs, leftOut)
+    }
+
+    /// The album folder that the disc's files would go into.
+    func plannedAlbumFolder(_ disc: RippedDisc, into library: URL) throws -> URL? {
+        try plan(disc, into: library).jobs.first?.folder
     }
 
     /// The album folder that the disc's files would go into, if it holds a rip of another
@@ -1219,6 +1228,7 @@ public struct DiscEncoder: Sendable {
             encoding.deEmphasizedTracks = deEmphasized.isEmpty ? nil : deEmphasized
             encoding.silentTracksLeftOut = silentTracksLeftOut.isEmpty ? nil : silentTracksLeftOut
             encoding.albumSuffix = albumSuffix
+            encoding.titleSuffix = titleSuffix
             encoding.dataTrackFiles = dataTrackFiles.isEmpty ? nil : dataTrackFiles
             encoding.graphicsFiles = graphicsFiles.isEmpty ? nil : graphicsFiles
             // Videos made earlier stay the album's, while their files are there.

@@ -278,8 +278,9 @@ struct Rip: AsyncParsableCommand {
         }
         let decoded = DiscEncoder.surroundFormat(for: format).name
         print(
-            "ffmpeg can decode it into \(decoded) files with every channel. d: the album as the disc has it, and a"
-                + " decoded copy beside it; o: the decode only; k: the stream only.")
+            "ffmpeg can decode it into \(decoded) files with every channel. d: the album as the disc has it,"
+                + " \"… (DTS 5.1)\", and a decoded copy beside it, \"… (5.1)\"; o: the decode only; k: the stream only."
+        )
         print("Decode the DTS? [D/o/k] ", terminator: "")
         fflush(stdout)
         switch readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? "" {

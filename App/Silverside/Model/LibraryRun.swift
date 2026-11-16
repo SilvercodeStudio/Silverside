@@ -24,12 +24,12 @@ final class LibraryRun: Identifiable {
     }
 
     /// A DTS decode of an earlier rip, with ffmpeg: as an album of its own beside the album,
-    /// its title ending in `suffix` (" (DTS 5.1)"), in `format`; or in place of the album's files.
+    /// its title ending in `suffix` (" (5.1)"), in `format`; or in place of the album's files.
     struct DTSDecode {
         var rip: RecentRip
         var beside: Bool
         var format: AudioFormat
-        var suffix = " (DTS 5.1)"
+        var suffix = " (5.1)"
     }
 
     /// Change Release: another release for an earlier rip, with its cover if it has one. A
@@ -322,20 +322,17 @@ final class LibraryRun: Identifiable {
                     let format = dts.beside ? dts.format : rip.report.encoding?.format ?? dts.format
                     var encoder = DiscEncoder(settings: settings, format: format)
                     encoder.decodesDTS = true
-                    if dts.beside {
-                        encoder.albumSuffix = dts.suffix
-                    } else {
-                        // In place: the album is where it is, beside whatever else the folder holds.
-                        encoder.overwrites = true
-                        encoder.sharesAlbumFolder = true
-                    }
+                    if dts.beside { encoder.albumSuffix = dts.suffix }
                     encoder.log = { line in onMain { run.add("  \(line)") } }
                     onMain {
                         run.add(
                             "\(rip.title): decoding DTS as \(format.rawValue.uppercased()), "
                                 + (dts.beside ? "beside the album…" : "in place of the album's files…"))
                     }
-                    let (files, record) = try encoder.encodeWithRecord(disc, into: library)
+                    // In place, the album loses its " (DTS 5.1)", beside whatever else the folder holds.
+                    let (files, record) =
+                        try dts.beside
+                        ? encoder.encodeWithRecord(disc, into: library) : encoder.decodeDTSInPlace(disc, into: library)
                     // In place, the rip's own report follows its files; a copy beside it is not the rip's.
                     if !dts.beside, rip.hasAudio { try record?.save(inReportAt: rip.file) }
                     onMain {

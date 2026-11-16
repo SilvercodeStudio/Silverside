@@ -526,6 +526,10 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// Added to the album's title in the names and tags, as " (HDCD)" for a decoded copy
         /// beside the album as it is on the disc. Nil for the album itself.
         public var albumSuffix: String?
+        /// Added to the album's own title in the names and tags, as " (DTS 5.1)" for an album
+        /// that keeps a DTS-CD's stream. Unlike `albumSuffix`, the album is still the album.
+        /// Nil when none was, and in older records.
+        public var titleSuffix: String?
         /// The disc image (the whole disc in one file, with its CUE sheet beside it), if one was
         /// written. Nil in older records.
         public var image: String?

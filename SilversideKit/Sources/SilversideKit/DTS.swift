@@ -190,11 +190,11 @@ public enum DTSChoice: String, Codable, CaseIterable, Sendable {
     /// The app asks when such a disc is about to be encoded; the command line asks at a
     /// terminal, and keeps the stream otherwise.
     case ask
-    /// The album as the disc has it, and a decoded copy beside it, "… (DTS 5.1)".
+    /// The album as the disc has it, "… (DTS 5.1)", and a decoded copy beside it, "… (5.1)".
     case decode
-    /// The decoded album only.
+    /// The decoded album only, under the album's plain title.
     case decodeOnly = "decode-only"
-    /// The album as the disc has it: the stream, bit for bit, for a DTS decoder.
+    /// The album as the disc has it, "… (DTS 5.1)": the stream, bit for bit, for a DTS decoder.
     case keep
 }
 
@@ -523,21 +523,33 @@ extension DiscEncoder {
 
     /// Encodes the disc as `choice` says for its DTS stream (`ask` keeps it). A disc without
     /// one is encoded as it is. Without ffmpeg, the stream is kept. A lossy format cannot keep
-    /// the stream, so there `decode` writes the decoded album only. `copySuffix` ends the
-    /// decoded copy's title: " (DTS 5.1)" for 5.1, if not given.
+    /// the stream, so there `decode` writes the decoded album only. The album that keeps the
+    /// stream ends its title with " (DTS 5.1)" (`streamSuffix`), and the decode beside it with
+    /// `copySuffix`: " (5.1)" for 5.1, if not given. The decoded album alone has no suffix.
     public func encodeWithRecord(
         _ disc: RippedDisc, into library: URL, dts choice: DTSChoice, copySuffix: String? = nil
     ) throws -> DTSEncoding {
         let tracks = try dtsTracks(of: disc)
-        guard !tracks.isEmpty, choice == .decode || choice == .decodeOnly else {
+        guard !tracks.isEmpty else {
             let (files, encoding) = try encodeWithRecord(disc, into: library)
-            return DTSEncoding(files: files, encoding: encoding, holdsStream: !tracks.isEmpty)
+            return DTSEncoding(files: files, encoding: encoding)
         }
-        guard let program = ffmpeg ?? FFmpeg.program() else {
-            log(
-                "DTS: ffmpeg is not installed, so the files keep the stream. Install it (brew install ffmpeg) to decode it."
-            )
-            let (files, encoding) = try encodeWithRecord(disc, into: library)
+        let program = ffmpeg ?? FFmpeg.program()
+        let earlier = Self.earlierStreamAlbum(of: disc)
+        guard choice == .decode || choice == .decodeOnly, let program else {
+            if choice == .decode || choice == .decodeOnly {
+                log(
+                    "DTS: ffmpeg is not installed, so the files keep the stream. Install it (brew install ffmpeg) to decode it."
+                )
+            }
+            // A lossy format cannot keep the stream, and the encoding refuses it before any decode.
+            let layout =
+                format.isLossless ? program.flatMap { try? layoutName(of: disc, tracks: tracks, ffmpeg: $0) } : nil
+            var encoder = self
+            if encoder.albumSuffix == nil, encoder.titleSuffix == nil, earlier == nil {
+                encoder.titleSuffix = Self.streamSuffix(layout: layout)
+            }
+            let (files, encoding) = try encoder.encodeWithRecord(disc, into: library)
             return DTSEncoding(files: files, encoding: encoding, holdsStream: true)
         }
         var decoder = self
@@ -554,16 +566,76 @@ extension DiscEncoder {
             let (files, encoding) = try decoder.encodeWithRecord(disc, into: library)
             return DTSEncoding(files: files, encoding: encoding)
         }
-        let (files, encoding) = try encodeWithRecord(disc, into: library)
-        let layout = try disc.tracks.first { tracks.contains($0.number) }.map {
-            try DTSDecoder(ffmpeg: program).layoutName(of: disc.audio(of: $0))
+        let layout = try layoutName(of: disc, tracks: tracks, ffmpeg: program)
+        var encoder = self
+        if encoder.albumSuffix == nil, encoder.titleSuffix == nil, earlier == nil {
+            encoder.titleSuffix = Self.streamSuffix(layout: layout)
         }
-        decoder.albumSuffix = copySuffix ?? " (DTS \(layout ?? "surround"))"
+        let (files, encoding) = try encoder.encodeWithRecord(disc, into: library)
+        // An earlier rip's album keeps the names it had: its decode was "… (DTS 5.1)".
+        decoder.albumSuffix = copySuffix ?? (earlier != nil ? " (DTS \(layout))" : " (\(layout))")
         decoder.images = nil
         log("DTS: the decoded copy, as \(disc.release?.title ?? "the album")\(decoder.albumSuffix!).")
         let (copyFiles, copyEncoding) = try decoder.encodeWithRecord(disc, into: library)
         return DTSEncoding(
             files: files, encoding: encoding, copyFiles: copyFiles, copyEncoding: copyEncoding, holdsStream: true)
+    }
+
+    /// What ends the title of an album that keeps a DTS stream: " (DTS 5.1)", or " (DTS)" when
+    /// the layout is not known (without ffmpeg).
+    public static func streamSuffix(layout: String?) -> String {
+        " (DTS" + (layout.map { " " + $0 } ?? "") + ")"
+    }
+
+    /// The layout of the disc's stream, such as "5.1", from the first track that holds it.
+    private func layoutName(of disc: RippedDisc, tracks: Set<Int>, ffmpeg: URL) throws -> String {
+        guard let track = disc.tracks.first(where: { tracks.contains($0.number) }) else {
+            throw DTSError.unexpectedDecode("no DTS track")
+        }
+        return try DTSDecoder(ffmpeg: ffmpeg).layoutName(of: disc.audio(of: track))
+    }
+
+    /// The album folder of the disc's earlier encoding, when it keeps the stream under the
+    /// album's plain title, as Silverside named it before 0.9.8, and is still there. A new
+    /// encoding keeps those names, so the library does not get the album twice.
+    static func earlierStreamAlbum(of disc: RippedDisc) -> URL? {
+        guard let encoding = disc.report?.encoding, encoding.albumSuffix == nil, encoding.titleSuffix == nil,
+            encoding.dtsDecoded == nil
+        else { return nil }
+        let folder = URL(filePath: encoding.folder, directoryHint: .isDirectory)
+        return FileManager.default.fileExists(atPath: folder.path) ? folder : nil
+    }
+
+    /// Decodes the stream of an album that keeps it, in place of its files, as `encodeWithRecord`
+    /// does with `overwrites` and `sharesAlbumFolder`. The decode has no " (DTS 5.1)" in its
+    /// title, so the album's folder, with whatever else is in it, first takes the title's plain
+    /// name, when no other folder has it; it goes back if the decode fails.
+    public func decodeDTSInPlace(
+        _ disc: RippedDisc, into library: URL
+    ) throws -> (files: [URL], encoding: RipReport.Encoding?) {
+        var decoder = self
+        decoder.decodesDTS = true
+        decoder.overwrites = true
+        decoder.sharesAlbumFolder = true
+        let manager = FileManager.default
+        guard let suffix = disc.report?.encoding?.titleSuffix, !suffix.isEmpty,
+            let folder = disc.report?.encoding.map({ URL(filePath: $0.folder, directoryHint: .isDirectory) }),
+            let planned = try decoder.plannedAlbumFolder(disc, into: library),
+            !Self.sameFile(folder, planned), manager.fileExists(atPath: folder.path),
+            !manager.fileExists(atPath: planned.path)
+        else { return try decoder.encodeWithRecord(disc, into: library) }
+        log("DTS: the album's folder becomes \(planned.lastPathComponent).")
+        try manager.moveItem(at: folder, to: planned)
+        do {
+            // An album that is its own source moved with its folder.
+            let source =
+                disc.isAlbum
+                ? try RippedDisc(albumReportAt: planned.appending(path: disc.reportFile.lastPathComponent)) : disc
+            return try decoder.encodeWithRecord(source, into: library)
+        } catch {
+            try? manager.moveItem(at: planned, to: folder)
+            throw error
+        }
     }
 }
 

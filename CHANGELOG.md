@@ -7,6 +7,14 @@ command-line tool.
 
 ### Changed
 
+- A DTS-CD's album that keeps the stream is now named for it, such as
+  "Forever Yours (DTS 5.1)", and the decoded copy beside it "Forever Yours
+  (5.1)": the stream plays as static without a DTS decoder, so it is the one
+  that needs the label. The decoded album alone keeps the album's own title.
+  Albums encoded before keep their names.
+- The welcome window and Help now advise System Settings › CDs & DVDs ›
+  Ignore, so that Music does not open when a disc goes in. Music's Show CD
+  setting is still there for people who want Music to open.
 - Building from source: `make install-cli-local` installs the command in
   `~/.local`, and `make install` is gone. `make` now stops when it runs as
   root: `sudo make install` left build files that only root could replace, and

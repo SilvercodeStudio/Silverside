@@ -333,10 +333,15 @@ Silverside finds the DTS stream in each track while it rips, and the header show
 it encodes such a disc, it asks what to write:
 
 - **The album as the disc has it, and a decoded copy beside it** (the advice): the album keeps the
-  stream bit for bit, for a DTS receiver, and a copy with its own folder and title, such as "Forever
-  Yours (DTS 5.1)", holds the decode.
-- **The decoded album only.**
-- **The DTS stream only.**
+  stream bit for bit, for a DTS receiver, and a copy with its own folder and title holds the decode.
+  The album's title ends with the stream's layout, such as "Forever Yours (DTS 5.1)", so that it is
+  not taken for audio that any player plays; the copy is "Forever Yours (5.1)".
+- **The decoded album only,** under the album's own title: "Forever Yours".
+- **The DTS stream only,** as "Forever Yours (DTS 5.1)" ("Forever Yours (DTS)" without ffmpeg, which
+  finds the layout).
+
+An album encoded before Silverside 0.9.8 kept the stream under the album's own title, and its copy
+was "… (DTS 5.1)". While that album is in the library, encoding the rip again keeps those names.
 
 Decoding needs [ffmpeg](https://ffmpeg.org), a free program that Silverside runs separately, as it
 runs LAME for MP3. Install it with Homebrew (brew.sh), in Terminal: `brew install ffmpeg`. Without
@@ -360,7 +365,7 @@ AAC and MP3 would turn the stream itself into noise, so with those formats Silve
 decode alone, or keeps the rip and encodes nothing.
 
 **Decode DTS…** in an earlier rip's toolbar decodes it later: a copy beside the album, in any format
-that holds surround sound, or in place of the album's files.
+that holds surround sound, or in place of the album's files, which then takes the album's own title.
 
 ## A hidden track before track 1
 

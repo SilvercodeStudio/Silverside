@@ -3,9 +3,9 @@ import Foundation
 /// An album's files added to Apple's Music app (`MusicApp`): as they are, in the formats that
 /// Music plays, and as copies in Apple Lossless or AAC for FLAC, which it does not play. The
 /// copies go in a folder of their own (`Settings.musicCopies`), each album where the library has
-/// it, never in the library. When Music copies the files it adds into its own folder, as its
-/// settings do by default, Silverside deletes its copies; when Music plays them where they are,
-/// they stay.
+/// it, never in the library, and never over a file that is there. When Music copies the files it
+/// adds into its own folder, as its settings do by default, Silverside deletes its copies; when
+/// Music plays them where they are, they stay.
 public struct MusicAdd: Sendable {
     /// The format of the copies: Apple Lossless or AAC (with `aac`).
     public var format: AudioFormat
@@ -69,7 +69,7 @@ public struct MusicAdd: Sendable {
         guard !files.isEmpty else { throw MusicAddError.notEncoded }
         var made = [URL]()
         if !MusicApp.reads(format) {
-            let folder = try copiesFolder(for: album)
+            let folder = try copiesFolder(for: album, files: files)
             log(
                 "Music cannot play \(format.name), so it gets \(self.format.name) copies, made in "
                     + Self.shown(folder) + ".")
@@ -103,33 +103,71 @@ public struct MusicAdd: Sendable {
     }
 
     /// The folder of an album's copies: the album's place in the library, in `copies`; for an
-    /// album outside the library, its folder's name. Copies inside the library are refused.
-    func copiesFolder(for album: URL) throws -> URL {
-        let root = library.standardizedFileURL.path
-        let copiesPath = copies.standardizedFileURL.path
-        guard copiesPath != root, !copiesPath.hasPrefix(root + "/") else { throw MusicAddError.copiesInLibrary(copies) }
-        let path = album.standardizedFileURL.path
+    /// album outside the library, its folder's name. An add never replaces a file, so when a
+    /// file there has the name of a copy of `files`, the copies go in "<name> 2", and so on.
+    /// Folders are compared through symbolic links and other spellings: one in the library, or
+    /// in the album's own folder, is refused.
+    func copiesFolder(for album: URL, files: [URL] = []) throws -> URL {
+        guard !Self.isWithin(copies, library) else { throw MusicAddError.copiesInLibrary(copies) }
+        let root = library.standardizedFileURL.resolvingSymlinksInPath().path
+        let path = album.standardizedFileURL.resolvingSymlinksInPath().path
         let place = path.hasPrefix(root + "/") ? String(path.dropFirst(root.count + 1)) : album.lastPathComponent
-        return copies.appending(path: place, directoryHint: .isDirectory)
+        let first = copies.appending(path: place, directoryHint: .isDirectory)
+        let names = files.map(Self.copyName)
+        var number = 1
+        while true {
+            let folder =
+                number == 1
+                ? first
+                : first.deletingLastPathComponent().appending(
+                    path: "\(first.lastPathComponent) \(number)", directoryHint: .isDirectory)
+            guard !Self.isWithin(folder, library) else { throw MusicAddError.copiesInLibrary(folder) }
+            guard !Self.isWithin(folder, album) else { throw MusicAddError.copiesInAlbum(folder) }
+            if !names.contains(where: { FileManager.default.fileExists(atPath: folder.appending(path: $0).path) }) {
+                return folder
+            }
+            number += 1
+        }
     }
 
-    /// The copies of `files` in `folder`, a few at a time, each checked.
+    /// True if `folder` is `other` or inside it, through any symbolic link or other spelling of
+    /// either, such as a case alias. `folder` need not be there yet.
+    static func isWithin(_ folder: URL, _ other: URL) -> Bool {
+        var path = folder.standardizedFileURL.resolvingSymlinksInPath().path
+        while true {
+            if DiscEncoder.sameFile(URL(filePath: path, directoryHint: .isDirectory), other) { return true }
+            let parent = (path as NSString).deletingLastPathComponent
+            guard !parent.isEmpty, parent != path else { return false }
+            path = parent
+        }
+    }
+
+    /// The name of a file's copy.
+    static func copyName(_ file: URL) -> String { file.deletingPathExtension().lastPathComponent + ".m4a" }
+
+    /// The copies of `files` in `folder`, a few at a time, each checked. When one fails, the
+    /// copies made are deleted, with the folders that this leaves empty.
     func copy(_ files: [URL], into folder: URL) throws -> [URL] {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let targets = files.map { folder.appending(path: $0.deletingPathExtension().lastPathComponent + ".m4a") }
+        let targets = files.map { folder.appending(path: Self.copyName($0)) }
         let lanes = max(1, min(parallelTracks, files.count))
-        let failures = CopyFailures()
+        let results = CopyResults()
         let (format, aac) = (self.format, self.aac)
         DispatchQueue.concurrentPerform(iterations: lanes) { lane in
-            for index in stride(from: lane, to: files.count, by: lanes) where !failures.any {
+            for index in stride(from: lane, to: files.count, by: lanes) where !results.failed {
                 do {
                     try Self.convert(files[index], to: targets[index], format: format, aac: aac)
+                    results.made(index)
                 } catch {
-                    failures.add(index, error)
+                    results.add(index, error)
                 }
             }
         }
-        if let error = failures.first { throw error }
+        if let error = results.firstError {
+            for index in results.madeIndexes { try? FileManager.default.removeItem(at: targets[index]) }
+            removeEmptyFolders(from: folder)
+            throw error
+        }
         log(
             "Made \(files.count) cop\(files.count == 1 ? "y" : "ies"), "
                 + (format.isLossless
@@ -139,7 +177,8 @@ public struct MusicAdd: Sendable {
     }
 
     /// Writes `source`, a FLAC file, as `target` in `format`, with its tags and cover: beside it
-    /// first, checked, then in its place. A lossless copy keeps every bit, and every channel.
+    /// first, checked, then in its place, which must be free. A lossless copy keeps every bit,
+    /// and every channel.
     static func convert(_ source: URL, to target: URL, format: AudioFormat, aac: AACOptions) throws {
         let partial = target.deletingLastPathComponent()
             .appending(path: ".\(target.deletingPathExtension().lastPathComponent).partial.m4a")
@@ -172,11 +211,7 @@ public struct MusicAdd: Sendable {
         let comments = try FLACTags.read(source).map { (key: $0.key.uppercased(), value: $0.value) }
         let cover = try FLACTags.readFrontCover(source).flatMap { try? EmbeddedCover(CoverImage(data: $0)) }
         try MP4Tags.write(comments, cover: cover, to: partial)
-        if FileManager.default.fileExists(atPath: target.path) {
-            _ = try FileManager.default.replaceItemAt(target, withItemAt: partial)
-        } else {
-            try FileManager.default.moveItem(at: partial, to: target)
-        }
+        try FileManager.default.moveItem(at: partial, to: target)
     }
 
     /// Deletes the copies that Music copied into its own folder: when it named a file for each
@@ -212,16 +247,22 @@ public struct MusicAdd: Sendable {
     static func shown(_ folder: URL) -> String { (folder.path as NSString).abbreviatingWithTildeInPath }
 }
 
-/// The copies that failed, and their errors, from the threads that make them.
-private final class CopyFailures: @unchecked Sendable {
+/// The copies that failed, and their errors, and the copies made, from the threads that make them.
+private final class CopyResults: @unchecked Sendable {
     private let lock = NSLock()
     private var errors = [Int: any Error]()
+    private var done = Set<Int>()
 
-    var any: Bool { lock.withLock { !errors.isEmpty } }
-    var first: (any Error)? { lock.withLock { errors.min { $0.key < $1.key }?.value } }
+    var failed: Bool { lock.withLock { !errors.isEmpty } }
+    var firstError: (any Error)? { lock.withLock { errors.min { $0.key < $1.key }?.value } }
+    var madeIndexes: Set<Int> { lock.withLock { done } }
 
     func add(_ index: Int, _ error: any Error) {
         lock.withLock { errors[index] = error }
+    }
+
+    func made(_ index: Int) {
+        lock.withLock { _ = done.insert(index) }
     }
 }
 
@@ -230,6 +271,7 @@ public enum MusicAddError: Error, Equatable, CustomStringConvertible {
     case dtsStream
     case missing(URL)
     case copiesInLibrary(URL)
+    case copiesInAlbum(URL)
     case copyFailed(URL)
     /// Music has the album already: what it has, for people.
     case inMusic(String)
@@ -242,6 +284,8 @@ public enum MusicAddError: Error, Equatable, CustomStringConvertible {
         case .missing(let file): "\(file.path) is not there: the album's files were moved or deleted."
         case .copiesInLibrary(let folder):
             "The copies for Music would go in the library (\(MusicAdd.shown(folder))). Choose a folder outside it."
+        case .copiesInAlbum(let folder):
+            "The copies for Music would go in the album's own folder (\(MusicAdd.shown(folder))). Choose a folder outside it."
         case .copyFailed(let file): "The copy of \(file.lastPathComponent) does not decode to the file's audio."
         case .inMusic(let found): "\(found) It is not added again."
         }

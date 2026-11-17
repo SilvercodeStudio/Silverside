@@ -205,8 +205,9 @@ adds each disc to Apple's Music app, unless Music has the album already
 (tracks of the same title, artist, and disc); the first time, macOS asks
 whether the terminal may control Music. Music cannot play FLAC, so a FLAC
 album goes in as Apple Lossless or AAC copies (the `musicFormat` setting),
-made in the `musicCopies` folder where the album is in the library; when
-Music copies them into its own folder, as it does at first, they are deleted.
+made in the `musicCopies` folder where the album is in the library, never
+over a file there; when Music copies them into its own folder, as it does at
+first, they are deleted.
 
 `--image` (or the `writeImages` setting) also writes a disc image: the whole
 disc in one lossless file, in the library's format or FLAC for AAC and MP3,

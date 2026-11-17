@@ -44,7 +44,7 @@ struct Tags: AsyncParsableCommand {
                 for folder in folders { albums.append(try LibraryAlbum.read(folder)) }
                 if !recursive, albums.last?.files.isEmpty == true, !LibraryAlbum.audioFolders(under: url).isEmpty {
                     albums.removeLast()
-                    print("\(url.path) has no audio files, but folders in it do: add --recursive.")
+                    printNote("\(url.path) has no audio files, but folders in it do: add --recursive.")
                 }
             } else {
                 looseFiles[url.deletingLastPathComponent(), default: []].append(url)

@@ -58,3 +58,9 @@ struct SilversideCommand: AsyncParsableCommand {
         }
     }
 }
+
+/// Prints a line to standard error: a note that is not the command's output, so that output such
+/// as JSON stays whole.
+func printNote(_ line: String) {
+    FileHandle.standardError.write(Data((line + "\n").utf8))
+}

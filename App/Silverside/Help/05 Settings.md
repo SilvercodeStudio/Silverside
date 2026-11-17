@@ -27,7 +27,8 @@ both.
   play FLAC, so Silverside makes copies, each checked against its file, in **Copies for Music**
   (`~/Music/Silverside for Music` at first), where the album is in the library. When Music copies
   them into its own folder, Silverside deletes its copies; otherwise they stay there for Music to
-  play, so keep that folder. Copies are never made in the library.
+  play, so keep that folder. Copies are never made in the library, and never over a file: when a
+  file there has a copy's name, the album's copies go in a folder such as "Abbey Road 2".
 - **When a disc goes in, rip it at once:** a disc that goes in while Silverside runs is ripped five
   seconds after its lookup, if MusicBrainz names its release for certain (an exact match, and not
   one of several releases unless you chose one for the set) and the disc is not ripped yet. The

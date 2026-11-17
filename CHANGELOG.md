@@ -22,8 +22,9 @@ command-line tool.
 
 - FLAC albums can now go into Music too. Music cannot play FLAC, so it gets
   Apple Lossless or AAC copies, made in their own folder (Settings › General ›
-  Apple Music), never in the library. When Music copies files into its own
-  folder, as it does at first, Silverside deletes its copies.
+  Apple Music), never in the library and never over a file. When Music copies
+  files into its own folder, as it does at first, Silverside deletes its
+  copies.
 - An album that Music has already is not added again after a rip or Encode.
 
 ### Fixed
@@ -32,6 +33,10 @@ command-line tool.
   the image you choose goes on every disc. It now says that Silverside asks
   next whether the image is for that disc only or for every disc, as it
   always did.
+- `silverside tags --json` printed a note before the JSON for a folder of
+  album folders ("add --recursive"), and `silverside cdtext --json` printed
+  one in place of it for a disc without CD-Text, so programs could not read
+  the output. The notes now go to standard error.
 
 ## 0.9.8 (2026-11-16)
 

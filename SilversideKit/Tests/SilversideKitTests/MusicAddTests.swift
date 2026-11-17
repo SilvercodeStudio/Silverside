@@ -151,6 +151,63 @@ struct MusicAddTests {
         #expect(throws: MusicAddError.self) { try inside.copiesFolder(for: library.appending(path: "A/B")) }
     }
 
+    /// An add never replaces a file: a copy's name taken moves the copies to "Album 2", and a
+    /// copy that fails takes the others away again. Through a symbolic link, the library and the
+    /// album's own folder are still refused.
+    @Test func neverPutsTheCopiesOverAFile() throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = FileManager.default
+        let library = root.appending(path: "Library", directoryHint: .isDirectory)
+        let copies = root.appending(path: "Copies", directoryHint: .isDirectory)
+        let album = library.appending(path: "Artist/Album", directoryHint: .isDirectory)
+        for folder in [album, copies] { try manager.createDirectory(at: folder, withIntermediateDirectories: true) }
+        let flac = album.appending(path: "01 A.flac")
+        try AudioEncoder.encode(LibraryAlbumTests.twoSeconds, format: .flac, to: flac)
+        let notAudio = album.appending(path: "02 B.flac")
+        try Data("not audio".utf8).write(to: notAudio)
+        let music = MusicAdd(settings: settings(library: library, copies: copies))
+        let first = copies.appending(path: "Artist/Album", directoryHint: .isDirectory)
+        #expect(try music.copiesFolder(for: album, files: [flac]).path == first.path)
+
+        // Someone else's file of a copy's name.
+        try manager.createDirectory(at: first, withIntermediateDirectories: true)
+        let theirs = first.appending(path: "01 A.m4a")
+        try Data("theirs".utf8).write(to: theirs)
+        let second = copies.appending(path: "Artist/Album 2", directoryHint: .isDirectory)
+        #expect(try music.copiesFolder(for: album, files: [flac]).path == second.path)
+        #expect(try music.copiesFolder(for: album, files: [notAudio]).path == first.path)
+        #expect(throws: (any Error).self) { try music.copy([flac], into: first) }
+        #expect(try Data(contentsOf: theirs) == Data("theirs".utf8))
+
+        // A copy that fails: the one made goes, and so does its folder, but not other files.
+        #expect(throws: (any Error).self) { try music.copy([flac, notAudio], into: second) }
+        #expect(!manager.fileExists(atPath: second.path))
+        let cover = first.appending(path: "cover.jpg")
+        try Data("cover".utf8).write(to: cover)
+        try manager.removeItem(at: theirs)
+        #expect(throws: (any Error).self) { try music.copy([flac, notAudio], into: first) }
+        #expect(try manager.contentsOfDirectory(atPath: first.path) == ["cover.jpg"])
+        #expect(try music.copy([flac], into: first).map(\.lastPathComponent) == ["01 A.m4a"])
+
+        // A link in the copies' folder that leads into the library.
+        let linked = MusicAdd(settings: settings(library: library, copies: root.appending(path: "Linked")))
+        try manager.createSymbolicLink(at: root.appending(path: "Linked"), withDestinationURL: library)
+        #expect(throws: MusicAddError.copiesInLibrary(root.appending(path: "Linked", directoryHint: .isDirectory))) {
+            try linked.copiesFolder(for: album)
+        }
+        try manager.createSymbolicLink(at: copies.appending(path: "Elsewhere"), withDestinationURL: library)
+        #expect(throws: MusicAddError.self) {
+            try music.copiesFolder(for: library.appending(path: "Elsewhere/Artist/Album"))
+        }
+
+        // An album outside the library, in the copies' own folder.
+        let outside = root.appending(path: "Old/Album", directoryHint: .isDirectory)
+        try manager.createDirectory(at: outside, withIntermediateDirectories: true)
+        let old = MusicAdd(settings: settings(library: library, copies: root.appending(path: "Old")))
+        #expect(throws: MusicAddError.copiesInAlbum(outside)) { try old.copiesFolder(for: outside) }
+    }
+
     /// Silverside's copies go only when Music has its own: a file for each copy, of the same
     /// sizes, none of them a copy. Then the empty folders go too, up to the copies' own.
     @Test func deletesTheCopiesOnlyWhenMusicCopiedThem() throws {

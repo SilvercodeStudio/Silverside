@@ -31,7 +31,7 @@ struct CDTextCommand: ParsableCommand {
         let drive = try IOKitDrive(bsdName: deviceOptions.bsdName())
         let toc = try drive.readTOCUnlessBlank()
         guard let bytes = try drive.readCDText() else {
-            print("This disc has no CD-Text.")
+            note("This disc has no CD-Text.")
             return
         }
         if packs {
@@ -48,7 +48,7 @@ struct CDTextCommand: ParsableCommand {
             return
         }
         guard let text = CDText(bytes: bytes) else {
-            print("The disc has CD-Text, but no pack of it could be read.")
+            note("The disc has CD-Text, but no pack of it could be read.")
             return
         }
         if json {
@@ -63,6 +63,11 @@ struct CDTextCommand: ParsableCommand {
             print("Block \(number)" + (text.languages[number].map { ", \($0)" } ?? ""))
             Self.printBlock(block, languages: [:], toc: toc)
         }
+    }
+
+    /// A note in place of the CD-Text; with --json, on standard error, so the output is only JSON.
+    func note(_ line: String) {
+        if json { printNote(line) } else { print(line) }
     }
 
     /// Prints one block's fields: the disc's, then each track's.

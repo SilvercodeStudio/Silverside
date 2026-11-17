@@ -25,11 +25,14 @@ public enum TagMerge {
     /// The keys, in capitals, that the merge takes out of a file: those written, the other
     /// programs' names for them, and with `otherRelease`, the release-bound ones.
     public static func removed(writing new: [(key: String, value: String)], otherRelease: Bool) -> Set<String> {
-        let written = Set(new.map { $0.key.uppercased() })
-        var removed = written
-        for (other, key) in otherNames where written.contains(key) { removed.insert(other) }
+        var removed = withOtherNames(Set(new.map { $0.key.uppercased() }))
         if otherRelease { removed.formUnion(releaseBound) }
         return removed
+    }
+
+    /// The keys, with other programs' names for them: DATE brings YEAR.
+    static func withOtherNames(_ keys: Set<String>) -> Set<String> {
+        keys.union(otherNames.filter { keys.contains($0.value) }.map(\.key))
     }
 
     /// The keys that Silverside writes from a release (`TrackMetadata.vorbisComments`).
@@ -41,9 +44,10 @@ public enum TagMerge {
     ]
 
     /// The keys, in capitals, that an update of a file Silverside encoded takes out before it
-    /// writes `new`: the keys written and other programs' names for them (`removed`), and the
-    /// keys that Silverside wrote there last (`lastWritten`, the encoding's record), whose
-    /// values it may have no more. Every other key stays, as another program wrote it. When
+    /// writes `new`: the keys written, and the keys that Silverside wrote there last
+    /// (`lastWritten`, the encoding's record), whose values it may have no more, each with
+    /// other programs' names for it, so a DATE that goes takes YEAR with it. Every other key
+    /// stays, as another program wrote it. When
     /// the file names another release than `new` does, or `new` names none (a disc of no
     /// release), the release-bound keys go too; and with no record (an album encoded before
     /// Silverside kept one), so does every key that Silverside writes from a release.
@@ -56,8 +60,9 @@ public enum TagMerge {
         }
         let tagged = release(existing)
         let otherRelease = tagged != nil && tagged != release(new)
-        var keys = removed(writing: new, otherRelease: otherRelease)
-        keys.formUnion(lastWritten ?? (otherRelease ? releaseKeys : []))
+        let earlier = lastWritten ?? (otherRelease ? releaseKeys : [])
+        var keys = withOtherNames(Set(new.map { $0.key.uppercased() }).union(earlier))
+        if otherRelease { keys.formUnion(releaseBound) }
         return keys
     }
 

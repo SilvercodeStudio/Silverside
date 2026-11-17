@@ -76,6 +76,17 @@ struct AlbumTagsTests {
             none.isSuperset(of: ["GENRE", "BARCODE", "ORIGINALDATE", "MUSICBRAINZ_ALBUMID"]) && !none.contains("MOOD"))
         // With a record, a key the user added stays across a change of release.
         #expect(!TagMerge.removedFromOwnFile(existing, writing: other, lastWritten: ["TITLE"]).contains("MOOD"))
+        // A DATE that goes, as the release has none now, takes another program's YEAR with it;
+        // with no record, both stay. Another release's ORIGINALYEAR goes too.
+        let undated = [("TITLE", "Help on the Way >"), ("MUSICBRAINZ_ALBUMID", "rel")]
+        #expect(
+            TagMerge.removedFromOwnFile(existing, writing: undated, lastWritten: ["DATE"]).isSuperset(of: [
+                "DATE", "YEAR",
+            ]))
+        #expect(
+            TagMerge.removedFromOwnFile(existing, writing: undated, lastWritten: nil).isDisjoint(with: ["DATE", "YEAR"])
+        )
+        #expect(none.isSuperset(of: ["YEAR", "ORIGINALYEAR"]))
     }
 
     @Test func writesTheMergeIntoAFLACFile() throws {

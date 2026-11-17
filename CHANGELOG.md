@@ -7,6 +7,29 @@ command-line tool.
 
 ### Added
 
+- DVD-Audio ripping in the app: inspect programs, choose stereo or surround,
+  import saved metadata or edit album and track names, and rip to verified FLAC
+  with progress and cancellation. Names are saved for the disc. The app includes
+  its DVD helper; FFmpeg and the DVD libraries remain optional Homebrew tools.
+- `silverside dvd info` lists DVD-Audio programs, and `silverside dvd rip`
+  extracts supported MLP stereo, 5.0 and 5.1 programs into numbered FLAC tracks,
+  with sample-count and PCM checks, playlists, and a rip report. Protected
+  discs use an optional helper and user-installed Homebrew DVD libraries.
+  FLAC files use blocks compatible with Apple's audio decoder. Completed
+  output follows normal folder permissions; failed or cancelled extractions
+  report the location and size of retained scratch files and how to remove them.
+  Programs can contain several continuous groups of tracks with restarting
+  timestamps; each group is decoded and verified before the tracks are published.
+  Inventory checks every track's format, reports rate and channel-layout changes,
+  and lists unsupported DVD-Video links or unavailable title sets without hiding
+  usable audio programs. Native rates, precision and speaker layouts can change
+  between independently decoded groups. Rounded durations on independent 44.1 kHz
+  tracks are accepted only when the full decoded sample count confirms them.
+- `silverside dvd metadata` saves editable album, artist and track names from
+  a DVD inventory, imports a selected MusicBrainz release, and assigns its tracks
+  explicitly to DVD programs. It also accepts pasted title/artist lists for
+  discs without database entries. `dvd rip --metadata` writes named, tagged FLAC
+  files, checking the disc identity and source boundaries before using the names.
 - **Add to Music** in the Disc menu adds an earlier rip's album to Apple's
   Music app at any time, and when "Add each disc to Music" is on in Settings,
   the toolbar has the button too. If Music seems to have the album already,
@@ -28,6 +51,8 @@ command-line tool.
 
 ### Fixed
 
+- Multichannel ALAC encoding handles poorly compressible 24-bit audio
+  without producing an empty or incomplete file.
 - On an earlier rip of a set's disc, the Cover Art Archive picker said that
   the image you choose goes on every disc. It now says that Silverside asks
   next whether the image is for that disc only or for every disc, as it

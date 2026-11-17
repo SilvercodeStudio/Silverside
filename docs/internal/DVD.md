@@ -2,6 +2,57 @@
 
 Status: CLI extraction and metadata implemented; first GUI FLAC workflow ready for user testing, following exploration started 2026-10-31. The primary product goal is a CD-like GUI workflow for tagged, lossless DVD-Audio extraction to multichannel/stereo FLAC or ALAC. Audio extraction from DVD-Video is a secondary goal. Optional movie export is planned for 2.0; the audio workflow has no new release commitment here.
 
+## Implementation map
+
+Engine files below are in `SilversideKit/Sources/SilversideKit/`:
+
+- `DVD/DVDNavigation`: bounded ATS navigation, presentations and `DVDTrack`
+  timestamp rules.
+- `DVD/DVDProcess`: optional helper and ffmpeg/ffprobe discovery, plus bounded
+  child-process execution.
+- `DVD/DVDInventoryInspection`: per-track format observations and conservative
+  extraction eligibility.
+- `DVD/DVDRunFormat`: constant native formats within a decoding run and bounded
+  44.1 kHz duration rounding.
+- `DVD/DVDVideoReferences`: corroborated AMG links to unsupported DVD-Video titles.
+- `DVD/DVDMetadata`: disc-bound editable metadata, preserved MusicBrainz
+  snapshots, explicit program/track mappings and bulk UTF-8 titles.
+  `dvd metadata` edits saved inventories without drive access;
+  `dvd rip --metadata` names and tags verified FLAC output.
+- `DVD/DVDExtraction`: `DVDMix`, program selection, staged FLAC extraction, PCM
+  checks, `DVDRipReport` and retained-scratch reporting.
+- `DVD/DVDProgramDecoding`: bounded source reads, continuous-run decoding and
+  verified publication.
+- `PCMFile`: explicit native PCM formats, streaming FLAC/ALAC conversion and
+  verified exclusive publication.
+- `DVD/DVDWorkflow`: synchronous inspection/extraction wrapped in `blocking(_:)`,
+  task cancellation bridged to `StopToken`, and typed `DVDProgress` events.
+
+The separate `silverside-dvd-helper` executable uses `DVDDirectory` for
+unencrypted folders and `DVDLibrary` for runtime-loaded library access. Both use
+`DVDPackets` to inspect every packet for encrypted audio. `DVDSamples` collects
+bounded per-track samples and reuses shared extents. Protocol v2 JSON and bounded
+AOB files carry results, retaining title-set and sample failures explicitly.
+
+The app's `DVDSession` and `DVDView` provide program selection, saved metadata
+import/editing and native FLAC extraction. Its build embeds and separately signs
+the helper in `Contents/Helpers`. Native-rate FLAC/ALAC engine groundwork is in
+place; the first GUI workflow writes FLAC and awaits user hardware testing.
+
+## Dependency and signing policy
+
+Policy clarified 2026-11-01: the user installs `ffmpeg` (including `ffprobe`) and Homebrew
+`libdvdread` with its transitive `libdvdcss`. Silverside never installs or bundles these
+libraries. The original, separate `silverside-dvd-helper` loads libdvdread with
+`dlopen`/`dlsym`, without mandatory link-time/Homebrew build dependencies; the engine invokes
+ffmpeg/ffprobe as external processes. Keep `com.apple.security.cs.disable-library-validation`
+confined to the helper when signing it, not the main app. Missing DVD dependencies must leave CD
+functionality available. Developer ID/notarization and clean-machine checks remain pending.
+Preserve the research C utilities' notices; they are not shipped production dependencies and
+their final packaging remains undecided.
+
+## Current status
+
 ### First DVD-Audio GUI workflow
 
 The app now provides a separate DVD drive page backed by `DVDSession` and

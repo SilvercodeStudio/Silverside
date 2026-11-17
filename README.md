@@ -37,8 +37,8 @@ it comes with no warranty (see [LICENSE](LICENSE)).
   - Super Audio CD (SACD) extraction is not possible with a standard
     PC DVD/BD drive. The CD layer of hybrid CD/SACD discs can still
     be ripped as standard CD audio.
-  - DVD-Audio (MLP lossless high-resolution surround) - planned for a
-    future version.
+  - DVD-Audio: supported MLP stereo, 5.0 and 5.1 programs extracted to
+    verified FLAC through optional FFmpeg and DVD libraries.
 
 See also:
 
@@ -229,6 +229,20 @@ Silverside finds `ffmpeg` as it finds `lame`, and runs it as a separate
 program. The environment variable `SILVERSIDE_FFMPEG` can name another
 `ffmpeg`, or with `none` make Silverside act as if it were not installed.
 
+## DVD-Audio
+
+The app can inspect DVD-Audio programs, select stereo or surround, import or
+edit metadata, and rip to verified FLAC with progress and cancellation.
+Extraction is also available through the CLI:
+`silverside dvd info -d matshita`, then
+`silverside dvd rip -d matshita -o "<new folder>"`. It extracts supported MLP
+stereo, 5.0 or 5.1 programs to numbered FLAC tracks with verification and a report.
+Install `ffmpeg` and `libdvdread` through Homebrew (`brew install ffmpeg libdvdread`);
+the DVD helper loads the external libraries at runtime. No DVD libraries are
+bundled. See [DVD-Audio in the CLI guide](docs/cli.md#dvd-audio-initial-cli-support)
+for presentation selection, source limitations, and output details. DVD-Video
+extraction is later work.
+
 ## MusicBrainz
 
 Silverside looks up each disc in MusicBrainz once, waits between requests, and
@@ -291,9 +305,9 @@ Note that some of these require an external tool (ffmpeg or LAME) for full use.
   - Detected automatically and supported in track preview playing
 - accurate ReplayGain tags for consistent volume levels on playback
 - Disc image and CUE sheet generation can be passed to burner apps.
-- DVD, DVD-Audio, Blu-ray and 4K UHD Blu-ray discs are recognized, but are not supported
+- DVD-Audio: supported MLP programs can be extracted to verified FLAC.
+- DVD-Video, Blu-ray and 4K UHD Blu-ray discs are recognized, but are not supported
   for audio extraction.
-- Planned for a future version: DVD-Audio extraction
 
 ## Building from source
 
@@ -347,7 +361,6 @@ tools and real discs.
   troubled disc.
 - A C2 error-flag check for each drive, kept in its profile.
 - A warning before a lossy encode of a DTS-CD.
-- DVD-Audio extraction support.
 - A second metadata source (GnuDB), and AcoustID.
 - Several encodings at once (for example FLAC and AAC).
 - More filename template options, and per-track pregap adjustments.

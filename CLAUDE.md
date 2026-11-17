@@ -44,6 +44,21 @@ Run `make format`, `make lint`, and `make test` before you report work as done.
 
 `CHANGELOG.md` has an entry for each version, for people who use Silverside: Added, Changed, and Fixed, in plain words, no internal names. When you change what a user sees or can do, add a line to the newest entry (start a new one after the version is tagged; the version is in `SilversideVersion` and the app's `MARKETING_VERSION`).
 
+## DVD-Audio
+
+The CLI and initial GUI extract verified FLAC; GUI hardware validation remains
+pending. Keep the implementation map, supported layouts, validation results and
+remaining work in [docs/internal/DVD.md](docs/internal/DVD.md), rather than in the
+shared architecture list below.
+
+DVD support uses user-installed FFmpeg/ffprobe and Homebrew libdvdread/libdvdcss
+(policy clarified 2026-11-01); Silverside never installs or bundles them. Only the
+separate `silverside-dvd-helper` may disable library validation when signed; the
+main app must retain it. Missing DVD dependencies must leave CD functionality
+available. Preserve the research C utilities' notices; they are not shipped
+production dependencies. Developer ID/notarization and clean-machine checks
+remain pending. The detailed dependency policy is in the DVD notes.
+
 ## Architecture
 
 The engine does the work, and the CLI only parses options and prints. Put new behavior in `SilversideKit`, so that the app gets it too. Engine files (`SilversideKit/Sources/SilversideKit/`), by layer:

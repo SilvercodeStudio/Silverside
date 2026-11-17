@@ -19,7 +19,8 @@ Or, from a copy of this repository, with Xcode installed:
 make install-cli-local          # silverside in ~/.local/bin
 ```
 
-It builds `silverside` for Apple silicon and Intel, and installs shell
+It builds `silverside` and its optional `silverside-dvd-helper` for Apple silicon
+and Intel, and installs shell
 completions for zsh, bash, and fish. `make uninstall-cli-local` takes them
 away. Run `make` as yourself, never with `sudo`: it stops when it runs as root.
 
@@ -46,6 +47,136 @@ this (type `yes`), and remembers the answer in the settings, which the app
 shares. Without a terminal, as in a script, `rip` does not run until you agree with
 `silverside --accept-disclaimer`.
 
+## DVD-Audio (initial CLI support)
+
+Install the optional tools yourself with Homebrew:
+
+```sh
+brew install ffmpeg libdvdread
+silverside dvd info -d matshita
+silverside dvd rip -d matshita -o "$HOME/Music/American Beauty DVD"
+silverside dvd rip -d asus --mix both -o "$HOME/Music/Fragile DVD"
+```
+
+Homebrew installs libdvdread's dependencies, including libdvdcss. The helper
+loads those external libraries at runtime; Silverside does not ship, download
+or install them. The CLI and helper must be installed together (`make install-cli-local`),
+or built together (`make cli ARGS='dvd info -d matshita'`). Ordinary CD commands
+continue to work without these DVD libraries.
+
+The default `--mix auto` prefers one supported surround program, falling back
+to stereo. `--mix stereo`, `--mix surround`, and `--mix both` select explicitly.
+If several programs fit, use `--title SET:TITLE` from `dvd info`, for example
+`--title 1:2`. One-track programs of at most one second require explicit title
+selection. `dvd info --json` emits the versioned inventory.
+
+Inventory samples each track's start and reports changes in rate, precision or
+speaker layout. These bounded observations do not verify a complete track.
+Formats may change between independent decoding runs; changes within a continuous run remain unsupported. A linked
+DVD-Video title is listed separately as unsupported; unavailable or malformed
+title sets are reported without hiding other usable audio. A program-wide
+format is shown only when every track's format is known and agrees. The CLI and
+helper must both use protocol v2; rebuild/install them together after upgrading.
+
+This first version supports 16/24-bit MLP stereo, 5.0 or 5.1 with
+contiguous, one-cell-per-track navigation. It preserves the decoded sample rate,
+precision and speaker layout. An identified authored stereo substream can be
+selected; Silverside does not synthesize a stereo mix. Other layouts/codecs,
+DVD-Video extraction and GUI integration are follow-up work.
+
+### DVD metadata selection and editing
+
+Save the inventory once, then select and edit metadata without accessing a drive:
+
+```sh
+silverside dvd info -d matshita --json > inventory.json
+silverside dvd metadata --inventory inventory.json --output names.json
+silverside dvd metadata --input names.json --release https://musicbrainz.org/release/b66fba4a-655f-4b56-8431-d9c0eddc829b
+silverside dvd metadata --input names.json --title 1:1 --medium 1 --map 1=13,2=14
+silverside dvd metadata --input names.json --title 1:1 --set 'program=Surround' --set 'track1.title=Second Hand News'
+silverside dvd metadata --input names.json
+```
+
+The Rumours mapping above assigns only the first two source tracks. Complete the
+remaining mappings before ripping. The command shows each source duration and,
+when available, its difference from the selected MusicBrainz track's duration.
+Importing a release never assigns tracks automatically. A release can list
+stereo, surround and bonus material in one medium; a DVD program may contain
+additional short tracks, or several chapters for one database entry. Repeated
+target positions are allowed when assigned explicitly, but do not join chapters.
+Source track numbering and all audio boundaries are retained. No track is skipped.
+
+For manual names, set `album`, `albumArtist`, `date`, `program` (with `--title`),
+`trackN.title` or `trackN.artist`. Repeat `--set` for several changes. An empty
+value removes an override and reveals the imported value again. Explicit edits
+remain separate from the unchanged MusicBrainz response saved in the document.
+`--titles titles.txt --title 1:1` imports UTF-8 text with one title per line,
+optionally followed by a tab and artist. Include every source track, even short
+unidentified segments; blank lines and incorrect counts are rejected. This bulk
+replacement clears that program's MusicBrainz track mappings. `--clear-release`
+clears the release and all mappings, keeping manual overrides; use it before
+selecting a different release after mapping tracks.
+
+Edits update `--input` atomically. Use `--output another.json` to save a new copy;
+an existing output is never overwritten. The JSON can also be edited directly.
+It is bound to the disc fingerprint and the saved source track boundaries:
+
+```sh
+silverside dvd rip -d matshita --title 1:1 --metadata names.json -o 'Rumours surround'
+```
+
+Every track in the selected program must resolve to a title and artist, and the
+album must have a name. Unselected programs may remain unfinished. MusicBrainz
+recording IDs are written only for explicitly mapped tracks. Program folders
+remain separate; safe filenames, tags, playlists and the rip report use the
+resolved names. The existing native-format, sample-count and PCM equality checks
+still apply. This CLI milestone does not yet provide DVD GUI editing, cover-art
+import, retagging of existing DVD rips, or embedded Audio Text parsing.
+
+### DVD extraction checks
+
+Continuous tracks are decoded together before cutting at sample boundaries.
+A repeated or backward track-start timestamp begins a new decoding run, whose
+format, packet timestamps, sample count and PCM must pass the same checks.
+Forward timestamp gaps and partial overlaps remain unsupported. For an independent,
+single-track 44.1 kHz run, a fractional duration is rounded to the nearest sample
+and must equal the full decoded sample count. Fractional internal cuts and fractional
+durations at other rates remain unsupported; no samples are padded or discarded to
+make a duration match. The report records each verified run's native format, track
+range, sample count, rounding decision and PCM hash. Mixed-format programs have no
+whole-program PCM hash, since concatenating them could resample or change channels.
+Programs containing both stereo and surround tracks require explicit `--title` selection;
+5.0 and 5.1 are both surround.
+
+The output folder must be new, and its parent must exist. Each program gets a
+folder of numbered FLAC tracks and `Tracks.m3u8`. `dvd-rip.json` and
+`Rip Report.txt` record the source navigation, tools, hashes and outcome. The
+checks compare decoded PCM and exact track lengths; they are **not**
+AccurateRip/CTDB verification or a secure reread consensus. No resampling,
+normalization or ReplayGain is applied. Optional disc text is not parsed yet,
+so track titles are placeholders. Menus and pictures are not exported.
+
+Ctrl-C stops the helper/decoder and retains an incomplete report and diagnostic
+work files. The report and terminal message name the retained `.work` folder
+and its size in bytes. After investigating the failure, you can delete that
+folder while keeping the reports and any completed programs. Published folders
+use normal permissions governed by your umask; `.work` stays private.
+A program's tracks become final only after its checks pass. There
+is no resume yet; choose a new output folder for another attempt. Temporary
+space can exceed the size of the selected audio while FLAC is being verified.
+
+For unprotected material, `--source /path/to/disc-folder` (or its `AUDIO_TS`
+folder) uses ordinary file reads. Encrypted filesystem copies are rejected;
+CPPM authentication normally needs the original disc in its drive. Direct ISO
+access is experimental: libdvdread 7.1.1/libdvdcss 1.6.0 fail on the tested
+unprotected Glen Phillips ISO's no-MKB path. Mount an unprotected ISO read-only
+and pass its mounted directory to `--source` instead. Silverside does not mount
+images automatically or modify the source.
+
+The existing personal-use agreement applies to `dvd rip` too. These commands
+do not add DVD features to the GUI yet. See [the DVD plan](internal/DVD.md) for
+tested titles, remaining coverage and helper signing requirements.
+
 ## Commands
 
 | Command | What it does |
@@ -59,6 +190,7 @@ shares. Without a terminal, as in a script, `rip` does not run until you agree w
 | `metadata` | Shows the MusicBrainz releases for a disc, and keeps the chosen one in a rip's `disc.json`; `--set` edits names, `--cover` gives a cover, and `--retag` writes both into the album's encoded files. |
 | `encode` | Encodes rips into the library, named and tagged, and checks each file. |
 | `video` | Makes a video of a CD+G disc's rip: the graphics drawn as a CD+G player draws them, over the rip's audio (Apple Lossless, exactly as ripped, or `--audio aac`), the whole disc in one `.m4v` with a chapter for each track, named by its title. A CD+EG disc's video shows its 256 colors, as a CD+EG player does; `--picture g` shows it as a CD+G player does, in 16 colors, as "… (CD+G).m4v", and `--picture both` makes the two. It goes into the album folder when the rip was encoded, named after the album, else into the rip's folder; an album whose rip is gone works too (give its `Rip Report.json`), if it is lossless. `--codec hevc` makes smaller files; `--scale` sets the size (4: 1200 × 864). |
+| `dvd` | Lists DVD-Audio presentations and extracts supported MLP programs to verified FLAC tracks (`info`, `rip`). |
 | `hdcd` | Looks for HDCD codes in audio files and folders (WAV, AIFF, FLAC, Apple Lossless), such as rips and albums from before. |
 | `album` | Puts a release's tags and cover art into an album folder that Silverside did not rip: finds the release, shows every change, and asks first. See [Albums from elsewhere](#albums-from-elsewhere). |
 | `tags` | Summarizes album folders, or some files, with no network and no changes: each file's format, length, and size; the tags that every file has, once, then each file's own; the covers, Artwork, and the choice that `album` keeps. `--recursive` takes each folder under the folders; `--full` shows long values and players' own items (such as iTunes's gapless data); `--json` prints JSON. |

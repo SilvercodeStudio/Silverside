@@ -457,11 +457,48 @@ Later, maybe: **GnuDB as a fallback** for discs MusicBrainz does not know (freed
 
 Not planned: Opus and Ogg Vorbis output (too few users; it would need `opusenc`, and Apple's frameworks cannot read Ogg to check the files).
 
-## Later: DVD-Audio and Blu-ray audio
+## DVD-Audio CLI; later DVD-Video and Blu-ray audio
 
-A possible goal after the CD work: extract the audio from a DVD-Audio disc (the user has *American Beauty*) and from a Blu-ray audio disc (a BD-R copy of *The Dark Side of the Moon*). These are different from CD: files on a UDF file system, MLP or PCM streams, and, on DVD-Audio, CPPM copy protection.
+Initial DVD-Audio CLI implementation (2026-11-01, feature/dvd): `dvd info`
+enumerates programs and `dvd rip` extracts supported MLP stereo/5.1 programs
+to numbered per-track FLAC, playlists, and a separate DVD report. A standalone
+helper loads user-installed Homebrew libdvdread/libdvdcss; neither library,
+cipher implementations nor keys are shipped. Plain AUDIO_TS directories have
+a filesystem reader. No Homebrew headers/libraries are needed to build.
 
-An outline (discussed 2026-10-31; not started). Glen Phillips' DVD-Audio disc (2001) has no CPPM: no `DVDAUDIO.MKB` in `AUDIO_TS`, and its `ATS_01_1.AOB` (MLP, 5.1, 24-bit, 96 kHz) decodes cleanly with ffmpeg from a plain `dd` image. For CPPM, Homebrew's libdvdcss (1.6.0) has `dvdcpxm.h` (`dvdcpxm_init` with the disc's MKB, `dvdcpxm_read`); the album ID comes from the disc's lead-in, so a protected disc is decrypted from the drive, not from an image. The user's choices: libdvdcss from Homebrew, never shipped, as with `lame` and `ffmpeg`; loaded by a small helper program in the app bundle (only it gets the hardened runtime's "disable library validation" entitlement, which notarization allows), which writes decrypted `.AOB` data to a pipe; ffmpeg decodes the MLP, and the IFO's track times split it into one FLAC per track. First, a scratchpad test on a CPPM disc: *American Beauty* (2001) is one (its `AUDIO_TS` has `DVDAUDIO.MKB`, every AOB packet sampled has its PES scrambling bits set, and ffmpeg's MLP decoder fails its checksums; MLP, 5.1, 24-bit, 96 kHz, four AOB files of about 4 GB); its `VIDEO_TS` has no CSS.
+The workflow checks navigation bounds, source fingerprints, packet timestamps,
+exact sample counts, output formats, per-track PCM and joined-program hashes.
+It groups tracks into continuous decoding runs, covering American Beauty's
+fresh-decoder-per-track layout, Fragile's continuous timeline and African
+Herbsman's three runs (all 26 tracks verified at 96 kHz/24-bit 5.1 on
+2026-11-06). Output must be new; failures/cancellation leave
+an incomplete report. The existing personal-use agreement also covers DVD rips.
+See [DVD.md](DVD.md) for evidence, command examples and remaining limitations.
+
+Native-rate engine groundwork (2026-11-03): explicit rate/precision/speakers,
+bounded FLAC/ALAC conversion with PCM verification, and Apple-compatible FLAC
+blocks. Synthetic high-resolution tests and full saved American Beauty stereo
+and surround tracks pass without drive access; details and hashes in DVD.md.
+The existing DVD CLI still writes FLAC.
+
+Inventory groundwork completed 2026-11-06: protocol v2 supplies bounded samples
+from every track, records per-track formats and failures, and recognizes the
+corroborated AMG-to-DVD-Video link on Spectrum stereo. Unavailable title sets
+remain explicit issues without hiding usable programs. Physical Spectrum/Brian
+Wilson and cached JVC checks pass; mixed-format extraction is still rejected.
+
+Next: preserve 5.0 and changing native formats, and validate rounded 44.1 kHz
+navigation against decoded samples (JVC). Complete full-disc checks including
+Brian Wilson's live transitions and distinct stereo/surround maps. See DVD.md
+for the evidence and verification requirements.
+
+Then: saved-rip metadata using a pasted MusicBrainz release URL/ID or manual
+entry, reviewed presentation-specific track mapping, artwork and tagged
+FLAC/ALAC output; reuse it for the audio-only GUI workflow. Finish Developer ID/
+notarization and clean-machine testing, and parse optional Audio Text. DVD-Video
+LPCM/chapter extraction and decrypted disc images remain separate follow-ups.
+Blu-ray audio (including the user's BD-R copy of The Dark Side of the Moon)
+remains exploratory. More DTS-CD titles are also on the way for CD-path testing.
 
 With it, for 1.0 whether or not the DVD part exists (done 2026-10-31, in 0.9.3): a one-time acknowledgment that Silverside is for copies of discs the user owns, for their own use, not to share or sell. A checkbox in the welcome window (Get Started waits for it), kept in the settings file so the CLI shares it; the CLI asks once at a terminal, with a flag for scripts. A line in the site's Download section says the same.
 

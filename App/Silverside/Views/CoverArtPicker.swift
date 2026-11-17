@@ -20,6 +20,9 @@ struct CoverArtPickerSheet: View {
     let release: MusicBrainzRelease
     /// The disc's position in the release, to mark the sleeves made for it. Nil for a whole set.
     var disc: Int?
+    /// An image other than a main front is for the disc or for every disc of its set, as the
+    /// one who chose it says next (an earlier rip of a set's disc); else it is kept for the release.
+    var asksWhichDiscs = false
     /// Other releases of the album to show the images of: the disc lookup's.
     var others: [MusicBrainzRelease] = []
     /// Starts with another release's images, not this one's.
@@ -32,6 +35,8 @@ struct CoverArtPickerSheet: View {
     @State private var source: String?
     /// The release that the archive takes for the album's release group, if not among the others.
     @State private var groupChoice: String?
+    /// The release's images in the archive's order, which tells a box set's sleeves apart
+    /// (`CoverArtImage.sleevesInOrder`); `shown` puts the disc's own first.
     @State private var images: [CoverArtImage]?
     @State private var thumbnails = [String: Data]()
     /// The images whose thumbnail could not be downloaded.
@@ -84,9 +89,11 @@ struct CoverArtPickerSheet: View {
                     .disabled(downloading)
                     .help(sleevePlan?.details ?? "")
                 }
-                Button("Use This Cover") { use() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(selected == nil || downloading)
+                Button(asksWhichDiscs && selectedImage?.isFront != true ? "Use This Cover…" : "Use This Cover") {
+                    use()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(selected == nil || downloading)
             }
         }
         .padding(20)
@@ -99,10 +106,27 @@ struct CoverArtPickerSheet: View {
     private var showsOwn: Bool { (source ?? release.id) == release.id }
 
     private var introduction: String {
-        showsOwn
+        if asksWhichDiscs {
+            let next =
+                "Silverside asks next whether it is for disc \(disc ?? 0) only, as an album's sleeve in a box set, or for every disc."
+            return showsOwn
+                ? "The images that MusicBrainz editors uploaded for \(release.title). The main front is the one Silverside uses by itself, for every disc. For another image, \(next)"
+                : "The images of another release of \(release.title). Its main front makes all of its images this release's artwork, for every disc, as if they were its own. For another image, \(next)"
+        }
+        return showsOwn
             ? "The images that MusicBrainz editors uploaded for \(release.title). The main front is the one Silverside uses by itself; the cover you choose is kept for the release, so every disc of a set gets it."
             : "The images of another release of \(release.title). Its main front makes all of its images this release's artwork, as if they were its own; another image becomes your cover. Either is kept for the release."
     }
+
+    private var selectedImage: CoverArtImage? { images?.first { $0.id == selected } }
+
+    /// The images as the grid shows them: the main front, then the disc's own, then the rest.
+    private func shown(_ images: [CoverArtImage]) -> [CoverArtImage] {
+        CoverArtImage.ordered(images, forDisc: showsOwn ? disc : nil, media: media)
+    }
+
+    /// The release's discs, by position, for sleeves in the archive's order (`CoverArtImage.sleevesInOrder`).
+    private var media: [Int] { release.media.map(\.position) }
 
     /// This release, the others, and the release group's choice, each with a name that tells them apart.
     private var sources: [(id: String, name: String)] {
@@ -162,14 +186,15 @@ struct CoverArtPickerSheet: View {
             )
             .foregroundStyle(.secondary)
         } else if let images {
+            let sleeveDiscs = sleeveDiscs
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 180), spacing: 14)], spacing: 14) {
-                    ForEach(images) { image in
+                    ForEach(shown(images)) { image in
                         // A button, so that the keyboard and VoiceOver can choose an image too.
                         Button {
                             selected = image.id
                         } label: {
-                            cell(image).contentShape(Rectangle())
+                            cell(image, discs: sleeveDiscs[image.id]).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityAddTraits(selected == image.id ? .isSelected : [])
@@ -193,7 +218,8 @@ struct CoverArtPickerSheet: View {
         }
     }
 
-    private func cell(_ image: CoverArtImage) -> some View {
+    /// `discs`: the discs whose sleeve the image is, if a set's.
+    private func cell(_ image: CoverArtImage, discs: [Int]?) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Group {
                 if let data = thumbnails[image.id], let picture = NSImage(data: data) {
@@ -219,7 +245,11 @@ struct CoverArtPickerSheet: View {
                 Text(image.types.isEmpty ? "Image" : image.types.joined(separator: ", "))
                     .font(.callout.weight(.medium))
                 if image.isFront { Chip(text: "Main", tone: .good) }
-                if let disc, image.mediums?.contains(disc) == true { Chip(text: "This disc", tone: .good) }
+                if let disc, image.mediums?.contains(disc) == true || discs?.contains(disc) == true {
+                    Chip(text: "This disc", tone: .good)
+                } else if let discs {
+                    Chip(text: Self.discs(discs, capitalized: true))
+                }
             }
             if !image.comment.isEmpty {
                 Text(image.comment).font(.caption).foregroundStyle(.secondary).lineLimit(3)
@@ -230,35 +260,56 @@ struct CoverArtPickerSheet: View {
         .contentShape(Rectangle())
     }
 
+    /// For a set whose discs have their own sleeves in the archive: which disc takes which.
+    private var sleeves: (sleeves: [(image: CoverArtImage, discs: [Int])], others: [Int])? {
+        let positions = release.cdPositions
+        guard positions.count > 1, showsOwn, let images else { return nil }
+        let plan = CoverArtImage.sleeves(for: positions, in: images, media: media)
+        return plan.sleeves.isEmpty ? nil : plan
+    }
+
+    /// The discs whose sleeve each image is, by image ID.
+    private var sleeveDiscs: [String: [Int]] {
+        Dictionary((sleeves?.sleeves ?? []).map { ($0.image.id, $0.discs) }, uniquingKeysWith: +)
+    }
+
     /// For a set whose discs have their own sleeves in the archive: which disc takes which,
     /// in one line and in full.
     private var sleevePlan: (text: String, details: String)? {
-        let positions = release.cdPositions
-        guard positions.count > 1, showsOwn, let images else { return nil }
-        let plan = CoverArtImage.sleeves(for: positions, in: images)
-        guard !plan.sleeves.isEmpty else { return nil }
-        let named = plan.sleeves.map { Self.discs($0.discs) }.joined(separator: ", ")
-        var text =
-            "\(Format.count(plan.sleeves.count, "sleeve")) \(plan.sleeves.count == 1 ? "names" : "name")"
-            + " the discs \(plan.sleeves.count == 1 ? "it is" : "they are") for (\(named))."
+        guard let plan = sleeves, let images else { return nil }
+        var text: String
+        if CoverArtImage.sleevesInOrder(images, media: media) != nil {
+            text =
+                "No image names a disc, but there is one other front for each of the \(media.count) discs. They"
+                + " are marked with the discs in the archive's order: check that each is its disc's sleeve."
+        } else {
+            let named = plan.sleeves.map { Self.discs($0.discs) }.joined(separator: ", ")
+            text =
+                "\(Format.count(plan.sleeves.count, "sleeve")) \(plan.sleeves.count == 1 ? "names" : "name")"
+                + " the discs \(plan.sleeves.count == 1 ? "it is" : "they are") for (\(named))."
+        }
         text +=
             plan.others.isEmpty
             ? " Use Each Disc's Sleeve gives every disc its own."
             : " Use Each Disc's Sleeve gives those discs their own; \(Self.discs(plan.others)) keep the set's cover."
-        let details = plan.sleeves.map { "\(Self.discs($0.discs)): \($0.image.comment)" }.joined(separator: "\n")
+        let details = plan.sleeves.map { sleeve in
+            Self.discs(sleeve.discs, capitalized: true)
+                + (sleeve.image.comment.isEmpty ? "" : ": " + sleeve.image.comment)
+        }.joined(separator: "\n")
         return (text, details)
     }
 
-    /// "disc 3", "discs 1–2", "discs 1, 4, and 9".
-    private static func discs(_ positions: [Int]) -> String {
-        if positions.count == 1 { return "disc \(positions[0])" }
+    /// "disc 3", "discs 1–2", "discs 1, 4, and 9"; "Disc 3" with `capitalized`.
+    private static func discs(_ positions: [Int], capitalized: Bool = false) -> String {
+        let word = capitalized ? "Disc" : "disc"
+        if positions.count == 1 { return "\(word) \(positions[0])" }
         if let first = positions.first, let last = positions.last, positions == Array(first...last) {
-            return "discs \(first)–\(last)"
+            return "\(word)s \(first)–\(last)"
         }
-        return "discs " + ListFormatter.localizedString(byJoining: positions.map(String.init))
+        return "\(word)s " + ListFormatter.localizedString(byJoining: positions.map(String.init))
     }
 
-    /// The list, with the main front and then this disc's images first, then the thumbnails in that order, four at a
+    /// The list, then the thumbnails with the main front and this disc's images first, four at a
     /// time (the web client still spaces the requests as the archive asks), each shown as it comes.
     private func load() async {
         guard let source else { return }
@@ -266,12 +317,11 @@ struct CoverArtPickerSheet: View {
         selected = nil
         failure = nil
         do {
-            let found = CoverArtImage.ordered(
-                try await CoverArtClient().images(releaseID: source), forDisc: showsOwn ? disc : nil)
+            let found = try await CoverArtClient().images(releaseID: source)
             guard source == self.source else { return }
             images = found
             await withTaskGroup(of: (String, Data?).self) { group in
-                var waiting = found[...]
+                var waiting = shown(found)[...]
                 func add() {
                     guard let image = waiting.popFirst() else { return }
                     group.addTask { (image.id, try? await CoverArtClient().thumbnail(image)) }

@@ -158,13 +158,15 @@ struct DiscInfo {
         shownRelease?.date == nil && release?.releaseGroup?.firstReleaseDate != nil
     }
 
-    /// "Disc 1 of 2", with the media when some cannot be ripped: "Disc 1 of 2 · CD + Blu-ray".
-    /// A mix of kinds of CD, such as "CD + HDCD", is only in the tooltip: MusicBrainz can be
-    /// wrong about those, and the rip finds HDCD codes itself.
+    /// "Disc 1 of 2", with the disc's own title if it has one ("Disc 1 of 10: Rio Grande Mud"),
+    /// and the media when some cannot be ripped: "Disc 1 of 2 · CD + Blu-ray". A mix of kinds
+    /// of CD, such as "CD + HDCD", is only in the tooltip: MusicBrainz can be wrong about those,
+    /// and the rip finds HDCD codes itself.
     var discLabel: String? {
         guard let release, release.media.count > 1 else { return nil }
         let count = release.media.count
-        let text = medium.map { "Disc \($0.position) of \(count)" } ?? "\(count) discs"
+        var text = medium.map { "Disc \($0.position) of \(count)" } ?? "\(count) discs"
+        if let title = medium?.title, !title.isEmpty { text += ": \(title)" }
         return release.media.allSatisfy(\.isCompactDisc) ? text : "\(text) · \(release.formats)"
     }
 
@@ -543,7 +545,8 @@ struct DiscInfo {
         guard let release, !release.isManual, let position = medium?.position,
             ReleaseCoverStore().usesDiscSleeves(releaseID: release.id)
         else { return }
-        sleeve = try? await CoverArtClient().discSleeve(releaseID: release.id, disc: position)
+        sleeve = try? await CoverArtClient().discSleeve(
+            releaseID: release.id, disc: position, media: release.media.map(\.position))
     }
 }
 

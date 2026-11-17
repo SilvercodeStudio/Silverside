@@ -11,6 +11,12 @@ command-line tool.
   Music app at any time, and when "Add each disc to Music" is on in Settings,
   the toolbar has the button too. If Music seems to have the album already,
   Silverside asks first.
+- An earlier rip of a disc of a set shows the disc's own title, such as "Rio
+  Grande Mud" in a box of albums, and so does a disc in a drive.
+- Use Each Disc's Sleeve now also works for a box set whose images in the
+  Cover Art Archive name no discs, when there is one front for each disc in
+  the discs' order. The picker marks each front with its disc, so you can
+  check them first.
 
 ### Changed
 
@@ -19,6 +25,13 @@ command-line tool.
   Apple Music), never in the library. When Music copies files into its own
   folder, as it does at first, Silverside deletes its copies.
 - An album that Music has already is not added again after a rip or Encode.
+
+### Fixed
+
+- On an earlier rip of a set's disc, the Cover Art Archive picker said that
+  the image you choose goes on every disc. It now says that Silverside asks
+  next whether the image is for that disc only or for every disc, as it
+  always did.
 
 ## 0.9.8 (2026-11-16)
 

@@ -443,9 +443,14 @@ struct ResultsView: View {
     }
 
     /// The album, its artist, and its date, for a rip that is not one disc of a set: a set's
-    /// names are edited in its own view.
+    /// names are edited in its own view, so a disc of a set shows its own title, if it has one.
     @ViewBuilder private var albumFields: some View {
-        if let release = report.release, model.set(for: release) == nil {
+        if let release = report.release, model.set(for: release) != nil {
+            if let disc = discTitle {
+                Field(label: disc.label, value: disc.title)
+                    .help("The disc's own title in MusicBrainz. The set's names are edited in the set's view.")
+            }
+        } else if let release = report.release {
             HStack(alignment: .top, spacing: 12) {
                 EditableField(
                     label: "Album", text: accepting($albumText), shown: shownRelease?.title ?? release.title,
@@ -462,6 +467,14 @@ struct ResultsView: View {
                 .frame(width: 140)
             }
         }
+    }
+
+    /// A disc of a set, with its own title in MusicBrainz: "Disc 1 of 10", "ZZ Top's First Album".
+    private var discTitle: (label: String, title: String)? {
+        guard let toc, let release = report.release, let medium = release.medium(for: toc),
+            let title = medium.title, !title.isEmpty
+        else { return nil }
+        return ("Disc \(medium.position) of \(release.media.count)", title)
     }
 
     /// An album field's text, kept and saved when the field's text is accepted.
@@ -541,7 +554,9 @@ struct ResultsView: View {
                 )
                 .sheet(isPresented: $archivePickerShown) {
                     if let release = report.release {
-                        CoverArtPickerSheet(release: release, disc: report.discPosition) { choice in
+                        CoverArtPickerSheet(
+                            release: release, disc: report.discPosition, asksWhichDiscs: setOfDisc != nil
+                        ) { choice in
                             switch choice {
                             case .image(let image?): useCover(image)
                             case .image(nil): useWholeSetCover(nil)

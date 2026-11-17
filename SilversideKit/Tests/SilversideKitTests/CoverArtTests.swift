@@ -102,6 +102,8 @@ struct CoverArtListingTests {
         // A disc's sleeve is a front that names it, not the main front, nor a photo of the disc.
         #expect(CoverArtImage.sleeve(forDisc: 2, in: images)?.id == "2")
         #expect(CoverArtImage.sleeve(forDisc: 3, in: images) == nil)
+        // A front that names its discs leaves the archive's order out of it.
+        #expect(CoverArtImage.sleeve(forDisc: 3, in: images, media: Array(1...14)) == nil)
         let plan = CoverArtImage.sleeves(for: Array(1...14), in: images)
         #expect(plan.sleeves.map(\.image.id) == ["2", "3"] && plan.sleeves.map(\.discs) == [[1, 2], [12, 13, 14]])
         #expect(plan.others == Array(3...11))
@@ -110,6 +112,41 @@ struct CoverArtListingTests {
         #expect(CoverArtImage.ordered(images, forDisc: 3).map(\.id) == ["1", "4", "2", "3"])
         #expect(CoverArtImage.ordered(images, forDisc: 9).map(\.id) == ["1", "2", "3", "4"])
         #expect(CoverArtImage.ordered(images, forDisc: nil).map(\.id) == ["1", "2", "3", "4"])
+    }
+
+    /// A box of albums whose images name no disc, as ZZ Top's *The Complete Studio Albums
+    /// 1970–1990* has them: each album's front, back, and disc in turn, and the box.
+    @Test func takesTheFrontsInTheArchivesOrderWhenNoneNamesADisc() throws {
+        func image(_ id: String, _ types: [String], front: Bool = false, comment: String = "") -> CoverArtImage {
+            CoverArtImage(
+                id: id, types: types, isFront: front, isBack: false,
+                url: URL(string: "https://coverartarchive.org/release/r/\(id).jpg")!, comment: comment)
+        }
+        let images = [
+            image("box", ["Front"], front: true),
+            image("f1", ["Front"]), image("b1", ["Back"]), image("m1", ["Medium"]),
+            image("f2", ["Front"]), image("b2", ["Back"]), image("m2", ["Medium"]),
+            image("f3", ["Front"]), image("b3", ["Back"]), image("m3", ["Medium"]),
+            image("lid", ["Front", "Back", "Spine"], comment: "Box (stitched for a better view)"),
+        ]
+        let media = [1, 2, 3]
+        #expect(CoverArtImage.sleevesInOrder(images, media: media)?.mapValues(\.id) == [1: "f1", 2: "f2", 3: "f3"])
+        #expect(CoverArtImage.sleeve(forDisc: 2, in: images, media: media)?.id == "f2")
+        // Without the release's discs (`silverside album`), only a comment names a sleeve.
+        #expect(CoverArtImage.sleeve(forDisc: 2, in: images) == nil)
+        let plan = CoverArtImage.sleeves(for: media, in: images, media: media)
+        #expect(plan.sleeves.map(\.image.id) == ["f1", "f2", "f3"] && plan.others.isEmpty)
+        #expect(CoverArtImage.ordered(images, forDisc: 3, media: media).prefix(3).map(\.id) == ["box", "f3", "f1"])
+        // Not when the fronts are fewer or more than the discs, nor for one disc.
+        #expect(CoverArtImage.sleevesInOrder(images, media: [1, 2, 3, 4]) == nil)
+        #expect(CoverArtImage.sleevesInOrder(Array(images.prefix(7)), media: media) == nil)
+        #expect(CoverArtImage.sleevesInOrder(Array(images.prefix(2)), media: [1]) == nil)
+        // Not when a front names a disc: the comments say which is which.
+        var named = images
+        named[4].comment = "Disc 2"
+        #expect(CoverArtImage.sleevesInOrder(named, media: media) == nil)
+        #expect(CoverArtImage.sleeve(forDisc: 1, in: named, media: media) == nil)
+        #expect(CoverArtImage.sleeve(forDisc: 2, in: named, media: media)?.id == "f2")
     }
 
     /// The sleeves rule is kept for the release, and a cover for the whole set ends it.

@@ -492,7 +492,8 @@ public struct DiscRip {
                 coverStore.usesDiscSleeves(releaseID: chosen.id)
             {
                 Task { [webClient] in
-                    try await CoverArtClient(client: webClient).discSleeve(releaseID: chosen.id, disc: position)
+                    try await CoverArtClient(client: webClient).discSleeve(
+                        releaseID: chosen.id, disc: position, media: chosen.media.map(\.position))
                 }
             } else {
                 nil

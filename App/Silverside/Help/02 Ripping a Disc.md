@@ -128,9 +128,15 @@ kept as "cover (Disc 2).jpg" beside the set's cover.jpg, which stays the album f
 disc that no sleeve names keeps the set's cover. Choosing one cover for the set, or Use the Cover
 Art Archive's, ends it.
 
+Often no comment names the discs, but the archive has one front for each disc after the main
+front, uploaded in the order of the discs, as for ZZ Top's *The Complete Studio Albums 1970–1990*.
+The picker then marks each of those fronts with its disc ("Disc 3") and offers Use Each Disc's
+Sleeve too. Check the marks first: they come from the order alone.
+
 When the archive has no sleeves for the discs, or not the ones you want, give a disc a cover of your
-own: on an earlier rip of one of the set's discs, drop an image on the cover or choose Choose
-Cover…, and answer **Disc 2 Only** (say) when Silverside asks which discs it is for. That disc's
+own: on an earlier rip of one of the set's discs, drop an image on the cover, choose Choose
+Cover…, or choose an image in Cover Art Archive…, and answer **Disc 2 Only** (say) when Silverside
+asks which discs it is for. That disc's
 files embed it in place of the set's cover, as with a sleeve; for *Anthology*, give discs 1 and 2
 the cover of *Anthology 1*, and so on. **Every Disc** gives the whole set the cover instead, and
 **Use the Set's Cover** in the cover's menu takes a disc's own away. A new cover chosen for the set

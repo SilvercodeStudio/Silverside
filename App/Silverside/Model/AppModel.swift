@@ -310,7 +310,9 @@ final class AppModel {
                 let images = try await CoverArtClient().images(releaseID: release.id)
                 var covers = [URL: DiscCoverChange]()
                 for rip in rips {
-                    let sleeve = rip.report.discPosition.flatMap { CoverArtImage.sleeve(forDisc: $0, in: images) }
+                    let sleeve = rip.report.discPosition.flatMap {
+                        CoverArtImage.sleeve(forDisc: $0, in: images, media: release.media.map(\.position))
+                    }
                     if let sleeve, let image = try await CoverArtClient().download(sleeve) {
                         covers[rip.file] = .set(image)
                     } else {

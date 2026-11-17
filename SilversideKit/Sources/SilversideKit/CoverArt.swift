@@ -173,11 +173,11 @@ public struct CoverArtClient: Sendable {
         try await client.data(from: image.url).map(CoverImage.init)
     }
 
-    /// The disc's own sleeve in a box set (see `CoverArtImage.sleeve`), at full size. Nil if
-    /// the archive has none for it.
-    public func discSleeve(releaseID: String, disc position: Int) async throws -> CoverImage? {
-        guard let sleeve = CoverArtImage.sleeve(forDisc: position, in: try await images(releaseID: releaseID))
-        else { return nil }
+    /// The disc's own sleeve in a box set (see `CoverArtImage.sleeve`; `media` are the
+    /// release's discs, by position), at full size. Nil if the archive has none for it.
+    public func discSleeve(releaseID: String, disc position: Int, media: [Int]) async throws -> CoverImage? {
+        let images = try await images(releaseID: releaseID)
+        guard let sleeve = CoverArtImage.sleeve(forDisc: position, in: images, media: media) else { return nil }
         return try await download(sleeve)
     }
 
@@ -407,31 +407,54 @@ public struct CoverArtImage: Equatable, Identifiable, Sendable {
     }
 
     /// The sleeve for a disc of a box set whose discs have their own: a front image (not the
-    /// main front) whose comment names the disc, as "(Mediums 1–2)". Nil if none does.
-    public static func sleeve(forDisc position: Int, in images: [CoverArtImage]) -> CoverArtImage? {
-        images.first { !$0.isFront && $0.types.contains("Front") && $0.mediums?.contains(position) == true }
+    /// main front) whose comment names the disc, as "(Mediums 1–2)". When no front names a
+    /// disc, the fronts in the archive's order, if there is one for each of `media` (the
+    /// release's discs, by position; see `sleevesInOrder`). Nil if there is none.
+    public static func sleeve(forDisc position: Int, in images: [CoverArtImage], media: [Int] = []) -> CoverArtImage? {
+        images.first { $0.isOtherFront && $0.mediums?.contains(position) == true }
+            ?? sleevesInOrder(images, media: media)?[position]
     }
 
-    /// The main front, then the images that name the disc, then the rest, so that a box set's
-    /// dozens of images show (and load) the disc's own early; each part keeps the archive's order.
-    public static func ordered(_ images: [CoverArtImage], forDisc position: Int?) -> [CoverArtImage] {
+    /// The sleeves of a box set whose images name no disc, but have one front for each disc in
+    /// the discs' order: *The Complete Studio Albums 1970–1990* has each album's front, back,
+    /// and discs in turn. These are the images of the type Front alone, but the main front,
+    /// when there are as many as `media` (the release's discs, by position). `images` must be
+    /// in the archive's order, not `ordered`'s. Nil when a front names a disc, or the numbers
+    /// differ.
+    public static func sleevesInOrder(_ images: [CoverArtImage], media: [Int]) -> [Int: CoverArtImage]? {
+        guard media.count > 1, !images.contains(where: { $0.isOtherFront && $0.mediums != nil }) else { return nil }
+        let fronts = images.filter { $0.isOtherFront && $0.types == ["Front"] }
+        guard fronts.count == media.count else { return nil }
+        return Dictionary(zip(media.sorted(), fronts), uniquingKeysWith: { first, _ in first })
+    }
+
+    /// A front image that is not the main front, such as a disc's sleeve in a box set.
+    var isOtherFront: Bool { !isFront && types.contains("Front") }
+
+    /// The main front, then the images that name the disc (and its sleeve, see `sleeve`), then
+    /// the rest, so that a box set's dozens of images show (and load) the disc's own early;
+    /// each part keeps the archive's order.
+    public static func ordered(_ images: [CoverArtImage], forDisc position: Int?, media: [Int] = []) -> [CoverArtImage]
+    {
         guard let position else { return images }
+        let sleeve = sleeve(forDisc: position, in: images, media: media)?.id
         func rank(_ image: CoverArtImage) -> Int {
-            image.isFront ? 0 : image.mediums?.contains(position) == true ? 1 : 2
+            image.isFront ? 0 : image.mediums?.contains(position) == true || image.id == sleeve ? 1 : 2
         }
         return images.enumerated().sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }
             .map(\.element)
     }
 
-    /// Which sleeve each disc takes, for `positions` (the release's CDs): the sleeve's discs,
-    /// in the archive's order, and the discs that no sleeve names, which keep the set's cover.
+    /// Which sleeve each disc takes, for `positions` (the release's CDs; `media`, all of its
+    /// discs, as `sleeve` takes them): the sleeve's discs, in the archive's order, and the
+    /// discs that no sleeve is for, which keep the set's cover.
     public static func sleeves(
-        for positions: [Int], in images: [CoverArtImage]
+        for positions: [Int], in images: [CoverArtImage], media: [Int] = []
     ) -> (sleeves: [(image: CoverArtImage, discs: [Int])], others: [Int]) {
         var sleeves = [(image: CoverArtImage, discs: [Int])]()
         var others = [Int]()
         for position in positions {
-            guard let sleeve = sleeve(forDisc: position, in: images) else {
+            guard let sleeve = sleeve(forDisc: position, in: images, media: media) else {
                 others.append(position)
                 continue
             }

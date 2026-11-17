@@ -1,7 +1,8 @@
 # App updates with Sparkle
 
 A plan, discussed 2026-11-01, 2026-11-11, and 2026-11-12. All of it is done
-(2026-11-12) but the test of a real update, from 0.9.6 to 0.9.7 (see the end).
+(2026-11-12), and a real update worked: 0.9.7 to 0.9.8 through Sparkle, on
+another Mac (the user, 2026-11-17).
 
 ## Decisions
 
@@ -194,10 +195,9 @@ everyone who checks then.
 
 ### Testing before the first release
 
-- A build with a lower version finds the update, checks its signature,
-  installs it, and relaunches. The plan: the 0.9.6 that `make dist` made
-  (2026-11-11, installed in `~/Applications`, the only copy with Sparkle) and
-  the 0.9.7 release's real feed.
+- Done (the user, 2026-11-17, 0.9.7 to 0.9.8 on another Mac): a build with a
+  lower version finds the update, checks its signature, installs it, and
+  relaunches.
 - An update that arrives during a demo rip waits for the rip.
 - **App Translocation:** an app opened from Downloads, not moved, runs from a
   read-only place, and Sparkle cannot replace it; Sparkle says so. Moving it

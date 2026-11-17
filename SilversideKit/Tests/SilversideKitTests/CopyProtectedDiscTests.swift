@@ -171,3 +171,67 @@ struct CopyProtectedDiscTests {
         #expect(!FileManager.default.fileExists(atPath: repair.output.path))
     }
 }
+
+/// Radiohead *Hail to the Thief* (EMI, Cactus Data Shield 200, ripped on the MATSHITA
+/// 2026-10-30): C2 errors about every 450 sectors in every track, the drive's fill where the
+/// protection took out audio. Every track was accurate in AccurateRip.
+struct CopyProtectionGridTests {
+    /// The first read's C2 sectors of tracks 1, 6, 10, and 13.
+    static let flagged: [[Int]] = [
+        [
+            781, 782, 1242, 1692, 2142, 2581, 2582, 2592, 3032, 3042, 3932, 4392, 4832, 4842, 5282, 5732, 6192,
+            6632, 7092, 7992, 8432, 8892, 9332, 9342, 9792, 10232, 10692, 11132, 13382, 13392, 13842,
+        ],
+        [
+            797, 807, 1247, 1697, 1707, 2597, 2607, 3047, 3497, 3506, 3507, 5297, 5747, 5756, 5757, 6646, 6647,
+            7557, 8007, 8447, 8896, 8897, 8907, 9347, 9357, 10257, 10697, 11147, 11157, 11597, 11607, 12957, 13407,
+            13857, 14297, 15657, 16097, 16107, 16557, 16997, 17447, 17897, 17907, 18797, 18807, 19246, 19247, 19257,
+        ],
+        [825, 2175, 2185, 3985, 4425, 4435, 4885, 5335, 5775, 6235, 7125, 7135, 7575, 7585],
+        [
+            800, 810, 1249, 1250, 1700, 1710, 2150, 3060, 4400, 4410, 4850, 5760, 6200, 6210, 7110, 7550, 8000,
+            8900, 8910, 9350, 9800, 9810, 10700, 10710, 11150, 11160, 11600, 11610, 12050, 12500, 12510, 12949,
+            12950, 12960, 13410, 14300, 14310,
+        ],
+    ]
+
+    func report(_ c2: [[Int]?]) throws -> RipReport {
+        let drive = RipReport.Drive(
+            vendor: "MATSHITA", product: "BD-MLT UJ260AF", revision: "1.00", readOffset: 103,
+            offsetSource: "AccurateRip")
+        let tracks = c2.enumerated().map { index, sectors in
+            var track = RipReport.Track(
+                number: index + 1, file: String(format: "Track %02d.wav", index + 1), startLBA: index * 20000,
+                sectors: 20000, preEmphasis: false, accurateRip: .accurate)
+            track.c2Sectors = sectors
+            return track
+        }
+        let toc = try TOC(
+            tracks: tracks.map { TOC.Track(number: $0.number, startLBA: $0.startLBA) }, leadOutLBA: c2.count * 20000)
+        return RipReport(drive: drive, secure: true, toc: toc, tracks: tracks, ctdb: .init(status: .verified))
+    }
+
+    @Test func notesTheGridOfCopyProtection() throws {
+        let protected = try report(Self.flagged)
+        #expect(protected.copyProtectionGridTracks == [1, 2, 3, 4])
+        #expect(protected.copyProtectionNote?.hasPrefix("Copy protection: the C2 errors come about every 450") == true)
+        #expect(protected.copyProtectionNote?.contains("in every track") == true)
+        #expect(protected.markdown.contains("Cactus Data Shield"))
+        // A track with no C2 errors, one verified at once: still most of the tracks.
+        #expect(try report(Self.flagged + [[]]).copyProtectionNote?.contains("in 4 of 5 tracks") == true)
+    }
+
+    @Test func leavesOtherC2ErrorsAlone() throws {
+        // A scratch: once a turn of the disc, about 12 sectors at the outer edge.
+        let scratch = Array(stride(from: 3000, to: 3600, by: 12))
+        // A worn disc: errors here and there.
+        let worn = [120, 2210, 2213, 5077, 9300, 9318, 12001, 14444, 17020]
+        #expect(!RipReport.isOnProtectionGrid(scratch))
+        #expect(!RipReport.isOnProtectionGrid(worn))
+        #expect(try report([scratch, worn, scratch, worn]).copyProtectionNote == nil)
+        // Too few tracks on the grid, or too few of those with errors.
+        #expect(try report(Array(Self.flagged.prefix(2)) + [nil, nil, nil]).copyProtectionNote == nil)
+        #expect(try report(Self.flagged + [worn, worn]).copyProtectionNote == nil)
+        #expect(try report([nil, nil, nil]).copyProtectionNote == nil)
+    }
+}

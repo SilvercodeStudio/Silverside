@@ -545,6 +545,11 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// The album's add to Apple's Music app (`MusicAdd`), the last if there were more. Nil if
         /// Silverside has not added it, and in older records.
         public var music: MusicRecord?
+        /// The tag keys, in capitals, that Silverside wrote into the album's files last, over
+        /// every file. An update of a FLAC or MP4 file takes out the ones it has no value for
+        /// any more, and keeps the keys that another program added (`TagMerge.removedFromOwnFile`).
+        /// Nil in records from before Silverside kept it.
+        public var tagKeys: [String]?
 
         /// An add of the album's files to Apple's Music app.
         public struct MusicRecord: Codable, Equatable, Sendable {

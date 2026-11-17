@@ -17,6 +17,9 @@ command-line tool.
   Cover Art Archive name no discs, when there is one front for each disc in
   the discs' order. The picker marks each front with its disc, so you can
   check them first.
+- The report of a copy-protected disc, such as one with Cactus Data Shield,
+  explains the C2 errors that come about every 6 seconds in every track: the
+  drive fills in audio that the protection took out, so they are not damage.
 
 ### Changed
 
@@ -33,6 +36,11 @@ command-line tool.
   the image you choose goes on every disc. It now says that Silverside asks
   next whether the image is for that disc only or for every disc, as it
   always did.
+- A name edit, Update the Library, a new cover, Change Release, or a set's
+  album gain wrote every tag of a FLAC, Apple Lossless, or AAC file again, so
+  tags that another program had added were lost, such as a genre typed in a
+  tag editor. Those tags now stay. MP3, AIFF, and WAV files keep only
+  Silverside's tags.
 - `silverside tags --json` printed a note before the JSON for a folder of
   album folders ("add --recursive"), and `silverside cdtext --json` printed
   one in place of it for a disc without CD-Text, so programs could not read

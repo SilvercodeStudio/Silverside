@@ -48,11 +48,11 @@ public enum FLACTags {
     }
 
     /// The file's contents with `comments` as its Vorbis comments (nil keeps them) and `cover`
-    /// as its front cover (nil keeps it). The comments' vendor stays the file's, and so do the
-    /// other pictures and blocks; padding is written again. `LibraryAlbum` gives the comments
-    /// already merged (`TagMerge`).
+    /// as its front cover (nil keeps it, unless `removingCover`). The comments' vendor stays the
+    /// file's, and so do the other pictures and blocks; padding is written again. The comments
+    /// come already merged (`TagMerge`).
     public static func updating(
-        _ data: Data, comments: [(key: String, value: String)]?, cover: EmbeddedCover?
+        _ data: Data, comments: [(key: String, value: String)]?, cover: EmbeddedCover?, removingCover: Bool = false
     ) throws -> Data {
         let (blocks, audioStart) = try parseBlocks(data)
         guard let streamInfo = blocks.first, streamInfo.type == BlockType.streamInfo.rawValue else {
@@ -61,7 +61,11 @@ public enum FLACTags {
         var kept = [(type: UInt8, body: Data)]()
         var wroteComments = false
         for block in blocks where block.type != BlockType.padding.rawValue {
-            if block.type == BlockType.picture.rawValue, cover != nil, (try? pictureType(block.body)) == 3 { continue }
+            if block.type == BlockType.picture.rawValue, cover != nil || removingCover,
+                (try? pictureType(block.body)) == 3
+            {
+                continue
+            }
             if block.type == BlockType.vorbisComment.rawValue, let comments {
                 if !wroteComments {
                     kept.append((block.type, vorbisComment(comments, vendor: try vendor(of: block.body))))

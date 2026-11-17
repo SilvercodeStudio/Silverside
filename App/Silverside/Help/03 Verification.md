@@ -51,6 +51,11 @@ audio; a difference means the drive did not read the track the same way twice. T
 whether the disc is a pressed CD, a CD-R, or a CD-RW: a CD-R of a show or a mix is in neither
 database, so nothing can verify it, and the reads alone decide.
 
+On some copy-protected discs, such as those with Cactus Data Shield, the drive reports C2 errors
+about every 6 seconds in every track: the protection took out short parts of the audio, and the
+drive fills them in. The report then says so. Other drives fill them in the same way, so the tracks
+can still be verified; only a pressing without the protection has the original samples.
+
 ## What the statuses mean
 
 | Status | Meaning |

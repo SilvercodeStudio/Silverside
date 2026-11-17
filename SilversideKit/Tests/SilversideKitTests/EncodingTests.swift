@@ -507,6 +507,53 @@ extension EncodingTests {
         #expect(again.renamed == 0 && again.files == update.files)
     }
 
+    /// A library update keeps the tags that another program added, in FLAC and in MP4, and
+    /// takes out a key that Silverside wrote last and has no value for now. A second update
+    /// leaves the files alone.
+    @Test(arguments: [AudioFormat.flac, .alac])
+    func keepsTagsThatAnotherProgramAdded(format: AudioFormat) throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let disc = try RippedDisc(folder: folder)
+        let files = try DiscEncoder(format: format).encode(disc, into: library)
+        let albumReport = files[0].deletingLastPathComponent().appending(path: "Rip Report (Disc 2).json")
+        let record = try #require(try RipReport.read(from: albumReport).encoding?.tagKeys)
+        #expect(record.contains("BARCODE") && record.contains("TITLE") && !record.contains("GENRE"))
+
+        // Another program's tags.
+        let added: [(key: String, value: String)] = [("GENRE", "Rock"), ("ORIGINALDATE", "1991-06-17")]
+        let data = try Data(contentsOf: files[0])
+        try
+            (format == .flac
+            ? FLACTags.updating(data, comments: try FLACTags.read(files[0]) + added + [("mood", "Mellow")], cover: nil)
+            : MP4Tags.updating(data, removing: [], adding: added, cover: nil)).write(to: files[0])
+        // The release has no barcode any more, and the album has a new name.
+        var report = try RipReport.read(from: folder.appending(path: "disc.json"))
+        report.release?.barcode = nil
+        try report.write(to: folder.appending(path: "disc.json"))
+        let edits = ReleaseEditsStore(url: folder.deletingLastPathComponent().appending(path: "edits.json"))
+        try edits.remember(MetadataEdits(album: "Giants Stadium 1991"), forReleaseID: "rel")
+        func update() throws -> URL {
+            try DiscEncoder(format: format).updateLibrary(
+                reportAt: folder.appending(path: "disc.json"), library: library, editsStore: edits,
+                coverStore: ReleaseCoverStore(folder: folder.deletingLastPathComponent().appending(path: "covers"))
+            ).files[0]
+        }
+        let file = try update()
+        let tags = try format == .flac ? FLACTags.read(file) : MP4Tags.read(file, every: true).comments
+        func value(_ key: String) -> String? { tags.first { $0.key == key }?.value }
+        #expect(value("ALBUM") == "Giants Stadium 1991" && value("TITLE") == "Help on the Way >")
+        #expect(value("GENRE") == "Rock" && value("ORIGINALDATE") == "1991-06-17")
+        #expect(value("BARCODE") == nil)
+        if format == .flac { #expect(value("mood") == "Mellow") }
+        let cover = try format == .flac ? FLACTags.readFrontCover(file) : MP4Tags.read(file).cover
+        #expect(cover != nil)
+
+        let modified = try file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        #expect(try update() == file)
+        #expect(try file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate == modified)
+    }
+
     /// *American Beauty*: the deluxe edition's disc 1 and the single-disc edition, encoded into
     /// one album folder while they had one name. Renaming this rip's album moves its files only:
     /// the other edition keeps its folder, report, files, CUE sheet, and cover.

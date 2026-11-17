@@ -43,6 +43,41 @@ struct AlbumTagsTests {
         #expect(TagMerge.changes(from: picard, to: other).filter(\.isRemoved).map(\.key) == ["RELEASETYPE", "BARCODE"])
     }
 
+    /// An update of Silverside's own file keeps another program's keys, and takes out the keys
+    /// that Silverside wrote last and has no value for now. With no record of them, a file of
+    /// the same release keeps every key Silverside does not write now, and one of another
+    /// release, or of none, loses the keys Silverside writes from a release.
+    @Test func updatesSilversidesOwnFile() {
+        let existing: [(key: String, value: String)] = [
+            ("TITLE", "Help on the Way"), ("DATE", "1991"), ("BARCODE", "603497852376"),
+            ("MUSICBRAINZ_ALBUMID", "rel"), ("YEAR", "1991"), ("GENRE", "Rock"), ("ORIGINALDATE", "1991-06-17"),
+            ("mood", "Mellow"),
+        ]
+        let new: [(key: String, value: String)] = [
+            ("TITLE", "Help on the Way >"), ("DATE", "2019-09-27"), ("MUSICBRAINZ_ALBUMID", "rel"),
+        ]
+        func kept(_ removed: Set<String>) -> [String] {
+            Self.text(TagMerge.merged(existing, writing: new, removing: removed)).filter {
+                !new.map(\.key).contains($0.split(separator: "=")[0].uppercased())
+            }
+        }
+        let recorded = TagMerge.removedFromOwnFile(
+            existing, writing: new, lastWritten: ["TITLE", "DATE", "BARCODE", "MUSICBRAINZ_ALBUMID"])
+        #expect(kept(recorded) == ["GENRE=Rock", "ORIGINALDATE=1991-06-17", "mood=Mellow"])
+        let unrecorded = TagMerge.removedFromOwnFile(existing, writing: new, lastWritten: nil)
+        #expect(kept(unrecorded) == ["BARCODE=603497852376", "GENRE=Rock", "ORIGINALDATE=1991-06-17", "mood=Mellow"])
+        // Another release, or a disc of none.
+        let other = [("TITLE", "Help on the Way >"), ("MUSICBRAINZ_ALBUMID", "other")]
+        #expect(
+            TagMerge.removedFromOwnFile(existing, writing: other, lastWritten: nil).isSuperset(of: ["GENRE", "BARCODE"])
+        )
+        let none = TagMerge.removedFromOwnFile(existing, writing: [("TITLE", "Track 1")], lastWritten: nil)
+        #expect(
+            none.isSuperset(of: ["GENRE", "BARCODE", "ORIGINALDATE", "MUSICBRAINZ_ALBUMID"]) && !none.contains("MOOD"))
+        // With a record, a key the user added stays across a change of release.
+        #expect(!TagMerge.removedFromOwnFile(existing, writing: other, lastWritten: ["TITLE"]).contains("MOOD"))
+    }
+
     @Test func writesTheMergeIntoAFLACFile() throws {
         let folder = try LibraryAlbumTests().temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }

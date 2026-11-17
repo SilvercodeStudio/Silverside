@@ -158,6 +158,12 @@ files take the new names and are renamed as the naming templates say; files whos
 change are not touched. A rip that is not encoded yet keeps the names for its encoding. The album's
 names of a set are edited in the set's view, because every disc shares them.
 
+Tags that another program added to FLAC, Apple Lossless, or AAC files stay when Silverside writes the
+files again, such as a genre that you typed in a tag editor where MusicBrainz has none. Where
+Silverside has a value of its own, such as a title, its value replaces the file's, so change those
+names in Silverside. A tag that Silverside wrote before and has no value for now, such as a barcode
+that the release no longer has, goes. MP3, AIFF, and WAV files keep only Silverside's tags.
+
 A rip tagged with the wrong release, such as another edition of the album, or a disc that
 MusicBrainz did not know at the rip and has since, can take another release with **Change
 Release…**: in the rip's header, in the Disc menu, or in the menu of the rip in Recent Rips and Rip

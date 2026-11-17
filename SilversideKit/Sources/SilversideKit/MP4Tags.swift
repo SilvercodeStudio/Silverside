@@ -59,12 +59,12 @@ public enum MP4Tags {
 
     /// The file's contents with its items for `keys` (Vorbis comment keys in capitals, as
     /// `keys(of:in:)` names an item) taken out, `comments` added as items, and `cover` as its
-    /// cover (nil keeps it). Every other item stays, whoever wrote it, and so does the rest of
-    /// meta, as for `replacingCover`. COMPILATION goes in `cpil`, as iTunes and Picard keep it.
-    /// No `©too`: the file's encoder stays.
+    /// cover (nil keeps it, unless `removingCover`). Every other item stays, whoever wrote it,
+    /// and so does the rest of meta, as for `replacingCover`. COMPILATION goes in `cpil`, as
+    /// iTunes and Picard keep it. No `©too`: the file's encoder stays.
     public static func updating(
         _ data: Data, removing keys: Set<String>, adding comments: [(key: String, value: String)],
-        cover: EmbeddedCover?
+        cover: EmbeddedCover?, removingCover: Bool = false
     ) throws -> Data {
         let top = try atoms(in: data, data.startIndex..<data.endIndex)
         guard let moov = top.first(where: { $0.type == "moov" }), let mdat = top.first(where: { $0.type == "mdat" })
@@ -72,7 +72,7 @@ public enum MP4Tags {
         if let cover, cover.image.fileExtension == nil { throw CoverArtError.unknownFormat }
         if let handler = try metaHandler(in: data, moov: moov), handler != "mdir" { throw MP4Error.otherTags(handler) }
         let kept = try existingItems(in: data, moov: moov).filter { item in
-            if item.type == "covr" { return cover == nil }
+            if item.type == "covr" { return cover == nil && !removingCover }
             return try !Self.keys(of: item, in: data).contains(where: keys.contains)
         }.map { Data(data[$0.range]) }
         var added = items(comments.filter { $0.key != "COMPILATION" }, cover: cover, vendor: false)
@@ -81,6 +81,12 @@ public enum MP4Tags {
         }
         return try rewritten(
             data, top: top, moov: moov, mdat: mdat, ilst: atom("ilst", kept + added), keepingMeta: true)
+    }
+
+    /// True if the writers keep the Vorbis comment key `key` in an item.
+    static func writes(_ key: String) -> Bool {
+        textAtoms[key] != nil || freeformNames[key] != nil
+            || ["TRACKNUMBER", "TRACKTOTAL", "DISCNUMBER", "DISCTOTAL"].contains(key)
     }
 
     /// Picard's freeform names for tags that Silverside does not write, by the Vorbis comment key.

@@ -33,6 +33,7 @@ extension RipReport {
         if let controlBits = Self.controlBitsSummary(of: tracks) {
             lines += ["", "Control bits (TOC and Q subchannel): " + controlBits]
         }
+        if let protection = copyProtectionNote { lines += ["", protection] }
         if let checkedAgain {
             lines += [
                 "", "Checked again in AccurateRip and CTDB \(ISO8601DateFormatter().string(from: checkedAgain)).",
@@ -510,5 +511,51 @@ extension RipReport {
     /// Text that cannot break a Markdown table.
     static func escaped(_ text: String) -> String {
         text.replacingOccurrences(of: "|", with: "\\|")
+    }
+}
+
+extension RipReport {
+    /// The spacing of the C2 flags that copy protection leaves: on Radiohead *Hail to the Thief*
+    /// (Cactus Data Shield 200), a run of flags about every 450 sectors (6 seconds) in every
+    /// track, where the protection took out audio that drives fill in.
+    static let protectionGridSectors = 450
+
+    /// The tracks whose C2 flags fall on copy protection's grid: 4 runs of flags or more, and
+    /// 8 in 10 of the steps between them near a multiple of 450 sectors. A worn disc's flags are
+    /// scattered, or come once a turn of the disc (9 to 23 sectors).
+    var copyProtectionGridTracks: [Int] {
+        tracks.filter { Self.isOnProtectionGrid($0.c2Sectors ?? []) }.map(\.number)
+    }
+
+    static func isOnProtectionGrid(_ sectors: [Int]) -> Bool {
+        // A run: flags no more than 15 sectors apart, such as the pairs 10 apart.
+        var starts = [Int]()
+        var last: Int?
+        for sector in sectors.sorted() {
+            if last.map({ sector - $0 > 15 }) ?? true { starts.append(sector) }
+            last = sector
+        }
+        guard starts.count >= 4 else { return false }
+        let steps = zip(starts, starts.dropFirst()).map { $1 - $0 }
+        let onGrid = steps.filter { step in
+            let multiple = (Double(step) / Double(protectionGridSectors)).rounded()
+            return multiple >= 1 && abs(step - Int(multiple) * protectionGridSectors) <= 25
+        }
+        return onGrid.count * 10 >= steps.count * 8
+    }
+
+    /// A note for a rip whose C2 flags fall on copy protection's grid in most tracks (3 or
+    /// more), and in nearly every track that has flags: the samples there are the drive's fill,
+    /// the same for other drives, not damage.
+    var copyProtectionNote: String? {
+        let grid = copyProtectionGridTracks
+        let flagged = tracks.filter { ($0.c2Sectors?.count ?? 0) >= 4 }.count
+        guard grid.count >= 3, grid.count * 2 >= tracks.count, grid.count * 4 >= flagged * 3 else { return nil }
+        let which = grid.count == tracks.count ? "every track" : "\(grid.count) of \(tracks.count) tracks"
+        return "Copy protection: the C2 errors come about every 450 sectors (6 seconds) in \(which). Copy "
+            + "protection such as Cactus Data Shield takes out short parts of the audio there, and the drive "
+            + "fills them in. So these samples are the drive's fill, not damage, and other drives fill them in "
+            + "the same way: the tracks can still be accurate in AccurateRip. Only a pressing without the "
+            + "protection has the original samples."
     }
 }

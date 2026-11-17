@@ -1087,6 +1087,7 @@ public struct DiscEncoder: Sendable {
 
         var written = [URL]()
         var encodedFiles = [RipReport.Encoding.File]()
+        var tagKeys = Set<String>()
         var albumFolder: URL?
         var cueTracks = [CueSheet.Track]()
         var hiddenTrackFile: String?
@@ -1107,6 +1108,7 @@ public struct DiscEncoder: Sendable {
             albumFolder = folder
             written.append(file)
             encodedFiles.append(.init(track: ripped.number, file: file.lastPathComponent))
+            tagKeys.formUnion((job.metadata.vorbisComments + job.extraComments).map { $0.key.uppercased() })
             if ripped.number == 0 {
                 hiddenTrackFile = file.lastPathComponent
                 continue
@@ -1231,6 +1233,7 @@ public struct DiscEncoder: Sendable {
             encoding.titleSuffix = titleSuffix
             encoding.dataTrackFiles = dataTrackFiles.isEmpty ? nil : dataTrackFiles
             encoding.graphicsFiles = graphicsFiles.isEmpty ? nil : graphicsFiles
+            encoding.tagKeys = tagKeys.sorted()
             // Videos made earlier stay the album's, while their files are there.
             if albumSuffix == nil, !graphicsFiles.isEmpty {
                 let album = URL(filePath: encoding.folder, directoryHint: .isDirectory)

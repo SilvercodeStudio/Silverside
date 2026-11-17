@@ -285,6 +285,8 @@ extension DiscEncoder {
 
         // Each file: its name as the template has it now, then its tags.
         let audioTracks = toc.audioTracks
+        let lastWritten = encoding.tagKeys.map(Set.init)
+        var writtenKeys = Set<String>()
         var files = [URL]()
         var cueTracks = [CueSheet.Track]()
         var hiddenTrackFile: String?
@@ -337,19 +339,19 @@ extension DiscEncoder {
                 + ReplayGain.tags(
                     track: gain?.tracks.first { $0.track == entry.track }?.values, album: gain?.albumInTags)
                 + (encoding.dynamics?.tags(forTrack: entry.track, ranges: gain != nil) ?? [])
-            // A file whose tags are already these is left alone (a library on a network
-            // volume is slow to write), unless the cover changes.
+            writtenKeys.formUnion(comments.map { $0.key.uppercased() })
             let coverChanges: Bool
             if case .keep = discCover { coverChanges = cover != nil } else { coverChanges = true }
-            if coverChanges || Self.comments(of: url, format: encoding.format).map({ !Self.same($0, comments) }) ?? true
-            {
-                switch encoding.format {
-                case .flac: try FLACTags.write(comments, cover: embedded, to: url)
-                case .alac, .aac: try MP4Tags.write(comments, cover: embedded, to: url)
-                case .aiff: try ChunkTags.writeAIFF(comments, cover: embedded, to: url)
-                case .wav: try ChunkTags.writeWAV(comments, cover: embedded, to: url)
-                case .mp3: try ID3Tags.write(comments, cover: embedded, to: url)
-                }
+            var removesCover = false
+            if case .remove = discCover { removesCover = embedded == nil }
+            switch encoding.format {
+            case .flac, .alac, .aac:
+                try Self.updateTags(
+                    of: url, format: encoding.format, writing: comments, lastWritten: lastWritten, cover: embedded,
+                    coverChanges: coverChanges, removingCover: removesCover)
+            case .aiff: try ChunkTags.writeAIFF(comments, cover: embedded, to: url)
+            case .wav: try ChunkTags.writeWAV(comments, cover: embedded, to: url)
+            case .mp3: try ID3Tags.write(comments, cover: embedded, to: url)
             }
             files.append(url)
             if entry.track == 0 {
@@ -388,6 +390,7 @@ extension DiscEncoder {
             }
         }
         encoding.folder = album.path
+        if !writtenKeys.isEmpty { encoding.tagKeys = writtenKeys.sorted() }
         // The videos of the CD+G graphics keep the album's name.
         for (index, video) in (encoding.videos ?? []).enumerated() {
             let planned = CDGraphicsVideo.fileName(release: release, toc: toc, picture: video.picture)
@@ -775,17 +778,44 @@ extension DiscEncoder {
         try move(source, destination)
     }
 
-    /// The tags of a FLAC or MP4 file, as the writer would give them; nil for other formats or a file that cannot be read.
-    private static func comments(of url: URL, format: AudioFormat) -> [(key: String, value: String)]? {
-        switch format {
-        case .flac: try? FLACTags.read(url)
-        case .alac, .aac: try? MP4Tags.read(url).comments
-        case .aiff, .wav, .mp3: nil
+    /// Writes `new` over the tags of a FLAC or MP4 file that Silverside encoded, and keeps the
+    /// keys that another program added, with every other block or item
+    /// (`TagMerge.removedFromOwnFile`, with the keys Silverside wrote last, `lastWritten`).
+    /// A file whose tags are these already is left alone (a library on a network volume is
+    /// slow to write), unless `coverChanges`. `cover` is the front cover (nil keeps the file's,
+    /// unless `removingCover`). The audio is checked before the file is replaced
+    /// (`LibraryAlbumWriter`).
+    static func updateTags(
+        of url: URL, format: AudioFormat, writing new: [(key: String, value: String)], lastWritten: Set<String>?,
+        cover: EmbeddedCover?, coverChanges: Bool, removingCover: Bool
+    ) throws {
+        let isFLAC = format == .flac
+        let existing = try isFLAC ? FLACTags.read(url) : MP4Tags.read(url, every: true).comments
+        let removed = TagMerge.removedFromOwnFile(existing, writing: new, lastWritten: lastWritten)
+        let merged = TagMerge.merged(existing, writing: new, removing: removed)
+        if !coverChanges {
+            // An MP4 file's items have their own order, and hold only the keys it has items for.
+            let same =
+                isFLAC
+                ? Self.same(existing, merged)
+                : Self.grouped(existing.filter { removed.contains($0.key.uppercased()) })
+                    == Self.grouped(new.filter { MP4Tags.writes($0.key) })
+            if same { return }
+        }
+        try LibraryAlbumWriter.rewrite(url, kind: isFLAC ? .flac : .mp4) { data in
+            isFLAC
+                ? try FLACTags.updating(data, comments: merged, cover: cover, removingCover: removingCover)
+                : try MP4Tags.updating(data, removing: removed, adding: new, cover: cover, removingCover: removingCover)
         }
     }
 
     private static func same(_ a: [(key: String, value: String)], _ b: [(key: String, value: String)]) -> Bool {
         a.count == b.count && zip(a, b).allSatisfy { $0.key == $1.key && $0.value == $1.value }
+    }
+
+    /// Each key's values, in order, by the key in capitals.
+    private static func grouped(_ tags: [(key: String, value: String)]) -> [String: [String]] {
+        Dictionary(tags.map { ($0.key.uppercased(), [$0.value]) }, uniquingKeysWith: +)
     }
 
     // MARK: ReplayGain for a set

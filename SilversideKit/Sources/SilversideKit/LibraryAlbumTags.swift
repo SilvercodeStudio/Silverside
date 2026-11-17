@@ -32,13 +32,49 @@ public enum TagMerge {
         return removed
     }
 
+    /// The keys that Silverside writes from a release (`TrackMetadata.vorbisComments`).
+    public static let releaseKeys: Set<String> = [
+        "TITLE", "ARTIST", "ALBUMARTIST", "ALBUM", "DISCNUMBER", "DISCTOTAL", "TRACKNUMBER", "TRACKTOTAL",
+        "DISCSUBTITLE", "COMPILATION", "DATE", "ORIGINALDATE", "GENRE", "COMPOSER", "LYRICIST", "ISRC", "BARCODE",
+        "LABEL", "CATALOGNUMBER", "RELEASECOUNTRY", "ARTISTSORT", "ALBUMARTISTSORT", "MUSICBRAINZ_ALBUMID",
+        "MUSICBRAINZ_RELEASEGROUPID", "MUSICBRAINZ_TRACKID", "MUSICBRAINZ_ALBUMARTISTID", "MUSICBRAINZ_ARTISTID",
+    ]
+
+    /// The keys, in capitals, that an update of a file Silverside encoded takes out before it
+    /// writes `new`: the keys written and other programs' names for them (`removed`), and the
+    /// keys that Silverside wrote there last (`lastWritten`, the encoding's record), whose
+    /// values it may have no more. Every other key stays, as another program wrote it. When
+    /// the file names another release than `new` does, or `new` names none (a disc of no
+    /// release), the release-bound keys go too; and with no record (an album encoded before
+    /// Silverside kept one), so does every key that Silverside writes from a release.
+    public static func removedFromOwnFile(
+        _ existing: [(key: String, value: String)], writing new: [(key: String, value: String)],
+        lastWritten: Set<String>?
+    ) -> Set<String> {
+        func release(_ tags: [(key: String, value: String)]) -> String? {
+            tags.first { $0.key.uppercased() == "MUSICBRAINZ_ALBUMID" && !$0.value.isEmpty }?.value.lowercased()
+        }
+        let tagged = release(existing)
+        let otherRelease = tagged != nil && tagged != release(new)
+        var keys = removed(writing: new, otherRelease: otherRelease)
+        keys.formUnion(lastWritten ?? (otherRelease ? releaseKeys : []))
+        return keys
+    }
+
     /// The file's tags after the merge: Silverside's first, in the library's order, then the
     /// file's others in their order.
     public static func merged(
         _ existing: [(key: String, value: String)], writing new: [(key: String, value: String)], otherRelease: Bool
     ) -> [(key: String, value: String)] {
-        let removed = removed(writing: new, otherRelease: otherRelease)
-        return new + existing.filter { !removed.contains($0.key.uppercased()) }
+        merged(existing, writing: new, removing: removed(writing: new, otherRelease: otherRelease))
+    }
+
+    /// `new`, then the file's tags whose keys, in capitals, are not in `keys`.
+    public static func merged(
+        _ existing: [(key: String, value: String)], writing new: [(key: String, value: String)],
+        removing keys: Set<String>
+    ) -> [(key: String, value: String)] {
+        new + existing.filter { !keys.contains($0.key.uppercased()) }
     }
 
     /// One key's change, for the report: its values before and after, and the names it had.

@@ -64,9 +64,12 @@ public struct MusicAdd: Sendable {
     }
 
     /// Adds the files of one disc, in `format`, of the album folder `album`: as they are, or in
-    /// a format that Music does not play, as copies.
+    /// a format that Music does not play, as copies. Files that hold a DTS stream are refused,
+    /// as `files(of:)` refuses them by the report: an album encoded before Silverside looked
+    /// for streams has nothing in its report to say so.
     public func add(_ files: [URL], format: AudioFormat, album: URL) throws -> Added {
         guard !files.isEmpty else { throw MusicAddError.notEncoded }
+        try Self.refuseStreams(files)
         var made = [URL]()
         if !MusicApp.reads(format) {
             let folder = try copiesFolder(for: album, files: files)
@@ -88,6 +91,11 @@ public struct MusicAdd: Sendable {
             format: made.isEmpty ? format : self.format, tracks: tracks.map(\.persistentID))
         return Added(
             record: record, tracks: tracks.isEmpty ? files.count : tracks.count, copies: made.count, keptCopies: kept)
+    }
+
+    /// Throws `MusicAddError.dtsStream` if a file holds a DTS stream (`DTSPlaybackCheck`).
+    static func refuseStreams(_ files: [URL]) throws {
+        if files.contains(where: DTSPlaybackCheck.holdsStream(file:)) { throw MusicAddError.dtsStream }
     }
 
     /// Adds the files as `add` does, unless Music has the album already: the tracks of an earlier
@@ -177,11 +185,11 @@ public struct MusicAdd: Sendable {
     }
 
     /// Writes `source`, a FLAC file, as `target` in `format`, with its tags and cover: beside it
-    /// first, checked, then in its place, which must be free. A lossless copy keeps every bit,
-    /// and every channel.
+    /// first, under a name of its own, checked, then in its place, which must be free. A
+    /// lossless copy keeps every bit, and every channel.
     static func convert(_ source: URL, to target: URL, format: AudioFormat, aac: AACOptions) throws {
         let partial = target.deletingLastPathComponent()
-            .appending(path: ".\(target.deletingPathExtension().lastPathComponent).partial.m4a")
+            .appending(path: ".\(target.deletingPathExtension().lastPathComponent).\(UUID().uuidString).partial.m4a")
         defer { try? FileManager.default.removeItem(at: partial) }
         let details = AudioDetails.read(source)?.format
         let bits = details?.bits ?? 24

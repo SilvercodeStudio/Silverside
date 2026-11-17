@@ -500,24 +500,7 @@ nonisolated final class DTSFileFeeder: @unchecked Sendable {
     }
 
     /// True if the file's first second with sound is a DTS stream: 16-bit stereo, as a rip has it.
-    static func holdsStream(_ url: URL) -> Bool {
-        DTSPlaybackCheck.holdsStream { try read(url, from: $0, frames: $1) }
-    }
-
-    /// Up to `frames` samples of the file from `start`, as Silverside samples. Nil for a file
-    /// that is not 16-bit stereo at 44.1 kHz, or at its end.
-    private static func read(_ url: URL, from start: Int, frames: Int) throws -> [UInt32]? {
-        let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatInt16, interleaved: true)
-        guard file.fileFormat.channelCount == 2, file.fileFormat.sampleRate == 44_100 else { return nil }
-        file.framePosition = AVAudioFramePosition(start)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(frames))
-        else { return nil }
-        try file.read(into: buffer)
-        guard buffer.frameLength > 0, let data = buffer.int16ChannelData else { return nil }
-        return UnsafeRawPointer(data[0]).withMemoryRebound(to: UInt32.self, capacity: Int(buffer.frameLength)) {
-            Array(UnsafeBufferPointer(start: $0, count: Int(buffer.frameLength)))
-        }
-    }
+    static func holdsStream(_ url: URL) -> Bool { DTSPlaybackCheck.holdsStream(file: url) }
 
     func start() {
         let thread = Thread { [self] in run() }

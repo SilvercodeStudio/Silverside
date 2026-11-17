@@ -122,6 +122,24 @@ struct MusicAddTests {
                 == ["plain.flac", "plain.m4a", "six.flac", "six.m4a", "twenty.flac", "twenty.m4a"])
     }
 
+    /// An album encoded before Silverside looked for DTS streams has no word of one in its
+    /// report, so its files are looked at: a stream is refused, music and a decode's 5.1 are not.
+    @Test func refusesAFileThatHoldsADTSStream() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let stream = folder.appending(path: "01 Stream.flac")
+        let quiet = [UInt32](repeating: 0, count: 2 * 44_100)
+        try AudioEncoder.encode(quiet + DTSTests.samples(DTSTests.stream(frames: 100)), format: .flac, to: stream)
+        let music = folder.appending(path: "02 Music.flac")
+        try AudioEncoder.encode(LibraryAlbumTests.twoSeconds, format: .flac, to: music)
+        let surround = folder.appending(path: "03 Surround.flac")
+        try AudioEncoder.encode(SurroundLayoutTests.tones(mask: 0x3F).0, format: .flac, to: surround)
+        #expect(DTSPlaybackCheck.holdsStream(file: stream))
+        #expect(!DTSPlaybackCheck.holdsStream(file: music) && !DTSPlaybackCheck.holdsStream(file: surround))
+        #expect(throws: MusicAddError.dtsStream) { try MusicAdd.refuseStreams([music, stream]) }
+        try MusicAdd.refuseStreams([music, surround])
+    }
+
     /// An AAC copy has the track's length and its tags.
     @Test func copiesFLACAsAAC() throws {
         let folder = try temporaryFolder()

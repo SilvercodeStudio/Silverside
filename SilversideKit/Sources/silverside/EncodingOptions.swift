@@ -59,7 +59,8 @@ struct EncodingOptions: ParsableArguments {
     var replayGain: Bool?
 
     @Flag(
-        inversion: .prefixedNo, help: "Add the encoded files to Apple's Music app (not for FLAC, which it cannot read)."
+        inversion: .prefixedNo,
+        help: "Add each encoded disc to Apple's Music app; FLAC as copies, as the musicFormat setting says."
     )
     var addToMusic: Bool?
 

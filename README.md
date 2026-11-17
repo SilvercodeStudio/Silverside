@@ -100,7 +100,7 @@ macOS opens them without warnings.
 - **Encoding** to FLAC, Apple Lossless (ALAC), AAC, AIFF, WAV, or MP3, with
   tags and the cover embedded. Each file is checked after encoding: a
   lossless file must decode to exactly the ripped audio. Optionally, the
-  files go into the Music app (every format but FLAC).
+  albums go into the Music app, FLAC as Apple Lossless or AAC copies.
 - **ReplayGain tags**, measured as EBU R 128 does, so players that read them
   play albums at one volume level. The raw audio samples are not changed.
 - **Dynamic range** of each track, disc, and set: the DR meter's number and

@@ -527,7 +527,7 @@ private final class RipPrinter: @unchecked Sendable {
         case .addedToMusic(let count):
             Swift.print("Added \(count) tracks to Music.")
         case .addToMusicFailed(let error):
-            Swift.print("Music: \(error)")
+            Swift.print("Not added to Music: \(error)")
         case .writingVideo(let fraction):
             progress.showText(String(format: "Video: %3.0f%%", fraction * 100))
         case .videoWritten(let url):

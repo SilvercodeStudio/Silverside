@@ -53,8 +53,14 @@ public struct Settings: Codable, Equatable, Sendable {
     public var mp3 = MP3Options()
     /// Write ReplayGain tags (track and album gain and peak, EBU R 128 loudness) into the encoded files.
     public var replayGain = true
-    /// Add the encoded files to Apple's Music app, in the formats it reads (not FLAC).
+    /// Add each disc to Apple's Music app when it is encoded. Music cannot play FLAC, so it gets
+    /// copies of a FLAC album (`MusicAdd`).
     public var addToMusic = false
+    /// The format of the copies that Music gets of FLAC albums: Apple Lossless or AAC (with `aac`).
+    public var musicFormat = AudioFormat.alac
+    /// Where those copies are made, each album where the library has it. When Music copies them
+    /// into its own folder, as its settings do by default, they are deleted; else they stay.
+    public var musicCopies = "~/Music/Silverside for Music"
     /// The app rips a disc when it goes in, if MusicBrainz names its release for certain.
     public var ripOnInsert = false
     /// What to do with a disc whose HDCD codes ask for peak extend or a gain adjustment.
@@ -127,6 +133,9 @@ public struct Settings: Codable, Equatable, Sendable {
 
     /// The folder for disc images, with "~" made into the home folder.
     public var imagesURL: URL { Self.expand(images) }
+
+    /// The folder for Music's copies of FLAC albums, with "~" made into the home folder.
+    public var musicCopiesURL: URL { Self.expand(musicCopies) }
 
     /// The folder for rips: the `rips` setting, or the current folder if it is empty.
     public var ripsURL: URL { rips.isEmpty ? URL.currentDirectory() : Self.expand(rips) }
@@ -222,6 +231,8 @@ public struct Settings: Codable, Equatable, Sendable {
         mp3 = try value(.mp3, defaults.mp3)
         replayGain = try value(.replayGain, defaults.replayGain)
         addToMusic = try value(.addToMusic, defaults.addToMusic)
+        musicFormat = try value(.musicFormat, defaults.musicFormat)
+        musicCopies = try value(.musicCopies, defaults.musicCopies)
         ripOnInsert = try value(.ripOnInsert, defaults.ripOnInsert)
         hdcd = try value(.hdcd, defaults.hdcd)
         preEmphasis = try value(.preEmphasis, defaults.preEmphasis)

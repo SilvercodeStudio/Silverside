@@ -70,15 +70,23 @@ struct GeneralSettings: View {
                     "Otherwise a rip whose tracks are all verified and encoded is deleted, and its report goes in the album folder."
                 )
                 .font(.caption).foregroundStyle(.secondary)
-                Toggle("Add the files to Apple's Music app", isOn: $model.settings.addToMusic)
-                    .disabled(!model.settings.encodeAfterRip || !MusicApp.reads(model.settings.format))
+                Toggle("Eject the disc if every track is verified", isOn: $model.settings.ejectAfterRip)
+            }
+            Section("Apple Music") {
+                Toggle("Add each disc to Music when it is encoded", isOn: $model.settings.addToMusic)
                 Text(
-                    MusicApp.reads(model.settings.format)
-                        ? "Music adds them where they are, or copies them if its own settings say so. macOS asks once whether Silverside may control Music."
-                        : "Music cannot read FLAC files. Choose Apple Lossless to add rips to Music."
+                    "After a rip, or Encode on an earlier rip, unless Music has the album already. Add to Music in the Disc menu adds an earlier rip at any time; with this on, it is in the toolbar too. macOS asks once whether Silverside may control Music."
                 )
                 .font(.caption).foregroundStyle(.secondary)
-                Toggle("Eject the disc if every track is verified", isOn: $model.settings.ejectAfterRip)
+                Picker("FLAC albums go in as", selection: $model.settings.musicFormat) {
+                    Text("Apple Lossless").tag(AudioFormat.alac)
+                    Text("AAC").tag(AudioFormat.aac)
+                }
+                FolderField(label: "Copies for Music", path: $model.settings.musicCopies)
+                Text(
+                    "Music cannot play FLAC, so it gets copies, made in this folder. When Music copies files into its own folder, as its settings do at first, Silverside deletes its copies; otherwise they stay here for Music to play. AAC copies use the AAC options in Encoding."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
             Section("When a disc goes in") {
                 Toggle("Rip it at once", isOn: $model.settings.ripOnInsert)

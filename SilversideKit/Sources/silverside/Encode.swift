@@ -54,12 +54,10 @@ struct Encode: ParsableCommand {
         let settings = try Settings.load()
         var (encoder, libraryURL) = encoding.encoder(settings)
         let format = encoder.format
-        var addsToMusic = encoding.addsToMusic(settings)
-        if addsToMusic && !MusicApp.reads(format) {
-            print("Music cannot read \(format.name) files, so they are not added to it.")
-            addsToMusic = false
-        }
-        var written = [URL]()
+        let addsToMusic = encoding.addsToMusic(settings)
+        var music = MusicAdd(settings: settings)
+        music.library = libraryURL
+        music.log = { print("  \($0)") }
         encoder.allowsUnverified = allowUnverified
         encoder.log = { print("  \($0)") }
         if hdcdCopy {
@@ -79,17 +77,27 @@ struct Encode: ParsableCommand {
             let encoded = try encoder.encodeWithRecord(
                 disc, into: libraryURL, dts: hdcdCopy ? .keep : encoding.dtsChoice(settings))
             total += encoded.files.count + encoded.copyFiles.count
-            // Music plays a DTS stream as static, so it gets the decode, if there is one.
-            written += encoded.musicFiles.files
             for first in [encoded.files.first, encoded.copyFiles.first].compactMap(\.self) {
                 print("  in \(first.deletingLastPathComponent().path)")
                 RipHistory().recordAlbum(in: first.deletingLastPathComponent())
             }
+            // Music plays a DTS stream as static, so it gets the decode, if there is one; FLAC
+            // goes in as copies, and an album that Music has already is left out.
+            let (musicFiles, musicFormat) = encoded.musicFiles
+            if addsToMusic, let musicFormat, let album = musicFiles.first?.deletingLastPathComponent() {
+                do {
+                    let added = try music.addUnlessThere(musicFiles, format: musicFormat, album: album)
+                    // The album's own report keeps the add; a decoded copy beside it is another album.
+                    if !encoded.holdsStream {
+                        try? RipReport.Encoding.saveMusic(added.record, reportAt: disc.reportFile)
+                    }
+                    print("  Added \(added.tracks) tracks to Music.")
+                } catch {
+                    print("  Not added to Music: \(error)")
+                }
+            }
         }
         print("Encoded \(total) tracks as \(format.rawValue.uppercased()), each checked against the rip.")
-        if addsToMusic {
-            print("Added \(try MusicApp.add(written)) tracks to Music.")
-        }
     }
 
     /// The discs in a folder: a rip (its disc.json), or an album in the library, whose

@@ -542,6 +542,24 @@ public struct RipReport: Codable, Equatable, Sendable {
         /// as "Information Society.m4v", and for a CD+EG disc perhaps its CD+G picture too,
         /// "… (CD+G).m4v". Nil if none.
         public var videos: [Video]?
+        /// The album's add to Apple's Music app (`MusicAdd`), the last if there were more. Nil if
+        /// Silverside has not added it, and in older records.
+        public var music: MusicRecord?
+
+        /// An add of the album's files to Apple's Music app.
+        public struct MusicRecord: Codable, Equatable, Sendable {
+            public var date: Date
+            /// The format that Music got: the album's, or for a FLAC album, its copies'.
+            public var format: AudioFormat
+            /// The persistent IDs of the tracks that Music added, as it gave them; empty if it gave none.
+            public var tracks: [String]
+
+            public init(date: Date, format: AudioFormat, tracks: [String]) {
+                self.date = date
+                self.format = format
+                self.tracks = tracks
+            }
+        }
 
         public struct Video: Codable, Equatable, Sendable {
             public var file: String

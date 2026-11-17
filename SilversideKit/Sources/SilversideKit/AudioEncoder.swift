@@ -165,11 +165,11 @@ public enum AudioEncoder {
     }
 
     /// Writes `pcm` to `url` in `format`: a lossless format keeps its 16 bits, or for wide
-    /// audio the format's `wideBits`. WAV and MP3 have their own writers.
+    /// audio `bits` (20 or 24), else the format's `wideBits`. WAV and MP3 have their own writers.
     public static func encode(
-        _ pcm: TrackPCM, format: AudioFormat, to url: URL, aac: AACOptions = AACOptions()
+        _ pcm: TrackPCM, format: AudioFormat, to url: URL, aac: AACOptions = AACOptions(), bits: Int? = nil
     ) throws {
-        let file = try create(url, format: format, wide: pcm.bitsPerSample == 24, aac: aac)
+        let file = try create(url, format: format, wide: pcm.bitsPerSample == 24, aac: aac, bits: bits)
         var closed = false
         defer { if !closed { ExtAudioFileDispose(file) } }
         switch pcm {
@@ -195,10 +195,14 @@ public enum AudioEncoder {
         try check("ExtAudioFileDispose", ExtAudioFileDispose(file))
     }
 
-    /// A new file at `url` in `format`, which takes 16-bit audio, or 32-bit if `wide`.
-    private static func create(_ url: URL, format: AudioFormat, wide: Bool, aac: AACOptions) throws -> ExtAudioFileRef {
+    /// A new file at `url` in `format`, which takes 16-bit audio, or 32-bit if `wide`: FLAC and
+    /// Apple Lossless keep `bits` of it, or the format's `wideBits`.
+    private static func create(
+        _ url: URL, format: AudioFormat, wide: Bool, aac: AACOptions, bits: Int? = nil
+    ) throws -> ExtAudioFileRef {
         let wideFlag =
-            format.wideBits == 20 ? kAppleLosslessFormatFlag_20BitSourceData : kAppleLosslessFormatFlag_24BitSourceData
+            (bits ?? format.wideBits) <= 20
+            ? kAppleLosslessFormatFlag_20BitSourceData : kAppleLosslessFormatFlag_24BitSourceData
         var destination = AudioStreamBasicDescription()
         let fileType: AudioFileTypeID
         destination.mSampleRate = 44_100

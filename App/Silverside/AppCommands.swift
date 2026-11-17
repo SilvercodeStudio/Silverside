@@ -103,6 +103,8 @@ struct AppCommands: Commands {
                 .disabled(model.selectedRip == nil)
             Button("Change Release…") { model.changingRelease = model.selectedRip }
                 .disabled(model.selectedRip.map(model.canChangeRelease) != true)
+            Button("Add to Music") { if let rip = model.selectedRip { model.addToMusic(rip) } }
+                .disabled(model.selectedRip.map(model.canAddToMusic) != true)
             Divider()
             Button("Eject") { if let slot = model.selectedDrive { model.eject(slot) } }
                 .keyboardShortcut("e", modifiers: .command)

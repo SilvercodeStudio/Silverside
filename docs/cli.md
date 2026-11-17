@@ -201,8 +201,12 @@ give the album a name of its own with `silverside metadata -i <rip>
 one, and offers the album's name with the release's year. ReplayGain's album gain is the disc's own until every disc of a
 set is in the album folder; the last disc's encoding gives every disc the
 album gain over all of them. `--add-to-music` (or the `addToMusic` setting)
-adds the files to Apple's Music app, in every format but FLAC; the first time,
-macOS asks whether the terminal may control Music.
+adds each disc to Apple's Music app, unless Music has the album already
+(tracks of the same title, artist, and disc); the first time, macOS asks
+whether the terminal may control Music. Music cannot play FLAC, so a FLAC
+album goes in as Apple Lossless or AAC copies (the `musicFormat` setting),
+made in the `musicCopies` folder where the album is in the library; when
+Music copies them into its own folder, as it does at first, they are deleted.
 
 `--image` (or the `writeImages` setting) also writes a disc image: the whole
 disc in one lossless file, in the library's format or FLAC for AAC and MP3,
@@ -384,7 +388,9 @@ silverside config unset aac.mode                     # back to the default
 | `keepRipAfterEncoding` | `false` | keep the WAV files after `rip --encode` |
 | `ejectAfterRip` | `false` | `rip` ejects the disc when every track is verified (`--eject`) |
 | `replayGain` | `true` | ReplayGain tags: each track's gain and peak and the album's, as EBU R 128 measures them, for players that level albums, and the dynamic range (DR and loudness range, [docs/DynamicRange.md](DynamicRange.md)); the audio is not changed (`encode --no-replay-gain`) |
-| `addToMusic` | `false` | add the encoded files to the Music app, except FLAC (`--add-to-music`) |
+| `addToMusic` | `false` | add each encoded disc to the Music app, unless it has the album already (`--add-to-music`) |
+| `musicFormat` | `alac` | the format of the copies that Music gets of a FLAC album: `alac` or `aac` (with the `aac` options) |
+| `musicCopies` | `~/Music/Silverside for Music` | where those copies are made; deleted when Music copies them into its own folder |
 | `ripOnInsert` | `false` | the app rips a disc when it goes in, if its release is certain and it is not ripped yet |
 | `hdcd` | `ask` | for a disc whose HDCD codes ask for peak extend or a gain: `decode` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--hdcd`) |
 | `preEmphasis` | `ask` | for tracks with pre-emphasis: `deemphasize` into 20-bit files (24-bit AIFF and WAV), `keep` as pressed, or `ask` (`--pre-emphasis`) |

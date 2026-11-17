@@ -5,6 +5,21 @@ command-line tool.
 
 ## 0.9.9 (not released yet)
 
+### Added
+
+- **Add to Music** in the Disc menu adds an earlier rip's album to Apple's
+  Music app at any time, and when "Add each disc to Music" is on in Settings,
+  the toolbar has the button too. If Music seems to have the album already,
+  Silverside asks first.
+
+### Changed
+
+- FLAC albums can now go into Music too. Music cannot play FLAC, so it gets
+  Apple Lossless or AAC copies, made in their own folder (Settings › General ›
+  Apple Music), never in the library. When Music copies files into its own
+  folder, as it does at first, Silverside deletes its copies.
+- An album that Music has already is not added again after a rip or Encode.
+
 ## 0.9.8 (2026-11-16)
 
 ### Added

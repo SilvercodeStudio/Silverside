@@ -122,6 +122,8 @@ final class AppModel {
     /// Work on the library under way, or the last, shown in a sheet.
     private(set) var library: LibraryRun?
     var libraryShown = false
+    /// True while Silverside asks Music whether it has an album, before Add to Music.
+    private(set) var lookingInMusic = false
     /// The rip whose release the Change Release sheet chooses.
     var changingRelease: RecentRip?
     /// Updates through Sparkle, in a build that `make dist` made. Made in `init`, so that its
@@ -349,6 +351,69 @@ final class AppModel {
         let run = LibraryRun(
             title: rip.title, encode: [], update: [],
             dts: LibraryRun.DTSDecode(rip: rip, beside: beside, format: format, suffix: suffix))
+        library = run
+        libraryShown = true
+        run.start(settings: settings, cover: nil) { [weak self] in
+            self?.refreshRecentRips()
+        }
+    }
+
+    /// True for an earlier rip whose album can go to Apple's Music app: it is encoded, it is
+    /// there, and no other work on the library is under way.
+    func canAddToMusic(_ rip: RecentRip) -> Bool {
+        rip.report.encoding != nil && !rip.isMissing && !lookingInMusic && library?.isRunning != true
+    }
+
+    /// Adds an earlier rip's album to Apple's Music app, a FLAC album as copies (`MusicAdd`), in
+    /// the library's sheet. When Music seems to have the album already, it asks first.
+    func addToMusic(_ rip: RecentRip) {
+        guard library?.isRunning != true else {
+            libraryShown = true
+            return
+        }
+        let files: [URL]
+        do {
+            files = try MusicAdd.files(of: rip.report).files
+        } catch {
+            alert = AppAlert(title: "“\(rip.title)” cannot be added to Music", message: "\(error)")
+            return
+        }
+        let record = rip.report.encoding?.music
+        lookingInMusic = true
+        Task { @MainActor in
+            defer { lookingInMusic = false }
+            do {
+                let (album, found) = try await Task.detached {
+                    let album = MusicAdd.album(of: files, record: record)
+                    return (album, try MusicApp.find(album))
+                }.value
+                if let description = found.description(of: album) {
+                    let same = found.hasAlbum(album)
+                    let question = NSAlert()
+                    question.messageText =
+                        same ? "Music has “\(rip.title)” already" : "Music has an album like “\(rip.title)”"
+                    question.informativeText =
+                        description
+                        + (same
+                            ? " Adding it again gives Music a second copy of each track."
+                            : " It may be another edition.")
+                    question.addButton(withTitle: same ? "Add Again" : "Add")
+                    question.addButton(withTitle: "Cancel")
+                    guard question.runModal() == .alertFirstButtonReturn else { return }
+                }
+                startMusicAdd(rip)
+            } catch {
+                alert = AppAlert(title: "Music did not say whether it has “\(rip.title)”", message: "\(error)")
+            }
+        }
+    }
+
+    private func startMusicAdd(_ rip: RecentRip) {
+        guard library?.isRunning != true else {
+            libraryShown = true
+            return
+        }
+        let run = LibraryRun(title: rip.title, encode: [], update: [], music: rip)
         library = run
         libraryShown = true
         run.start(settings: settings, cover: nil) { [weak self] in

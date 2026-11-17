@@ -1053,10 +1053,22 @@ public struct DiscRip {
                             "The decoded copy: \(encoded.copyFiles.count) \(copy.format.name) files in \(copy.folder)"))
                 }
                 // Music plays a DTS stream as static, so it gets the decode, if there is one.
+                // FLAC goes in as copies; an album that Music has already is left out.
                 let (musicFiles, musicFormat) = encoded.musicFiles
-                if options.addsToMusic, let musicFormat, MusicApp.reads(musicFormat), !musicFiles.isEmpty {
+                if options.addsToMusic, let musicFormat, let album = musicFiles.first?.deletingLastPathComponent() {
+                    var music = MusicAdd(settings: settings)
+                    music.library = library
+                    music.log = { events(.encodedTrack($0)) }
                     do {
-                        events(.addedToMusic(try await blocking { try MusicApp.add(musicFiles) }))
+                        let added = try await blocking { [music] in
+                            try music.addUnlessThere(musicFiles, format: musicFormat, album: album)
+                        }
+                        // The album's own report keeps the add; a decoded copy beside it is another album.
+                        if !encoded.holdsStream {
+                            try? RipReport.Encoding.saveMusic(
+                                added.record, reportAt: folder.appending(path: "disc.json"))
+                        }
+                        events(.addedToMusic(added.tracks))
                     } catch {
                         events(.addToMusicFailed(error))
                     }

@@ -11,15 +11,23 @@ both.
 - **Rips** is where each rip's WAV files, report, and cover go. Keep it out of the library: music
   apps would import the WAV files.
 - **After a rip:** encode the disc into the library in the chosen format; keep or delete the rip's
-  WAV files once the album is encoded and verified; add the files to the Music app; eject the disc
-  when every track is verified. MP3 is in the list of formats once the LAME encoder is installed
-  (see Encoding).
-- **Add the files to Apple's Music app** works for every format but FLAC, which Music cannot read.
-  Music adds the files where they are, in the library folder, or copies them into its own folder if
-  "Copy files to Music Media folder when adding to Library" is on in Music's settings. The first
-  time, macOS asks whether Silverside may control Music; the answer is in System Settings › Privacy
-  & Security › Automation. A file renamed later by Update the Library or a name change stays in
+  WAV files once the album is encoded and verified; eject the disc when every track is verified. MP3
+  is in the list of formats once the LAME encoder is installed (see Encoding).
+- **Apple Music:** "Add each disc to Music when it is encoded" adds each album after its rip, or
+  after Encode on an earlier rip, unless Music has the album already: tracks of the same title,
+  artist, and disc, or the tracks that Silverside gave it before. **Add to Music** in the Disc menu
+  adds an earlier rip's album at any time, and with this setting on, the earlier rip's toolbar has
+  the button too; if Music seems to have the album, it asks first. Music adds the files where they
+  are, in the library folder, or copies them into its own folder if "Copy files to Music Media
+  folder when adding to Library" is on in Music's settings, as it is at first. The first time,
+  macOS asks whether Silverside may control Music; the answer is in System Settings › Privacy &
+  Security › Automation. A file renamed later by Update the Library or a name change stays in
   Music, which follows a moved file on the same disk.
+- **FLAC albums go in as** Apple Lossless or AAC (with the AAC options in Encoding): Music cannot
+  play FLAC, so Silverside makes copies, each checked against its file, in **Copies for Music**
+  (`~/Music/Silverside for Music` at first), where the album is in the library. When Music copies
+  them into its own folder, Silverside deletes its copies; otherwise they stay there for Music to
+  play, so keep that folder. Copies are never made in the library.
 - **When a disc goes in, rip it at once:** a disc that goes in while Silverside runs is ripped five
   seconds after its lookup, if MusicBrainz names its release for certain (an exact match, and not
   one of several releases unless you chose one for the set) and the disc is not ripped yet. The

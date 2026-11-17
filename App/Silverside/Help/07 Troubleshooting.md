@@ -70,11 +70,12 @@ Rip Disc.
 
 ## Music did not get the files
 
-"Add the files to Apple's Music app" does nothing for FLAC, which Music cannot read; choose Apple
-Lossless. If the banner says Silverside may not control Music, you said no when macOS asked, or the
-question did not show: allow Silverside under System Settings › Privacy & Security › Automation, so
-the next album goes in. For the album that did not, drag its folder from the library onto Music's
-window.
+If the banner says Silverside may not control Music, you said no when macOS asked, or the question
+did not show: allow Silverside under System Settings › Privacy & Security › Automation, then choose
+**Disc › Add to Music** for the album that did not go in. If it says Music has the album already,
+Music has tracks of the same title, artist, and disc; Add to Music asks, and adds it again if you
+say so. Music does not open FLAC files, so a FLAC album goes in as copies (see
+[Settings](help:settings#general)); don't drag a FLAC album onto Music's window.
 
 ## Tracks are not accurate
 

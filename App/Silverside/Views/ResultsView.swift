@@ -244,6 +244,15 @@ struct ResultsView: View {
                     .help(encodeHelp)
                     .disabled(model.library?.isRunning == true)
                 }
+                if model.settings.addToMusic, report.encoding != nil, !recentRip.isMissing {
+                    Button {
+                        model.addToMusic(recentRip)
+                    } label: {
+                        Label("Add to Music", systemImage: "music.note.list")
+                    }
+                    .help(addToMusicHelp)
+                    .disabled(!model.canAddToMusic(recentRip))
+                }
                 if canDecodeHDCD {
                     Button {
                         hdcdDecodeShown = true
@@ -365,6 +374,16 @@ struct ResultsView: View {
                 + "unverified tracks first. Repair, or a rip in another drive, may still verify it."
         }
         return "Encode the rip into the library as \(model.settings.format.name), with the names as they are now."
+    }
+
+    private var addToMusicHelp: String {
+        let copies = model.settings.musicFormat == .aac ? AudioFormat.aac : .alac
+        let add =
+            report.encoding?.format == .flac
+            ? "Add the album to Apple's Music app, as \(copies.name) copies: Music cannot play FLAC"
+            : "Add the album to Apple's Music app"
+        guard let music = report.encoding?.music else { return add }
+        return add + ". Silverside added it on \(music.date.formatted(date: .abbreviated, time: .omitted))."
     }
 
     /// Saves the edits, if they changed, and brings the encoded files up to date.

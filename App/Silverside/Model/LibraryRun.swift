@@ -57,6 +57,8 @@ final class LibraryRun: Identifiable {
     let hdcd: HDCDDecode?
     let dts: DTSDecode?
     let change: ReleaseChange?
+    /// Add to Music: the rip whose album goes to Apple's Music app (`MusicAdd`).
+    let music: RecentRip?
     /// Rips that leave their custom set before the change: a disc that another took the place of.
     let leaving: [RecentRip]
     /// The changed rip's report, where it is after the change (an album folder's report moves
@@ -67,6 +69,7 @@ final class LibraryRun: Identifiable {
     private(set) var encodedDiscs = 0
     private(set) var updatedDiscs = 0
     private(set) var decodedDiscs = 0
+    private(set) var addedToMusic = 0
     private(set) var problems = 0
     private(set) var leftSet = 0
     /// The report files of the rips in `leaving` that left their set.
@@ -76,7 +79,7 @@ final class LibraryRun: Identifiable {
 
     init(
         title: String, encode: [RecentRip], update: [RecentRip], hdcd: HDCDDecode? = nil, dts: DTSDecode? = nil,
-        change: ReleaseChange? = nil, leaving: [RecentRip] = []
+        change: ReleaseChange? = nil, leaving: [RecentRip] = [], music: RecentRip? = nil
     ) {
         self.title = title
         self.encode = encode
@@ -85,6 +88,7 @@ final class LibraryRun: Identifiable {
         self.dts = dts
         self.change = change
         self.leaving = leaving
+        self.music = music
     }
 
     var isRunning: Bool { phase == .running }
@@ -94,6 +98,7 @@ final class LibraryRun: Identifiable {
         case .running:
             if change != nil || !leaving.isEmpty { return "Changing the release…" }
             if dts != nil { return "Decoding DTS…" }
+            if music != nil { return "Adding to Music…" }
             return hdcd != nil ? "Decoding HDCD…" : encode.isEmpty ? "Updating the library…" : "Encoding…"
         case .stopped: return "Stopped after the disc under way."
         case .failed(let message): return "Failed: \(message)"
@@ -104,6 +109,7 @@ final class LibraryRun: Identifiable {
             if !encode.isEmpty { parts.append("\(Format.count(encodedDiscs, "disc")) encoded") }
             if !update.isEmpty { parts.append("\(Format.count(updatedDiscs, "disc")) brought up to date") }
             if hdcd != nil || dts != nil { parts.append("\(Format.count(decodedDiscs, "disc")) decoded") }
+            if music != nil { parts.append("\(Format.count(addedToMusic, "disc")) added to Music") }
             if problems > 0 { parts.append("\(Format.count(problems, "problem"))") }
             return parts.joined(separator: ", ") + "."
         }
@@ -118,7 +124,7 @@ final class LibraryRun: Identifiable {
         let run = self
         let stop = self.stopToken
         let (encode, update, hdcd, dts, change) = (self.encode, self.update, self.hdcd, self.dts, self.change)
-        let leaving = self.leaving
+        let (leaving, music) = (self.leaving, self.music)
         task = Task.detached {
             @Sendable func onMain(_ body: @escaping @MainActor () -> Void) {
                 DispatchQueue.main.async { MainActor.assumeIsolated(body) }
@@ -229,12 +235,20 @@ final class LibraryRun: Identifiable {
                         disc, into: library, dts: settings.dts == .ask ? .keep : settings.dts)
                     let (files, record) = (encoded.files, encoded.encoding)
                     try record?.save(inReportAt: rip.folder.appending(path: "disc.json"))
-                    // Music plays a DTS stream as static, so it gets the decode, if there is one.
+                    // Music plays a DTS stream as static, so it gets the decode, if there is one; FLAC
+                    // goes in as copies, and an album that Music has already is left out.
                     let (musicFiles, musicFormat) = encoded.musicFiles
-                    if settings.addToMusic, MusicApp.reads(musicFormat ?? settings.format), !musicFiles.isEmpty {
+                    if settings.addToMusic, let musicFormat, let album = musicFiles.first?.deletingLastPathComponent() {
+                        var music = MusicAdd(settings: settings)
+                        music.log = { line in onMain { run.add("  \(line)") } }
                         do {
-                            let added = try MusicApp.add(musicFiles)
-                            onMain { run.add("\(rip.title): added \(Format.count(added, "track")) to Music.") }
+                            let added = try music.addUnlessThere(musicFiles, format: musicFormat, album: album)
+                            // The album's own report keeps the add; a decoded copy beside it is another album.
+                            if !encoded.holdsStream {
+                                try? RipReport.Encoding.saveMusic(
+                                    added.record, reportAt: rip.folder.appending(path: "disc.json"))
+                            }
+                            onMain { run.add("\(rip.title): added \(Format.count(added.tracks, "track")) to Music.") }
                         } catch {
                             onMain { run.add("\(rip.title): not added to Music: \(error)") }
                         }
@@ -349,6 +363,25 @@ final class LibraryRun: Identifiable {
                     onMain {
                         run.problems += 1
                         run.add("\(rip.title): \(error)")
+                    }
+                }
+            }
+            if let rip = music, !stop.isStopped {
+                do {
+                    let (files, format) = try MusicAdd.files(of: rip.report)
+                    var adder = MusicAdd(settings: settings)
+                    adder.log = { line in onMain { run.add("  \(line)") } }
+                    onMain { run.add("\(rip.title): adding to Music…") }
+                    let added = try adder.add(files, format: format, album: files[0].deletingLastPathComponent())
+                    try? RipReport.Encoding.saveMusic(added.record, reportAt: rip.file)
+                    onMain {
+                        run.addedToMusic += 1
+                        run.add("\(rip.title): added \(Format.count(added.tracks, "track")) to Music.")
+                    }
+                } catch {
+                    onMain {
+                        run.problems += 1
+                        run.add("\(rip.title): not added to Music: \(error)")
                     }
                 }
             }

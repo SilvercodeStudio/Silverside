@@ -39,6 +39,8 @@ it comes with no warranty (see [LICENSE](LICENSE)).
     be ripped as standard CD audio.
   - DVD-Audio (MLP lossless high-resolution surround) - planned for a
     future version.
+  - DVD, DVD-Audio, Blu-ray, and Ultra HD Blu-ray discs are identified by
+    type (the app shows which kind is in the drive), but not ripped.
 
 See also:
 
@@ -117,20 +119,26 @@ macOS opens them without warnings.
   FLAC or Apple Lossless files that keep what the decoder restores, or into
   AAC or MP3 before a lossy encode removes the codes.
 - **Pre-emphasis.** A few early CDs were mastered with pre-emphasis, a treble
-  boost that a CD player takes out again. Silverside finds the flag in the table
-  of contents and in the subchannel (some discs set it in only one) and, if you
-  agree, takes it out as a CD player does, into 20-bit FLAC or Apple Lossless
-  files tagged `DE_EMPHASIZED=yes`. Kept as pressed, the files are tagged
+  boost that a CD player takes out again. Most rippers and players leave it in,
+  and the music sounds harsh and trebly. Silverside finds the flag in the table
+  of contents and in the subchannel (some discs set it in only one, and some
+  tools read only the table of contents) and, if you agree, takes it out as a
+  CD player does, into 20-bit FLAC or Apple Lossless files tagged
+  `DE_EMPHASIZED=yes`. Kept as pressed, the files are tagged
   `PRE_EMPHASIS=yes`, and the CUE sheet marks the tracks (`FLAGS PRE`).
 - **Disc images**, if you want them: the whole disc in one lossless file with
   a CUE sheet, beside the library, from which the disc can be burned again.
 - **A rip report**, as Markdown to read and as JSON (`disc.json`), with every
   track's result, its CRC-32 as EAC and XLD print it, the TOC, pregaps and
-  index points, the
-  disc IDs, the ISRCs, MCN, and CD-Text, the media (pressed CD or CD-R), the
-  drive and its offset, the release, and the encoding; and a **CUE sheet**,
-  with the pregaps and the index points after 01, from which the disc can be
-  burned again exactly.
+  index points, the disc IDs, the ISRCs, MCN, and CD-Text, the media (pressed
+  CD or CD-R), the drive and its offset, the release, and the encoding; an
+  **EAC-style log** (`Rip Report.log`) in the layout of Exact Audio Copy's
+  logs, with the same CRC-32s and AccurateRip checksums, to compare with an
+  EAC rip; and a **CUE sheet**, with the pregaps and the index points after
+  01, from which the disc can be burned again exactly.
+- **Rip history.** Silverside keeps its own copy of each rip's report, so
+  every rip stays in Rip History, searchable, after its album moves (to a
+  NAS, for example) or is deleted.
 - **Hidden track one audio** (a song before track 1) is ripped and encoded as
   track 0.
 - **CD+G graphics:** the pictures or karaoke lyrics in a disc's subchannel,
@@ -139,9 +147,10 @@ macOS opens them without warnings.
   track, with the track's name, as karaoke programs would pair them. Silverside
   can also make a video of the whole disc, as a CD+G player shows it, with a
   chapter for each track and the audio as Apple Lossless or AAC. A CD+EG disc
-  (CD+Extended Graphics, from a handful of Asian releases) gets its 256 colors, or
-  its 16-color CD+G picture, or both.
-- **Enhanced CDs:** the data track after the music is kept as a disc image
+  (CD+Extended Graphics, from a few early 1990s Japanese and Korean releases)
+  gets its 256 colors, or its 16-color CD+G picture, or both.
+- **Enhanced CDs and Mixed Mode CDs:** the data track, after the music on an
+  Enhanced CD or before it on an older Mixed Mode CD, is kept as a disc image
   (`Data track.iso`, both its Windows and its classic Mac file systems), with
   the Windows side's files copied into a `Data track` folder, ready to open.
 - **Names you can change.** The album's title, artist, and date, and each
@@ -150,9 +159,9 @@ macOS opens them without warnings.
   After the rip too: the encoded files are tagged and renamed again, and the
   audio is not touched. The album's edits are kept for the release, so the
   other discs of a set get them. The disc's CD-Text names (in your language,
-  if the disc has it) can replace MusicBrainz's. A disc that MusicBrainz does
-  not know gets its names from CD-Text or from you, and its files carry no
-  MusicBrainz IDs.
+  if the disc has it, Japanese in MS-JIS too) can replace MusicBrainz's. A
+  disc that MusicBrainz does not know gets its names from CD-Text or from
+  you, and its files carry no MusicBrainz IDs.
 - **Play a track** from the disc, read as a rip reads it, or from an earlier
   rip, to check it.
 - **Rip on insertion**, if you want it: a disc whose release is certain, and
@@ -216,10 +225,13 @@ Encoding changes that.
 
 ## Decoding DTS-CDs
 
-A DTS-CD holds surround sound coded as DTS, which plays as static without a
-DTS decoder. Silverside rips it bit for bit, and decodes it with the free
-[FFmpeg](https://ffmpeg.org) into files with every channel (FLAC, Apple
-Lossless, AAC, or AIFF), gapless across the tracks. Install it with Homebrew:
+A DTS-CD holds surround sound, usually 5.1, coded as DTS, which plays as
+static without a DTS decoder. Silverside finds the stream by itself, rips it
+bit for bit, and decodes it with the free [FFmpeg](https://ffmpeg.org) into
+files with every channel (FLAC, Apple Lossless, AAC, or AIFF), gapless across
+the tracks; FLAC and Apple Lossless are 20-bit, the source resolution that
+the stream names, or 24-bit if it names 24. The track player decodes it too,
+mixed down to stereo. Install FFmpeg with Homebrew:
 
 ```sh
 brew install ffmpeg
@@ -241,59 +253,6 @@ it), Silverside asks which one, and remembers the answer for the other discs.
 A disc that MusicBrainz does not know at all is named from its CD-Text or by
 you, and its files get no MusicBrainz IDs. Adding the release to MusicBrainz,
 then looking up the disc again, is better for everyone.
-
-## Technical Features
-
-My goal is for Silverside to be one of the most capable CD ripping apps available.
-Here's a summary of its supported formats, technical features and capabilities.
-Note that some of these require an external tool (ffmpeg or LAME) for full use.
-
-- Compact Disc Digital Audio (CDDA) - standard music CDs
-  - secure ripping with verification and error recovery; can extract
-    verified audio from marginal or damaged CDs in many cases
-  - Uses AccurateRip and CTDB for verification and repair
-- MusicBrainz disc metadata lookup, with links to submit updates or additions
-  - Cover Art Archive lookups
-- Multi-disc set handling for metadata
-  - Shared names and covers; support for different cover art for individual
-    discs or subsets of discs, e.g. "Summer Magic 1985" concert sets.
-- Detailed rip reports in Markdown text and JSON saved to output folders
-  and internal history data, and an EAC-style log (`Rip Report.log`).
-- Enhanced CDs - multisession audio discs with PC/Mac extra features
-  - mainly from the late 1990s to early 2000s
-  - The data can be extracted to a regular folder for examination, and is
-    also saved as a complete `.iso` image for hybrid filesystem (Mac HFS and PC) support.
-- Mixed-mode CDs - an earlier form of enhanced CD with data in track 1
-  - mainly from the early 1990s. Data folder and `.iso` also extracted.
-- CD-Text - song titles on disc; relatively common.
-  - Additional character blocks such as Japanese MS-JIS are supported.
-- CD+G - CD+Graphics: Mainly karaoke, but a few commercial album releases use it.
-  - The graphics are saved as `.cdg` files, and can be made into a video file
-    with chapters, in a drive that reads the subchannel.
-  - CD+EG (CD+Extended Graphics) - 256 colors and dissolves between pictures,
-    from a few early 1990s Japanese and Korean releases - drawn as a CD+EG player
-    such as the Sega Saturn shows it.
-- Hidden track one audio (HTOA) identification and extraction
-- Additional technical details of the discs are logged:
-  - disc IDs, MCN (Media Catalog Number), ISRC (International Standard Recording
-    Code), media type (CD-R, etc.).
-- HDCD - High Definition Compatible Digital discs - hidden codes can allow expansion
-  of 16-bit data to 20-bit on certain titles for increased dynamic range
-- pre-emphasis handling (de-emphasis) - a rare form of noise reduction on some
-  early 1980s CDs. If the ripping app and player combo doesn't reverse it, and most
-  don't, the resulting sound will be harsh and trebly, but Silverside can decode it
-  to de-emphasized 20-bit FLAC/ALAC to sound as the artist intended.
-   - Pre-emphasis is detected in both the TOC and Q subchannel; some tools miss the
-     subchannel codes or keep the flag only in the CUE sheet.
-- DTS-CD - multichannel audio (often 5.1) on compact disc.
-  - Decoded with ffmpeg to multichannel FLAC or ALAC (up to 24-bit), or
-    multichannel lossy AAC
-  - Detected automatically and supported in track preview playing
-- accurate ReplayGain tags for consistent volume levels on playback
-- Disc image and CUE sheet generation can be passed to burner apps.
-- DVD, DVD-Audio, Blu-ray and 4K UHD Blu-ray discs are recognized, but are not supported
-  for audio extraction.
-- Planned for a future version: DVD-Audio extraction
 
 ## Building from source
 

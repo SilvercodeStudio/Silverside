@@ -271,6 +271,17 @@ struct DiscInfo {
 
     mutating func lookUpRelease(fresh: Bool = false) async {
         guard !toc.audioTracks.isEmpty else { return }
+        #if DEBUG
+            // `-lookupFindsNothing 1`: no release has the disc, as for one MusicBrainz does not
+            // know, to try that state with any disc. Only this lookup: the rip asks again.
+            if UserDefaults.standard.bool(forKey: "lookupFindsNothing") {
+                releases = []
+                lookup = .notFound
+                release = nil
+                await useManualRelease()
+                return
+            }
+        #endif
         lookup = .lookingUp
         var found: ReleaseLookupResult?
         var failure: (any Error)?

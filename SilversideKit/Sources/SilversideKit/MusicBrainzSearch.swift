@@ -45,12 +45,41 @@ public struct MusicBrainzSearchResult: Equatable, Identifiable, Sendable {
     }
 }
 
+extension MusicBrainzSearchResult {
+    /// A release looked up by its ID, as a search lists it: the release of a link that the
+    /// user pasted.
+    public init(release: MusicBrainzRelease) {
+        func given(_ text: String?) -> String? { text.flatMap { $0.isEmpty ? nil : $0 } }
+        self.init(
+            id: release.id, score: 100, title: release.title, artist: release.artist, date: given(release.date),
+            country: release.country, barcode: given(release.barcode), status: release.status,
+            disambiguation: given(release.disambiguation),
+            labels: release.labels.map { [$0.name, $0.catalogNumber].compactMap { $0 }.joined(separator: " ") }
+                .filter { !$0.isEmpty },
+            media: release.media.map { Medium(format: $0.format, trackCount: $0.tracks.count) },
+            releaseGroupID: release.releaseGroup?.id)
+    }
+}
+
+/// What a link to MusicBrainz that the user pasted names (`MusicBrainzClient.link(in:)`).
+public enum MusicBrainzLink: Equatable, Sendable {
+    case release(String)
+    case releaseGroup(String)
+    /// Another page of MusicBrainz, such as an artist's: no release to search for.
+    case other
+}
+
 extension MusicBrainzClient {
     /// Searches MusicBrainz's releases (`/ws/2/release?query=`), the best match first. `text` is
-    /// what the user typed (`searchQuery(for:)`). The answer is cached like any other.
+    /// what the user typed (`searchQuery(for:)`). The answer is cached like any other. A link to
+    /// a release, or its ID, gives that release, looked up by its ID: the search's index can be
+    /// behind a release added minutes ago, and the lookup is the one that choosing it makes.
     public func searchReleases(_ text: String, limit: Int = 25, useCache: Bool = true) async throws
         -> [MusicBrainzSearchResult]
     {
+        if case .release(let id) = Self.link(in: text) {
+            return try await release(id: id, useCache: useCache).map { [MusicBrainzSearchResult(release: $0)] } ?? []
+        }
         let query = Self.searchQuery(for: text)
         guard !query.isEmpty,
             let data = try await client.data(from: Self.searchURL(query: query, limit: limit), useCache: useCache)
@@ -63,9 +92,17 @@ extension MusicBrainzClient {
     /// the box first); characters that the query language uses are escaped. A barcode (12 or 13
     /// digits) is looked for as a barcode, with and without its leading 0, as MusicBrainz may
     /// keep a UPC or an EAN. A query that names a field ("catno:EN4CD9161") goes as it is; a
-    /// title such as "Soundtracks: Vol. 1" or "Classic Country: Hits" does not name one.
+    /// title such as "Soundtracks: Vol. 1" or "Classic Country: Hits" does not name one. A link
+    /// to a release or a release group looks for it by its ID; a link to another page of
+    /// MusicBrainz looks for nothing.
     public static func searchQuery(for text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
+        switch link(in: trimmed) {
+        case .release(let id): return "reid:\(id)"
+        case .releaseGroup(let id): return "rgid:\(id)"
+        case .other: return ""
+        case nil: break
+        }
         if let barcode = barcodeQuery(for: trimmed) { return barcode }
         let field = /(^|[\s(])(release|artist|barcode|catno|label|date|country|format|tracks):[^\s]/
         if trimmed.lowercased().contains(field) { return trimmed }
@@ -80,6 +117,26 @@ extension MusicBrainzClient {
         else { return nil }
         let forms = [text, text.count == 13 && text.hasPrefix("0") ? String(text.dropFirst()) : "0" + text]
         return Array(Set(forms)).sorted().map { "barcode:\($0)" }.joined(separator: " OR ")
+    }
+
+    /// What `text` links to: a page of MusicBrainz ("https://musicbrainz.org/release/<ID>",
+    /// with or without "https://", or a page under it such as ".../discids"), or an ID alone,
+    /// taken as a release's. Nil for text that is neither.
+    public static func link(in text: String) -> MusicBrainzLink? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if UUID(uuidString: trimmed) != nil { return .release(trimmed.lowercased()) }
+        guard !trimmed.contains(where: \.isWhitespace),
+            let url = URL(string: trimmed.contains("://") ? trimmed : "https://" + trimmed),
+            let host = url.host()?.lowercased(), host == "musicbrainz.org" || host.hasSuffix(".musicbrainz.org")
+        else { return nil }
+        let path = url.pathComponents.filter { $0 != "/" }
+        guard path.count >= 2, UUID(uuidString: path[1]) != nil else { return .other }
+        let id = path[1].lowercased()
+        switch path[0].lowercased() {
+        case "release": return .release(id)
+        case "release-group": return .releaseGroup(id)
+        default: return .other
+        }
     }
 
     static func searchURL(query: String, limit: Int) -> URL {

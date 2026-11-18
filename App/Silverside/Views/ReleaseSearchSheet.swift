@@ -44,12 +44,12 @@ struct ReleaseSearchSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Search MusicBrainz").font(.headline)
             Text(
-                "Find this disc's release by its names, its barcode, or its catalog number. A release with a disc of \(Format.count(trackCount, "track")), as this one has, comes first; the one you choose must have a disc whose track lengths fit. Then Add Disc ID… sends this disc's ID to MusicBrainz, so the next lookup finds it by itself."
+                "Find this disc's release by its names, its barcode, its catalog number, or a link to it in MusicBrainz. A release with a disc of \(Format.count(trackCount, "track")), as this one has, comes first; the one you choose must have a disc whose track lengths fit. Then Add Disc ID… sends this disc's ID to MusicBrainz, so the next lookup finds it by itself."
             )
             .font(.callout).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             HStack {
-                TextField("Artist, album, barcode, or catalog number", text: $query)
+                TextField("Artist, album, barcode, catalog number, or MusicBrainz link", text: $query)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await search() } }
                 Button("Search") { Task { await search() } }
@@ -92,8 +92,12 @@ struct ReleaseSearchSheet: View {
         } else if let failure {
             Text(failure).foregroundStyle(Theme.warning)
         } else if let results, results.isEmpty {
-            Text("MusicBrainz found no release. Try fewer words, or the barcode on the back of the case.")
-                .foregroundStyle(.secondary)
+            Text(
+                MusicBrainzClient.link(in: query) != nil
+                    ? "MusicBrainz has no release there. Paste the link to a release or a release group."
+                    : "MusicBrainz found no release. Try fewer words, or the barcode on the back of the case."
+            )
+            .foregroundStyle(.secondary)
         } else if results != nil {
             ScrollView {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
@@ -223,8 +227,11 @@ struct ReleaseSearchSheet: View {
         selected = nil
         defer { searching = false }
         do {
-            results = try await MusicBrainzClient().searchReleases(text)
-            selected = ordered.first(where: fits)?.id
+            let found = try await MusicBrainzClient().searchReleases(text)
+            results = found
+            // One release, such as a link's, is selected even when no disc of it has as many
+            // tracks: the footer then says why it does not fit.
+            selected = ordered.first(where: fits)?.id ?? (found.count == 1 ? found[0].id : nil)
         } catch {
             results = nil
             failure = "The search failed: \(error)"

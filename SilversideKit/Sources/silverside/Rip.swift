@@ -425,7 +425,7 @@ private final class RipPrinter: @unchecked Sendable {
                             : " (a fuzzy match of the TOC; MusicBrainz does not know this disc ID)")
                     + (lookup.otherCount > 0 ? "; \(lookup.otherCount) other releases (see silverside metadata)" : ""))
             if !lookup.isExact {
-                Swift.print("  To add the disc ID: \(MusicBrainzRelease.submissionURL(for: toc).absoluteString)")
+                Swift.print("  To add the disc ID to this release: \(chosen.submissionURL(for: toc).absoluteString)")
             }
             if let failure = lookup.detailsFailure {
                 Swift.print("  The release's own lookup failed (\(failure)), so the files get no writers or genre.")

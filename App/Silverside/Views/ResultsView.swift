@@ -74,7 +74,7 @@ struct ResultsView: View {
     /// The chip for a release that MusicBrainz matched by its track lengths at the rip.
     private var lengthsMatchChip: [Chip] {
         guard let toc, report.release?.lacksDiscID(of: toc) == true else { return [] }
-        return [ResultChips.lengthsMatch(toc: toc)]
+        return [ResultChips.lengthsMatch(toc: toc, release: report.release)]
     }
 
     /// The report, with the names as they are now, as the rip writes its Markdown.

@@ -246,6 +246,15 @@ struct MusicBrainzTests {
         #expect(
             url.hasPrefix("https://musicbrainz.org/cdtoc/attach?id=\(toc.musicBrainzDiscID)&tracks=3&toc=1%203%2060000")
         )
+        #expect(!url.contains("filter-release"))
+        // A release of MusicBrainz's opens the page at that release; a manual one does not.
+        let id = "3cc3309f-49d4-4a0e-837e-7fab59d8983b"
+        let atRelease = MusicBrainzRelease.submissionURL(for: toc, releaseID: id).absoluteString
+        #expect(atRelease == url + "&filter-release.query=\(id)")
+        var release = MusicBrainzRelease.manual(toc: toc)
+        #expect(release.submissionURL(for: toc).absoluteString == url)
+        release.id = id
+        #expect(release.submissionURL(for: toc).absoluteString == atRelease)
     }
 
     @Test func refusesSomethingElse() {

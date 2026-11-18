@@ -729,27 +729,28 @@ struct AlbumHeader: View {
                 help: "Several releases in MusicBrainz have this disc. Click to choose the one you have.",
                 action: { releasePickerShown = true })
         case .found where disc.isFuzzy:
-            ResultChips.lengthsMatch(toc: disc.toc, how: disc.matchKind)
+            ResultChips.lengthsMatch(toc: disc.toc, release: disc.release, how: disc.matchKind)
         case .found:
             Chip(
                 text: "MusicBrainz · disc ID match", tone: .good, systemImage: "checkmark",
                 help: disc.release.map(ResultChips.discIDMatchHelp) ?? "", link: disc.release?.pageURL)
         case .notFound:
+            // The chip that says so opens the search too: it is the one people click first.
             Chip(
                 text: disc.namesFromEarlierRip
                     ? "Not in MusicBrainz · names from your earlier rip"
                     : disc.hasCDText
                         ? "Not in MusicBrainz · names from CD-Text" : "Not in MusicBrainz · type the names",
-                tone: .warning, systemImage: "xmark"
-            )
-            .help(
-                (disc.namesFromEarlierRip
+                tone: .warning, systemImage: "xmark",
+                help: (disc.namesFromEarlierRip
                     ? "The names and the cover are those you gave your newest rip of this disc. " : "")
-                    + "The files get no MusicBrainz IDs. Edit the names here; they are kept with the rip.")
+                    + "The files get no MusicBrainz IDs. Edit the names here; they are kept with the rip. "
+                    + "Click to search MusicBrainz: it may have the release, but not this pressing's disc ID.",
+                action: canChange ? { model.releaseSearchTarget = .drive(slot) } : nil)
             Chip(
                 text: "Search MusicBrainz…", systemImage: "magnifyingglass",
                 help:
-                    "Find the disc's release in MusicBrainz by its names, barcode, or catalog number: it may have the release, but not this pressing's disc ID.",
+                    "Find the disc's release in MusicBrainz by its names, barcode, or catalog number, or paste a link to it: MusicBrainz may have the release, but not this pressing's disc ID.",
                 action: canChange ? { model.releaseSearchTarget = .drive(slot) } : nil)
             if let (set, position) = disc.suggestedSet {
                 Chip(
@@ -1480,14 +1481,15 @@ enum ResultChips {
 
     /// For a release that MusicBrainz matched by its track lengths: a click opens the page
     /// that adds the disc ID to it.
-    static func lengthsMatch(toc: TOC, how: MatchKind = .lengths) -> Chip {
+    /// The page opens on `release`, the one the disc has now, so its disc is a click away.
+    static func lengthsMatch(toc: TOC, release: MusicBrainzRelease?, how: MatchKind = .lengths) -> Chip {
         Chip(
             text: how.chipText, tone: .warning, systemImage: how.systemImage,
             help: how.help
-                + "Click to add the disc ID to the right release in MusicBrainz (you need an account); "
+                + "Click to add the disc ID to this release in MusicBrainz (you need an account); "
                 + "after that, every ripper finds the disc by its ID. Then use Disc › Look Up Metadata (⌘L) "
                 + "to see it here.",
-            link: MusicBrainzRelease.submissionURL(for: toc))
+            link: release?.submissionURL(for: toc) ?? MusicBrainzRelease.submissionURL(for: toc))
     }
 
     /// How a release without the disc's ID was found.
@@ -1547,7 +1549,7 @@ enum ResultChips {
                 + "often have the same disc, so a disc ID can be on both. If this disc is from \(name(release)), "
                 + "click to add the disc ID to \(disc) in MusicBrainz (you need an account), then use Look Up "
                 + "Metadata. Remove the disc ID from the other release only if that release is wrong.",
-            link: MusicBrainzRelease.submissionURL(for: toc))
+            link: release.submissionURL(for: toc))
     }
 
     static func chips(for report: RipReport) -> [Chip] {

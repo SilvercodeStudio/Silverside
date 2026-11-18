@@ -33,8 +33,10 @@ struct ReleasePickerSheet: View {
             .frame(minHeight: 220)
             if disc.isFuzzy {
                 Link(
-                    "Add this disc ID to the right release in MusicBrainz",
-                    destination: MusicBrainzRelease.submissionURL(for: disc.toc)
+                    selected == nil
+                        ? "Add this disc ID to the right release in MusicBrainz"
+                        : "Add this disc ID to the selected release in MusicBrainz",
+                    destination: MusicBrainzRelease.submissionURL(for: disc.toc, releaseID: selected)
                 )
                 .font(.callout)
             }
@@ -47,7 +49,9 @@ struct ReleasePickerSheet: View {
                 .disabled(selected == nil)
                 .help(ResultChips.newReleaseHelp.replacingOccurrences(of: "this one", with: "the selected one"))
                 Button("Search MusicBrainz…") { searchShown = true }
-                    .help("None of these is your release: find it by its names, barcode, or catalog number")
+                    .help(
+                        "None of these is your release: find it by its names, barcode, or catalog number, or by a link to it"
+                    )
                 Spacer()
                 Button("None of These") {
                     noRelease()
@@ -185,7 +189,7 @@ struct ChangeReleaseSheet: View {
                     .help("Ask MusicBrainz again, for a release or a disc ID added since the rip")
                 Button("Search MusicBrainz…") { searchShown = true }
                     .disabled(!model.canChangeRelease(rip))
-                    .help("Find the disc's release by its names, barcode, or catalog number")
+                    .help("Find the disc's release by its names, barcode, or catalog number, or by a link to it")
                 Spacer()
                 Button("No Release") {
                     model.useNoRelease(for: rip)

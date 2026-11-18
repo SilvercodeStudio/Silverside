@@ -20,6 +20,13 @@ command-line tool.
 - The report of a copy-protected disc, such as one with Cactus Data Shield,
   explains the C2 errors that come about every 6 seconds in every track: the
   drive fills in audio that the protection took out, so they are not damage.
+- Search MusicBrainz… takes a link to a release in MusicBrainz, or its ID, for
+  a disc that the lookup did not find: paste it in the search field. A link to
+  a release group lists its releases. The "Not in MusicBrainz" chip opens
+  the search too.
+- The chip that adds a disc ID to a release found by its track lengths, its
+  barcode, or a search opens MusicBrainz at that release, with its discs to
+  choose from, not at a search for it.
 
 ### Changed
 

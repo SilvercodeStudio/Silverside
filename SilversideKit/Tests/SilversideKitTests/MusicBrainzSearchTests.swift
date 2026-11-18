@@ -41,6 +41,43 @@ struct MusicBrainzSearchTests {
         #expect(results.count == 10 && results[1].title == "Dave Brubeck")
     }
 
+    /// A link to a release, or its ID alone, gives that release, looked up by its ID: one
+    /// request, and no search. A release group's link searches for its releases.
+    @Test func findsTheReleaseOfALink() async throws {
+        let id = Self.releaseID
+        for text in [
+            "https://musicbrainz.org/release/\(id)", "musicbrainz.org/release/\(id)/discids", " \(id.uppercased()) ",
+            "https://beta.musicbrainz.org/release/\(id)?tport=8000\n",
+        ] {
+            #expect(MusicBrainzClient.link(in: text) == .release(id))
+        }
+        #expect(MusicBrainzClient.searchQuery(for: "https://musicbrainz.org/release/\(id)") == "reid:\(id)")
+        let group = "0a2b3c4d-1111-4222-8333-444455556666"
+        #expect(MusicBrainzClient.link(in: "https://musicbrainz.org/release-group/\(group)") == .releaseGroup(group))
+        #expect(MusicBrainzClient.searchQuery(for: "https://musicbrainz.org/release-group/\(group)") == "rgid:\(group)")
+        #expect(MusicBrainzClient.link(in: "https://musicbrainz.org/artist/\(group)") == .other)
+        #expect(MusicBrainzClient.link(in: "https://musicbrainz.org/release/add") == .other)
+        #expect(MusicBrainzClient.searchQuery(for: "https://musicbrainz.org/artist/\(group)").isEmpty)
+        #expect(MusicBrainzClient.link(in: "https://example.com/release/\(id)") == nil)
+        #expect(MusicBrainzClient.link(in: "Dave Brubeck \(id)") == nil)
+        #expect(MusicBrainzClient.link(in: "823564030142") == nil)
+
+        let tests = MusicBrainzTests()
+        let web = FakeWeb([
+            ("https://musicbrainz.org/ws/2/release/\(id)", try tests.fixture("seven-classic-lps-release"))
+        ])
+        let root = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let client = MusicBrainzClient(client: await web.client(in: root))
+        let results = try await client.searchReleases("https://musicbrainz.org/release/\(id)")
+        let box = try #require(results.first)
+        #expect(results.count == 1 && box.id == id && box.title == "Seven Classic LPs" && box.artist == "Dave Brubeck")
+        #expect(box.labels == ["Enlightenment EN4CD9161"] && box.barcode == "823564030142" && box.formats == "4×CD")
+        #expect(box.media.map(\.trackCount) == [18, 10, 16, 15] && box.positions(withTrackCount: 18) == [1])
+        let requests = await web.requests
+        #expect(requests.count == 1 && !requests[0].contains("query="))
+    }
+
     /// The disc ID finds nothing; the disc's barcode finds the box, whose disc 1 fits by its
     /// track count and lengths. One search, and one lookup of the release.
     @Test func findsAReleaseByTheDiscsBarcode() async throws {

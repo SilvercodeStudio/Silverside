@@ -233,15 +233,27 @@ public struct MusicBrainzRelease: Codable, Equatable, Sendable {
         !isManual && medium(withDiscID: toc.musicBrainzDiscID) == nil
     }
 
-    /// The page where a user can add this disc ID to a release in MusicBrainz.
-    public static func submissionURL(for toc: TOC) -> URL {
+    /// The page where a user can add this disc ID to a release in MusicBrainz. Without a
+    /// release, the page asks for a search first. With `releaseID`, a release MusicBrainz has,
+    /// the page shows that release's discs to choose from: the ID goes in as the page's own
+    /// "Release title or MBID" search (`filter-release.query`), which takes a release by its ID.
+    public static func submissionURL(for toc: TOC, releaseID: String? = nil) -> URL {
         var components = URLComponents(string: "https://musicbrainz.org/cdtoc/attach")!
         components.queryItems = [
             URLQueryItem(name: "id", value: toc.musicBrainzDiscID),
             URLQueryItem(name: "tracks", value: String(toc.sessionAudioTracks.count)),
             URLQueryItem(name: "toc", value: toc.musicBrainzTOCString.replacingOccurrences(of: "+", with: " ")),
         ]
+        // A manual release's ID ("silverside:…") is not MusicBrainz's.
+        if let releaseID, UUID(uuidString: releaseID) != nil {
+            components.queryItems?.append(URLQueryItem(name: "filter-release.query", value: releaseID))
+        }
         return components.url!
+    }
+
+    /// The page where a user can add this disc ID to this release in MusicBrainz.
+    public func submissionURL(for toc: TOC) -> URL {
+        Self.submissionURL(for: toc, releaseID: isManual ? nil : id)
     }
 
     static func joined(_ credit: [Credit]) -> String {

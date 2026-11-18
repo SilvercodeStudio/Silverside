@@ -39,6 +39,10 @@ command-line tool.
 
 ### Fixed
 
+- A rip just after you added the disc ID in MusicBrainz could still say
+  "nearly the same TOC", until Look Up Metadata: the release's details came
+  from Silverside's cache, from before the disc ID. A release whose details
+  lack a disc ID that MusicBrainz now lists is looked up again.
 - On an earlier rip of a set's disc, the Cover Art Archive picker said that
   the image you choose goes on every disc. It now says that Silverside asks
   next whether the image is for that disc only or for every disc, as it

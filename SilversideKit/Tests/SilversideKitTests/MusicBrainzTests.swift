@@ -79,6 +79,46 @@ struct MusicBrainzTests {
         #expect(await transport.requests.count == 2)
     }
 
+    /// The release's own lookup in the cache is from before its disc ID was added, and the disc
+    /// lookup is from after: the release is asked for again, once, so it has the disc ID.
+    @Test func looksUpAReleaseAgainThatLacksTheDiscsNewID() async throws {
+        let toc = try TOC(
+            musicBrainzOffsets: [150, 25220, 61075, 82890, 116599, 145802, 173575, 189016, 210578, 236749, 251121],
+            sectors: 301_681)
+        let id = "aa0d7d7e-1d78-4f78-ba03-7a32c200f660"
+        let lookupJSON = try #require(
+            try JSONSerialization.jsonObject(with: fixture("cornell-1977-disc1")) as? [String: Any])
+        var release = try #require(
+            (lookupJSON["releases"] as? [[String: Any]])?.first { $0["id"] as? String == id })
+        let current = try JSONSerialization.data(withJSONObject: release)
+        var media = try #require(release["media"] as? [[String: Any]])
+        media[0]["discs"] = [[String: Any]]()
+        release["media"] = media
+        let older = try JSONSerialization.data(withJSONObject: release)
+
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SilversideTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let before = FakeWeb([("https://musicbrainz.org/ws/2/release/\(id)", older)])
+        let cached = try await MusicBrainzClient(client: before.client(in: directory)).release(id: id)
+        #expect(cached?.medium(withDiscID: toc.musicBrainzDiscID) == nil)
+
+        let after = FakeWeb([
+            ("https://musicbrainz.org/ws/2/discid/", try fixture("cornell-1977-disc1")),
+            ("https://musicbrainz.org/ws/2/release/\(id)", current),
+        ])
+        let client = MusicBrainzClient(client: await after.client(in: directory))
+        let store = ReleaseChoiceStore(url: directory.appending(path: "ReleaseChoices.json"))
+        let result = try await ReleaseLookup.find(toc: toc, mcn: nil, details: true, client: client, store: store)
+        #expect(result.isExact && result.chosen?.medium(withDiscID: toc.musicBrainzDiscID)?.position == 1)
+        #expect(result.chosen?.lacksDiscID(of: toc) == false)
+        #expect(await after.requests.count == 2)
+        // The rip's lookup, by the release's ID, finds both in the cache, and they agree.
+        let rip = try await ReleaseLookup.find(
+            toc: toc, mcn: nil, releaseID: id, details: true, client: client, store: store)
+        #expect(rip.chosen?.lacksDiscID(of: toc) == false)
+        #expect(await after.requests.count == 2)
+    }
+
     /// `silverside drives` names a disc from the cache, with no request: nothing before the
     /// first lookup, the release after it.
     @Test func namesADiscFromTheCacheOnly() async throws {

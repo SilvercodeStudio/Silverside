@@ -120,7 +120,6 @@ public enum ReleaseLookup {
         return releases
     }
 
-    /// The release looked up by its ID, or the summary and why that lookup failed.
     /// The release for a disc as an earlier lookup found it, from the cache, with no request:
     /// the remembered choice if there is one, else the best ranked. Nil if the disc was never
     /// found. For `silverside drives`, which names the disc in each drive.
@@ -135,11 +134,25 @@ public enum ReleaseLookup {
         ).first
     }
 
+    /// The release looked up by its ID, or the summary and why that lookup failed. The release
+    /// comes from the cache like any answer (for a week), and the disc lookup's summary can be
+    /// newer: a disc ID added in MusicBrainz since is in the summary only, and the rip kept the
+    /// release without it, as one matched by its track lengths (*Live on King Street*, both
+    /// discs, 2026-11-18). A release that lacks a disc ID of its summary is looked up again.
     private static func detailed(
         _ summary: MusicBrainzRelease, client: MusicBrainzClient, useCache: Bool
     ) async throws -> (MusicBrainzRelease, String?) {
         do {
-            return (try await client.release(id: summary.id, useCache: useCache) ?? summary, nil)
+            guard var release = try await client.release(id: summary.id, useCache: useCache) else {
+                return (summary, nil)
+            }
+            let discIDs = Set(release.media.flatMap(\.discIDs))
+            if useCache, !Set(summary.media.flatMap(\.discIDs)).isSubset(of: discIDs),
+                let fresh = try await client.release(id: summary.id, useCache: false)
+            {
+                release = fresh
+            }
+            return (release, nil)
         } catch is CancellationError {
             throw CancellationError()
         } catch {

@@ -11,8 +11,8 @@ command-line tool.
   Music app at any time, and when "Add each disc to Music" is on in Settings,
   the toolbar has the button too. If Music seems to have the album already,
   Silverside asks first.
-- An earlier rip of a disc of a set shows the disc's own title, such as "Rio
-  Grande Mud" in a box of albums, and so does a disc in a drive.
+- An earlier rip of a disc of a set shows the disc's own title in a box set of
+  multiple albums or titles, and so does a disc in a drive.
 - Use Each Disc's Sleeve now also works for a box set whose images in the
   Cover Art Archive name no discs, when there is one front for each disc in
   the discs' order. The picker marks each front with its disc, so you can
@@ -27,14 +27,17 @@ command-line tool.
 - The chip that adds a disc ID to a release found by its track lengths, its
   barcode, or a search opens MusicBrainz at that release, with its discs to
   choose from, not at a search for it.
+- Help › Support Silverside, and Leave a Tip in the About window, open the
+  page where you can leave a tip. Silverside stays free.
+- The About window names Silvercode Studio, which makes Silverside, with a
+  link to its website.
 
 ### Changed
 
 - FLAC albums can now go into Music too. Music cannot play FLAC, so it gets
   Apple Lossless or AAC copies, made in their own folder (Settings › General ›
   Apple Music), never in the library and never over a file. When Music copies
-  files into its own folder, as it does at first, Silverside deletes its
-  copies.
+  files into its own folder, as it does at first, Silverside deletes its copies.
 - An album that Music has already is not added again after a rip or Encode.
 
 ### Fixed

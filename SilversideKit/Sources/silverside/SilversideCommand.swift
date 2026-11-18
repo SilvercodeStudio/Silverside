@@ -21,6 +21,8 @@ struct SilversideCommand: AsyncParsableCommand {
 
             Silverside is for archival copies of discs that you own, for your personal use. The first \
             rip asks you to agree to this; silverside --accept-disclaimer agrees ahead of time.
+
+            Silverside is free. To support it with a tip: \(SilversideLinks.sponsor.absoluteString)
             """,
         version: SilversideVersion.described,
         subcommands: [

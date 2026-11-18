@@ -7,20 +7,22 @@
     /// -2, -3 added), then quits. It draws the view hierarchy, so it needs no screen
     /// recording permission. `-screenshotWidth 700` makes the main window that wide first, to
     /// check a narrow layout (`-screenshotHeight 500` that high, for a short one). `-appearance light` or `dark` overrides the system's, for a
-    /// capture in each.
+    /// capture in each, also without a screenshot path.
     enum DebugScreenshot {
         private static var scheduled = false
 
         static func scheduleIfRequested() {
-            guard !scheduled, let path = UserDefaults.standard.string(forKey: "screenshotPath"), !path.isEmpty else {
-                return
-            }
-            scheduled = true
+            // Also without a screenshot path, for a capture of the windows on screen
+            // (`screencapture -l`), with the windows' own frames and corners.
             switch UserDefaults.standard.string(forKey: "appearance") {
             case "light": NSApp.appearance = NSAppearance(named: .aqua)
             case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
             default: break
             }
+            guard !scheduled, let path = UserDefaults.standard.string(forKey: "screenshotPath"), !path.isEmpty else {
+                return
+            }
+            scheduled = true
             let configured = UserDefaults.standard.double(forKey: "screenshotDelay")
             let delay = configured > 0 ? configured : 4
             let width = UserDefaults.standard.double(forKey: "screenshotWidth")

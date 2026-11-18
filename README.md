@@ -45,6 +45,7 @@ it comes with no warranty (see [LICENSE](LICENSE)).
 See also:
 
 - [silverside.app](https://silverside.app) official site
+- [silvercode.studio](https://silvercode.studio), the studio that makes Silverside, and its other apps.
 - [CHANGELOG.md](CHANGELOG.md) changes in each version.
 - [LICENSE](LICENSE) (the GNU General Public License) and [NOTICE](NOTICE)
 - [CONTRIBUTING.md](CONTRIBUTING.md) if you want to send a change.
@@ -311,6 +312,11 @@ tools and real discs.
 - Several encodings at once (for example FLAC and AAC).
 - More filename template options, and per-track pregap adjustments.
 - The app in other languages.
+
+## Support Silverside
+
+Silverside is free. If you find it useful, you can
+[leave a tip](https://silvercode.studio/sponsor?from=silverside).
 
 ## License
 

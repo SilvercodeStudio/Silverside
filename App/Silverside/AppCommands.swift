@@ -31,7 +31,8 @@ struct AppCommands: Commands {
                 .keyboardShortcut("?", modifiers: .command)
             Button("Welcome to Silverside") { openWindow(id: "welcome") }
             Divider()
-            Button("Silverside Website") { NSWorkspace.shared.open(AboutView.website) }
+            Button("Silverside Website") { NSWorkspace.shared.open(SilversideLinks.website) }
+            Button("Support Silverside") { NSWorkspace.shared.open(SilversideLinks.sponsor) }
             Button("Report a Problem…") { NSWorkspace.shared.open(model.problemReportURL()) }
             Button("Send Feedback…") { NSWorkspace.shared.open(ProblemReport.feedbackURL()) }
         }

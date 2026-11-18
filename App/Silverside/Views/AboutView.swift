@@ -9,8 +9,6 @@ struct AboutView: View {
     @State private var drivesKnown = 0
     @State private var acknowledgmentsShown = false
 
-    static let website = URL(string: "https://silverside.app")!
-
     var body: some View {
         VStack(spacing: 0) {
             Hero()
@@ -25,11 +23,12 @@ struct AboutView: View {
                 credits
                 HStack(spacing: 12) {
                     Button("Acknowledgments…") { acknowledgmentsShown = true }
-                    Button("Website") { NSWorkspace.shared.open(Self.website) }
+                    Button("Website") { NSWorkspace.shared.open(SilversideLinks.website) }
+                    Button("Leave a Tip") { NSWorkspace.shared.open(SilversideLinks.sponsor) }
                 }
                 .controlSize(.large)
                 .padding(.top, 6)
-                Text(copyright).font(.callout).foregroundStyle(.secondary)
+                Text(copyrightLine).font(.callout).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 32)
             .padding(.top, 24)
@@ -54,12 +53,21 @@ struct AboutView: View {
         // A release (an archive) leaves out the commit, which its Git tag names, unless it had
         // changes that were not committed. The reports and the log name it either way.
         let archive = info?["SilversideArchive"] as? Bool == true
+        #if DEBUG
+            // `-plainVersion 1` shows the version as a clean release does, for screenshots.
+            if UserDefaults.standard.bool(forKey: "plainVersion") { return text }
+        #endif
         if let commit = SilversideVersion.commit, !archive || commit.hasSuffix("-dirty") { text += " · \(commit)" }
         return text
     }
 
-    private var copyright: String {
-        Bundle.main.infoDictionary?["NSHumanReadableCopyright"] as? String ?? ""
+    /// "© 2026 Preston Landers · Silvercode Studio", with a link to the studio. The copyright
+    /// stays the author's, as in NOTICE; the studio's name comes after it.
+    private var copyrightLine: AttributedString {
+        let copyright = Bundle.main.infoDictionary?["NSHumanReadableCopyright"] as? String ?? ""
+        var studio = AttributedString("Silvercode Studio")
+        studio.link = SilversideLinks.studio
+        return AttributedString(copyright.isEmpty ? "" : "\(copyright) · ") + studio
     }
 
     /// Each disc counts once, however many times it was ripped or repaired, with its best

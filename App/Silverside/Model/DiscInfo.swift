@@ -322,6 +322,19 @@ struct DiscInfo {
         await use(chosen)
     }
 
+    #if DEBUG
+        /// The release an earlier rip of the disc had, for a screenshot scene (`ScreenshotScene`)
+        /// whose web cache lacks the lookup: as if the lookup had found it by the disc ID.
+        mutating func useSceneRelease(_ release: MusicBrainzRelease) async {
+            releases = [release]
+            isFuzzy = false
+            isAmbiguous = false
+            lookup = .found
+            lookupChoice = release
+            await use(release)
+        }
+    #endif
+
     /// Uses a release that a search of MusicBrainz found, which has a disc that fits this one:
     /// as if the lookup had found it by the disc's track lengths.
     mutating func useFound(_ found: MusicBrainzRelease) async {

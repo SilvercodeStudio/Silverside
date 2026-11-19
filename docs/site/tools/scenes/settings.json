@@ -1,0 +1,6 @@
+{
+  "arguments": "-openWindow settings -settingsTab encoding",
+  "mainWindow": false,
+  "scroll": 135,
+  "widths": "1200,600"
+}

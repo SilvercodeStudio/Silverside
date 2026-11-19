@@ -1,0 +1,11 @@
+{
+  "drives": [
+    { "vendor": "MATSHITA", "product": "BD-MLT UJ260AF" },
+    { "vendor": "HL-DT-ST", "product": "BD-RE BU50N" },
+    { "vendor": "ASUS", "product": "BW-16D1HT" }
+  ],
+  "settings": { "library": "~/Music/Silverside Library", "rips": "~/Music/Silverside Rips" },
+  "arguments": "-openWindow welcome",
+  "mainWindow": false,
+  "widths": "1200,600"
+}

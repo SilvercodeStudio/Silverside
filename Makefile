@@ -34,7 +34,7 @@ COMMIT := $(shell scripts/commit-id.sh)
 COMMIT_PLIST = $(PACKAGE)/.build/commit/Info-$(COMMIT).plist
 COMMIT_FLAGS = $(if $(COMMIT),-Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker $(abspath $(COMMIT_PLIST)))
 
-.PHONY: help build run app cli test hwtest core format lint release commit-plist install-cli-local install-app open-app dist uninstall-cli-local site rip-art
+.PHONY: help build run app cli test hwtest core format lint release commit-plist install-cli-local install-app open-app dist uninstall-cli-local site site-shots rip-art
 
 # Never as root: a build with sudo leaves files in .build that only root can replace, and every
 # build after it fails to link. /usr/local gets the command from the app's Install Command Line Tool.
@@ -69,6 +69,7 @@ help:
 	@echo "make dist           the app for others: Developer ID, notarized, stapled, in a disk image in build/dist (NOTARIZE=0 stops before Apple)"
 	@echo "make uninstall-cli-local  remove what make install-cli-local put under ~/.local"
 	@echo "make site           serve the website (docs/site) at http://localhost:8000"
+	@echo "make site-shots     take the site's screenshots again, scene by scene (SCENES='ready done', APPEARANCES=dark for some)"
 	@echo "make rip-art        render the Rip button's pictures from SilversideRipIcon.icon (after the icon changes)"
 	@echo "Set CONFIG=Release for a release build (Apple silicon and Intel)."
 
@@ -169,6 +170,11 @@ uninstall-cli-local:
 # The website, as GitHub Pages serves it.
 site:
 	python3 -m http.server 8000 --bind 127.0.0.1 --directory docs/site
+
+# The site's screenshots, from scenes of the rip history (docs/site/tools/screenshots.sh).
+site-shots: build
+	@app="$$($(XCODEBUILD) -showBuildSettings 2>/dev/null | awk -F' = ' '/^ *BUILT_PRODUCTS_DIR =/ {dir=$$2} /^ *FULL_PRODUCT_NAME =/ {name=$$2} END {print dir "/" name}')"; \
+	APP="$$app" SCENES="$(SCENES)" APPEARANCES="$(APPEARANCES)" docs/site/tools/screenshots.sh
 
 # Xcode does not build SilversideRipIcon.icon; this renders it with Icon Composer into the asset catalog.
 rip-art:

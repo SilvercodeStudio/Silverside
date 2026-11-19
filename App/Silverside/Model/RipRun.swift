@@ -920,6 +920,75 @@ final class RipRun {
         }
     }
 
+    #if DEBUG
+        /// The rip as an earlier rip's report has it, for a screenshot scene (`ScreenshotScene`):
+        /// under way at `track`, `fraction` of the way through it, or finished with no `track`.
+        /// No drive is read. The clock stays at `elapsed`, or for a finished rip, the time it took.
+        func showScene(
+            report: RipReport, folder: URL, track current: Int?, fraction: Double, elapsed: TimeInterval?,
+            speed: Double?
+        ) {
+            encodes = report.encoding != nil
+            tracksToRip = report.tracks.map(\.number)
+            var before = 0
+            for track in disc.toc.audioTracks {
+                let sectors = disc.toc.sectorRange(of: track).count
+                trackErrors[track.number] = TrackErrors(sectors: sectors)
+                guard tracksToRip.contains(track.number) else {
+                    trackStates[track.number] = .skipped
+                    continue
+                }
+                trackStates[track.number] = .queued
+                sectorsBefore[track.number] = before
+                before += sectors
+            }
+            sectorsTotal = before
+            readOffset = report.drive.readOffset
+            offsetSource = report.drive.offsetSource
+            self.folder = folder
+            phase = .ripping
+            for track in report.tracks.sorted(by: { $0.number < $1.number }) {
+                if let current, track.number >= current { break }
+                trackStates[track.number] = .finished(track)
+                trackErrors[track.number]?.flagged = Set(track.c2Sectors ?? [])
+                trackErrors[track.number]?.unreadable = Set(track.unreadableSectors ?? [])
+                trackErrors[track.number]?.suspect = Set(track.suspectSectors)
+                trackErrors[track.number]?.unresolved = Set(track.unresolvedSectors)
+                sectorsDone = (sectorsBefore[track.number] ?? 0) + track.sectors
+            }
+            // An end date stops the clock; whether the rip runs follows its phase alone.
+            let took =
+                report.started.map { report.date.timeIntervalSince($0) + Double(report.encoding?.seconds ?? 0) }
+            endDate = Date()
+            startDate = endDate!.addingTimeInterval(-(elapsed ?? took ?? 0))
+            if let current {
+                currentTrack = current
+                position = (tracksToRip.firstIndex(of: current) ?? 0) + 1
+                count = tracksToRip.count
+                sectorsDone = sectorsBefore[current] ?? 0
+                sectorsInPass = Int(Double(trackErrors[current]?.sectors ?? 0) * fraction)
+                trackStates[current] = .reading(pass: 1, passes: 1, fraction: fraction)
+                self.speed = speed
+                return
+            }
+            self.report = report
+            ctdb = report.ctdb
+            for track in report.tracks where track.repairedSamples > 0 {
+                repairedTracks[track.number] = track.repairedSamples
+            }
+            if let encoding = report.encoding {
+                encodingFormat = encoding.format
+                encodedFiles = encoding.files.map { URL(filePath: encoding.folder).appending(path: $0.file) }
+                for file in encoding.files {
+                    encodeStates[file.track] = .encoded(URL(filePath: encoding.folder).appending(path: file.file))
+                }
+                encodedCount = encoding.files.count
+            }
+            sectorsDone = sectorsTotal
+            phase = .finished
+        }
+    #endif
+
     /// The encoder writes the tracks in order, so the first one still queued is under way.
     private func startNextEncode() {
         if let next = tracksToRip.sorted().first(where: { encodeStates[$0] == .queued }) {

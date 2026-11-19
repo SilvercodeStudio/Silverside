@@ -23,6 +23,8 @@ public struct URLSessionTransport: HTTPTransport {
 /// - Responses, and 404s, are kept in a cache on disk, for a time that depends on the host.
 ///   When a request fails, a copy from the cache is used even if it is old, so that
 ///   lookups work offline.
+/// - With `SILVERSIDE_CACHE_ONLY=1` in the environment, nothing is sent: every answer comes
+///   from the cache, however old, as for the site's screenshots (`docs/site/tools/screenshots.sh`).
 public actor WebClient {
     public static let userAgent =
         "Silverside/\(SilversideVersion.string) ( https://silverside.app )"
@@ -67,18 +69,23 @@ public actor WebClient {
     let directory: URL
     let policies: [String: HostPolicy]
     let firstRetryDelay: Duration
+    /// True to send no request: an answer comes from the cache, however old, and a URL that
+    /// the cache lacks fails as if the Mac were offline.
+    let cacheOnly: Bool
 
     /// The number of requests sent to the transport, for tests.
     public private(set) var requestsSent = 0
 
     public init(
         directory: URL, transport: any HTTPTransport = URLSessionTransport(),
-        policies: [String: HostPolicy] = defaultPolicies, firstRetryDelay: Duration = .seconds(2)
+        policies: [String: HostPolicy] = defaultPolicies, firstRetryDelay: Duration = .seconds(2),
+        cacheOnly: Bool = ProcessInfo.processInfo.environment["SILVERSIDE_CACHE_ONLY"] == "1"
     ) {
         self.directory = directory
         self.transport = transport
         self.policies = policies
         self.firstRetryDelay = firstRetryDelay
+        self.cacheOnly = cacheOnly
     }
 
     /// The cached response body for `url`, however old, with no request: nil if the cache has
@@ -105,6 +112,10 @@ public actor WebClient {
             entry -> (entry: CacheEntry, data: Data?)? in
             if entry.status == 404 { return (entry, nil) }
             return (try? Data(contentsOf: body)).map { (entry, $0) }
+        }
+        if cacheOnly {
+            if let cached { return cached.data }
+            throw URLError(.notConnectedToInternet)
         }
         if useCache, let cached {
             let age = Duration.seconds(Date().timeIntervalSince(cached.entry.fetched))

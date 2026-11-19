@@ -209,6 +209,13 @@ final class DriveSlot: Identifiable {
         probeStop = nil
     }
 
+    #if DEBUG
+        /// What a look at the disc found, for a screenshot scene (`ScreenshotScene`), which reads no drive.
+        func showScene(probe: DiscProbe) {
+            self.probe = probe
+        }
+    #endif
+
     /// Uses another of the releases that have the disc.
     func choose(_ release: MusicBrainzRelease) {
         changeDisc { await $0.choose(release) }

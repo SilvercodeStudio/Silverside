@@ -146,6 +146,11 @@ final class AppModel {
         // A table's dragged widths last while it shows; a quit leaves them saved.
         TrackColumns.forgetWidths()
         #if DEBUG
+            // `-scene file.json` shows the drives, discs, and rips of a scene for the site's screenshots.
+            if let scene = ScreenshotScene.current {
+                if let changed = ScreenshotScene.settings(changing: settings) { settings = changed }
+                drives = scene.slots()
+            }
             // `-demo` adds a simulated drive with a disc, offline; `-demoRip` starts its rip.
             if UserDefaults.standard.bool(forKey: "demo"), let demo = DemoDisc.slot() {
                 drives.append(demo)
@@ -159,6 +164,10 @@ final class AppModel {
         #endif
         refreshDrives()
         refreshRecentRips()
+        #if DEBUG
+            // A scene's rips are there at once, so it can show one of them.
+            if let scene = ScreenshotScene.current { selection = scene.selection(rips: allRips, sets: sets) }
+        #endif
         _ = updater
         if selection == nil { selection = drives.first.map { .drive($0.id) } }
         watcher = DiskWatcher { [weak self] in self?.discsChanged() }
@@ -533,8 +542,9 @@ final class AppModel {
     /// came or went is read, or forgotten.
     func refreshDrives() {
         #if DEBUG
-            // `-demoOnly` leaves the real drives alone, for work on the app with a disc in one.
-            if UserDefaults.standard.bool(forKey: "demoOnly") { return }
+            // `-demoOnly` leaves the real drives alone, for work on the app with a disc in one; a
+            // screenshot scene has drives of its own.
+            if UserDefaults.standard.bool(forKey: "demoOnly") || ScreenshotScene.current != nil { return }
         #endif
         let devices = OpticalDrive.all()
         // A DVD or Blu-ray disc counts too: its drive comes into view, to say what it is.
@@ -810,6 +820,14 @@ final class AppModel {
     /// the chip that says a rip keeps them. Only when a folder has track files: AccurateRip's
     /// answer is cached, so the rip itself asks no second time.
     func findEarlierCopies(for slot: DriveSlot, stamp: String) async {
+        #if DEBUG
+            if ScreenshotScene.current != nil, let disc = slot.disc {
+                let (folders, own) = earlierCopyFolders(for: slot)
+                let copies = ScreenshotScene.earlierCopies(of: disc.toc, in: earlierRips(of: disc.toc.ctdbTOCString))
+                slot.earlierCopies = EarlierCopies(folders: folders, own: own, copies: copies, stamp: stamp)
+                return
+            }
+        #endif
         guard let disc = slot.disc, !slot.isDemo, !slot.choices.offline else {
             slot.earlierCopies = nil
             return
@@ -1039,6 +1057,15 @@ final class AppModel {
     /// Looks through the rips folder and the library again. The first time, the history's rips
     /// show at once, since a library on a NAS can take some seconds to list.
     func refreshRecentRips(then completion: (@MainActor () -> Void)? = nil) {
+        #if DEBUG
+            // A screenshot scene's rips are the history's as it was then; the folders are not looked at.
+            if let scene = ScreenshotScene.current {
+                hasScannedRips = true
+                show(scene.rips())
+                completion?()
+                return
+            }
+        #endif
         let folder = settings.ripsURL
         let library = settings.libraryURL
         let history = history

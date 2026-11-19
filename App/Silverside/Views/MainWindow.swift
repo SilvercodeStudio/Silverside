@@ -7,6 +7,7 @@ struct MainWindow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
+    @State private var columnVisibility = NavigationSplitViewVisibility.automatic
 
     /// A rip that waits to hear whether to replace files in the library.
     private var questionRip: RipRun? { model.drives.lazy.compactMap(\.rip).first { $0.overwriteQuestion != nil } }
@@ -37,7 +38,7 @@ struct MainWindow: View {
 
     var body: some View {
         @Bindable var model = model
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
         } detail: {
             DetailView()
@@ -133,6 +134,10 @@ struct MainWindow: View {
             if !UserDefaults.standard.bool(forKey: WelcomeView.doneKey) { openWindow(id: "welcome") }
             #if DEBUG
                 DebugScreenshot.scheduleIfRequested()
+                if let scene = ScreenshotScene.current {
+                    scene.arrangeWindow()
+                    if !scene.showsSidebar { columnVisibility = .detailOnly }
+                }
                 // `-openWindow help` opens a window at launch, for screenshots.
                 if let id = UserDefaults.standard.string(forKey: "openWindow"), !id.isEmpty {
                     if id == "settings" { openSettings() } else { openWindow(id: id) }

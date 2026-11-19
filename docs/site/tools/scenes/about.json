@@ -1,0 +1,6 @@
+{
+  "arguments": "-openWindow about -plainVersion 1",
+  "mainWindow": false,
+  "tabs": 3,
+  "widths": "900,450"
+}

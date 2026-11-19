@@ -1,0 +1,9 @@
+{
+  "historyUntil": "2026-11-01T18:21:07Z",
+  "window": { "width": 1200, "height": 675 },
+  "drives": [
+    { "vendor": "MATSHITA", "product": "BD-MLT UJ260AF", "disc": "2026-11-01T20:32:34Z", "selected": true },
+    { "vendor": "HL-DT-ST", "product": "BD-RE BU50N", "disc": "2026-10-31T21:01:18Z" },
+    { "vendor": "ASUS", "product": "BW-16D1HT" }
+  ]
+}

@@ -112,6 +112,23 @@ struct WebClientTests {
         #expect(await client.requestsSent == 1 + WebClient.maximumAttempts)
     }
 
+    @Test func asksNothingWhenOnlyTheCacheMayAnswer() async throws {
+        let transport = FakeTransport([.status(200, body: "old")])
+        let (client, directory) = client(transport, lifetime: .zero)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        #expect(try await client.data(from: Self.url) == Data("old".utf8))
+        let other = FakeTransport([.status(200, body: "new")])
+        let cacheOnly = WebClient(
+            directory: directory, transport: other, policies: ["example.org": .init(interval: .zero, lifetime: .zero)],
+            cacheOnly: true)
+        #expect(try await cacheOnly.data(from: Self.url) == Data("old".utf8))
+        #expect(try await cacheOnly.data(from: Self.url, useCache: false) == Data("old".utf8))
+        await #expect(throws: URLError.self) {
+            try await cacheOnly.data(from: URL(string: "https://example.org/b")!)
+        }
+        #expect(await cacheOnly.requestsSent == 0)
+    }
+
     /// Two clients that share a folder stand for two processes: the limit holds for both.
     @Test func waitsBetweenRequestsToAHost() async throws {
         let transport = FakeTransport([.status(200), .status(200), .status(200)])

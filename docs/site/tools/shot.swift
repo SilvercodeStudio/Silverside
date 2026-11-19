@@ -9,6 +9,10 @@
 // the edge where the pixels stop matching the margin, along many rows and columns (the median, so
 // a desktop icon or label in the margin does not move it).
 //
+// A capture of one window (Shift-Command-4, Space, then Option-click the window, for no shadow)
+// has transparent corners and nothing around the window. The tool keeps its transparency and
+// crops to its opaque pixels, for a window in front of another, or a sheet.
+//
 //   --trim    cuts that many more pixels from each side, when another window shows at an edge.
 //   --rect    crops that rectangle instead (pixels, from the top left), for a window over another,
 //             such as the welcome or Settings in front of the main window.
@@ -51,13 +55,36 @@ else { fail("cannot read \(source.path)") }
 let width = image.width, height = image.height
 let colorSpace = CGColorSpaceCreateDeviceRGB()
 
-func windowRect() -> CGRect {
+/// The capture's pixels, premultiplied RGBA from the top row.
+let pixels: UnsafeMutablePointer<UInt8> = {
     let context = CGContext(
         data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4, space: colorSpace,
         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
     context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-    // A bitmap context's memory starts with the image's top row.
-    let pixels = context.data!.assumingMemoryBound(to: UInt8.self)
+    let copy = UnsafeMutablePointer<UInt8>.allocate(capacity: width * height * 4)
+    copy.initialize(from: context.data!.assumingMemoryBound(to: UInt8.self), count: width * height * 4)
+    return copy
+}()
+
+/// A capture of one window: its corner is transparent.
+let isWindowCapture = pixels[3] == 0
+
+/// The rectangle of a window capture's opaque pixels: the window, without any shadow.
+func opaqueRect() -> CGRect {
+    var (left, top, right, bottom) = (width, height, -1, -1)
+    for y in 0..<height {
+        for x in 0..<width where pixels[(y * width + x) * 4 + 3] >= 250 {
+            left = min(left, x)
+            right = max(right, x)
+            top = min(top, y)
+            bottom = max(bottom, y)
+        }
+    }
+    guard right >= left else { fail("the capture has no opaque pixels") }
+    return CGRect(x: left, y: top, width: right - left + 1, height: bottom - top + 1)
+}
+
+func windowRect() -> CGRect {
     func pixel(_ x: Int, _ yFromTop: Int) -> (Int, Int, Int) {
         let i = (yFromTop * width + x) * 4
         return (Int(pixels[i]), Int(pixels[i + 1]), Int(pixels[i + 2]))
@@ -104,24 +131,29 @@ if let r = options["--rect"] {
     guard r.count == 4 else { fail("--rect takes four numbers: x,y,width,height") }
     rect = CGRect(x: r[0], y: r[1], width: r[2], height: r[3])
 } else {
-    rect = windowRect()
+    rect = isWindowCapture ? opaqueRect() : windowRect()
 }
 print(
     "\(source.lastPathComponent): \(width)x\(height), window at \(Int(rect.minX)),\(Int(rect.minY))"
         + " \(Int(rect.width))x\(Int(rect.height))")
 let cropped = image.cropping(to: rect)!
+if let largest = widths.max(), Int(rect.width) < largest {
+    print("  The window is \(Int(rect.width)) pixels wide, less than \(largest): take the screenshot on a Retina display.")
+}
 
 let cwebp = ["/opt/homebrew/bin/cwebp", "/usr/local/bin/cwebp"].first { FileManager.default.isExecutableFile(atPath: $0) }
-if radius > 0 && cwebp == nil { fail("--radius needs cwebp: brew install webp") }
+// A window capture keeps its transparent corners, as --radius makes them.
+let keepsAlpha = radius > 0 || isWindowCapture
+if keepsAlpha && cwebp == nil { fail("--radius and a window capture need cwebp: brew install webp") }
 for targetWidth in widths {
     let targetHeight = Int((Double(cropped.height) * Double(targetWidth) / Double(cropped.width)).rounded())
     let scaled = CGContext(
         data: nil, width: targetWidth, height: targetHeight, bitsPerComponent: 8, bytesPerRow: targetWidth * 4,
         space: colorSpace,
-        bitmapInfo: (radius > 0 ? CGImageAlphaInfo.premultipliedLast : CGImageAlphaInfo.noneSkipLast).rawValue)!
+        bitmapInfo: (keepsAlpha ? CGImageAlphaInfo.premultipliedLast : CGImageAlphaInfo.noneSkipLast).rawValue)!
     scaled.interpolationQuality = .high
     let bounds = CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight)
-    if radius > 0 {
+    if radius > 0 && !isWindowCapture {
         let r = CGFloat(radius) * CGFloat(targetWidth) / rect.width
         scaled.addPath(CGPath(roundedRect: bounds, cornerWidth: r, cornerHeight: r, transform: nil))
         scaled.clip()

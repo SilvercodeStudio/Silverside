@@ -6,6 +6,82 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>Silverside</title>
         <item>
+            <title>0.9.9</title>
+            <pubDate>Thu, 19 Nov 2026 14:15:46 -0600</pubDate>
+            <link>https://silverside.app</link>
+            <sparkle:version>0.9.9</sparkle:version>
+            <sparkle:shortVersionString>0.9.9</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[
+### Added
+
+- **Add to Music** in the Disc menu adds an earlier rip's album to Apple's
+  Music app at any time, and when "Add each disc to Music" is on in Settings,
+  the toolbar has the button too. If Music seems to have the album already,
+  Silverside asks first.
+- An earlier rip of a disc of a set shows the disc's own title in a box set of
+  multiple albums or titles, and so does a disc in a drive.
+- Use Each Disc's Sleeve now also works for a box set whose images in the
+  Cover Art Archive don't name a disc, when there is one front for each disc in
+  the discs' order. The picker marks each front with its disc, so you can
+  check them first.
+- The report of a copy-protected disc, such as one with Cactus Data Shield,
+  explains the C2 errors that come about every 6 seconds in every track: the
+  drive fills in audio that the protection took out, so they are not damage.
+- Search MusicBrainz… takes a link to a release in MusicBrainz, or its ID, for
+  a disc that the lookup did not find: paste it in the search field. A link to
+  a release group lists its releases. The "Not in MusicBrainz" chip opens
+  the search too.
+- The chip that adds a disc ID to a release found by its track lengths, its
+  barcode, or a search opens MusicBrainz at that release, with its discs to
+  choose from, not at a search for it.
+- More Results, under Search MusicBrainz…'s results, shows the next 25
+  releases that MusicBrainz found, up to 100.
+- Help › Support Silverside, and Leave a Tip in the About window, open the
+  page where you can leave a tip. Silverside stays free.
+- The About window names Silvercode Studio, which makes Silverside, with a
+  link to its website.
+
+### Changed
+
+- FLAC albums can now go into Music too. Music cannot play FLAC, so it gets
+  Apple Lossless or AAC copies, made in their own folder (Settings › General ›
+  Apple Music), never in the library and never over a file. When Music copies
+  files into its own folder, as it does at first, Silverside deletes its copies.
+- An album that Music has already is not added again after a rip or Encode.
+- The Rip button has a new icon: a drive's pickup over the disc. During a rip,
+  the level bars hang below the pickup and its laser's spot pulses on the
+  disc.
+
+### Fixed
+
+- Search MusicBrainz… looked for your words in album titles only, so an
+  artist's name did not help, and a release with a common title, such as
+  *Valhalla*, could be missing from the results. Now it looks for them in the
+  artists too, as MusicBrainz's own search does, and a catalog number, such
+  as CK 67862, finds its release. So does `silverside album --search`.
+- A rip just after you added the disc ID in MusicBrainz could still say
+  "nearly the same TOC", until Look Up Metadata: the release's details came
+  from Silverside's cache, from before the disc ID. A release whose details
+  lack a disc ID that MusicBrainz now lists is looked up again.
+- On an earlier rip of a set's disc, the Cover Art Archive picker said that
+  the image you choose goes on every disc. It now says that Silverside asks
+  next whether the image is for that disc only or for every disc, as it
+  always did.
+- A name edit, Update the Library, a new cover, Change Release, or a set's
+  album gain wrote every tag of a FLAC, Apple Lossless, or AAC file again, so
+  tags that another program had added were lost, such as a genre typed in a
+  tag editor. Those tags now stay. MP3, AIFF, and WAV files keep only
+  Silverside's tags.
+- `silverside tags --json` printed a note before the JSON for a folder of
+  album folders ("add --recursive"), and `silverside cdtext --json` printed
+  one in place of it for a disc without CD-Text, so programs could not read
+  the output. The notes now go to standard error.
+
+]]></description>
+            <enclosure url="https://github.com/SilvercodeStudio/Silverside/releases/download/0.9.9/Silverside-0.9.9.dmg" length="21085472" type="application/octet-stream" sparkle:edSignature="iVFteQ0FmEAubNK6x9yk1KwC05cFJtPv+lG8AtERh9r8kBADsK9Nve1MOWMDKHerlEI78d07DDKQE3HWp0CmAg=="/>
+        </item>
+        <item>
             <title>0.9.8</title>
             <pubDate>Mon, 16 Nov 2026 17:56:28 -0600</pubDate>
             <link>https://silverside.app</link>
@@ -105,6 +181,6 @@ First public release.
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: +mt+ruBBngRmsOSI11jgstNHK/2JvI7Acq2nJN0yNu4rDsdGdCHdmMLmahmHZwuFcNuCfHg132Zvsq1yWTMADw==
-length: 5870
+edSignature: TL9d7pn/kUINw0M2tifRFNoEC0adKQOppBoJTNgDADptwRLhLV9CnGL0oK16IkUI9YZN/1+uPUCY0hRYIApNCA==
+length: 10366
 -->

@@ -41,6 +41,9 @@ command-line tool.
   Apple Music), never in the library and never over a file. When Music copies
   files into its own folder, as it does at first, Silverside deletes its copies.
 - An album that Music has already is not added again after a rip or Encode.
+- The Rip button has a new icon: a drive's pickup over the disc. During a rip,
+  the level bars hang below the pickup and its laser's spot pulses on the
+  disc.
 
 ### Fixed
 

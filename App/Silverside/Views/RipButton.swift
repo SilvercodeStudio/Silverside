@@ -2,8 +2,8 @@ import SilversideKit
 import SwiftUI
 
 /// The Rip button over the track table's lower right: the rip icon (`SilversideRipIcon.icon`), which moves
-/// during a rip. Before a rip it starts one. During the rip level bars hang from the top and
-/// bounce behind the arm, the laser's spot pulses, and a line fills around the edge; a click
+/// during a rip. Before a rip it starts one. During the rip level bars hang from the drive's bay
+/// and bounce behind the pickup, the laser's spot pulses, and a line fills around the edge; a click
 /// asks to stop. After it, a badge shows the verdict, and a click opens the rip's results.
 struct RipButton: View {
     @Environment(AppModel.self) private var model
@@ -122,7 +122,7 @@ private struct RipButtonStyle: ButtonStyle {
 
 /// The picture, with the progress line around its edge and the verdict's badge. The icon is
 /// two pictures that Icon Composer rendered (`App/Icon/make_rip_art.swift`): `RipArt`, the
-/// whole icon, and `RipArtFront`, its arm, laser, disc, and rim alone. The bars go between them.
+/// whole icon, and `RipArtFront`, its drive, laser, disc, and rim alone. The bars go between them.
 struct RipPicture: View {
     enum Look: Equatable {
         case ready
@@ -168,16 +168,20 @@ struct RipPicture: View {
 
     private var outline: FrameOutline { FrameOutline(cornerRadius: size * Self.cornerRatio) }
 
+    /// The edge of the picture, for a line `width` wide inside it.
+    private func edge(width: CGFloat) -> some InsettableShape {
+        FrameOutline(cornerRadius: size * Self.cornerRatio - width / 2).inset(by: width / 2)
+    }
+
     /// The progress line during a rip, in the progress bar's colors, which turn slowly; a
-    /// green or orange edge after it.
+    /// thinner green or orange edge after it.
     @ViewBuilder private func frameLine(time: TimeInterval?) -> some View {
-        let width = size * 0.03
-        let shape = FrameOutline(cornerRadius: size * Self.cornerRatio - width / 2).inset(by: width / 2)
         switch look {
         case .ready: EmptyView()
         case .ripping(let fraction):
+            let width = size * 0.06
             let turn = time.map { ($0 * 40).truncatingRemainder(dividingBy: 360) } ?? 0
-            shape
+            edge(width: width)
                 .trim(from: 0, to: max(0.005, fraction))
                 .stroke(
                     AngularGradient(
@@ -188,7 +192,8 @@ struct RipPicture: View {
                 .shadow(color: .white.opacity(0.6), radius: width * 0.6)
                 .animation(.linear(duration: 0.3), value: fraction)
         case .done(let verified):
-            shape
+            let width = size * 0.03
+            edge(width: width)
                 .stroke(verified ? Theme.good : Theme.warning, lineWidth: width)
                 .shadow(color: (verified ? Theme.good : Theme.warning).opacity(0.8), radius: width)
         }
@@ -247,7 +252,7 @@ nonisolated struct FrameOutline: InsettableShape {
 }
 
 /// Draws the rip icon in a 1024-unit square, as `SilversideRipIcon.icon` lays it out: the
-/// whole icon, the level bars, then the arm, laser, disc, and rim over them. `time` (nil when
+/// whole icon, the level bars, then the drive, laser, disc, and rim over them. `time` (nil when
 /// still) bounces the bars and pulses the laser's spot; `bars` (0 to 1) is how far they have risen.
 struct RipArt {
     var time: TimeInterval?
@@ -256,11 +261,16 @@ struct RipArt {
     var dark = false
 
     static let side: CGFloat = 1024
-    /// The bottom of the orange head, from `head.svg`: the bars reach no lower, so they stay
-    /// well above the disc.
-    private static let headBottom = 380.0
+    /// The bay's lower edge, from `bay.svg`: the bars hang from it.
+    private static let bayEdge = 400.0
+    /// The pickup's lower edge, from `sled.svg`: the bars always reach past it, so that they
+    /// show under it.
+    private static let sledBottom = 474.0
+    /// How much farther the bars reach at most, which keeps them above the disc (its edge is at
+    /// 590 in the middle).
+    private static let reach = 100.0
     /// The laser's spot on the disc, from `spot.svg`.
-    private static let spot = CGPoint(x: 512, y: 622)
+    private static let spot = CGPoint(x: 512, y: 705.2)
     private static let barCount = 15
 
     func draw(in context: inout GraphicsContext, size: CGFloat) {
@@ -274,14 +284,15 @@ struct RipArt {
         if let time { pulse(&context, time: time) }
     }
 
-    /// Bars that hang from the top edge, at most as far as the bottom of the head, and shorter
-    /// near the laser so that they frame it. While ripping they bounce, in the progress bar's colors, which
+    /// Bars that hang from the bay's edge, behind the pickup and past it, and shorter near the
+    /// laser so that they frame it. While ripping they bounce, in the progress bar's colors, which
     /// drift along them.
     private func levelBars(_ context: inout GraphicsContext) {
         var layer = context
         layer.clip(
             to: FrameOutline(cornerRadius: Self.side * RipPicture.cornerRatio).path(
                 in: CGRect(x: 0, y: 0, width: Self.side, height: Self.side)))
+        layer.clip(to: Path(CGRect(x: 0, y: Self.bayEdge, width: Self.side, height: Self.side - Self.bayEdge)))
         layer.opacity = dark ? 0.75 : 0.9
         let left = 40.0
         let width = (Self.side - 2 * left) / Double(Self.barCount)
@@ -296,9 +307,9 @@ struct RipArt {
                 level = 0.35 + 0.5 * abs(sin(Double(index) * 1.7 + 0.5))
             }
             let nearLaser = 1 - 0.4 * exp(-pow((middle - Self.spot.x) / 110, 2))
-            let length = Self.headBottom * level * nearLaser * bars
+            let length = (Self.sledBottom - Self.bayEdge + Self.reach * level * nearLaser) * bars
             let color = time.map { Self.sheen(at: Double(index) / Double(Self.barCount) - $0 * 0.2) } ?? .white
-            let bar = CGRect(x: x + width * 0.2, y: -40, width: width * 0.6, height: length + 40)
+            let bar = CGRect(x: x + width * 0.2, y: Self.bayEdge - 40, width: width * 0.6, height: length + 40)
             layer.fill(Path(roundedRect: bar, cornerRadius: width * 0.3), with: .color(color))
         }
     }
@@ -306,19 +317,19 @@ struct RipArt {
     /// The laser's spot brightens and fades, about once a second.
     private func pulse(_ context: inout GraphicsContext, time: TimeInterval) {
         let strength = 0.5 + 0.5 * sin(time * 5)
-        // spot.svg's gradient: a circle of radius 160, squashed to the disc's slant.
+        // spot.svg's gradient: a circle of radius 220, squashed to the disc's slant.
         var layer = context
         layer.translateBy(x: Self.spot.x, y: Self.spot.y)
-        layer.scaleBy(x: 1, y: 0.4545)
+        layer.scaleBy(x: 1, y: 0.5)
         layer.fill(
-            Path(ellipseIn: CGRect(x: -160, y: -160, width: 320, height: 320)),
+            Path(ellipseIn: CGRect(x: -220, y: -220, width: 440, height: 440)),
             with: .radialGradient(
                 Gradient(stops: [
                     .init(color: Color(red: 1, green: 0.95, blue: 0.93).opacity(0.9 * strength), location: 0),
-                    .init(color: Color(red: 1, green: 0.48, blue: 0.43).opacity(0.6 * strength), location: 0.12),
-                    .init(color: Color(red: 1, green: 0.23, blue: 0.19).opacity(0.25 * strength), location: 0.45),
+                    .init(color: Color(red: 1, green: 0.48, blue: 0.43).opacity(0.65 * strength), location: 0.1),
+                    .init(color: Color(red: 1, green: 0.23, blue: 0.19).opacity(0.3 * strength), location: 0.42),
                     .init(color: Color(red: 1, green: 0.23, blue: 0.19).opacity(0), location: 1),
-                ]), center: .zero, startRadius: 0, endRadius: 160))
+                ]), center: .zero, startRadius: 0, endRadius: 220))
     }
 
     /// A color of `Theme.sheenColors`, taken round as a loop: 0 and 1 are the first color.

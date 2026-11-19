@@ -6,9 +6,9 @@
 // writes two image sets into App/Silverside/Assets.xcassets, each light and dark:
 //
 // - RipArt: the whole icon.
-// - RipArtFront: the same picture where only the Arm, Laser, and Disc groups and the icon's
+// - RipArtFront: the same picture where only the Drive, Laser, and Disc groups and the icon's
 //   rim are, transparent elsewhere. The button draws RipArt, then the level bars, then
-//   RipArtFront, so that the bars pass behind the arm.
+//   RipArtFront, so that the bars pass behind the drive's pickup.
 //
 // A macOS icon always has an opaque background, so RipArtFront comes from two renders of
 // those groups alone, one on black and one on white: where the background shows, the two
@@ -17,7 +17,7 @@ import AppKit
 import Foundation
 
 let ictool = "/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool"
-let frontGroups: Set<String> = ["Arm", "Laser", "Disc"]
+let frontGroups: Set<String> = ["Drive", "Laser", "Disc"]
 /// 256 points at 2x: the button is about 120 points wide.
 let points = 256
 
@@ -62,6 +62,9 @@ func frontOnly(fill: String) -> URL {
         guard var json = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any],
             let groups = json["groups"] as? [[String: Any]]
         else { fail("\(icon.path) has no groups") }
+        // A renamed group would drop out of the front without a word.
+        let missing = frontGroups.subtracting(groups.map { $0["name"] as? String ?? "" })
+        if !missing.isEmpty { fail("\(icon.path) has no group named \(missing.sorted().joined(separator: ", "))") }
         json["groups"] = groups.filter { frontGroups.contains($0["name"] as? String ?? "") }
         // The dark rendition takes only a fill made for it.
         let solid = ["solid": "srgb:\(fill),\(fill),\(fill),1"]

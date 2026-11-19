@@ -27,6 +27,8 @@ command-line tool.
 - The chip that adds a disc ID to a release found by its track lengths, its
   barcode, or a search opens MusicBrainz at that release, with its discs to
   choose from, not at a search for it.
+- More Results, under Search MusicBrainz…'s results, shows the next 25
+  releases that MusicBrainz found, up to 100.
 - Help › Support Silverside, and Leave a Tip in the About window, open the
   page where you can leave a tip. Silverside stays free.
 - The About window names Silvercode Studio, which makes Silverside, with a
@@ -42,6 +44,11 @@ command-line tool.
 
 ### Fixed
 
+- Search MusicBrainz… looked for your words in album titles only, so an
+  artist's name did not help, and a release with a common title, such as
+  *Valhalla*, could be missing from the results. Now it looks for them in the
+  artists too, as MusicBrainz's own search does, and a catalog number, such
+  as CK 67862, finds its release. So does `silverside album --search`.
 - A rip just after you added the disc ID in MusicBrainz could still say
   "nearly the same TOC", until Look Up Metadata: the release's details came
   from Silverside's cache, from before the disc ID. A release whose details

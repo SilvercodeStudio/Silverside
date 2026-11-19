@@ -61,6 +61,51 @@ extension MusicBrainzSearchResult {
     }
 }
 
+/// One page of a release search: its results, where they start, and how many releases match in
+/// all. A search asks for one page, and the user for each page after it, up to `mostResults`.
+public struct MusicBrainzSearchPage: Equatable, Sendable {
+    /// The results in one page.
+    public static let size = 25
+    /// The results a search goes to at most: 4 pages, each one asked for. A release further down
+    /// is found by more words, its barcode, or its link.
+    public static let mostResults = 100
+
+    public var results: [MusicBrainzSearchResult]
+    /// The place of the first result in the whole search, from 0.
+    public var offset: Int
+    /// The releases that match in all; MusicBrainz counts every one that has any of the words.
+    public var total: Int
+
+    public init(results: [MusicBrainzSearchResult], offset: Int = 0, total: Int) {
+        self.results = results
+        self.offset = offset
+        self.total = total
+    }
+
+    /// Where the next page starts, or nil when there is none: MusicBrainz has no more, or the
+    /// search has its most.
+    public var nextOffset: Int? {
+        let next = offset + results.count
+        return !results.isEmpty && next < total && next < Self.mostResults ? next : nil
+    }
+}
+
+/// A release search as MusicBrainz takes it (`MusicBrainzClient.searchQuery(for:)`).
+public struct MusicBrainzSearchQuery: Equatable, Sendable {
+    /// The query, in MusicBrainz's query language unless `isPlain`.
+    public var text: String
+    /// `text` is plain words, which MusicBrainz looks for in each release's title and artist,
+    /// each word counted once, where it fits best, as the search on its website does
+    /// (`dismax=true`, which escapes the language's characters itself). It does not look in
+    /// catalog numbers.
+    public var isPlain: Bool
+
+    public init(_ text: String, isPlain: Bool = false) {
+        self.text = text
+        self.isPlain = isPlain
+    }
+}
+
 /// What a link to MusicBrainz that the user pasted names (`MusicBrainzClient.link(in:)`).
 public enum MusicBrainzLink: Equatable, Sendable {
     case release(String)
@@ -74,40 +119,78 @@ extension MusicBrainzClient {
     /// what the user typed (`searchQuery(for:)`). The answer is cached like any other. A link to
     /// a release, or its ID, gives that release, looked up by its ID: the search's index can be
     /// behind a release added minutes ago, and the lookup is the one that choosing it makes.
-    public func searchReleases(_ text: String, limit: Int = 25, useCache: Bool = true) async throws
-        -> [MusicBrainzSearchResult]
+    public func searchReleases(_ text: String, limit: Int = MusicBrainzSearchPage.size, useCache: Bool = true)
+        async throws -> [MusicBrainzSearchResult]
     {
-        if case .release(let id) = Self.link(in: text) {
-            return try await release(id: id, useCache: useCache).map { [MusicBrainzSearchResult(release: $0)] } ?? []
-        }
-        let query = Self.searchQuery(for: text)
-        guard !query.isEmpty,
-            let data = try await client.data(from: Self.searchURL(query: query, limit: limit), useCache: useCache)
-        else { return [] }
-        return try Self.searchResults(fromJSON: data)
+        try await searchReleasePage(text, limit: limit, useCache: useCache).results
     }
 
-    /// The query for what the user typed. Words go as they are, and MusicBrainz looks for them
-    /// in the title, the artist, the label, and so on ("dave brubeck seven classic lps" finds
-    /// the box first); characters that the query language uses are escaped. A barcode (12 or 13
-    /// digits) is looked for as a barcode, with and without its leading 0, as MusicBrainz may
-    /// keep a UPC or an EAN. A query that names a field ("catno:EN4CD9161") goes as it is; a
-    /// title such as "Soundtracks: Vol. 1" or "Classic Country: Hits" does not name one. A link
-    /// to a release or a release group looks for it by its ID; a link to another page of
-    /// MusicBrainz looks for nothing.
-    public static func searchQuery(for text: String) -> String {
+    /// One page of `searchReleases`: `limit` results from `offset`, with the number that match
+    /// in all, for a search that the user takes further. Each page is a request of its own.
+    public func searchReleasePage(
+        _ text: String, offset: Int = 0, limit: Int = MusicBrainzSearchPage.size, useCache: Bool = true
+    ) async throws -> MusicBrainzSearchPage {
+        if case .release(let id) = Self.link(in: text) {
+            let found = try await release(id: id, useCache: useCache).map { [MusicBrainzSearchResult(release: $0)] }
+            return MusicBrainzSearchPage(results: found ?? [], total: found?.count ?? 0)
+        }
+        let query = Self.searchQuery(for: text)
+        guard !query.text.isEmpty,
+            let data = try await client.data(
+                from: Self.searchURL(query: query, limit: limit, offset: offset), useCache: useCache)
+        else { return MusicBrainzSearchPage(results: [], offset: offset, total: 0) }
+        return try Self.searchPage(fromJSON: data)
+    }
+
+    /// The fields of MusicBrainz's release search. Text that names one, with no space after
+    /// the colon ("catno:EN4CD9161", "comment:(bonus)"), is a query in its language.
+    static let releaseFields = [
+        "alias", "arid", "artist", "artistname", "asin", "barcode", "catno", "comment", "country", "creditname",
+        "date", "discids", "discidsmedium", "format", "laid", "label", "lang", "mediums", "primarytype", "quality",
+        "reid", "release", "releaseaccent", "rgid", "script", "secondarytype", "status", "tag", "tracks",
+        "tracksmedium", "type",
+    ]
+
+    /// The query for what the user typed:
+    ///
+    /// - A link to a release or a release group looks for it by its ID; a link to another page
+    ///   of MusicBrainz looks for nothing.
+    /// - A barcode (12 or 13 digits) is looked for as a barcode, with and without its leading 0,
+    ///   as MusicBrainz may keep a UPC or an EAN.
+    /// - Text that names a field (`releaseFields`) goes as it is. A title such as "Soundtracks:
+    ///   Vol. 1" or "Classic Country: Hits" names none.
+    /// - Text that can be a catalog number, a digit in at most 3 words ("CK 67862",
+    ///   "EN4CD9161"), is looked for as one, ahead of the title and the artist. MusicBrainz keeps
+    ///   a catalog number as one word without its spaces, so the spaces are escaped, and its
+    ///   matches count for little, so it gets 20 times the weight.
+    /// - Other text is plain words (`MusicBrainzSearchQuery.isPlain`). With no field, a query
+    ///   in the language looks in the title alone ("ron goodwin valhalla" found releases named
+    ///   Valhalla by anyone), and words in several fields add up ("Golden Sounds of Ron Goodwin"
+    ///   came before his *Valhalla*); plain words give his *Valhalla* first.
+    public static func searchQuery(for text: String) -> MusicBrainzSearchQuery {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         switch link(in: trimmed) {
-        case .release(let id): return "reid:\(id)"
-        case .releaseGroup(let id): return "rgid:\(id)"
-        case .other: return ""
+        case .release(let id): return MusicBrainzSearchQuery("reid:\(id)")
+        case .releaseGroup(let id): return MusicBrainzSearchQuery("rgid:\(id)")
+        case .other: return MusicBrainzSearchQuery("")
         case nil: break
         }
-        if let barcode = barcodeQuery(for: trimmed) { return barcode }
-        let field = /(^|[\s(])(release|artist|barcode|catno|label|date|country|format|tracks):[^\s]/
-        if trimmed.lowercased().contains(field) { return trimmed }
+        if let barcode = barcodeQuery(for: trimmed) { return MusicBrainzSearchQuery(barcode) }
+        let field = try? Regex("(^|[\\s(])(\(releaseFields.joined(separator: "|"))):[^\\s]")
+        if let field, trimmed.lowercased().contains(field) { return MusicBrainzSearchQuery(trimmed) }
+        let words = trimmed.split(whereSeparator: \.isWhitespace).map(String.init)
+        if trimmed.contains(where: \.isASCIIDigit), words.count <= 3 {
+            let all = escaped(trimmed)
+            let number = words.map(escaped).joined(separator: "\\ ")
+            return MusicBrainzSearchQuery("catno:(\(number))^20 OR release:(\(all)) OR artist:(\(all))")
+        }
+        return MusicBrainzSearchQuery(trimmed, isPlain: true)
+    }
+
+    /// `text` with the characters that the query language uses escaped.
+    static func escaped(_ text: String) -> String {
         let special = Set("+-&|!(){}[]^\"~*?:\\/")
-        return String(trimmed.flatMap { special.contains($0) ? ["\\", $0] : [$0] })
+        return String(text.flatMap { special.contains($0) ? ["\\", $0] : [$0] })
     }
 
     /// The query for a barcode: "barcode:0823564030142 OR barcode:823564030142". Nil if `text`
@@ -139,12 +222,15 @@ extension MusicBrainzClient {
         }
     }
 
-    static func searchURL(query: String, limit: Int) -> URL {
+    static func searchURL(query: MusicBrainzSearchQuery, limit: Int, offset: Int = 0) -> URL {
         var components = URLComponents(url: baseURL.appending(path: "release"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
-            URLQueryItem(name: "query", value: query), URLQueryItem(name: "limit", value: String(limit)),
-            URLQueryItem(name: "fmt", value: "json"),
+            URLQueryItem(name: "query", value: query.text), URLQueryItem(name: "limit", value: String(limit)),
         ]
+        // A first page has no offset in its address, as before, so the cache keeps earlier searches.
+        if offset > 0 { components.queryItems?.append(URLQueryItem(name: "offset", value: String(offset))) }
+        if query.isPlain { components.queryItems?.append(URLQueryItem(name: "dismax", value: "true")) }
+        components.queryItems?.append(URLQueryItem(name: "fmt", value: "json"))
         // URLComponents leaves "+" as it is, and the server reads it as a space.
         components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         return components.url!
@@ -152,8 +238,16 @@ extension MusicBrainzClient {
 
     /// Parses a release search.
     public static func searchResults(fromJSON data: Data) throws -> [MusicBrainzSearchResult] {
+        try searchPage(fromJSON: data).results
+    }
+
+    /// Parses a page of a release search.
+    public static func searchPage(fromJSON data: Data) throws -> MusicBrainzSearchPage {
         do {
-            return try JSONDecoder().decode(RawSearch.self, from: data).releases.map(\.result)
+            let raw = try JSONDecoder().decode(RawSearch.self, from: data)
+            let results = raw.releases.map(\.result)
+            let offset = raw.offset ?? 0
+            return MusicBrainzSearchPage(results: results, offset: offset, total: raw.count ?? offset + results.count)
         } catch {
             throw MusicBrainzError.malformedResponse
         }
@@ -221,6 +315,8 @@ private struct RawSearch: Decodable {
     }
 
     var releases: [Release]
+    var count: Int?
+    var offset: Int?
 }
 
 extension Character {

@@ -19,7 +19,16 @@ struct ReleaseSearchSheet: View {
     @AppStorage("changeReleaseKeepsTitles") private var keepsTitles = false
 
     @State private var query = ""
-    @State private var results: [MusicBrainzSearchResult]?
+    /// The search's pages so far, each as MusicBrainz ordered it; nil before a search.
+    @State private var pages: [[MusicBrainzSearchResult]]?
+    /// The text that `pages` are for, which More Results goes on with, also after the field changed.
+    @State private var searched = ""
+    /// Where the next page starts; nil when MusicBrainz has no more, or the search has its most.
+    @State private var nextOffset: Int?
+    @State private var loadingMore = false
+    @State private var moreFailure: String?
+    /// Counts the searches, so that a page asked for in an earlier one is dropped.
+    @State private var generation = 0
     @State private var searching = false
     @State private var failure: String?
     @State private var selected: String?
@@ -30,10 +39,17 @@ struct ReleaseSearchSheet: View {
 
     private var trackCount: Int { toc.sessionAudioTracks.count }
 
-    /// The results whose discs could be this one (as many tracks) first, in MusicBrainz's order.
+    private var results: [MusicBrainzSearchResult]? { pages?.flatMap { $0 } }
+
+    /// In each page, the results whose discs could be this one (as many tracks) first, in
+    /// MusicBrainz's order. A later page goes after the ones before it, so its results appear
+    /// where More Results was, and nothing above moves.
     private var ordered: [MusicBrainzSearchResult] {
-        let all = results ?? []
-        return all.filter { fits($0) } + all.filter { !fits($0) }
+        (pages ?? []).flatMap(orderedPage)
+    }
+
+    private func orderedPage(_ page: [MusicBrainzSearchResult]) -> [MusicBrainzSearchResult] {
+        page.filter { fits($0) } + page.filter { !fits($0) }
     }
 
     private func fits(_ result: MusicBrainzSearchResult) -> Bool {
@@ -113,8 +129,30 @@ struct ReleaseSearchSheet: View {
                     }
                 }
                 .padding(4)
+                moreResults
             }
             .task(id: results?.map(\.id)) { await loadThumbnails() }
+        }
+    }
+
+    /// More Results, under the results while MusicBrainz has more: the next page, one request.
+    @ViewBuilder private var moreResults: some View {
+        if loadingMore || moreFailure != nil || nextOffset != nil {
+            VStack(spacing: 6) {
+                if let moreFailure {
+                    Text(moreFailure).font(.callout).foregroundStyle(Theme.warning)
+                }
+                if loadingMore {
+                    ProgressView().controlSize(.small)
+                } else if nextOffset != nil {
+                    Button("More Results") { Task { await loadMore() } }
+                        .help(
+                            "Shows the next \(MusicBrainzSearchPage.size) releases that MusicBrainz found, up to \(MusicBrainzSearchPage.mostResults) in all. More words, the barcode, or a link to the release narrow the search."
+                        )
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
         }
     }
 
@@ -222,19 +260,45 @@ struct ReleaseSearchSheet: View {
     private func search() async {
         let text = query.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
+        generation += 1
         searching = true
         failure = nil
+        moreFailure = nil
         selected = nil
+        nextOffset = nil
+        loadingMore = false
         defer { searching = false }
         do {
-            let found = try await MusicBrainzClient().searchReleases(text)
-            results = found
+            let page = try await MusicBrainzClient().searchReleasePage(text)
+            let found = page.results
+            pages = [found]
+            searched = text
+            nextOffset = page.nextOffset
             // One release, such as a link's, is selected even when no disc of it has as many
             // tracks: the footer then says why it does not fit.
             selected = ordered.first(where: fits)?.id ?? (found.count == 1 ? found[0].id : nil)
         } catch {
-            results = nil
+            pages = nil
             failure = "The search failed: \(error)"
+        }
+    }
+
+    /// The search's next page, after the ones shown; a release already shown is left out.
+    private func loadMore() async {
+        guard let offset = nextOffset, !loadingMore else { return }
+        let search = generation
+        loadingMore = true
+        moreFailure = nil
+        defer { if search == generation { loadingMore = false } }
+        do {
+            let page = try await MusicBrainzClient().searchReleasePage(searched, offset: offset)
+            guard search == generation else { return }
+            let shown = Set(results?.map(\.id) ?? [])
+            pages = (pages ?? []) + [page.results.filter { !shown.contains($0.id) }]
+            nextOffset = page.nextOffset
+        } catch {
+            guard search == generation else { return }
+            moreFailure = "MusicBrainz did not give more results: \(error)"
         }
     }
 
@@ -254,10 +318,10 @@ struct ReleaseSearchSheet: View {
         }
     }
 
-    /// The covers, one after another, as the Cover Art Archive asks; the releases that may be
-    /// this disc's first.
+    /// The covers, one after another, as the Cover Art Archive asks: the first 16 of each page,
+    /// the releases that may be this disc's first.
     private func loadThumbnails() async {
-        for result in ordered.prefix(16) where thumbnails[result.id] == nil {
+        for result in (pages ?? []).flatMap({ orderedPage($0).prefix(16) }) where thumbnails[result.id] == nil {
             guard !Task.isCancelled else { return }
             if let data = try? await CoverArtClient().frontThumbnail(releaseID: result.id) {
                 thumbnails[result.id] = data

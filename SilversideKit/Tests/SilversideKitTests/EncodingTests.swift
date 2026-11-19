@@ -554,6 +554,60 @@ extension EncodingTests {
         #expect(try file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate == modified)
     }
 
+    /// An album encoded before 0.9.9 has no record of the keys Silverside wrote. When its album
+    /// artist and a track's artist are edited, the old artists' sort names and MusicBrainz IDs
+    /// go, in FLAC and in MP4: a typed artist has none. Another program's tags stay.
+    @Test(arguments: [AudioFormat.flac, .alac])
+    func dropsTheOldArtistsIDsFromAnAlbumWithNoRecord(format: AudioFormat) throws {
+        let (folder, library) = try makeRip()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let discJSON = folder.appending(path: "disc.json")
+        // MusicBrainz's credits, with the artist's ID and sort name.
+        var report = try RipReport.read(from: discJSON)
+        let credit = [MusicBrainzRelease.Credit(name: "Grateful Dead", artistID: "gd", sortName: "Grateful Dead")]
+        var release = try #require(report.release)
+        release.artistCredit = credit
+        for medium in release.media.indices {
+            for track in release.media[medium].tracks.indices {
+                release.media[medium].tracks[track].artistCredit = credit
+            }
+        }
+        report.release = release
+        try report.write(to: discJSON)
+        let files = try DiscEncoder(format: format).encode(try RippedDisc(folder: folder), into: library)
+        func tags(_ file: URL) throws -> [(key: String, value: String)] {
+            try format == .flac ? FLACTags.read(file) : MP4Tags.read(file, every: true).comments
+        }
+        let written = Set(try tags(files[0]).map { $0.key.uppercased() })
+        #expect(written.isSuperset(of: TagMerge.creditKeys))
+
+        // As 0.9.8 left it: no record of the keys, and another program's genre.
+        let albumReport = files[0].deletingLastPathComponent().appending(path: "Rip Report (Disc 2).json")
+        for file in [discJSON, albumReport] {
+            var old = try RipReport.read(from: file)
+            old.encoding?.tagKeys = nil
+            try old.write(to: file)
+        }
+        let data = try Data(contentsOf: files[0])
+        try
+            (format == .flac
+            ? FLACTags.updating(data, comments: try FLACTags.read(files[0]) + [("GENRE", "Rock")], cover: nil)
+            : MP4Tags.updating(data, removing: [], adding: [("GENRE", "Rock")], cover: nil)).write(to: files[0])
+
+        let edits = ReleaseEditsStore(url: folder.deletingLastPathComponent().appending(path: "edits.json"))
+        try edits.remember(MetadataEdits(albumArtist: "The Grateful Dead"), forReleaseID: "rel")
+        try MetadataEdits(tracks: [1: .init(artist: "Bob Weir")]).save(inDiscJSONOf: folder)
+        let file = try DiscEncoder(format: format).updateLibrary(
+            reportAt: discJSON, library: library, editsStore: edits,
+            coverStore: ReleaseCoverStore(folder: folder.deletingLastPathComponent().appending(path: "covers"))
+        ).files[0]
+        let updated = try tags(file)
+        func value(_ key: String) -> String? { updated.first { $0.key.uppercased() == key }?.value }
+        #expect(value("ALBUMARTIST") == "The Grateful Dead" && value("ARTIST") == "Bob Weir")
+        #expect(Set(updated.map { $0.key.uppercased() }).isDisjoint(with: TagMerge.creditKeys))
+        #expect(value("GENRE") == "Rock")
+    }
+
     /// *American Beauty*: the deluxe edition's disc 1 and the single-disc edition, encoded into
     /// one album folder while they had one name. Renaming this rip's album moves its files only:
     /// the other edition keeps its folder, report, files, CUE sheet, and cover.

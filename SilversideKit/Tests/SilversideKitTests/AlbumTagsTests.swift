@@ -87,6 +87,14 @@ struct AlbumTagsTests {
             TagMerge.removedFromOwnFile(existing, writing: undated, lastWritten: nil).isDisjoint(with: ["DATE", "YEAR"])
         )
         #expect(none.isSuperset(of: ["YEAR", "ORIGINALYEAR"]))
+        // With no record, the credits' sort names and IDs go from a file of the same release, as
+        // an edited artist has none; a file that names no release keeps them.
+        #expect(
+            TagMerge.removedFromOwnFile(existing, writing: new, lastWritten: nil).isSuperset(of: TagMerge.creditKeys))
+        let untagged = existing.filter { $0.key != "MUSICBRAINZ_ALBUMID" }
+        #expect(
+            TagMerge.removedFromOwnFile(untagged, writing: [("TITLE", "Track 1")], lastWritten: nil)
+                .isDisjoint(with: TagMerge.creditKeys))
     }
 
     @Test func writesTheMergeIntoAFLACFile() throws {

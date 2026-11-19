@@ -14,7 +14,7 @@ command-line tool.
 - An earlier rip of a disc of a set shows the disc's own title in a box set of
   multiple albums or titles, and so does a disc in a drive.
 - Use Each Disc's Sleeve now also works for a box set whose images in the
-  Cover Art Archive name no discs, when there is one front for each disc in
+  Cover Art Archive don't name a disc, when there is one front for each disc in
   the discs' order. The picker marks each front with its disc, so you can
   check them first.
 - The report of a copy-protected disc, such as one with Cactus Data Shield,

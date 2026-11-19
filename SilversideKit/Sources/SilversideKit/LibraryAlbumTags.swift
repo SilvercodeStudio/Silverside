@@ -43,6 +43,12 @@ public enum TagMerge {
         "MUSICBRAINZ_RELEASEGROUPID", "MUSICBRAINZ_TRACKID", "MUSICBRAINZ_ALBUMARTISTID", "MUSICBRAINZ_ARTISTID",
     ]
 
+    /// The keys that Silverside writes from MusicBrainz's artist credits, which no one types: an
+    /// artist typed in place of MusicBrainz's has no sort name or ID.
+    public static let creditKeys: Set<String> = [
+        "ARTISTSORT", "ALBUMARTISTSORT", "MUSICBRAINZ_ARTISTID", "MUSICBRAINZ_ALBUMARTISTID",
+    ]
+
     /// The keys, in capitals, that an update of a file Silverside encoded takes out before it
     /// writes `new`: the keys written, and the keys that Silverside wrote there last
     /// (`lastWritten`, the encoding's record), whose values it may have no more, each with
@@ -50,7 +56,10 @@ public enum TagMerge {
     /// stays, as another program wrote it. When
     /// the file names another release than `new` does, or `new` names none (a disc of no
     /// release), the release-bound keys go too; and with no record (an album encoded before
-    /// Silverside kept one), so does every key that Silverside writes from a release.
+    /// Silverside kept one), so does every key that Silverside writes from a release. With no
+    /// record and the same release, the credits' keys go (`creditKeys`): an album encoded
+    /// before 0.9.9 whose artist is edited would otherwise keep the old artist's sort names
+    /// and IDs, then and at every update after.
     public static func removedFromOwnFile(
         _ existing: [(key: String, value: String)], writing new: [(key: String, value: String)],
         lastWritten: Set<String>?
@@ -60,7 +69,7 @@ public enum TagMerge {
         }
         let tagged = release(existing)
         let otherRelease = tagged != nil && tagged != release(new)
-        let earlier = lastWritten ?? (otherRelease ? releaseKeys : [])
+        let earlier = lastWritten ?? (otherRelease ? releaseKeys : tagged != nil ? creditKeys : [])
         var keys = withOtherNames(Set(new.map { $0.key.uppercased() }).union(earlier))
         if otherRelease { keys.formUnion(releaseBound) }
         return keys

@@ -3,7 +3,7 @@
 What changed in each version of Silverside, the app and the `silverside`
 command-line tool.
 
-## 0.9.9 (not released yet)
+## 0.9.9 (2026-11-19)
 
 ### Added
 

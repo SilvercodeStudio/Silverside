@@ -24,7 +24,7 @@ make test        # swift test --package-path SilversideKit
 make hwtest OFFSET=103   # hardware tests; needs a disc in AccurateRip (DEVICE=diskN to choose; OFFSET checks the drive's offset)
 make core        # swift build --package-path SilversideKit
 make build       # xcodebuild the app (CONFIG=Release for a universal build)
-make run         # build and start the app; ARGS='...' passes launch arguments
+make run         # build and start the app through open (scripts/run-app.sh: never run the executable inside an app from a shell, or it joins the terminal's process coalition, and the Dock's Stop or Force Quit can end tmux and the shells), waiting until it quits; ARGS='...' passes launch arguments
 make rip-art     # render the Rip button's pictures after SilversideRipIcon.icon changes
 scripts/commit-id.sh   # the Git commit of a build, "-dirty" with changes not committed (SilversideVersion.commit)
 make format      # swift-format in place (.swift-format: 4 spaces, 120 columns)

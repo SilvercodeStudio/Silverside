@@ -54,7 +54,7 @@ LSREGISTER = /System/Library/Frameworks/CoreServices.framework/Frameworks/Launch
 
 help:
 	@echo "make build          build the app ($(CONFIG)) with xcodebuild"
-	@echo "make run            build, then start the app in the foreground; ARGS='...' passes launch arguments"
+	@echo "make run            build, then start the app through open and wait until it quits; ARGS='...' passes launch arguments"
 	@echo "make app            print the path of the built app"
 	@echo "make cli            build and run the silverside CLI; ARGS='info -d disk14' passes arguments"
 	@echo "make test           run the engine tests (swift test)"
@@ -76,10 +76,11 @@ help:
 build:
 	$(XCODEBUILD) -quiet build
 
+# Through open (scripts/run-app.sh), never the executable itself: an app started from a shell
+# joins the terminal's process coalition, and stopping it from the Dock can end the terminal's
+# processes too.
 run: build
-	@app="$$($(XCODEBUILD) -showBuildSettings 2>/dev/null | awk -F' = ' '/^ *BUILT_PRODUCTS_DIR =/ {dir=$$2} /^ *EXECUTABLE_PATH =/ {exe=$$2} END {print dir "/" exe}')"; \
-	echo "Starting $$app $(ARGS)"; \
-	"$$app" $(ARGS)
+	@scripts/run-app.sh "$$($(MAKE) -s app)" $(ARGS)
 
 app:
 	@$(XCODEBUILD) -showBuildSettings 2>/dev/null | awk -F' = ' '/^ *BUILT_PRODUCTS_DIR =/ {dir=$$2} /^ *FULL_PRODUCT_NAME =/ {name=$$2} END {print dir "/" name}'

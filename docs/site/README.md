@@ -19,6 +19,8 @@ Switch macOS between Light and Dark (System Settings › Appearance) to see both
 - `images/`: the app icon and the screenshots, each in dark and light, at two widths for `srcset`.
 - `tools/shot.swift`: crops a window screenshot to the window's edge and writes the WebP images the pages use (see below). `tools/og-image.swift`: makes the link preview picture (`og:image`) from the hero screenshot.
 - `CNAME`: the custom domain. `.nojekyll`: Pages serves the files as they are.
+- `sitemap.xml`: the pages, for search engines; add a new page to it. `robots.txt`: lets crawlers in, keeps them out of `tools/` and this README, and names the sitemap.
+- `appcast.xml`: the app's update feed (`make dist` adds each release).
 
 ## Publishing
 

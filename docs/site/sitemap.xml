@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The site's pages, for search engines (robots.txt names this file). Add a new page here. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://silverside.app/</loc></url>
+  <url><loc>https://silverside.app/screenshots.html</loc></url>
+  <url><loc>https://silverside.app/privacy.html</loc></url>
+  <url><loc>https://silverside.app/license.html</loc></url>
+</urlset>
